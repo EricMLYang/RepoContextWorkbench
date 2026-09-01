@@ -6,7 +6,7 @@
 ## 範圍
 
 - **有**：M1 引擎核心（P1 registry+audit／P2 組／P3 採集／P6 打包簡版／P8 落／P10 脊椎三件套／P11 查詢+stats）＋借調 M2 的 P7 兩段式碰撞、P13 未讀、P15 provider（mock＋claude）＋早晨簡報產生器（樣貌 A 純事實版）。
-- **無**：薄殼（tray/hotkey/toast/timer）、P4 上游、P5 digest、P9 spawn、P12 排程、P14 監控台、MCP server——移植正式 repo 再做。
+- **無**：薄殼（tray/hotkey/toast/timer）、P4 上游、P5 digest、P9 spawn、P12 排程、MCP server——移植正式 repo 再做。P14 已有網頁雛形（`ui` 子命令，見 VERIFICATION.md UI 增補）。
 - 對 v2 的小偏差：kv token 多一個 `id:`（collision 回連需要，v2 的 kv 清單為例示性）；pack 用內建文件層選料（正式版換 Repomix）。
 
 ## 快速開始
@@ -33,6 +33,7 @@ python -m repoengine --spine ... query --today -v       # P11
 python -m repoengine --spine ... query --stats          # 靈感命中率
 python -m repoengine --spine ... registry audit         # P1 稽核紅字
 python -m repoengine --spine ... commit                 # git 單一提交者（批次）
+python -m repoengine --spine ... ui                     # S4 監控台雛形（localhost 網頁，事件列＋碰撞框＋深看）
 ```
 
 `--spine` 可用環境變數 `REPOENGINE_SPINE` 取代。
@@ -59,6 +60,7 @@ repoengine/
   agents.py    P15 provider 介面（mock／claude -p --output-format json；內層驗證＋重試一次＋raw log）
   route.py     P8（group materials／repo 01_inbox／incubator）
   cli.py       全部原語的人用介面（正式版同組原語再開 MCP）
+  webui.py     S4 監控台雛形（stdlib http.server、127.0.0.1 限定；/api/state 輕量輪詢、/api/scan 才打 git）
 ```
 
 鐵律對應：引擎零私有字樣（有測試釘住）；git 只有 `commit` 子命令會動（單一提交者）；壞事件程式入口回錯誤、人的入口落 dead-letter（想法永不丟）。

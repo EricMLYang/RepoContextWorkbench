@@ -33,3 +33,11 @@ python -m repoengine --spine <spine> collide submit "一個真想法" --group g1
 - 體驗回饋（該吵沒吵／不該吵卻吵、簡報形狀、判定可信度）記進 `VERIFICATION.md`「回饋迴路」段；每條回饋先補 failing test 再修。
 - 滿意後移植成獨立正式 repo，屆時才做：MCP server、薄殼（tray/hotkey/toast/S6 timer）、P4 上游、P5 digest、P9 spawn、P12 排程、P14 監控台。
 - 移植前置動作別忘 v2 §3.5／M1 Day 0：spine repo 搬離雲同步資料夾、GitHub 政策確認、VDI 環境 smoke test。
+
+---
+
+## 2026-09-01 增補：監控台已可用
+
+- `python -m repoengine --spine <spine> ui` → 瀏覽器開 http://127.0.0.1:8765/（S4 事件列＋碰撞輸入框＋組切換＋深看；僅綁 localhost）
+- 雙擊啟動：spine repo 裡的 `監控台.cmd`
+- 未做（仍留給真殼）：tray 常駐、全域 hotkey、OS 通知——監控台開著時每 5 秒輪詢脊椎未讀，等效回程通道

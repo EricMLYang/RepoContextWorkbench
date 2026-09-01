@@ -48,3 +48,23 @@ v2 裡「現在不驗、三個月後才痛」的東西，全部釘成不變式�
 - **做**：M1 引擎核心（P1 含 audit／P2／P3／P6 簡版／P8／P10 三件套／P11 陽春＋stats）＋ M2 借調（P7 兩段式、P13 閾值過濾與未讀、P15 provider 介面：mock＋claude）＋ brief 產生器（樣貌 A，無 LLM、純事實版——同時充當 M1 Day1-3 假簡報的產生工具）。
 - **不做**：薄殼全部（tray/hotkey/toast/S6 timer）、P4 上游（留 stub）、P5 digest、P9 spawn、P12 排程、P14 監控台、MCP server。這些等移植正式 repo 再做。
 - pack 的選料規則採 v2 §9-7 最簡版：**只撞文件層**（README／*.md），超預算按檔案由小到大裝、裝不下就截斷並在輸出標注。
+
+---
+
+## UI 增補（2026-09-01 第二輪：S4 監控台雛形）
+
+**範圍修訂**：原「不做」清單中的監控台改為**做網頁雛形**（P14-lite + S2-lite 碰撞輸入框 + S3-lite 組切換）。
+形態＝`python -m repoengine ui`：stdlib http.server 綁 127.0.0.1、瀏覽器開頁，零新依賴（v2 §9-8 耗材原則）。
+tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke test 過了才蓋）。
+
+**殼原則的落實（可測）**：
+- `/api/state` 輕量輪詢（5 秒）＝純脊椎檔案讀——「殼只 poll 脊椎未讀」的網頁化
+- `/api/scan` 才跑 P3 採集（開頁／切組／手動按鈕），不在輪詢裡打 git——高頻輪詢不碰 subprocess
+
+**UI 驗證（併入四層）**：
+- L1：`build_state`／`build_scan` 純函數測試（脊椎+registry → dict，欄位齊全）
+- L2：HTTP E2E——thread 起真 server（port 0），urllib 打：
+  `GET /` 200 且含關鍵區塊；`GET /api/state` JSON 欄位齊；`POST /api/collide`（wait=true）後脊椎多兩筆 collision；
+  `POST /api/ignore` 落 `chosen` 事件（忽略是 chosen 的負形）；`POST /api/close_loop` 後 open loops 少一條；
+  `POST /api/ack` 後未讀歸零；server 綁定必須是 127.0.0.1（不變式：不對外暴露）
+- L4（人）：瀏覽器開頁——空狀態是不是「一切正常」一行字？碰撞送出即關（fire-and-forget）回程有沒有出現在未讀？深看表格對不對？

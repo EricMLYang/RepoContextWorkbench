@@ -198,6 +198,12 @@ def cmd_commit(args):
     print("已 commit" if r.returncode == 0 else "無變更可 commit")
 
 
+def cmd_ui(args):
+    from . import webui
+    d = _spine_dir(args)
+    webui.serve(d, port=args.port, open_browser=not args.no_browser)
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="repoengine", description="個人 repo 引擎原型")
     p.add_argument("--spine", help="spine repo 路徑（預設 $REPOENGINE_SPINE 或 cwd）")
@@ -282,6 +288,11 @@ def build_parser():
     s = sub.add_parser("commit", help="git 單一提交者（批次 commit）")
     s.add_argument("-m", "--message", default="spine: batch commit")
     s.set_defaults(func=cmd_commit)
+
+    s = sub.add_parser("ui", help="S4 監控台雛形（localhost 網頁）")
+    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--no-browser", action="store_true")
+    s.set_defaults(func=cmd_ui)
     return p
 
 
