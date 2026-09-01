@@ -16,6 +16,13 @@ DEFAULTS = {
         "default": "mock",
         "models": {"digest": "haiku", "collide": "strong"},
     },
+    # P16 會話可開的 agent CLI（terminal 只負責 spawn，帶料 prompt 走 positional）。
+    # mcp: "mcp-config"＝支援 --mcp-config 掛本引擎（v1 只保證 Claude Code）；
+    #      "cwd"＝靠 cwd 設定檔自動掛載；"none"＝該家 MCP 設定自理，引擎不代管。
+    # prompt_flag: prompt 前置旗標（如某家要 ["-i"]），預設空＝直接接在指令後。
+    "agents": {
+        "claude": {"cmd": ["claude"], "mcp": "mcp-config", "prompt_flag": []},
+    },
     "pack": {"token_budget": 60000},
     # P12：排程住殼內（S6）。每項 {task: brief|digest|upstream|commit, at: "HH:MM", group: <組名|null>}
     "schedule": [],

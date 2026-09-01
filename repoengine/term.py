@@ -164,13 +164,15 @@ class TermManager:
         self.sessions[sid] = s
         return s
 
-    def create_agent(self, group=None, repos=None, repo=None, task=None):
+    def create_agent(self, group=None, repos=None, repo=None, task=None,
+                     agent="claude"):
         from . import session as _session
         cwd, cmd, _pack = _session.build(self.spine_dir, group=group,
-                                         repos=repos, repo=repo, task=task)
+                                         repos=repos, repo=repo, task=task,
+                                         agent=agent)
         sid = f"t{next(self._ids)}"
         scope = repo or group or ("臨時" if repos else "全部")
-        s = TermSession(sid, cmd, cwd=str(cwd), title=f"agent:{scope}")
+        s = TermSession(sid, cmd, cwd=str(cwd), title=f"{agent}:{scope}")
         self.sessions[sid] = s
         return s
 

@@ -133,7 +133,8 @@ def _handle_action(spine_dir, action, payload, terms=None):
             s = terms.create_agent(group=payload.get("group") or None,
                                    repos=payload.get("repos") or None,
                                    repo=payload.get("repo") or None,
-                                   task=payload.get("task") or None)
+                                   task=payload.get("task") or None,
+                                   agent=payload.get("agent") or "claude")
         else:
             s = terms.create_shell(cwd=payload.get("cwd") or None)
         return {"ok": True, "sid": s.sid, "title": s.title}
@@ -233,6 +234,7 @@ def _make_handler(spine_dir):
                 elif u.path == "/api/state":
                     st = build_state(spine_dir)
                     st["terms"] = self.server.terms.list()
+                    st["agents"] = list(_config.load(spine_dir)["agents"])
                     self._json(st)
                 elif u.path == "/api/scan":
                     q = parse_qs(u.query)
@@ -549,6 +551,7 @@ PAGE = r"""<!doctype html>
     <span class="tlabel">終端</span>
     <div id="termtabs"></div>
     <button id="newshell" class="small">＋shell</button>
+    <select id="agentsel" class="small" title="開哪家 agent CLI（config agents: 註冊）"></select>
     <button id="newagent" class="small">＋agent 會話（帶料）</button>
   </div>
   <div id="termbody"><div id="termempty">＋agent 會話＝打包目前勾選範圍開 claude；Ctrl+` 收合面板</div></div>
@@ -653,6 +656,11 @@ function renderState(st){
     +(s.hit_rate==null?"n/a":Math.round(s.hit_rate*100)+"%")
     +"｜生出 repo "+s.spawned+"｜存活率 "
     +(s.survival_rate==null?"n/a":Math.round(s.survival_rate*100)+"%");
+  const asel=$("agentsel");
+  if(st.agents&&asel.options.length!==st.agents.length){
+    const cur=asel.value;asel.innerHTML="";
+    st.agents.forEach(a=>asel.append(new Option(a,a)));
+    if(st.agents.includes(cur))asel.value=cur;}
   syncTerms(st.terms||[]);
   updateAllClear();
 }
@@ -830,10 +838,11 @@ function fitTerm(rec){try{rec.fit&&rec.fit.fit();}catch(e){}}
 function fitAll(){for(const r of terms.values())if(r.t)fitTerm(r);}
 async function newTerm(kind,extra){
   const payload=Object.assign({kind},kind==="agent"?scopePayload():{},extra||{});
+  if(kind==="agent")payload.agent=$("agentsel").value||"claude";
   const r=await api("/api/term_create",post(payload));
   if(!terms.has(r.sid))addTab(r.sid,r.title);
   selectTerm(r.sid);
-  toast(kind==="agent"?"agent 會話已開（料已打包）":"shell 已開");}
+  toast(kind==="agent"?(payload.agent+" 會話已開（料已打包）"):"shell 已開");}
 $("newshell").onclick=()=>newTerm("shell");
 $("newagent").onclick=()=>newTerm("agent");
 

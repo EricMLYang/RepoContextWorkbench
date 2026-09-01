@@ -33,11 +33,20 @@ def ensure_mcp_json(spine_dir):
     return p
 
 
-def build(spine_dir, group=None, repos=None, repo=None, task=None, budget=None):
-    """組會話：打包＋掛載＋指令。回傳 (cwd, cmd list, pack 檔路徑)。"""
+def build(spine_dir, group=None, repos=None, repo=None, task=None, budget=None,
+          agent="claude"):
+    """組會話：打包＋掛載＋指令。回傳 (cwd, cmd list, pack 檔路徑)。
+
+    agent＝config `agents:` 註冊表的 key（預設 claude）——terminal 對 agent 無關，
+    spawn 哪家 CLI 只是查表；MCP 掛載是各家不同的膠水，由表上 `mcp` 欄決定
+    （v1 只保證 Claude Code 的自動掛載，其他家 MCP 設定自理）。"""
     import datetime as _dt
     spine_dir = Path(spine_dir)
     cfg = _config.load(spine_dir)
+    spec = cfg["agents"].get(agent)
+    if spec is None:
+        raise ValueError(f"未知 agent: {agent}（config agents: 目前有 "
+                         f"{', '.join(cfg['agents'])}）")
     _, entries = registry.resolve_group(spine_dir, group, repos)
     text, _, _ = _pack.pack_group(entries, budget or cfg["pack"]["token_budget"])
     out = spine_dir / "groups" / (group or "adhoc") / "materials" / \
@@ -48,10 +57,10 @@ def build(spine_dir, group=None, repos=None, repo=None, task=None, budget=None):
     cwd = Path(registry.get_repo(spine_dir, repo)["path"]).expanduser() \
         if repo else spine_dir
     prompt = f"料已備好：{out}。任務：{task or '（未指定——先讀料，再問我要做什麼）'}"
-    cmd = ["claude"]
-    if repo:  # cwd 不在 spine → cwd 的 .mcp.json 吃不到，改 --mcp-config
-        cmd += ["--mcp-config", str(mcp_json)]
-    cmd.append(prompt)
+    cmd = list(spec["cmd"])
+    if repo and spec.get("mcp") == "mcp-config":
+        cmd += ["--mcp-config", str(mcp_json)]  # cwd 不在 spine → 顯式掛載
+    cmd += list(spec.get("prompt_flag") or []) + [prompt]
     return cwd, cmd, out
 
 

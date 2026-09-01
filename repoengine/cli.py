@@ -270,7 +270,7 @@ def cmd_session(args):
     d = _spine_dir(args)
     cwd, cmd, pack_path = _session.build(d, group=args.group, repos=args.repos,
                                          repo=args.repo, task=args.task,
-                                         budget=args.budget)
+                                         budget=args.budget, agent=args.agent)
     print(f"料：{pack_path}")
     if args.print_only:
         print(f"cd {cwd}")
@@ -411,6 +411,8 @@ def build_parser():
     s.add_argument("--repo", help="會話 cwd 設為此 repo（改用 --mcp-config 掛載）")
     s.add_argument("--task")
     s.add_argument("--budget", type=int)
+    s.add_argument("--agent", default="claude",
+                   help="開哪家 agent CLI（config agents: 註冊表；預設 claude）")
     s.add_argument("--print", dest="print_only", action="store_true",
                    help="只印指令不開視窗")
     s.set_defaults(func=cmd_session)
