@@ -1,0 +1,52 @@
+"""L1：P1 registry / P2 組 / audit 紅字。"""
+import pytest
+
+from repoengine import registry
+from tests.conftest import make_git_repo
+
+
+def test_add_and_get(spine, tmp_path):
+    p = make_git_repo(tmp_path, "repo-x")
+    registry.add_repo(spine, "repo-x", p, tags=["dev"])
+    r = registry.get_repo(spine, "repo-x")
+    assert r["type"] == "mine" and r["tier"] == "active" and r["tags"] == ["dev"]
+    with pytest.raises(ValueError):
+        registry.add_repo(spine, "repo-x", p)  # id 重複
+
+
+def test_group_and_adhoc(spine_with_repos):
+    name, entries = registry.resolve_group(spine_with_repos, "g1")
+    assert name == "g1" and [e["id"] for e in entries] == ["repo-a", "repo-b"]
+    name, entries = registry.resolve_group(spine_with_repos, repos="repo-b")
+    assert name.startswith("臨時(") and entries[0]["id"] == "repo-b"
+    with pytest.raises(ValueError):
+        registry.add_group(spine_with_repos, "g2", ["ghost"])  # 組員未登記
+
+
+def test_audit_red_flags(spine, tmp_path):
+    ok = make_git_repo(tmp_path, "ok-repo", days_old=1)
+    stale = make_git_repo(tmp_path, "stale-repo", days_old=45)
+    registry.add_repo(spine, "ok-repo", ok)
+    registry.add_repo(spine, "stale-repo", stale)                     # tier 漂移
+    registry.add_repo(spine, "ghost", tmp_path / "no-such-dir")      # 路徑失效
+    registry.add_repo(spine, "napper", ok, tier="paused")            # paused 無 resume_when
+    registry.add_repo(spine, "ext", ok, type="external")             # external 無 upstream
+    reds = registry.audit(spine)
+    text = "\n".join(reds)
+    assert "tier 漂移" in text and "stale-repo" in text
+    assert "路徑失效" in text and "ghost" in text
+    assert "resume_when" in text and "napper" in text
+    assert "external 無 upstream" in text
+    assert "ok-repo" not in text
+
+
+def test_audit_unregistered_scan(spine, tmp_path):
+    make_git_repo(tmp_path / "zone", "secret-repo")
+    reds = registry.audit(spine, scan_dirs=[tmp_path / "zone"])
+    assert any("未登記" in r and "secret-repo" in r for r in reds)
+
+
+def test_audit_clean(spine, tmp_path):
+    p = make_git_repo(tmp_path, "clean-repo", days_old=2)
+    registry.add_repo(spine, "clean-repo", p)
+    assert registry.audit(spine) == []

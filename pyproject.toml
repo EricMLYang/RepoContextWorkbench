@@ -1,0 +1,13 @@
+[project]
+name = "repoengine"
+version = "0.1.0"
+description = "personal repo engine prototype (build-to-delete)"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6"]
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: CLI subprocess end-to-end tests",
+    "agent: needs a logged-in claude CLI (manual/L3)",
+]
+addopts = "-p no:cacheprovider"
