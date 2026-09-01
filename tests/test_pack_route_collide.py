@@ -8,11 +8,12 @@ from repoengine import collide, pack, registry, route, spine as spine_mod
 
 def test_pack_budget_and_exclusion(spine_with_repos):
     _, entries = registry.resolve_group(spine_with_repos, "g1")
-    text, inc, exc = pack.pack_group(entries, token_budget=100000)
+    text, inc, exc, flagged = pack.pack_group(entries, token_budget=100000)
     assert exc == [] and len(inc) >= 4          # 兩 repo 各 README+plan
+    assert flagged == []                        # fixture 無機密
     assert "widget 快取設計" in text            # 內容真的在
     # 縮到很小的預算 → 有東西被擠出去，且標頭有列
-    text2, inc2, exc2 = pack.pack_group(entries, token_budget=15)
+    text2, inc2, exc2, _ = pack.pack_group(entries, token_budget=15)
     assert exc2 and "未納入" in text2
 
 
@@ -25,10 +26,37 @@ def test_pack_respects_gitignore(spine_with_repos, tmp_path):
     (clones / "noise.md").write_text("clone 雜訊\n" * 50, encoding="utf-8")
     (ra / ".gitignore").write_text("tool_clones/\n", encoding="utf-8")
     _, entries = registry.resolve_group(spine_with_repos, None, "repo-a")
-    text, inc, exc = pack.pack_group(entries, token_budget=100000)
+    text, inc, exc, _ = pack.pack_group(entries, token_budget=100000)
     assert "clone 雜訊" not in text
     assert not any("noise.md" in x for x in inc + exc)
     assert "widget 快取設計" in text  # 自己的正文還在
+
+
+def test_pack_secret_sentinel(spine_with_repos):
+    """洩密哨兵（Repomix Secretlint 課）：長得像憑證的檔案不進包、有列出。"""
+    from pathlib import Path
+    ra = Path(registry.get_repo(spine_with_repos, "repo-a")["path"])
+    (ra / "oops.md").write_text(
+        "# 筆記\n-----BEGIN RSA PRIVATE KEY-----\nMIIEow…\n", encoding="utf-8")
+    _, entries = registry.resolve_group(spine_with_repos, None, "repo-a")
+    text, inc, exc, flagged = pack.pack_group(entries, token_budget=100000)
+    assert any("oops.md" in x for x in flagged)
+    assert "BEGIN RSA PRIVATE KEY" not in text and "MIIEow" not in text  # 內容不出 repo
+    assert "疑似機密" in text                     # 判定時知道被擋了什麼
+    assert not any("oops.md" in x for x in inc + exc)
+
+
+def test_pack_estimate_budget_function(spine_with_repos):
+    """token 預算函數（Repomix 課）：挑的粒度由數字反推——先算再挑。"""
+    _, entries = registry.resolve_group(spine_with_repos, "g1")
+    rows = pack.estimate(entries)
+    assert {r["id"] for r in rows} == {"repo-a", "repo-b"}
+    for r in rows:
+        assert r["files"] >= 2 and r["tokens"] > 0
+    # estimate 的合計要跟真打包（大預算、全收錄）一致量級：全部裝得進該數字的預算
+    total = sum(r["tokens"] for r in rows)
+    _, inc, exc, _ = pack.pack_group(entries, token_budget=total)
+    assert exc == []
 
 
 def test_route_to_repo_inbox(spine_with_repos):

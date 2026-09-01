@@ -21,11 +21,30 @@ def test_initialize_and_tools_list(spine):
     r = _call(spine, "tools/list")
     names = {t["name"] for t in r["result"]["tools"]}
     # 原語全覆蓋：P1–P13、P15/P16 相關工具都在
-    assert {"registry_add", "registry_audit", "group_add", "collect", "pack",
-            "brief", "spine_append", "spine_query", "spine_stats", "open_loops",
+    assert {"registry_add", "registry_audit", "registry_scan", "group_add",
+            "collect", "pack", "pack_estimate", "brief", "spine_append",
+            "spine_query", "spine_stats", "spine_lint", "open_loops",
             "unread", "collide_submit", "route", "upstream_check", "digest_run",
             "spawn"} <= names
     assert all(t["inputSchema"]["type"] == "object" for t in r["result"]["tools"])
+
+
+def test_scan_lint_estimate_tools(spine_with_repos, tmp_path):
+    """拆機報告落地輪三工具：掃描（mani 課）、lint（second-brain 課）、
+    預算函數（Repomix 課）——agent 的介面＝人的介面。"""
+    from tests.conftest import make_git_repo
+    make_git_repo(tmp_path / "zone", "found-me")
+    t = _tool(spine_with_repos, "registry_scan",
+              {"dir": str(tmp_path / "zone")})["result"]["content"][0]["text"]
+    assert "found-me" in t and "候選" in t          # 預設只列不登記
+    t = _tool(spine_with_repos, "registry_scan",
+              {"dir": str(tmp_path / "zone"), "apply": True})
+    assert "已登記" in t["result"]["content"][0]["text"]
+    t = _tool(spine_with_repos, "spine_lint")["result"]["content"][0]["text"]
+    assert "零紅字" in t
+    t = _tool(spine_with_repos, "pack_estimate",
+              {"group": "g1"})["result"]["content"][0]["text"]
+    assert "repo-a" in t and "tokens" in t and "合計" in t
 
 
 def test_notifications_ignored_and_unknowns(spine):

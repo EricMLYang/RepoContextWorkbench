@@ -71,6 +71,33 @@ def test_audit_clean(spine, tmp_path):
     assert registry.audit(spine) == []
 
 
+def test_scan_dir_candidates_and_register(spine, tmp_path):
+    """mani「init 自動掃描＋手寫補語意」混合模式：下半身機器填、上半身留人。"""
+    zone = tmp_path / "zone"
+    a = make_git_repo(zone, "new-a")
+    make_git_repo(zone, "new-b")
+    (zone / "not-a-repo").mkdir()                     # 沒 .git 不算
+    registry.add_repo(spine, "new-a", a)              # 已登記者不重列
+    cands = registry.scan_dir(spine, zone)
+    assert [(c[1]) for c in cands] == ["new-b"]
+    added = registry.scan_register(spine, zone)
+    assert added == ["new-b"]
+    r = registry.get_repo(spine, "new-b")
+    assert r["type"] == "mine" and r["tier"] == "active"   # 下半身預設值
+    assert registry.scan_register(spine, zone) == []       # 冪等：再掃無新增
+
+
+def test_scan_dir_id_collision_gets_suffix(spine, tmp_path):
+    """同名資料夾登在別處 → 建議 id 加序號，不覆蓋既有登記。"""
+    p1 = make_git_repo(tmp_path / "elsewhere", "dup")
+    registry.add_repo(spine, "dup", p1)
+    make_git_repo(tmp_path / "zone", "dup")
+    cands = registry.scan_dir(spine, tmp_path / "zone")
+    assert [c[1] for c in cands] == ["dup-2"]
+    with pytest.raises(ValueError, match="目錄不存在"):
+        registry.scan_dir(spine, tmp_path / "no-such-zone")
+
+
 def test_remove_repo_cleans_groups(spine_with_repos):
     registry.remove_repo(spine_with_repos, "repo-b")
     data = registry.load(spine_with_repos)

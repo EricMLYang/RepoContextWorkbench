@@ -54,6 +54,34 @@ def _t_registry_audit(d, a):
     return "\n".join(f"[RED] {r}" for r in reds) if reds else "audit 零紅字 OK"
 
 
+def _t_registry_scan(d, a):
+    if a.get("apply"):
+        added = _registry.scan_register(d, a["dir"])
+        return ("已登記：" + ", ".join(added)
+                + "（上半身 type/tier/tags 待人補）") if added else "無新 repo 可登記"
+    cands = _registry.scan_dir(d, a["dir"])
+    return "\n".join(f"[候選] {cid}: {p}" for p, cid in cands) \
+        or "無未登記 repo"
+
+
+def _t_spine_lint(d, a):
+    reds = _spine.lint(d)
+    return "\n".join(f"[RED] {r}" for r in reds) if reds \
+        else "脊椎 lint 零紅字 OK（衛生迴圈）"
+
+
+def _t_pack_estimate(d, a):
+    _, entries = _registry.resolve_group(d, a.get("group"), a.get("repos"))
+    rows = _pack.estimate(entries)
+    total = sum(r["tokens"] for r in rows)
+    budget = _config.load(d)["pack"]["token_budget"]
+    lines = [f"{r['id']}\t{r['files']} 檔\t~{r['tokens']} tokens"
+             for r in sorted(rows, key=lambda x: -x["tokens"])]
+    lines.append(f"合計 ~{total} tokens／預算 {budget} → "
+                 + ("裝得下" if total <= budget else "超預算（挑細一點）"))
+    return "\n".join(lines)
+
+
 def _t_group_list(d, a):
     rows = [f"{g['name']}\t{','.join(g['members'])}"
             for g in _registry.load(d)["groups"]]
@@ -67,14 +95,15 @@ def _t_group_add(d, a):
 
 def _t_collect(d, a):
     _, entries = _registry.resolve_group(d, a.get("group"), a.get("repos"))
-    return _collect.format_table(_collect.collect_group(entries))
+    return _collect.format_table(_collect.collect_group(entries, d))
 
 
 def _t_pack(d, a):
     _, entries = _registry.resolve_group(d, a.get("group"), a.get("repos"))
     budget = a.get("budget") or _config.load(d)["pack"]["token_budget"]
-    text, inc, exc = _pack.pack_group(entries, budget)
-    return f"<!-- 收錄 {len(inc)}、未納入 {len(exc)} -->\n{text}"
+    text, inc, exc, flagged = _pack.pack_group(entries, budget)
+    return (f"<!-- 收錄 {len(inc)}、未納入 {len(exc)}、"
+            f"疑似機密擋下 {len(flagged)} -->\n{text}")
 
 
 def _t_brief(d, a):
@@ -177,10 +206,14 @@ TOOLS = {
     "registry_add": ("P1 登記 repo", _s(id=_STR, path=_STR, type=_STR, tier=_STR,
                                         upstream=_STR, _req=["id", "path"]), _t_registry_add),
     "registry_audit": ("P1 稽核（tier 漂移/路徑失效/未登記）", _s(scan_dirs=_ARR), _t_registry_audit),
+    "registry_scan": ("P1 掃目錄找未登記 git repo（apply=true 才登記；mani 混合模式）",
+                      _s(dir=_STR, apply=_BOOL, _req=["dir"]), _t_registry_scan),
     "group_list": ("P2 列組", _s(), _t_group_list),
     "group_add": ("P2 建組", _s(name=_STR, members=_ARR, _req=["name", "members"]), _t_group_add),
     "collect": ("P3 採集 git 狀態", _s(**_SCOPE), _t_collect),
-    "pack": ("P6 打包文件層選料", _s(**_SCOPE, budget=_INT), _t_pack),
+    "pack": ("P6 打包文件層選料（含洩密哨兵）", _s(**_SCOPE, budget=_INT), _t_pack),
+    "pack_estimate": ("P6 只算各 repo token 成本不打包（挑的預算函數）",
+                      _s(**_SCOPE), _t_pack_estimate),
     "brief": ("早晨簡報（樣貌A；落 presented 事件）", _s(**_SCOPE), _t_brief),
     "spine_append": ("P10 寫脊椎事件（validator 拒寫時錯誤原樣回傳，修正後重試）",
                      _s(type=_STR, source=_STR, kv=_ARR, body=_STR,
@@ -189,6 +222,8 @@ TOOLS = {
                                     verbose=_BOOL), _t_spine_query),
     "spine_stats": ("P11 品味量測（靈感命中率＋repo 存活率）", _s(), _t_spine_stats),
     "open_loops": ("P11 未結 open loops", _s(), _t_open_loops),
+    "spine_lint": ("P11 脊椎衛生迴圈（ref 斷鏈/逾期 loop/碰撞無回程/dead-letter）",
+                   _s(), _t_spine_lint),
     "unread": ("P13 未讀（interrupt 優先；ack=true 全部標已讀）", _s(ack=_BOOL), _t_unread),
     "collide_submit": ("P7 撞（兩段式；wait=true 同步判定）",
                        _s(idea=_STR, **_SCOPE, wait=_BOOL, provider=_STR,

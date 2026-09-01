@@ -103,6 +103,30 @@ def test_cli_refuses_non_spine_dir(tmp_path):
     assert r.returncode != 0 and "不是 spine repo" in (r.stderr + r.stdout)
 
 
+def test_scan_lint_estimate_cli(tmp_path):
+    """拆機報告落地輪：registry scan（mani 課）／lint（衛生迴圈）／pack --estimate。"""
+    spine_dir = tmp_path / "s"
+    make_git_repo(tmp_path / "zone", "repo-new")
+    run_cli("init", str(spine_dir), check=True)
+    r = run_cli("registry", "scan", str(tmp_path / "zone"),
+                spine_dir=spine_dir, check=True)
+    assert "候選" in r.stdout and "repo-new" in r.stdout
+    run_cli("registry", "scan", str(tmp_path / "zone"), "--apply",
+            spine_dir=spine_dir, check=True)
+    r = run_cli("registry", "list", spine_dir=spine_dir, check=True)
+    assert "repo-new" in r.stdout
+    r = run_cli("pack", "--estimate", spine_dir=spine_dir, check=True)
+    assert "repo-new" in r.stdout and "合計" in r.stdout
+    r = run_cli("lint", spine_dir=spine_dir, check=True)
+    assert "零紅字" in r.stdout
+    # 弄髒脊椎（斷 ref）→ lint exit 1（跟 audit 同形態）
+    run_cli("append", "--type", "chosen", "--source", "manual",
+            "--kv", "ref:presented:00:01", "--body", "斷鏈",
+            spine_dir=spine_dir, check=True)
+    r = run_cli("lint", spine_dir=spine_dir)
+    assert r.returncode == 1 and "ref 斷鏈" in r.stdout
+
+
 def test_registry_set_field(tmp_path):
     """回歸：registry set <id> <key> <value> 之前因 argparse 位置參數共用而寫錯欄位。"""
     spine_dir = tmp_path / "s"

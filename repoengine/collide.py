@@ -76,7 +76,7 @@ def run_judgement(spine_dir, cid, group=None, repos=None, provider=None, when=No
         repos = group[len(prefix):-1]   # 臨時組合：從事件 token 解回 repo 清單
         group = None
     _, entries = registry.resolve_group(spine_dir, group, repos)
-    packed, _, _ = _pack.pack_group(entries, cfg["pack"]["token_budget"])
+    packed, _, _, _ = _pack.pack_group(entries, cfg["pack"]["token_budget"])
     prompt = PROMPT_TEMPLATE.format(idea=idea, packed=packed)
     try:
         j = judge(provider, prompt, spine_dir,

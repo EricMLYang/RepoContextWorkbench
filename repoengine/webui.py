@@ -77,12 +77,13 @@ def build_scan(spine_dir, group=None, repos=None):
     else:
         entries = _registry.load(spine_dir)["repos"]
         gname = "全部"
-    states = _collect.collect_group(entries)
+    states = _collect.collect_group(entries, spine_dir)
     return {
         "group": gname,
         "states": states,
         "questions": _brief.build_questions(states, cfg["thresholds"]),
-        "audit": _registry.audit(spine_dir),
+        # registry 稽核＋脊椎衛生迴圈併同一個紅字面（second-brain lint 課）
+        "audit": _registry.audit(spine_dir) + _spine.lint(spine_dir),
     }
 
 
@@ -785,9 +786,11 @@ function renderRepoList(){
       const bad=(s.dirty_days!=null&&s.dirty_days>=4)||!s.exists||s.note
                 ||(s.behind||0)>0;
       const bits=[];
+      if((s.agents||[]).length)bits.push("🤖"+s.agents.join(","));  // agent 偵測（gitpane 課）
       if(s.dirty)bits.push("dirty "+s.dirty+(s.dirty_days!=null?"×"+s.dirty_days.toFixed(0)+"d":""));
       if(s.ahead)bits.push("↑"+s.ahead);      // 有 commit 沒 push
       if(s.behind)bits.push("↓"+s.behind);    // 落後遠端（fetch 後才準）
+      if(s.worktrees)bits.push("wt×"+s.worktrees);
       if(s.last_commit_days!=null)bits.push(s.last_commit_days.toFixed(0)+"d");
       if(s.note)bits.push(s.note);
       row.append(el("span","st"+(bad?" bad":""),bits.join("｜")||"✓"));
@@ -820,7 +823,7 @@ function renderScan(sc){
   const d=$("deeptable");d.innerHTML="";
   const tb=el("table");const hd=el("tr");
   [["repo",""],["tags",""],["branch",""],["tier",""],["dirty","num"],["dirty天","num"],
-   ["末commit天","num"],["↑未push","num"],["↓落後","num"],
+   ["末commit天","num"],["↑未push","num"],["↓落後","num"],["wt","num"],["agent",""],
    ["最後 commit",""],["note",""]].forEach(([t,c])=>hd.append(el("th",c,t)));
   tb.append(hd);
   sc.states.forEach(s=>{const tr=el("tr");
@@ -835,6 +838,8 @@ function renderScan(sc){
     tr.append(el("td","num",f(s.last_commit_days)));
     tr.append(el("td","num",n(s.ahead)));
     tr.append(el("td","num",n(s.behind)));
+    tr.append(el("td","num",String(s.worktrees||0)));
+    tr.append(el("td","",(s.agents||[]).join(",")||"-"));
     tr.append(el("td","",(s.last_subject||"").slice(0,60)));
     tr.append(el("td","",s.note||""));tb.append(tr);});
   d.append(tb);

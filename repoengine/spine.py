@@ -193,6 +193,58 @@ def stats(spine_dir):
     }
 
 
+def lint(spine_dir, today=None):
+    """脊椎衛生迴圈（second-brain 的 /second-brain-lint 課，拆機報告 §5.1：
+    知識庫會爛掉，衛生檢查要當一等公民；staleness 做在資料層——Szapar 課 §5.2）。
+    回傳紅字清單；跟 registry.audit 同形態，工作台併同一個紅字面呈現。"""
+    today = today or f"{_dt.date.today():%Y-%m-%d}"
+    reds = []
+    events = list(iter_events(spine_dir))
+    # 1) ref 斷鏈：ref:<type>:<key> 要解得回既有事件（key＝id: 值或 HH:MM）
+    keys = set()
+    for ev in events:
+        keys.add((ev.type, ev.time))
+        eid = ev.kv("id")
+        if eid:
+            keys.add((ev.type, eid))
+    for ev in events:
+        ref = ev.kv("ref")
+        if not ref or ":" not in ref:
+            continue
+        rtype, rkey = ref.split(":", 1)
+        if (rtype, rkey) not in keys:
+            reds.append(f"[ref 斷鏈] {ev.date} {ev.time} {ev.type} "
+                        f"ref:{ref} 解不回任何事件")
+    # 2) 逾期 open loops（過 due 未 closed＝最該浮上來的陳舊）
+    for ev in open_loops(spine_dir):
+        due = ev.kv("due")
+        if due and due < today:
+            num = next((t for t in ev.tokens if t.startswith("#")), "#?")
+            first = ev.body.splitlines()[0] if ev.body else ""
+            reds.append(f"[open-loop 逾期] {num} due:{due}「{first}」")
+    # 3) 碰撞無回程：opened 後判定沒回來（判定分鐘級，隔天還沒回＝detached 進程死了）
+    opened, answered = {}, set()
+    for ev in events:
+        if ev.type != "collision":
+            continue
+        cid = ev.kv("id")
+        if not cid:
+            continue
+        if ev.body.startswith("opened"):
+            opened[cid] = ev
+        else:
+            answered.add(cid)
+    for cid, ev in sorted(opened.items()):
+        if cid not in answered and ev.date < today:
+            reds.append(f"[碰撞無回程] {cid}：opened 後判定沒回來（想法在，判定丟了）")
+    # 4) dead-letter 積壓（拒寫原文等人撿，放著＝想法實質丟了）
+    dl = Path(spine_dir) / "spine" / "dead-letter"
+    n = len(list(dl.glob("*.md"))) if dl.is_dir() else 0
+    if n:
+        reds.append(f"[dead-letter 積壓] {n} 件拒寫原文待人工撿回")
+    return reds
+
+
 def default_due_tokens(tokens, body, due_days, when=None):
     """open-loop opened 未帶 due → 補預設到期（§3.4 openloop_default_due_days）。
     closed 事件（狀態變化記新事件）不補。"""

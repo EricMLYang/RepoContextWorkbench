@@ -19,6 +19,45 @@ def test_collect_states(spine_with_repos):
     assert "↑未push" in table and "branch" in table
 
 
+def test_collect_worktrees(spine_with_repos, tmp_path):
+    """gitpane 欄位課：worktree 數（agent 並行開發的訊號）。"""
+    import subprocess
+    from pathlib import Path
+    ra = Path(registry.get_repo(spine_with_repos, "repo-a")["path"])
+    subprocess.run(["git", "-C", str(ra), "worktree", "add", "-q",
+                    str(tmp_path / "wt-a"), "-b", "wt-branch"],
+                   check=True, capture_output=True)
+    st = collect.collect_repo(registry.get_repo(spine_with_repos, "repo-a"))
+    assert st["worktrees"] == 1
+    st_b = collect.collect_repo(registry.get_repo(spine_with_repos, "repo-b"))
+    assert st_b["worktrees"] == 0
+
+
+def test_collect_agent_detection(spine_with_repos):
+    """gitpane 課的 agent 偵測：存活會話標在 cwd 所屬 repo；pid 死了的殘骸自動清。"""
+    import os
+    import subprocess
+    import sys
+    from repoengine import agentmark
+    ra = registry.get_repo(spine_with_repos, "repo-a")["path"]
+    # 活會話（用自己的 pid＝必活）
+    agentmark.mark(spine_with_repos, "t1", ra, "claude", os.getpid())
+    # 殘骸：spawn 一個立即結束的進程，拿它的 pid
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()
+    agentmark.mark(spine_with_repos, "t2", ra, "codex", p.pid)
+    _, entries = registry.resolve_group(spine_with_repos, "g1")
+    states = {s["id"]: s for s in collect.collect_group(entries, spine_with_repos)}
+    assert states["repo-a"]["agents"] == ["claude"]   # 殘骸不算
+    assert states["repo-b"]["agents"] == []
+    # 殘骸 marker 已被清掉
+    assert not (spine_with_repos / ".state" / "agent_sessions" / "t2.json").exists()
+    # 不帶 spine_dir（舊呼叫路徑）不標，也不炸
+    states2 = {s["id"]: s for s in collect.collect_group(entries)}
+    assert states2["repo-a"]["agents"] == []
+    agentmark.unmark(spine_with_repos, "t1")
+
+
 def test_collect_external_skips_dirty(spine, tmp_path):
     from tests.conftest import make_git_repo
     p = make_git_repo(tmp_path, "ext-repo", dirty_files=3)

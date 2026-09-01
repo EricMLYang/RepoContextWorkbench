@@ -4,12 +4,32 @@
 （L4 實錘：rglob 會把 tool_experiments 的 clone 森林全掃進料，小檔擠占預算，
 自己 repo 的正文反而被擠到未納入）；非 git 目錄 fallback rglob。
 由小到大裝進 token 預算（粗估 tokens ≈ chars / 3），裝不下列在「未納入」。
+洩密哨兵抄 Repomix 的 Secretlint 課（拆機報告 §4.1）：引擎要開源、資料要私有，
+打包＝內容離開 repo 的那一刻，長得像憑證的檔案在這裡自動擋下（公私分界的哨兵）。
 正式版換 Repomix；輸出格式維持單一 md，下一代工具仍能直接讀。
 """
+import re
 import subprocess
 from pathlib import Path
 
 EXCLUDE_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv"}
+
+# 高精度樣式優先（誤攔正文比漏攔更傷用感；正式版換 Secretlint 全集）
+SECRET_PATTERNS = [
+    ("private-key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+    ("aws-key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("github-token", re.compile(
+        r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b|\bgithub_pat_[A-Za-z0-9_]{22,}\b")),
+    ("slack-token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
+    ("generic-secret", re.compile(
+        r"(?i)\b(?:api[_-]?key|secret[_-]?key|access[_-]?token)\b\s*[:=]\s*"
+        r"['\"][A-Za-z0-9_\-]{16,}['\"]")),
+]
+
+
+def secret_hits(text):
+    """回傳命中的樣式名清單（空＝乾淨）。"""
+    return [name for name, rx in SECRET_PATTERNS if rx.search(text)]
 
 
 def _doc_files(repo_path):
@@ -63,9 +83,28 @@ def pack_index(entries, max_files_per_repo=80):
     return "\n".join(out) + "\n"
 
 
+def estimate(entries):
+    """token 預算函數（Repomix 課，拆機報告 §4.1）：「這組撞下去要花多少」先算
+    再挑——挑的粒度由這個數字反推，不憑感覺。回傳 [{id, files, tokens}]。"""
+    out = []
+    for e in entries:
+        root = Path(e["path"]).expanduser()
+        files, toks = 0, 0
+        if root.is_dir():
+            for f in _doc_files(root):
+                try:
+                    text = f.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                files += 1
+                toks += est_tokens(text)
+        out.append({"id": e["id"], "files": files, "tokens": toks})
+    return out
+
+
 def pack_group(entries, token_budget):
-    """回傳 (打包文字, 收錄清單, 未納入清單)。"""
-    files = []
+    """回傳 (打包文字, 收錄清單, 未納入清單, 疑似機密清單)。"""
+    files, flagged = [], []
     for e in entries:
         root = Path(e["path"]).expanduser()
         if not root.is_dir():
@@ -74,6 +113,11 @@ def pack_group(entries, token_budget):
             try:
                 text = f.read_text(encoding="utf-8", errors="replace")
             except OSError:
+                continue
+            hits = secret_hits(text)
+            if hits:  # 洩密哨兵：內容不進包、不進 LLM
+                flagged.append(f"{e['id']}/{f.relative_to(root).as_posix()}"
+                               f"（{', '.join(hits)}）")
                 continue
             files.append((e["id"], f.relative_to(root).as_posix(), text))
     files.sort(key=lambda x: len(x[2]))  # 由小到大裝
@@ -91,4 +135,7 @@ def pack_group(entries, token_budget):
               "## 收錄"] + [f"- {x}" for x in included]
     if excluded:
         header += ["## 未納入（超預算——漏撞來源，判定時要知道）"] + [f"- {x}" for x in excluded]
-    return "\n".join(header) + "\n" + "".join(chunks), included, excluded
+    if flagged:
+        header += ["## 疑似機密（洩密哨兵已排除——公私分界，內容不出 repo）"] \
+            + [f"- {x}" for x in flagged]
+    return "\n".join(header) + "\n" + "".join(chunks), included, excluded, flagged

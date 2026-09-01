@@ -141,3 +141,30 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
   `POST /api/save_group` 把勾選存成命名組；CLI `registry remove` E2E
 - L4（人）：預設面直接看到 repo 狀態表＋勾選框；取消勾選後「需要你判斷的」與碰撞範圍同步縮小；
   勾選可一鍵存成組
+
+---
+
+## 拆機落地輪（2026-09-01 第五輪：外部工具比對檔的「可抄設計決策」補完）
+
+**範圍裁定**：依 `../personal_agent_design/20260901_外部工具比對_逐一介紹.md`，把報告點名
+「可抄」而原型尚缺的五項設計課落地；全部是 v2 既有原語（P1/P3/P6/P11）的延伸，
+與 v2 無新偏差（規格收斂檢查：未動分層、未動鐵律、未加依賴）。
+
+**新驗收條款（全部已釘成測試，117 tests）**：
+- **P3 gitpane 欄位補完**（`test_collect_brief.py`）：worktree 數（`git worktree list`，
+  主 worktree 不算）；**agent 偵測**——工作台 spawn 的 agent 會話寫存活標記
+  （`agentmark.py`，marker 落 `.state/agent_sessions/`），採集時 cwd 落在哪個 repo 就標誰；
+  pid 已死的殘骸 marker 自動清（工作台被硬殺不留幽靈）；不帶 spine_dir 的舊呼叫路徑不變
+- **P1 registry scan**（`test_registry.py`＋CLI E2E）：mani「init 自動掃描＋手寫補語意」
+  混合模式——預設只列候選、`--apply` 才登記；下半身預設 mine/active，上半身留人；
+  已登記不重列（冪等）、同名資料夾建議 id 加序號不覆蓋
+- **P6 洩密哨兵**（`test_pack_route_collide.py`）：命中憑證樣式（private key／AKIA／
+  ghp_／xox／generic secret）的檔案不進包、內容不出 repo，「疑似機密」段列名讓判定知情
+- **P6 estimate 預算函數**（同上＋MCP）：per-repo token 成本先算再挑；estimate 合計
+  ＝真打包全收錄的預算（兩個函數不說兩套話）
+- **P11 spine lint 衛生迴圈**（`test_spine.py`＋CLI E2E）：ref 斷鏈／open-loop 逾期／
+  碰撞無回程（opened 隔天判定沒回）／dead-letter 積壓四類紅字；乾淨脊椎零紅字；
+  exit code 與 audit 同形態；工作台 `/api/scan` 的 audit 欄位＝registry 稽核＋spine lint
+  併同一個紅字面
+- **MCP parity**（`test_mcpserver.py`）：`registry_scan`／`pack_estimate`／`spine_lint`
+  三工具入表——agent 的介面＝人的介面，新原語不例外

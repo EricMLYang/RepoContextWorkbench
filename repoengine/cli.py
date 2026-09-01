@@ -93,6 +93,24 @@ def cmd_registry(args):
     elif args.action == "list":
         for r in _registry.load(d)["repos"]:
             print(f"{r['id']:<24} {r.get('type','mine'):<9} {r.get('tier','?'):<9} {r['path']}")
+    elif args.action == "scan":
+        # mani「init 自動掃描＋手寫補語意」混合模式：預設只列候選，--apply 才登記
+        base = args.id
+        if not base:
+            sys.exit("用法：registry scan <目錄> [--apply]")
+        if args.apply:
+            added = _registry.scan_register(d, base)
+            for cid in added:
+                print(f"已登記：{cid}（下半身預設 mine/active；"
+                      f"上半身 type/tier/tags 用 registry set 補）")
+            if not added:
+                print("無新 repo 可登記")
+        else:
+            cands = _registry.scan_dir(d, base)
+            for path, cid in cands:
+                print(f"[候選] {cid}: {path}")
+            print(f"共 {len(cands)} 個未登記 git repo（加 --apply 登記）"
+                  if cands else "無未登記 repo")
     elif args.action == "audit":
         reds = _registry.audit(d, scan_dirs=args.scan or [])
         if reds:
@@ -100,6 +118,16 @@ def cmd_registry(args):
                 print(f"[RED] {r}")
             sys.exit(1)
         print("audit 零紅字 OK")
+
+
+def cmd_lint(args):
+    d = _spine_dir(args)
+    reds = _spine.lint(d)
+    if reds:
+        for r in reds:
+            print(f"[RED] {r}")
+        sys.exit(1)
+    print("脊椎 lint 零紅字 OK（衛生迴圈）")
 
 
 def cmd_group(args):
@@ -115,7 +143,7 @@ def cmd_group(args):
 def cmd_collect(args):
     d = _spine_dir(args)
     _, entries = _registry.resolve_group(d, args.group, args.repos)
-    print(_collect.format_table(_collect.collect_group(entries)))
+    print(_collect.format_table(_collect.collect_group(entries, d)))
 
 
 def cmd_pack(args):
@@ -123,12 +151,23 @@ def cmd_pack(args):
     gname, entries = _registry.resolve_group(d, args.group, args.repos)
     cfg = _config.load(d)
     budget = args.budget or cfg["pack"]["token_budget"]
-    text, inc, exc = _pack.pack_group(entries, budget)
+    if args.estimate:
+        # 挑的預算函數：先算再挑，粒度由數字反推（Repomix 課）
+        rows = _pack.estimate(entries)
+        total = sum(r["tokens"] for r in rows)
+        for r in sorted(rows, key=lambda x: -x["tokens"]):
+            print(f"{r['id']:<24} {r['files']:>4} 檔 ~{r['tokens']:>7} tokens")
+        fit = "裝得下" if total <= budget else f"超預算（挑細一點或加 --budget）"
+        print(f"{'合計':<24} {'':>6} ~{total:>7} tokens／預算 {budget} → {fit}")
+        return
+    text, inc, exc, flagged = _pack.pack_group(entries, budget)
     out = d / "groups" / (args.group or "adhoc") / "materials" / \
         f"pack-{_dt.datetime.now():%Y%m%d-%H%M%S}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
-    print(f"打包完成：{out}（收錄 {len(inc)}、未納入 {len(exc)}）")
+    msg = f"打包完成：{out}（收錄 {len(inc)}、未納入 {len(exc)}"
+    msg += f"、疑似機密擋下 {len(flagged)}）" if flagged else "）"
+    print(msg)
 
 
 def cmd_brief(args):
@@ -310,9 +349,10 @@ def build_parser():
     s.add_argument("path")
     s.set_defaults(func=cmd_init)
 
-    s = sub.add_parser("registry", help="P1 登記/稽核/tag")
-    s.add_argument("action", choices=["add", "set", "remove", "tag", "list", "audit"])
-    s.add_argument("id", nargs="?")
+    s = sub.add_parser("registry", help="P1 登記/掃描/稽核/tag")
+    s.add_argument("action",
+                   choices=["add", "set", "remove", "tag", "list", "scan", "audit"])
+    s.add_argument("id", nargs="?", help="scan 時＝要掃的目錄")
     s.add_argument("path_arg", nargs="?")
     s.add_argument("key", nargs="?")
     s.add_argument("value", nargs="?")
@@ -321,6 +361,8 @@ def build_parser():
     s.add_argument("--tags")
     s.add_argument("--upstream")
     s.add_argument("--scan", action="append")
+    s.add_argument("--apply", action="store_true",
+                   help="scan：把候選實際登記（預設只列出）")
     s.add_argument("--add", help="tag：加（逗號分隔）")
     s.add_argument("--remove", help="tag：移除（逗號分隔）")
     s.set_defaults(func=cmd_registry)
@@ -339,6 +381,8 @@ def build_parser():
         s.add_argument("--repos")
         if name == "pack":
             s.add_argument("--budget", type=int)
+            s.add_argument("--estimate", action="store_true",
+                           help="只算各 repo token 成本不打包（挑的預算函數）")
         s.set_defaults(func=fn)
 
     s = sub.add_parser("append", help="P10 寫事件")
@@ -361,6 +405,9 @@ def build_parser():
 
     s = sub.add_parser("loops", help="未結 open loops（P11 視圖）")
     s.set_defaults(func=cmd_loops)
+
+    s = sub.add_parser("lint", help="脊椎衛生迴圈（ref 斷鏈/逾期 loop/碰撞無回程/dead-letter）")
+    s.set_defaults(func=cmd_lint)
 
     s = sub.add_parser("collide", help="P7 撞（兩段式）")
     s.add_argument("action", choices=["submit", "run"])

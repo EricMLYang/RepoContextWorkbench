@@ -20,10 +20,12 @@ _EXIT_MSG = "\r\n\x1b[2m[進程已結束——關這個分頁或重開一個會�
 
 
 class TermSession:
-    def __init__(self, sid, cmd, cwd=None, env=None, title="", cols=120, rows=32):
+    def __init__(self, sid, cmd, cwd=None, env=None, title="", cols=120, rows=32,
+                 on_exit=None):
         self.sid = sid
         self.title = title or os.path.basename(str(cmd[0]))
         self.alive = True
+        self._on_exit = on_exit   # 進程自然結束時回呼（agent 偵測 marker 清理）
         self._buf = collections.deque()   # bytes chunks
         self._buf_len = 0
         self._subs = set()                # callables(data: bytes)
@@ -79,6 +81,11 @@ class TermSession:
                 os.close(self._master)
             except OSError:
                 pass
+        if self._on_exit:
+            try:
+                self._on_exit()
+            except Exception:
+                pass
 
     def _push(self, data):
         with self._lock:
@@ -103,6 +110,12 @@ class TermSession:
                 os.write(self._master, data)
         except OSError:
             self.alive = False
+
+    @property
+    def pid(self):
+        if os.name == "nt":
+            return getattr(self._winpty, "pid", None)
+        return self._proc.pid if self._proc else None
 
     def resize(self, cols, rows):
         try:
@@ -166,6 +179,7 @@ class TermManager:
 
     def create_agent(self, group=None, repos=None, repo=None, task=None,
                      agent="claude"):
+        from . import agentmark as _agentmark
         from . import session as _session
         cwd, cmd, _pack = _session.build(self.spine_dir, group=group,
                                          repos=repos, repo=repo, task=task,
@@ -178,7 +192,10 @@ class TermManager:
             cmd = [sh, "-lc", "exec " + shlex.join(cmd)]
         sid = f"t{next(self._ids)}"
         scope = repo or group or ("臨時" if repos else "全部")
-        s = TermSession(sid, cmd, cwd=str(cwd), title=f"{agent}:{scope}")
+        s = TermSession(sid, cmd, cwd=str(cwd), title=f"{agent}:{scope}",
+                        on_exit=lambda: _agentmark.unmark(self.spine_dir, sid))
+        # agent 偵測（gitpane 課）：標記存活會話，P3 採集據此標「🤖 誰在跑」
+        _agentmark.mark(self.spine_dir, sid, cwd, agent, s.pid)
         self.sessions[sid] = s
         return s
 
@@ -189,6 +206,8 @@ class TermManager:
         s = self.sessions.pop(sid, None)
         if s:
             s.kill()
+            from . import agentmark as _agentmark
+            _agentmark.unmark(self.spine_dir, sid)  # reader 收尾可能晚到，這裡先清
         return s is not None
 
     def list(self):

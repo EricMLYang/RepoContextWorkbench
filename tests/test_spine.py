@@ -1,11 +1,11 @@
-"""L1：脊椎寫入/查詢/dead-letter/stats（不變式 2、6、7）。"""
+"""L1：脊椎寫入/查詢/dead-letter/stats/lint（不變式 2、6、7＋衛生迴圈）。"""
 import datetime as dt
 
 import pytest
 
 from repoengine.spine import (
     ValidationError, ack_unread, append_event, get_unread,
-    open_loops, query, stats,
+    lint, open_loops, query, stats,
 )
 
 
@@ -82,3 +82,47 @@ def test_unread_marker(spine):
     assert get_unread(spine) == []
     append_event(spine, "decision", "manual", body="第二筆", when=_t(10, 0))
     assert len(get_unread(spine)) == 1
+
+
+# ── 衛生迴圈（second-brain lint 課＋Szapar staleness 課）──────────────
+
+
+def test_lint_clean_spine(spine):
+    """健康脊椎：好 ref、未到期 loop、今天的 opened 碰撞——零紅字。"""
+    append_event(spine, "presented", "morning-brief", [], body="呈現了", when=_t(7, 42))
+    append_event(spine, "chosen", "morning-brief", ["ref:presented:07:42"],
+                 body="選了", when=_t(7, 45))
+    append_event(spine, "open-loop", "hotkey", ["#1", "due:2099-01-01"],
+                 body="opened →「未來的事」", when=_t(9, 0))
+    append_event(spine, "collision", "hotkey", ["id:x-a"],
+                 body="opened\n輸入：今天剛丟的", when=_t(9, 5))
+    assert lint(spine) == []
+
+
+def test_lint_broken_ref(spine):
+    append_event(spine, "chosen", "monitor", ["ref:presented:09:15"],
+                 body="ref 指到不存在的事件", when=_t(10, 0))
+    reds = lint(spine)
+    assert len(reds) == 1 and "ref 斷鏈" in reds[0]
+
+
+def test_lint_overdue_loop_and_stale_collision(spine):
+    yesterday = dt.datetime.now() - dt.timedelta(days=1)
+    append_event(spine, "open-loop", "hotkey", ["#7", "due:2020-01-01"],
+                 body="opened →「早該做的」", when=_t(9, 0))
+    append_event(spine, "collision", "hotkey", ["id:old-a"],
+                 body="opened\n輸入：昨天丟的想法",
+                 when=yesterday.replace(hour=9, minute=0))
+    reds = "\n".join(lint(spine))
+    assert "open-loop 逾期" in reds and "#7" in reds
+    assert "碰撞無回程" in reds and "old-a" in reds
+    # 判定回來後（同 id 的非 opened 事件）就不再紅
+    append_event(spine, "collision", "engine", ["id:old-a", "ref:collision:old-a"],
+                 body="判定：真增量", when=_t(10, 0))
+    assert "碰撞無回程" not in "\n".join(lint(spine))
+
+
+def test_lint_dead_letter_backlog(spine):
+    append_event(spine, "bad-type", "hotkey", body="拒寫原文", dead_letter=True)
+    reds = lint(spine)
+    assert any("dead-letter 積壓" in r and "1 件" in r for r in reds)

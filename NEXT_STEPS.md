@@ -1,6 +1,6 @@
-# NEXT_STEPS — 原型看過後的下一步（2026-09-01，工作台輪後更新）
+# NEXT_STEPS — 原型看過後的下一步（2026-09-01，拆機落地輪後更新）
 
-> 原型現況：**引擎原語 P1–P16＋MCP server＋IDE 工作台（內嵌 terminal）**；L1＋L2 全綠（98 tests）；L3/L4 待人。
+> 原型現況：**引擎原語 P1–P16＋MCP server＋IDE 工作台（內嵌 terminal）＋拆機報告五項設計課**；L1＋L2 全綠（117 tests）；L3/L4 待人。
 > 詳見 `VERIFICATION.md`＋設計檔 `../personal_agent_design/20260901_工作台設計_v1.md`。
 > 入口：`python -m repoengine --spine <spine> app`（桌面視窗；需 `pip install pywebview`）。
 
@@ -10,13 +10,16 @@
 $env:PYTHONUTF8 = "1"
 cd repo_engine_prototype
 python -m repoengine init <某個空資料夾>                    # 建 spine repo
-python -m repoengine --spine <spine> registry add <id> <路徑>  # 登記 3–5 個真實 repo
+python -m repoengine --spine <spine> registry scan <repo群目錄>          # 先看候選（mani 混合模式）
+python -m repoengine --spine <spine> registry scan <repo群目錄> --apply  # 批次登記，上半身再手補
 python -m repoengine --spine <spine> registry add <外部id> <路徑> --type external --upstream owner/repo
 python -m repoengine --spine <spine> group add g1 <id1>,<id2>
 python -m repoengine --spine <spine> collect --group g1     # 採集對不對？
 python -m repoengine --spine <spine> upstream --group g1    # 上游查得到嗎（需 gh 登入）
 python -m repoengine --spine <spine> digest  --group g1     # mock 摘要形狀對嗎（真摘要換 --provider claude）
 python -m repoengine --spine <spine> brief   --group g1     # 簡報一屏內？問句形狀對？
+python -m repoengine --spine <spine> pack --estimate --group g1  # 這組撞下去要花多少 token？
+python -m repoengine --spine <spine> lint                   # 脊椎衛生迴圈（用幾天後再跑一次看陳舊浮不浮）
 python -m repoengine --spine <spine> ui                     # 監控台＋碰撞台＋深看
 python -m repoengine --spine <spine> unread                 # 動作有留痕嗎
 ```
@@ -64,3 +67,6 @@ python -m repoengine --spine <spine> session --group g1 --task "隨便問脊椎�
 - **2026-09-01 第二輪**：repo 勾選（P2 臨時組合進介面）＋ `registry remove`
 - **2026-09-01 補完輪**：P4 upstream／P5 digest／P9 spawn／P12 timer／P13 notify／P16 session／MCP server；
   品味量測補存活率；open-loop 自動補預設 due；監控台 interrupt 置頂＋瀏覽器通知
+- **2026-09-01 拆機落地輪**：外部工具比對檔的五項「可抄設計決策」補完——P3 worktree＋agent 偵測（gitpane）
+  ／P1 registry scan（mani）／P6 洩密哨兵＋estimate（Repomix）／P11 spine lint（second-brain＋Szapar）；
+  MCP 三工具同步入表

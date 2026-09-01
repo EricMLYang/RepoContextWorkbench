@@ -165,6 +165,43 @@ def survival(spine_dir):
             "survival_rate": (len(alive) / n) if n else None}
 
 
+def scan_dir(spine_dir, base_dir):
+    """mani「init 自動掃描」課（拆機報告 §2.2）：找 base_dir 下含 .git 的資料夾，
+    回傳未登記候選 [(path, 建議id)]。id 撞名時加序號（同名資料夾登在別處的情況）。"""
+    data = load(spine_dir)
+    known_paths = set()
+    for r in data["repos"]:
+        p = Path(r["path"]).expanduser()
+        known_paths.add(p.resolve() if p.exists() else p)
+    used_ids = {r["id"] for r in data["repos"]}
+    out = []
+    base = Path(base_dir).expanduser()
+    if not base.is_dir():
+        raise ValueError(f"目錄不存在: {base_dir}")
+    for child in sorted(base.iterdir()):
+        if not (child.is_dir() and (child / ".git").exists()):
+            continue
+        if child.resolve() in known_paths:
+            continue
+        cid, n = child.name, 2
+        while cid in used_ids:
+            cid = f"{child.name}-{n}"
+            n += 1
+        used_ids.add(cid)
+        out.append((child, cid))
+    return out
+
+
+def scan_register(spine_dir, base_dir):
+    """混合模式的「自動下半身」：掃描到的 repo 以預設值登記（mine/active/無 tag）；
+    上半身（type/tier/tags/血統/關係）留人手寫——狀態欄位機器填，語意我填。"""
+    added = []
+    for path, cid in scan_dir(spine_dir, base_dir):
+        add_repo(spine_dir, cid, path)
+        added.append(cid)
+    return added
+
+
 def audit(spine_dir, scan_dirs=None, active_max_days=30):
     """紅字清單。scan_dirs：額外掃「資料夾在但 registry 沒有」的洞。"""
     data = load(spine_dir)
