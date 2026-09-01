@@ -170,6 +170,12 @@ class TermManager:
         cwd, cmd, _pack = _session.build(self.spine_dir, group=group,
                                          repos=repos, repo=repo, task=task,
                                          agent=agent)
+        if os.name != "nt":
+            # 經登入 shell 跑：PATH/profile（~/.local/bin、npm-global…）天然正確，
+            # 不受「工作台是怎麼被啟動的」影響；command not found 也會顯示在終端裡
+            import shlex
+            sh = os.environ.get("SHELL") or "/bin/zsh"
+            cmd = [sh, "-lc", "exec " + shlex.join(cmd)]
         sid = f"t{next(self._ids)}"
         scope = repo or group or ("臨時" if repos else "全部")
         s = TermSession(sid, cmd, cwd=str(cwd), title=f"{agent}:{scope}")

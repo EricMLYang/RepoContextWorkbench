@@ -99,11 +99,14 @@ def add_group(spine_dir, name, members, landing="default"):
 
 
 def resolve_group(spine_dir, name=None, repos=None):
-    """回傳 (組名, [repo entries])。repos 給定＝臨時組合免建組（P2）。"""
+    """回傳 (組名, [repo entries])。repos 給定＝臨時組合免建組（P2）；
+    name=None 且無 repos＝全部（工作台的（全部）範圍——L4 bug：以前這裡直接炸）。"""
     data = load(spine_dir)
     if repos:
         ids = [r.strip() for r in repos.split(",")] if isinstance(repos, str) else repos
         return f"臨時({','.join(ids)})", [get_repo(spine_dir, i) for i in ids]
+    if name is None:
+        return "全部", list(data["repos"])
     for g in data["groups"]:
         if g["name"] == name:
             return name, [get_repo(spine_dir, m) for m in g["members"]]

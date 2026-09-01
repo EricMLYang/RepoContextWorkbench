@@ -16,6 +16,21 @@ def test_pack_budget_and_exclusion(spine_with_repos):
     assert exc2 and "未納入" in text2
 
 
+def test_pack_respects_gitignore(spine_with_repos, tmp_path):
+    """L4 實錘回歸：gitignored 的 clone 森林不得進料（rglob 時代 1551 檔擠占預算）。"""
+    from pathlib import Path
+    ra = Path(registry.get_repo(spine_with_repos, "repo-a")["path"])
+    clones = ra / "tool_clones" / "some-clone"
+    clones.mkdir(parents=True)
+    (clones / "noise.md").write_text("clone 雜訊\n" * 50, encoding="utf-8")
+    (ra / ".gitignore").write_text("tool_clones/\n", encoding="utf-8")
+    _, entries = registry.resolve_group(spine_with_repos, None, "repo-a")
+    text, inc, exc = pack.pack_group(entries, token_budget=100000)
+    assert "clone 雜訊" not in text
+    assert not any("noise.md" in x for x in inc + exc)
+    assert "widget 快取設計" in text  # 自己的正文還在
+
+
 def test_route_to_repo_inbox(spine_with_repos):
     p = route.route(spine_with_repos, "碰撞結論內容", "repo:repo-a", title="cache-idea")
     assert p.exists() and "01_inbox" in str(p)

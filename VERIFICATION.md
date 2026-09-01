@@ -27,6 +27,20 @@ v2 裡「現在不驗、三個月後才痛」的東西，全部釘成不變式�
 
 ## 回饋迴路（用起來之後）
 
+- **2026-09-01 L4「▶ 沒 work」**→ 兩個根因都實錘：① claude `--mcp-config` 吃多值，
+  空格形式把帶料 prompt 吞成設定檔路徑（Invalid MCP configuration）→ 改等號形式；
+  ② hover 才現身的 ▶ 隱形時不吃 click（穿透到列上、零回饋），5 秒輪詢重繪再打斷 hover
+  → 改永遠可見。另修 pack 改走 git ls-files 尊重 .gitignore（clone 森林 1551 檔擠占預算）。
+- **2026-09-01 L4「開 Agent 時料太長」**→ 設計錯位：全文打包是給 P7 headless 判定的
+  （沒工具只能餵全文）；P16 互動會話的 agent 自己會讀檔 → 會話料改 `pack_index`
+  **文件地圖**（路徑＋行數＋首標題，大檔在前）——實測 AgentCodingPM 1854 行 → 19 行；
+  prompt 明說「先讀地圖挑檔細讀，不要整包吞」。全文 pack_group 保留給 collide。
+- **2026-09-01 L4「agent 功能開啟都是失敗的」**→ 根因＝（全部）範圍時 `resolve_group(None)` 炸
+  「組不存在: None」（工作台預設範圍，claude/codex 都死在打包前；簡報鈕同雷）；
+  先補 failing test（resolve_group None＝全部／build 無範圍／假 agent 全路徑）再修；
+  順手加固：agent 會話經 **登入 shell（$SHELL -lc）** spawn——PATH/profile 不受工作台
+  怎麼被啟動影響，command not found 會顯示在終端裡而不是無聲失敗。
+
 - **每一次「這則不該吵我／怎麼沒告訴我」**→ 改 `config.yaml` thresholds → 立刻補一條 L1 閾值測試釘住新手感。
 - **每一次 L4 發現的 bug** → 先寫 failing test（L1 或 L2）再修——原型期就維持紅綠循環。
 - **每一次真實碰撞的判定不準** → 改 prompt（`collide.py` 內）→ L3 重跑；判定標準的措辭本來就留給前三次真實碰撞調（v2 §9-2）。

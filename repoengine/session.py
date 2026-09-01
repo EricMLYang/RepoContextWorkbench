@@ -33,7 +33,7 @@ def ensure_mcp_json(spine_dir):
     return p
 
 
-def build(spine_dir, group=None, repos=None, repo=None, task=None, budget=None,
+def build(spine_dir, group=None, repos=None, repo=None, task=None,
           agent="claude"):
     """組會話：打包＋掛載＋指令。回傳 (cwd, cmd list, pack 檔路徑)。
 
@@ -48,7 +48,8 @@ def build(spine_dir, group=None, repos=None, repo=None, task=None, budget=None,
         raise ValueError(f"未知 agent: {agent}（config agents: 目前有 "
                          f"{', '.join(cfg['agents'])}）")
     _, entries = registry.resolve_group(spine_dir, group, repos)
-    text, _, _ = _pack.pack_group(entries, budget or cfg["pack"]["token_budget"])
+    # 會話料＝文件地圖（L4 回饋「料太長」）：agent 自己會讀檔，給地圖讓它先挑再細讀
+    text = _pack.pack_index(entries)
     out = spine_dir / "groups" / (group or "adhoc") / "materials" / \
         f"session-{_dt.datetime.now():%Y%m%d-%H%M%S}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -56,10 +57,13 @@ def build(spine_dir, group=None, repos=None, repo=None, task=None, budget=None,
     mcp_json = ensure_mcp_json(spine_dir)
     cwd = Path(registry.get_repo(spine_dir, repo)["path"]).expanduser() \
         if repo else spine_dir
-    prompt = f"料已備好：{out}。任務：{task or '（未指定——先讀料，再問我要做什麼）'}"
+    prompt = (f"料（文件地圖）已備好：{out}——先讀地圖挑相關檔案自己細讀，"
+              f"不要整包讀完。任務：{task or '（未指定——先讀地圖，再問我要做什麼）'}")
     cmd = list(spec["cmd"])
     if repo and spec.get("mcp") == "mcp-config":
-        cmd += ["--mcp-config", str(mcp_json)]  # cwd 不在 spine → 顯式掛載
+        # 等號形式必須：claude 的 --mcp-config 吃多值，空格形式會把後面的
+        # 帶料 prompt 也吞成設定檔路徑（L4 實錘：Invalid MCP configuration）
+        cmd.append(f"--mcp-config={mcp_json}")
     cmd += list(spec.get("prompt_flag") or []) + [prompt]
     return cwd, cmd, out
 

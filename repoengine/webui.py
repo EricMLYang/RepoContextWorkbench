@@ -436,8 +436,10 @@ PAGE = r"""<!doctype html>
   .repo.off .rid{color:var(--sub)}
   .repo .st{font-size:11px;color:var(--sub);white-space:nowrap}
   .repo .st.bad{color:var(--warn)}
-  .repo .go{visibility:hidden;font-size:11px;padding:0 5px}
-  .repo:hover .go{visibility:visible}
+  /* 永遠可見——hover 才現身的按鈕在 5 秒輪詢重繪的清單裡點不到（隱形不吃 click），
+     L4 實錘「▶ 沒 work」的根因之一 */
+  .repo .go{font-size:11px;padding:0 5px;opacity:.5}
+  .repo:hover .go,.repo .go:hover{opacity:1}
   #auditbox{font-size:12px}
   #auditbox .red{color:var(--red)}
   #auditbox .okline{color:var(--ok)}

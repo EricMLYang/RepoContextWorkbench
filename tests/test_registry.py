@@ -5,6 +5,13 @@ from repoengine import registry
 from tests.conftest import make_git_repo
 
 
+def test_resolve_group_none_means_all(spine_with_repos):
+    """L4 bug 回歸：（全部）範圍＝name=None 且無 repos，必須回全部而不是炸
+    「組不存在: None」（工作台預設範圍的 agent 會話/簡報以前都死在這）。"""
+    gname, entries = registry.resolve_group(spine_with_repos)
+    assert gname == "全部" and {e["id"] for e in entries} == {"repo-a", "repo-b"}
+
+
 def test_add_and_get(spine, tmp_path):
     p = make_git_repo(tmp_path, "repo-x")
     registry.add_repo(spine, "repo-x", p, tags=["dev"])

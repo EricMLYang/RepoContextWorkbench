@@ -40,6 +40,27 @@ def test_session_echo_replay_kill(tmp_path):
 
 
 @posix_only
+def test_manager_agent_spawns_via_login_shell(spine_with_repos, tmp_path):
+    """agent 會話全路徑：（全部）範圍＋假 agent（/bin/echo）——
+    打包→登入 shell 包裝→PTY spawn→帶料 prompt 真的出現在終端輸出。"""
+    from pathlib import Path
+    (Path(spine_with_repos) / "config.yaml").write_text(
+        "agents:\n  fake: {cmd: [/bin/echo], mcp: none, prompt_flag: []}\n",
+        encoding="utf-8")
+    m = term.TermManager(spine_with_repos)
+    s = m.create_agent(agent="fake")   # 不給 group/repos＝（全部）
+    assert s.title == "fake:全部"
+    marker = "文件地圖".encode("utf-8")
+    got = [s.attach(lambda d: None) or b""]
+    deadline = time.time() + 15
+    while time.time() < deadline and marker not in got[0]:
+        time.sleep(0.1)
+        got[0] = s.attach(lambda d: None)
+    assert marker in got[0]
+    m.kill_all()
+
+
+@posix_only
 def test_manager_shell_and_kill(spine):
     m = term.TermManager(spine)
     s = m.create_shell()
