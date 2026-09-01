@@ -39,6 +39,10 @@ pack:
 #   - {task: brief, at: "07:30", group: g1}
 #   - {task: upstream, at: "07:25"}
 #   - {task: commit, at: "21:00"}
+# agents:                     # P16 會話 agent 註冊表——claude 內建（見預設值），其他家照這個形狀加：
+#   codex:  {cmd: [codex], mcp: none, prompt_flag: []}   # codex <prompt> 本身就是互動模式
+#   gemini: {cmd: [gemini], mcp: none, prompt_flag: ["-i"]}  # -i 帶初始 prompt 進互動模式
+#   # mcp: mcp-config＝支援 --mcp-config（v1 只保證 claude）｜cwd＝靠 cwd 設定檔自動掛載｜none＝該家自理
 """
 
 SCAFFOLD_GITIGNORE = ".engine.lock\n.state/\n.agent_logs/\n"
