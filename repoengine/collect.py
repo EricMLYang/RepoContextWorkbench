@@ -22,7 +22,7 @@ def collect_repo(entry):
           "tier": entry.get("tier", "active"), "path": str(p),
           "exists": p.is_dir(), "dirty": 0, "dirty_days": None,
           "last_commit_days": None, "ahead": None, "behind": None,
-          "note": ""}
+          "branch": None, "last_subject": "", "note": ""}
     if not st["exists"]:
         st["note"] = "路徑不存在"
         return st
@@ -50,6 +50,10 @@ def collect_repo(entry):
     if rc == 0 and out:
         behind, ahead = out.split()
         st["ahead"], st["behind"] = int(ahead), int(behind)
+    rc, out = _git(p, "rev-parse", "--abbrev-ref", "HEAD")
+    st["branch"] = out if rc == 0 and out else None
+    rc, out = _git(p, "log", "-1", "--format=%s")
+    st["last_subject"] = out if rc == 0 else ""
     return st
 
 
@@ -58,9 +62,14 @@ def collect_group(entries):
 
 
 def format_table(states):
-    lines = [f"{'repo':<24} {'tier':<8} {'dirty':>5} {'dirty天':>7} {'末commit天':>9}  note"]
+    lines = [f"{'repo':<24} {'tier':<8} {'branch':<12} {'dirty':>5} {'dirty天':>7} "
+             f"{'末commit天':>9} {'↑未push':>7} {'↓落後':>6}  note"]
     for s in states:
         dd = f"{s['dirty_days']:.1f}" if s["dirty_days"] is not None else "-"
         lc = f"{s['last_commit_days']:.1f}" if s["last_commit_days"] is not None else "-"
-        lines.append(f"{s['id']:<24} {s['tier']:<8} {s['dirty']:>5} {dd:>7} {lc:>9}  {s['note']}")
+        ah = str(s["ahead"]) if s.get("ahead") is not None else "-"
+        bh = str(s["behind"]) if s.get("behind") is not None else "-"
+        br = (s.get("branch") or "-")[:12]
+        lines.append(f"{s['id']:<24} {s['tier']:<8} {br:<12} {s['dirty']:>5} {dd:>7} "
+                     f"{lc:>9} {ah:>7} {bh:>6}  {s['note']}")
     return "\n".join(lines)

@@ -670,9 +670,12 @@ function renderRepoList(){
     row.append(cb);
     row.append(el("span","rid",id));
     if(s){
-      const bad=(s.dirty_days!=null&&s.dirty_days>=4)||!s.exists||s.note;
+      const bad=(s.dirty_days!=null&&s.dirty_days>=4)||!s.exists||s.note
+                ||(s.behind||0)>0;
       const bits=[];
       if(s.dirty)bits.push("dirty "+s.dirty+(s.dirty_days!=null?"×"+s.dirty_days.toFixed(0)+"d":""));
+      if(s.ahead)bits.push("↑"+s.ahead);      // 有 commit 沒 push
+      if(s.behind)bits.push("↓"+s.behind);    // 落後遠端（fetch 後才準）
       if(s.last_commit_days!=null)bits.push(s.last_commit_days.toFixed(0)+"d");
       if(s.note)bits.push(s.note);
       row.append(el("span","st"+(bad?" bad":""),bits.join("｜")||"✓"));
@@ -699,15 +702,21 @@ function renderScan(sc){
   if(!sc.audit.length)a.append(el("div","okline","零紅字 ✅"));
   const d=$("deeptable");d.innerHTML="";
   const tb=el("table");const hd=el("tr");
-  [["repo",""],["tier",""],["dirty","num"],["dirty天","num"],
-   ["末commit天","num"],["note",""]].forEach(([t,c])=>hd.append(el("th",c,t)));
+  [["repo",""],["branch",""],["tier",""],["dirty","num"],["dirty天","num"],
+   ["末commit天","num"],["↑未push","num"],["↓落後","num"],
+   ["最後 commit",""],["note",""]].forEach(([t,c])=>hd.append(el("th",c,t)));
   tb.append(hd);
   sc.states.forEach(s=>{const tr=el("tr");
     const f=v=>v==null?"-":v.toFixed(1);
-    tr.append(el("td","",s.id));tr.append(el("td","",s.tier));
+    const n=v=>v==null?"-":String(v);
+    tr.append(el("td","",s.id));tr.append(el("td","",s.branch||"-"));
+    tr.append(el("td","",s.tier));
     tr.append(el("td","num",String(s.dirty)));
     tr.append(el("td","num",f(s.dirty_days)));
     tr.append(el("td","num",f(s.last_commit_days)));
+    tr.append(el("td","num",n(s.ahead)));
+    tr.append(el("td","num",n(s.behind)));
+    tr.append(el("td","",(s.last_subject||"").slice(0,60)));
     tr.append(el("td","",s.note||""));tb.append(tr);});
   d.append(tb);
   $("statsraw").textContent=$("statsline").textContent;

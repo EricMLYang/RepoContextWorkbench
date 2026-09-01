@@ -11,6 +11,12 @@ def test_collect_states(spine_with_repos):
     assert states["repo-b"]["dirty"] == 2
     assert states["repo-b"]["dirty_days"] >= 4.5   # fixture 設 5 天
     assert states["repo-a"]["last_commit_days"] is not None
+    assert states["repo-a"]["branch"] in ("main", "master")
+    assert states["repo-a"]["last_subject"] == "init"
+    # fixture repo 無 remote → ahead/behind 查不到＝None（fetch 後才準的 caveat）
+    assert states["repo-a"]["ahead"] is None
+    table = collect.format_table(collect.collect_group(entries))
+    assert "↑未push" in table and "branch" in table
 
 
 def test_collect_external_skips_dirty(spine, tmp_path):
