@@ -224,6 +224,24 @@ def test_collide_with_repos_adhoc(server):
 
 
 @pytest.mark.e2e
+def test_tag_api(server):
+    """tag：加/移除經 API 落 registry；state 帶 tags map 與詞彙（suggestions ∪ 既有）。"""
+    base, spine_dir = server
+    code, r = _post(base, "/api/tag", {"id": "repo-a", "add": ["PM", "開發"]})
+    assert code == 200 and r["tags"] == ["PM", "開發"]
+    from repoengine import registry
+    assert registry.get_repo(spine_dir, "repo-a")["tags"] == ["PM", "開發"]
+    _, body = _get(base, "/api/state")
+    st = json.loads(body)
+    assert st["tags"]["repo-a"] == ["PM", "開發"] and st["tags"]["repo-b"] == []
+    assert "PM" in st["tag_vocab"]
+    code, r = _post(base, "/api/tag", {"id": "repo-a", "remove": ["開發"]})
+    assert code == 200 and r["tags"] == ["PM"]
+    code, r = _post(base, "/api/tag", {"id": "ghost", "add": ["x"]})
+    assert code == 500  # 未知 repo 錯誤浮出
+
+
+@pytest.mark.e2e
 def test_save_group_api(server):
     base, spine_dir = server
     code, r = _post(base, "/api/save_group",

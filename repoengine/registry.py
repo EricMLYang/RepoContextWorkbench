@@ -67,6 +67,36 @@ def set_field(spine_dir, id, key, value):
     raise ValueError(f"repo 不存在: {id}")
 
 
+def tag_repo(spine_dir, id, add=None, remove=None):
+    """P1 tag 操作（2026-09-01 使用者需求：分群以外要能很容易下 tag）。
+    回傳更新後的 tags；重複 add 冪等、remove 不存在的 tag 靜默略過。"""
+    data = load(spine_dir)
+    for r in data["repos"]:
+        if r["id"] == id:
+            tags = list(r.get("tags") or [])
+            for t in (add or []):
+                t = str(t).strip()
+                if t and t not in tags:
+                    tags.append(t)
+            for t in (remove or []):
+                if t in tags:
+                    tags.remove(t)
+            r["tags"] = tags
+            save(spine_dir, data)
+            return tags
+    raise ValueError(f"repo 不存在: {id}")
+
+
+def all_tags(spine_dir):
+    """registry 內既有 tag 的去重清單（保持首次出現順序）。"""
+    out = []
+    for r in load(spine_dir)["repos"]:
+        for t in r.get("tags") or []:
+            if t not in out:
+                out.append(t)
+    return out
+
+
 def remove_repo(spine_dir, id):
     """移除 repo 並清掉所有組的 membership（組保留，允許空組）。"""
     data = load(spine_dir)

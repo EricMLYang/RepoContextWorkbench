@@ -49,10 +49,16 @@ def build_state(spine_dir):
     """輕量狀態（純檔案讀，供 5 秒輪詢）。interrupt 先於 normal（打斷要掙得，其餘累積）。"""
     data = _registry.load(spine_dir)
     p = _notify.pending(spine_dir)
+    vocab = list(_config.load(spine_dir)["tags"]["suggestions"])
+    for t in _registry.all_tags(spine_dir):
+        if t not in vocab:
+            vocab.append(t)
     return {
         "groups": [{"name": g["name"], "members": g["members"]}
                    for g in data["groups"]],
         "repos": [r["id"] for r in data["repos"]],
+        "tags": {r["id"]: (r.get("tags") or []) for r in data["repos"]},
+        "tag_vocab": vocab,
         "unread": [dict(_ev_dict(e), interrupt=True) for e in p["interrupt"]]
                   + [_ev_dict(e) for e in p["normal"]],
         "loops": [_ev_dict(e) for e in _spine.open_loops(spine_dir)],
@@ -112,6 +118,12 @@ def _handle_action(spine_dir, action, payload, terms=None):
         _spine.append_event(spine_dir, "open-loop", "monitor", [num],
                             body="closed → 從工作台關閉")
         return {"ok": True}
+    if action == "tag":
+        rid = payload.get("id") or ""
+        tags = _registry.tag_repo(spine_dir, rid,
+                                  add=payload.get("add") or None,
+                                  remove=payload.get("remove") or None)
+        return {"ok": True, "id": rid, "tags": tags}
     if action == "save_group":
         name = (payload.get("name") or "").strip()
         members = payload.get("repos") or []
@@ -440,6 +452,19 @@ PAGE = r"""<!doctype html>
      L4 實錘「▶ 沒 work」的根因之一 */
   .repo .go{font-size:11px;padding:0 5px;opacity:.5}
   .repo:hover .go,.repo .go:hover{opacity:1}
+  .chip{font-size:11px;border:1px solid var(--line);border-radius:9px;
+        padding:0 8px 0 6px;cursor:pointer;color:var(--sub);white-space:nowrap;
+        background:none;line-height:17px;display:inline-flex;
+        align-items:center;gap:5px}
+  .chip .dot{margin:0}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;
+       flex:none;cursor:pointer}
+  .repo{border-left:3px solid transparent;padding-left:5px}
+  .repo .dots{display:inline-flex;gap:3px;align-items:center;margin-left:2px}
+  #tagfilter{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 6px}
+  .tageditor{display:flex;flex-wrap:wrap;gap:4px;padding:5px 2px 9px 24px;
+             border-bottom:1px solid var(--line);align-items:center}
+  .tageditor input{width:96px;font-size:11px;padding:1px 6px}
   #auditbox{font-size:12px}
   #auditbox .red{color:var(--red)}
   #auditbox .okline{color:var(--ok)}
@@ -517,6 +542,7 @@ PAGE = r"""<!doctype html>
     <h2>Repo 選取與狀態
       <button id="checkall" class="small">全</button>
       <button id="checknone" class="small">無</button></h2>
+    <div id="tagfilter" title="點 tag＝勾選有該 tag 的 repo（可多選聯集）"></div>
     <div id="repolist"></div>
     <div class="srow" style="margin-top:6px">
       <input id="newgroup" placeholder="組名" style="width:100px">
@@ -571,6 +597,7 @@ const $=id=>document.getElementById(id);
 const TOKEN=new URLSearchParams(location.search).get("token")||"";
 let curGroup=localStorage.getItem("group")||"";
 let groupsData=[],allRepos=[],scopeRepos=[],lastStates=[],checked=new Set();
+let tagsMap={},tagVocab=[],activeTags=new Set(),editorFor=null;
 
 function toast(msg){const t=$("toast");t.textContent=msg;t.style.opacity=1;
   setTimeout(()=>t.style.opacity=0,2600);}
@@ -617,6 +644,8 @@ function maybeNotify(ev){const key=ev.date+" "+ev.time+" "+ev.header;
 
 function renderState(st){
   groupsData=st.groups;allRepos=st.repos;
+  tagsMap=st.tags||{};tagVocab=st.tag_vocab||[];
+  if(scopeRepos.length)renderRepoList();
   const n=st.unread.length;
   $("badge").style.display=n?"inline-block":"none";
   $("badge").textContent=n?("未讀 "+n):"";
@@ -667,18 +696,91 @@ function renderState(st){
   updateAllClear();
 }
 
+// ── tag：色點制——列上只有顏色（hover 看名、點了開編輯器才有字），
+//    同 tag 聚在一起（依主 tag 排序＋左緣同色描邊），篩選/編輯器同一套色 ──
+const TAGCOLORS=["#6ca0dd","#98c379","#d19a66","#c678dd","#56b6c2",
+                 "#e06c75","#e5c07b","#7f9f7f","#bf7fbf","#8fa1b3"];
+function tagColor(t){
+  let i=tagVocab.indexOf(t);
+  if(i<0){i=0;for(const c of t)i=(i*31+c.codePointAt(0))%997;}
+  return TAGCOLORS[i%TAGCOLORS.length];
+}
+function primaryOrder(id){
+  const ts=tagsMap[id]||[];
+  if(!ts.length)return 998;
+  const i=tagVocab.indexOf(ts[0]);
+  return i<0?997:i;
+}
+function makeDot(t,onclick){
+  const d=el("span","dot");d.style.background=tagColor(t);d.title=t;
+  if(onclick)d.onclick=onclick;return d;
+}
+function toggleTagFilter(t){
+  activeTags.has(t)?activeTags.delete(t):activeTags.add(t);
+  if(activeTags.size){
+    checked=new Set(scopeRepos.filter(r=>
+      (tagsMap[r]||[]).some(x=>activeTags.has(x))));
+    saveChecked();updateScope();rescan();
+  }
+  renderRepoList();
+}
+function renderTagFilter(){
+  const d=$("tagfilter");d.innerHTML="";
+  const used=new Set();Object.values(tagsMap).forEach(a=>a.forEach(t=>used.add(t)));
+  tagVocab.forEach(t=>{
+    const c=el("button","chip"+(activeTags.has(t)?" on":""));
+    c.append(makeDot(t),document.createTextNode(t));
+    if(activeTags.has(t)){c.style.borderColor=tagColor(t);c.style.color=tagColor(t);}
+    if(!used.has(t))c.style.opacity=.4;    // 詞彙裡有但還沒人用
+    c.onclick=()=>toggleTagFilter(t);d.append(c);});
+  if(activeTags.size){
+    const x=el("button","chip","✕ 清除篩選");
+    x.onclick=()=>{activeTags.clear();renderRepoList();};d.append(x);}
+}
+async function setTag(id,t,on){
+  const r=await api("/api/tag",post(on?{id,add:[t]}:{id,remove:[t]}));
+  tagsMap[id]=r.tags;renderRepoList();
+}
+function tagEditor(id){
+  const ed=el("div","tageditor");
+  const cur=new Set(tagsMap[id]||[]);
+  tagVocab.forEach(t=>{
+    const c=el("button","chip"+(cur.has(t)?" on":""));
+    c.append(makeDot(t),document.createTextNode(t));
+    if(cur.has(t)){c.style.borderColor=tagColor(t);c.style.color=tagColor(t);}
+    c.onclick=()=>setTag(id,t,!cur.has(t));ed.append(c);});
+  const inp=document.createElement("input");
+  inp.placeholder="新 tag，Enter";
+  inp.onkeydown=e=>{if(e.key==="Enter"&&inp.value.trim())
+    setTag(id,inp.value.trim(),true);};
+  ed.append(inp);
+  const done=el("button","chip","完成");
+  done.onclick=()=>{editorFor=null;renderRepoList();};ed.append(done);
+  return ed;
+}
+
 function renderRepoList(){
+  renderTagFilter();
   const d=$("repolist");d.innerHTML="";
   const byId={};lastStates.forEach(s=>byId[s.id]=s);
-  scopeRepos.forEach(id=>{
+  // 同 tag 聚在一起：依主 tag（詞彙順序）排序，左緣同色描邊做視覺分塊
+  const sorted=[...scopeRepos].sort((a,b)=>
+    primaryOrder(a)-primaryOrder(b)||a.localeCompare(b));
+  sorted.forEach(id=>{
     const s=byId[id];
     const row=el("div","repo"+(checked.has(id)?"":" off"));
+    const ts=tagsMap[id]||[];
+    if(ts.length)row.style.borderLeftColor=tagColor(ts[0]);
     const cb=document.createElement("input");cb.type="checkbox";
     cb.checked=checked.has(id);
     cb.onchange=()=>{cb.checked?checked.add(id):checked.delete(id);
       saveChecked();renderRepoList();updateScope();rescan();};
     row.append(cb);
     row.append(el("span","rid",id));
+    const dots=el("span","dots");   // 色點制：hover 看名、點了開編輯器才有字
+    ts.forEach(t=>dots.append(makeDot(t,
+      ()=>{editorFor=editorFor===id?null:id;renderRepoList();})));
+    row.append(dots);
     if(s){
       const bad=(s.dirty_days!=null&&s.dirty_days>=4)||!s.exists||s.note
                 ||(s.behind||0)>0;
@@ -690,10 +792,15 @@ function renderRepoList(){
       if(s.note)bits.push(s.note);
       row.append(el("span","st"+(bad?" bad":""),bits.join("｜")||"✓"));
     }else row.append(el("span","st","…"));
+    const tg=el("button","small go","🏷");
+    tg.title="編輯 tag";
+    tg.onclick=()=>{editorFor=editorFor===id?null:id;renderRepoList();};
+    row.append(tg);
     const go=el("button","small go","▶");
     go.title="在此 repo 開 agent 會話（帶料）";
     go.onclick=()=>newTerm("agent",{repo:id,repos:[id]});
-    row.append(go);d.append(row);});
+    row.append(go);d.append(row);
+    if(editorFor===id)d.append(tagEditor(id));});
 }
 
 function renderScan(sc){
@@ -712,14 +819,16 @@ function renderScan(sc){
   if(!sc.audit.length)a.append(el("div","okline","零紅字 ✅"));
   const d=$("deeptable");d.innerHTML="";
   const tb=el("table");const hd=el("tr");
-  [["repo",""],["branch",""],["tier",""],["dirty","num"],["dirty天","num"],
+  [["repo",""],["tags",""],["branch",""],["tier",""],["dirty","num"],["dirty天","num"],
    ["末commit天","num"],["↑未push","num"],["↓落後","num"],
    ["最後 commit",""],["note",""]].forEach(([t,c])=>hd.append(el("th",c,t)));
   tb.append(hd);
   sc.states.forEach(s=>{const tr=el("tr");
     const f=v=>v==null?"-":v.toFixed(1);
     const n=v=>v==null?"-":String(v);
-    tr.append(el("td","",s.id));tr.append(el("td","",s.branch||"-"));
+    tr.append(el("td","",s.id));
+    tr.append(el("td","",(tagsMap[s.id]||[]).join("、")));
+    tr.append(el("td","",s.branch||"-"));
     tr.append(el("td","",s.tier));
     tr.append(el("td","num",String(s.dirty)));
     tr.append(el("td","num",f(s.dirty_days)));

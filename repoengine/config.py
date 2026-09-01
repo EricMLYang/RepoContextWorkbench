@@ -24,6 +24,8 @@ DEFAULTS = {
         "claude": {"cmd": ["claude"], "mcp": "mcp-config", "prompt_flag": []},
     },
     "pack": {"token_budget": 60000},
+    # tag 詞彙建議（顯示在 tag 編輯器裡供一鍵點選；registry 既有 tag 會自動併入）
+    "tags": {"suggestions": []},
     # P12：排程住殼內（S6）。每項 {task: brief|digest|upstream|commit, at: "HH:MM", group: <組名|null>}
     "schedule": [],
 }

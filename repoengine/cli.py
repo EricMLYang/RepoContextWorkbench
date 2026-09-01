@@ -84,6 +84,12 @@ def cmd_registry(args):
     elif args.action == "remove":
         _registry.remove_repo(d, args.id)
         print(f"已移除：{args.id}（含所有組的 membership）")
+    elif args.action == "tag":
+        tags = _registry.tag_repo(
+            d, args.id,
+            add=args.add.split(",") if args.add else None,
+            remove=args.remove.split(",") if args.remove else None)
+        print(f"{args.id} tags: {', '.join(tags) or '（無）'}")
     elif args.action == "list":
         for r in _registry.load(d)["repos"]:
             print(f"{r['id']:<24} {r.get('type','mine'):<9} {r.get('tier','?'):<9} {r['path']}")
@@ -304,8 +310,8 @@ def build_parser():
     s.add_argument("path")
     s.set_defaults(func=cmd_init)
 
-    s = sub.add_parser("registry", help="P1 登記/稽核")
-    s.add_argument("action", choices=["add", "set", "remove", "list", "audit"])
+    s = sub.add_parser("registry", help="P1 登記/稽核/tag")
+    s.add_argument("action", choices=["add", "set", "remove", "tag", "list", "audit"])
     s.add_argument("id", nargs="?")
     s.add_argument("path_arg", nargs="?")
     s.add_argument("key", nargs="?")
@@ -315,6 +321,8 @@ def build_parser():
     s.add_argument("--tags")
     s.add_argument("--upstream")
     s.add_argument("--scan", action="append")
+    s.add_argument("--add", help="tag：加（逗號分隔）")
+    s.add_argument("--remove", help="tag：移除（逗號分隔）")
     s.set_defaults(func=cmd_registry)
 
     s = sub.add_parser("group", help="P2 組")

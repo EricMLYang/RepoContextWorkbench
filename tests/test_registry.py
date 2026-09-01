@@ -12,6 +12,18 @@ def test_resolve_group_none_means_all(spine_with_repos):
     assert gname == "全部" and {e["id"] for e in entries} == {"repo-a", "repo-b"}
 
 
+def test_tag_repo_and_all_tags(spine_with_repos):
+    tags = registry.tag_repo(spine_with_repos, "repo-a", add=["PM", "開發"])
+    assert tags == ["PM", "開發"]
+    assert registry.tag_repo(spine_with_repos, "repo-a", add=["PM"]) == ["PM", "開發"]  # 冪等
+    registry.tag_repo(spine_with_repos, "repo-b", add=["開發", "Demo"])
+    assert registry.all_tags(spine_with_repos) == ["PM", "開發", "Demo"]  # 去重保序
+    assert registry.tag_repo(spine_with_repos, "repo-a",
+                             remove=["開發", "不存在的"]) == ["PM"]
+    with pytest.raises(ValueError, match="repo 不存在"):
+        registry.tag_repo(spine_with_repos, "ghost", add=["x"])
+
+
 def test_add_and_get(spine, tmp_path):
     p = make_git_repo(tmp_path, "repo-x")
     registry.add_repo(spine, "repo-x", p, tags=["dev"])
