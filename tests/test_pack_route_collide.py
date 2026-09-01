@@ -104,3 +104,18 @@ def test_mock_verdict_follows_idea_not_template(spine_with_repos):
     cid2 = collide.submit(spine_with_repos, "這與既有結論衝突吧", group="g1")
     j2 = collide.run_judgement(spine_with_repos, cid2, provider="mock")
     assert j2["判定"] == "衝突"
+
+
+def test_collide_adhoc_repos_token_roundtrip(spine_with_repos):
+    """P2 臨時組合免建組：submit(repos=...) 落 group:臨時(...) token，
+    run_judgement 不帶參數也能從事件解回選料範圍（detached 進程同路徑）。"""
+    from repoengine.agents import MockProvider
+    import os
+    MockProvider._calls = 0
+    os.environ.pop("REPOENGINE_MOCK_FAIL", None)
+    cid = collide.submit(spine_with_repos, "臨時組合的想法", repos=["repo-a"])
+    opened = [e for e in spine_mod.query(spine_with_repos, type="collision")
+              if e.kv("id") == cid][0]
+    assert opened.kv("group") == "臨時(repo-a)"
+    j = collide.run_judgement(spine_with_repos, cid)  # 不給 group/repos
+    assert j is not None and j["判定"] in ("已知", "衝突", "真增量")

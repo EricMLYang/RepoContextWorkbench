@@ -20,7 +20,9 @@ def test_build_state_fields(spine_with_repos):
     spine_mod.append_event(spine_with_repos, "open-loop", "hotkey", ["#1"],
                            body="opened →「試」", when=_t(9, 0))
     st = webui.build_state(spine_with_repos)
-    assert st["groups"] == ["g1"]
+    assert [g["name"] for g in st["groups"]] == ["g1"]
+    assert st["groups"][0]["members"] == ["repo-a", "repo-b"]
+    assert set(st["repos"]) == {"repo-a", "repo-b"}
     assert len(st["unread"]) == 1 and st["unread"][0]["type"] == "open-loop"
     assert len(st["loops"]) == 1
     assert set(st["stats"]) == {"collisions", "collisions_with_outcome", "hit_rate"}
@@ -78,11 +80,12 @@ def test_page_and_state(server):
     base, _ = server
     code, html = _get(base, "/")
     assert code == 200
-    for key in ("監控台", "碰撞台", "需要你判斷的", "未讀事件", "深看"):
+    for key in ("監控台", "碰撞台", "需要你判斷的", "未讀事件", "深看",
+                "Repo 選取與狀態", "勾選存成組"):
         assert key in html
     code, body = _get(base, "/api/state")
     st = json.loads(body)
-    assert code == 200 and st["groups"] == ["g1"]
+    assert code == 200 and st["groups"][0]["name"] == "g1"
     code, body = _get(base, "/api/scan?group=g1")
     assert code == 200 and json.loads(body)["group"] == "g1"
 
@@ -136,3 +139,41 @@ def test_unknown_routes(server):
     assert code == 404
     code, r = _post(base, "/api/nope", {})
     assert code == 400 and "未知 action" in r["error"]
+
+
+@pytest.mark.e2e
+def test_scan_with_repos_subset(server):
+    """勾選＝臨時組合：scan 只回選取的 repo，問句同步過濾。"""
+    base, _ = server
+    code, body = _get(base, "/api/scan?repos=repo-a")
+    sc = json.loads(body)
+    assert code == 200
+    assert [s["id"] for s in sc["states"]] == ["repo-a"]
+    assert sc["group"].startswith("臨時(")
+    assert not any("repo-b" in q for q in sc["questions"])  # dirty 的 repo-b 被排除
+
+
+@pytest.mark.e2e
+def test_collide_with_repos_adhoc(server):
+    base, spine_dir = server
+    code, r = _post(base, "/api/collide",
+                    {"idea": "只撞 repo-a 的想法", "repos": ["repo-a"], "wait": True})
+    assert code == 200 and r["ok"] and r["judgement"]
+    opened = [e for e in spine_mod.query(spine_dir, type="collision")
+              if e.body.startswith("opened")]
+    assert opened[-1].kv("group") == "臨時(repo-a)"
+
+
+@pytest.mark.e2e
+def test_save_group_api(server):
+    base, spine_dir = server
+    code, r = _post(base, "/api/save_group",
+                    {"name": "g2", "repos": ["repo-b"]})
+    assert code == 200 and r["name"] == "g2"
+    from repoengine import registry
+    _, entries = registry.resolve_group(spine_dir, "g2")
+    assert [e["id"] for e in entries] == ["repo-b"]
+    code, r = _post(base, "/api/save_group", {"name": "", "repos": ["repo-a"]})
+    assert code == 400
+    code, r = _post(base, "/api/save_group", {"name": "g3", "repos": []})
+    assert code == 400

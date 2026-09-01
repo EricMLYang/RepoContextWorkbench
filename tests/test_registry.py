@@ -50,3 +50,13 @@ def test_audit_clean(spine, tmp_path):
     p = make_git_repo(tmp_path, "clean-repo", days_old=2)
     registry.add_repo(spine, "clean-repo", p)
     assert registry.audit(spine) == []
+
+
+def test_remove_repo_cleans_groups(spine_with_repos):
+    registry.remove_repo(spine_with_repos, "repo-b")
+    data = registry.load(spine_with_repos)
+    assert [r["id"] for r in data["repos"]] == ["repo-a"]
+    g1 = next(g for g in data["groups"] if g["name"] == "g1")
+    assert g1["members"] == ["repo-a"]  # membership 同步清掉
+    with pytest.raises(ValueError):
+        registry.remove_repo(spine_with_repos, "ghost")

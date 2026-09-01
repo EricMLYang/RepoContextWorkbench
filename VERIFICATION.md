@@ -68,3 +68,20 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
   `POST /api/ignore` 落 `chosen` 事件（忽略是 chosen 的負形）；`POST /api/close_loop` 後 open loops 少一條；
   `POST /api/ack` 後未讀歸零；server 綁定必須是 127.0.0.1（不變式：不對外暴露）
 - L4（人）：瀏覽器開頁——空狀態是不是「一切正常」一行字？碰撞送出即關（fire-and-forget）回程有沒有出現在未讀？深看表格對不對？
+
+---
+
+## UI 第二輪（2026-09-01 L4 回饋：「無法在介面選取/去除 repo、看不到監控資訊」）
+
+**回饋定性**：規格未錯——P2「臨時組合免建組」與 P14 深看全量表都在，是原型 UI 未實作；
+另 `registry remove` 連 CLI 都缺（真缺口）。規格修訂建議（v3 候選）：repo 清單屬**操作面板**
+（選取介面），監控四判準只管通知與事件流，操作面板進預設面不算違反「無事不報」。
+
+**新驗收條款**：
+- L1：`collide.submit(repos=...)` 落 `group:臨時(a,b)` token（照 §3.2 文法範例）；
+  `run_judgement` 無 group 參數時能從事件的 臨時(...) token 解回 repos（detached 進程也拿得到料）；
+  `registry.remove_repo` 移除 repo 並同步清掉所有組的 membership，不存在的 id 要報錯
+- L2 HTTP：`/api/scan?repos=a` 只回選取的 repo 且問句同步過濾；`POST /api/collide {repos:[...]}` 可撞臨時組合；
+  `POST /api/save_group` 把勾選存成命名組；CLI `registry remove` E2E
+- L4（人）：預設面直接看到 repo 狀態表＋勾選框；取消勾選後「需要你判斷的」與碰撞範圍同步縮小；
+  勾選可一鍵存成組

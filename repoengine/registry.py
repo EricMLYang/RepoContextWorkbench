@@ -67,6 +67,18 @@ def set_field(spine_dir, id, key, value):
     raise ValueError(f"repo 不存在: {id}")
 
 
+def remove_repo(spine_dir, id):
+    """移除 repo 並清掉所有組的 membership（組保留，允許空組）。"""
+    data = load(spine_dir)
+    if not any(r["id"] == id for r in data["repos"]):
+        raise ValueError(f"repo 不存在: {id}")
+    data["repos"] = [r for r in data["repos"] if r["id"] != id]
+    for g in data["groups"]:
+        if id in g["members"]:
+            g["members"].remove(id)
+    save(spine_dir, data)
+
+
 def get_repo(spine_dir, id):
     for r in load(spine_dir)["repos"]:
         if r["id"] == id:

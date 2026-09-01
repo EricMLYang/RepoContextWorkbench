@@ -45,9 +45,14 @@ def _next_collision_id(spine_dir, date_str):
 
 
 def submit(spine_dir, idea, group=None, repos=None, source="hotkey", when=None):
-    """段一：想法落脊椎。回傳 collision id。"""
+    """段一：想法落脊椎。回傳 collision id。
+    repos 給定＝臨時組合（P2 免建組）：token 落 group:臨時(a,b)（§3.2 文法範例），
+    detached 進程重讀事件即可解回選料範圍。"""
     now = when or _dt.datetime.now()
     cid = _next_collision_id(spine_dir, f"{now:%Y-%m-%d}")
+    if repos:
+        ids = [r.strip() for r in repos.split(",")] if isinstance(repos, str) else list(repos)
+        group = f"臨時({','.join(ids)})"
     tokens = [f"id:{cid}"] + ([f"group:{group}"] if group else [])
     spine.append_event(spine_dir, "collision", source, tokens,
                        body=f"opened\n輸入：{idea}", when=now)
@@ -66,6 +71,10 @@ def run_judgement(spine_dir, cid, group=None, repos=None, provider=None, when=No
             group = group or ev.kv("group")
     if idea is None:
         raise ValueError(f"找不到 collision opened 事件: {cid}")
+    prefix = "臨時("
+    if repos is None and group and group.startswith(prefix) and group.endswith(")"):
+        repos = group[len(prefix):-1]   # 臨時組合：從事件 token 解回 repo 清單
+        group = None
     _, entries = registry.resolve_group(spine_dir, group, repos)
     packed, _, _ = _pack.pack_group(entries, cfg["pack"]["token_budget"])
     prompt = PROMPT_TEMPLATE.format(idea=idea, packed=packed)

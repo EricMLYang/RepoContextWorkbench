@@ -120,3 +120,17 @@ def test_registry_set_field(tmp_path):
     entry = next(x for x in data["repos"] if x["id"] == "repo-a")
     assert entry.get("resume_when") == "等 Q4"
     assert "等 Q4" not in entry  # 沒有變成錯的 key 名
+
+
+def test_registry_remove(tmp_path):
+    spine_dir = tmp_path / "s"
+    ra = make_git_repo(tmp_path, "repo-a", days_old=1)
+    run_cli("init", str(spine_dir), check=True)
+    run_cli("registry", "add", "repo-a", str(ra), spine_dir=spine_dir, check=True)
+    run_cli("group", "add", "g1", "repo-a", spine_dir=spine_dir, check=True)
+    r = run_cli("registry", "remove", "repo-a", spine_dir=spine_dir, check=True)
+    assert "已移除" in r.stdout
+    r = run_cli("registry", "list", spine_dir=spine_dir, check=True)
+    assert "repo-a" not in r.stdout
+    r = run_cli("registry", "remove", "repo-a", spine_dir=spine_dir)
+    assert r.returncode != 0  # 不存在要報錯

@@ -68,6 +68,9 @@ def cmd_registry(args):
         key, value = args.path_arg, args.key
         e = _registry.set_field(d, args.id, key, value)
         print(f"已更新：{e['id']}.{key} = {value}")
+    elif args.action == "remove":
+        _registry.remove_repo(d, args.id)
+        print(f"已移除：{args.id}（含所有組的 membership）")
     elif args.action == "list":
         for r in _registry.load(d)["repos"]:
             print(f"{r['id']:<24} {r.get('type','mine'):<9} {r.get('tier','?'):<9} {r['path']}")
@@ -214,7 +217,7 @@ def build_parser():
     s.set_defaults(func=cmd_init)
 
     s = sub.add_parser("registry", help="P1 登記/稽核")
-    s.add_argument("action", choices=["add", "set", "list", "audit"])
+    s.add_argument("action", choices=["add", "set", "remove", "list", "audit"])
     s.add_argument("id", nargs="?")
     s.add_argument("path_arg", nargs="?")
     s.add_argument("key", nargs="?")
