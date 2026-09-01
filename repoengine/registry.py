@@ -123,6 +123,15 @@ def last_commit_days(repo_path):
     return (time.time() - int(out)) / 86400.0
 
 
+def survival(spine_dir):
+    """品味量測第二視圖（P11）：碰撞生出來的 repo（有 origin 血統）還活著幾個。"""
+    spawned = [r for r in load(spine_dir)["repos"] if r.get("origin")]
+    alive = [r for r in spawned if r.get("tier") in ("active", "paused")]
+    n = len(spawned)
+    return {"spawned": n, "alive": len(alive),
+            "survival_rate": (len(alive) / n) if n else None}
+
+
 def audit(spine_dir, scan_dirs=None, active_max_days=30):
     """紅字清單。scan_dirs：額外掃「資料夾在但 registry 沒有」的洞。"""
     data = load(spine_dir)

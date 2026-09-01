@@ -122,6 +122,96 @@ def test_registry_set_field(tmp_path):
     assert "等 Q4" not in entry  # 沒有變成錯的 key 名
 
 
+def test_new_primitives_pipeline(tmp_path):
+    """P4/P5/P9/P12/P13/P16 走真 CLI：upstream 無事不報、digest 增量、spawn 出生登記、
+    timer --once 補課、notify 分類、session --print 指令組裝。"""
+    spine_dir = tmp_path / "s"
+    ra = make_git_repo(tmp_path, "repo-a", days_old=1)
+    run_cli("init", str(spine_dir), check=True)
+    run_cli("registry", "add", "repo-a", str(ra), spine_dir=spine_dir, check=True)
+    run_cli("group", "add", "g1", "repo-a", spine_dir=spine_dir, check=True)
+
+    # P4：組內無 external → 講清楚，不是沉默
+    r = run_cli("upstream", "--group", "g1", spine_dir=spine_dir, check=True)
+    assert "無 external repo" in r.stdout
+
+    # P5：mock digest 首輪 ok、二輪水位線擋住
+    r = run_cli("digest", "--group", "g1", spine_dir=spine_dir, check=True)
+    assert "repo-a: ok" in r.stdout
+    assert list((spine_dir / "groups" / "g1" / "digests").glob("*.md"))
+    r = run_cli("digest", "--group", "g1", spine_dir=spine_dir, check=True)
+    assert "無新 commit" in r.stdout
+
+    # P7→P9：碰撞 → 升格 → 命中率/存活率都算得出來
+    run_cli("collide", "submit", "值得長成 repo 的想法", "--group", "g1",
+            "--no-run", spine_dir=spine_dir, check=True)
+    cid = f"{dt.date.today():%Y-%m-%d}-a"
+    r = run_cli("spawn", "born-repo", str(tmp_path / "born"),
+                "--origin", f"collision:{cid}", spine_dir=spine_dir, check=True)
+    assert "已升格" in r.stdout and (tmp_path / "born" / ".git").is_dir()
+    r = run_cli("query", "--stats", spine_dir=spine_dir, check=True)
+    assert "靈感命中率 100%" in r.stdout and "存活率 100%" in r.stdout
+
+    # P12：schedule 進 config → timer --once 當日補跑一次、同日不重跑
+    cfg = (spine_dir / "config.yaml").read_text(encoding="utf-8")
+    (spine_dir / "config.yaml").write_text(
+        cfg + '\nschedule:\n  - {task: commit, at: "00:00"}\n', encoding="utf-8")
+    r = run_cli("timer", "--once", spine_dir=spine_dir, check=True)
+    assert "✔ commit@00:00@" in r.stdout
+    assert _commit_count(spine_dir) == 1  # commit 任務＝單一提交者的排程形態
+    r = run_cli("timer", "--once", spine_dir=spine_dir, check=True)
+    assert "無到期任務" in r.stdout
+
+    # P13：目前未讀全是一般事件 → notify 只累積不打斷
+    r = run_cli("notify", spine_dir=spine_dir, check=True)
+    assert "[打斷]" not in r.stdout and "未讀" in r.stdout
+
+    # P16：session --print——料檔＋claude 指令＋.mcp.json
+    r = run_cli("session", "--group", "g1", "--task", "寫文", "--print",
+                spine_dir=spine_dir, check=True)
+    assert "料：" in r.stdout and "claude" in r.stdout
+    assert (spine_dir / ".mcp.json").exists()
+
+
+def test_mcp_stdio_roundtrip(tmp_path):
+    """MCP server 走真 stdio：initialize → tools/list → tools/call（含 validator 拒寫）。"""
+    import json as _json
+    import sys
+    from tests.conftest import ROOT
+    spine_dir = tmp_path / "s"
+    run_cli("init", str(spine_dir), check=True)
+    msgs = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+         "params": {"name": "spine_append",
+                    "arguments": {"type": "decision", "source": "agent",
+                                  "body": "MCP 往返"}}},
+        {"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+         "params": {"name": "spine_append",
+                    "arguments": {"type": "bogus", "source": "agent"}}},
+    ]
+    import os
+    env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
+    r = subprocess.run(
+        [sys.executable, "-m", "repoengine", "--spine", str(spine_dir), "mcp"],
+        input="\n".join(_json.dumps(m, ensure_ascii=False) for m in msgs) + "\n",
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT, env=env,
+        timeout=60)
+    lines = [_json.loads(x) for x in r.stdout.strip().splitlines()]
+    assert len(lines) == 4  # notification 不回
+    by_id = {x["id"]: x for x in lines}
+    assert by_id[1]["result"]["serverInfo"]["name"] == "repoengine"
+    assert any(t["name"] == "collide_submit" for t in by_id[2]["result"]["tools"])
+    assert by_id[3]["result"]["isError"] is False
+    assert by_id[4]["result"]["isError"] is True
+    assert "未知事件型別" in by_id[4]["result"]["content"][0]["text"]
+    # 事件真的落了脊椎
+    day = spine_dir / "spine" / "events" / f"{dt.date.today():%Y-%m-%d}.md"
+    assert "MCP 往返" in day.read_text(encoding="utf-8")
+
+
 def test_registry_remove(tmp_path):
     spine_dir = tmp_path / "s"
     ra = make_git_repo(tmp_path, "repo-a", days_old=1)

@@ -71,6 +71,48 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
 
 ---
 
+## 補完輪（2026-09-01 第三輪：引擎原語 P1–P16 補齊＋MCP server）
+
+**範圍修訂**：原「不做」清單中的 P4 上游、P5 digest、P9 spawn、P12 排程、MCP server 改為**做**；
+真殼（tray／全域 hotkey／OS toast）仍不做（VDI Day 0 smoke test 過了才蓋，監控台網頁＋瀏覽器通知為等效替身）。
+
+**新驗收條款（全部已釘成測試）**：
+- **P4**（`test_upstream.py`）：新 release 落 `suggestion [upstream]` 事件；**同一筆不重報**（無事不報的上游版）；
+  kinds/prerelease 由 config 驅動；fetch 可注入（L1 不打網路）
+- **P5**（`test_digest.py`）：首輪產摘要檔＋事件；**二輪水位線擋住**（一律增量——水位線就在脊椎裡）;
+  agent 失敗落 system-unsure 事件（失敗必須浮出）
+- **P9**（`test_spawn.py`）：升格建 repo＋registry origin 血統＋`outcome` 回連 → **靈感命中率從真資料算得出來**
+  （M2 驗收③的自動化版）；incubator 素材搬離＝升格完成；非空目標拒絕且不弄髒 registry；
+  存活率視圖（`registry.survival`）＝品味量測第二視圖
+- **P12**（`test_timer.py`）：due 判定純函數——到點才跑、**當日補課、同日不重跑、跨日不補**；
+  失敗浮出且不重試轟炸；`commit` 排程任務＝git 單一提交者的排程形態（走 `spine.batch_commit` 同一入口）
+- **P13**（`test_notify.py`）：interrupt 白名單分類（body 含 system-unsure → 打斷；其餘未讀累積）；
+  空狀態＝「一切正常」一行字
+- **P16**（`test_session.py`）：指令組裝純函數——cwd=spine 靠 `.mcp.json` 自動掛載、cwd=某 repo 改 `--mcp-config`；
+  `.mcp.json` 產生 idempotent
+- **MCP**（`test_mcpserver.py`＋E2E stdio 往返）：tools 覆蓋全部原語；**validator 拒寫錯誤原樣回 agent**
+  （isError，不落 dead-letter——dead-letter 是人的入口專屬）；notification 不回；stdio 真跑 initialize→list→call
+- **open-loop 預設 due**：未帶 `due:` 的 opened 事件自動補 `openloop_default_due_days`（closed 不補）
+- **webui**：`/api/state` 的 unread interrupt 置頂帶標記；stats 併入存活率；有 schedule 時 `ui` 殼內起 timer
+
+---
+
+## 工作台輪（2026-09-01 第四輪：「要 IDE 風格工作台＋terminal 跟 Agent 溝通，目前太像玩具」）
+
+**裁定**：S4 從監控頁升級為 IDE 工作台（設計檔＝`../personal_agent_design/20260901_工作台設計_v1.md`）；
+內嵌 terminal 取代 v2 §7「不內嵌 terminal」舊裁定。桌面視窗＝pywebview（前一輪裁定 ①）。
+
+**新驗收條款（全部已釘成測試，98 tests）**：
+- PTY 會話：echo 迴路｜晚到訂閱者拿 replay（會話生命週期獨立於視窗）｜kill 收乾淨（`test_term.py` L1）
+- WS codec：RFC6455 官方向量＋frame 編解碼往返（含 70KB、中文）（L1 純函數）
+- 真 WS 往返：HTTP 建 shell 會話 → 握手 → JSON 輸入 → PTY 輸出以 binary frame 回來（L2）
+- token 防護：無 token 一律 403、/static 除外（VDI multi-session localhost 共享，檢討④）（L2 不變式）
+- 簡報從 UI 產生且 presented 留痕；工作台頁關鍵區塊齊（碰撞台/事件流/簡報/深看/終端）（L2）
+- L4（人）：`app` 開工作台 → ＋agent 會話直接跟 claude 對話、MCP tools 掛上；關視窗重開會話還在；
+  瀏覽器實測已過（zsh 會話 echo 中文往返 OK），claude 會話與一週手感待人
+
+---
+
 ## UI 第二輪（2026-09-01 L4 回饋：「無法在介面選取/去除 repo、看不到監控資訊」）
 
 **回饋定性**：規格未錯——P2「臨時組合免建組」與 P14 深看全量表都在，是原型 UI 未實作；

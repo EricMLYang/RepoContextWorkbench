@@ -48,6 +48,11 @@ class MockProvider:
     name = "mock"
     _calls = 0
 
+    def run_text(self, prompt, spine_dir, model=None):
+        _raw_log(spine_dir, {"provider": "mock", "mode": "text",
+                             "prompt": prompt[:2000]})
+        return f"mock 摘要：輸入 {len(prompt.splitlines())} 行——重點請看 diff。"
+
     def run_judgement(self, prompt, spine_dir, model=None):
         MockProvider._calls += 1
         fail_n = int(os.environ.get("REPOENGINE_MOCK_FAIL", "0"))
@@ -74,7 +79,7 @@ class ClaudeProvider:
 
     name = "claude"
 
-    def run_judgement(self, prompt, spine_dir, model=None):
+    def _call(self, prompt, spine_dir, model=None):
         cmd = ["claude", "-p", prompt, "--output-format", "json"]
         if model:
             cmd += ["--model", model]
@@ -86,8 +91,13 @@ class ClaudeProvider:
                              "stdout": r.stdout, "stderr": r.stderr})
         if r.returncode != 0:
             raise AgentUnsure(f"claude CLI 失敗 rc={r.returncode}: {(r.stderr or '')[:300]}")
-        outer = json.loads(r.stdout)
-        return _extract_json(outer.get("result", ""))
+        return json.loads(r.stdout).get("result", "")
+
+    def run_judgement(self, prompt, spine_dir, model=None):
+        return _extract_json(self._call(prompt, spine_dir, model))
+
+    def run_text(self, prompt, spine_dir, model=None):
+        return self._call(prompt, spine_dir, model)
 
 
 PROVIDERS = {"mock": MockProvider, "claude": ClaudeProvider}
@@ -105,3 +115,20 @@ def judge(provider_name, prompt, spine_dir, model=None):
         except Exception as e:  # 內層解析/驗證失敗 → 重試一次
             last_err = e
     raise AgentUnsure(f"輸出驗證兩次皆失敗: {last_err}")
+
+
+def run_text(provider_name, prompt, spine_dir, model=None):
+    """自由文字輸出（P5 digest 用），空輸出視為失敗重試一次；仍壞 → AgentUnsure。"""
+    provider = PROVIDERS[provider_name]()
+    last_err = None
+    for attempt in (1, 2):
+        try:
+            out = provider.run_text(prompt, spine_dir, model)
+            if out and out.strip():
+                return out.strip()
+            last_err = ValueError("空輸出")
+        except AgentUnsure:
+            raise
+        except Exception as e:
+            last_err = e
+    raise AgentUnsure(f"文字輸出兩次皆失敗: {last_err}")

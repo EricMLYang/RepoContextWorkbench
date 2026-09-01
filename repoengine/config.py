@@ -17,6 +17,8 @@ DEFAULTS = {
         "models": {"digest": "haiku", "collide": "strong"},
     },
     "pack": {"token_budget": 60000},
+    # P12：排程住殼內（S6）。每項 {task: brief|digest|upstream|commit, at: "HH:MM", group: <組名|null>}
+    "schedule": [],
 }
 
 

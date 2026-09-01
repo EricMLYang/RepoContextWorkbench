@@ -24,8 +24,35 @@ def test_build_state_fields(spine_with_repos):
     assert st["groups"][0]["members"] == ["repo-a", "repo-b"]
     assert set(st["repos"]) == {"repo-a", "repo-b"}
     assert len(st["unread"]) == 1 and st["unread"][0]["type"] == "open-loop"
+    assert "interrupt" not in st["unread"][0]  # 一般事件不帶打斷標記
     assert len(st["loops"]) == 1
-    assert set(st["stats"]) == {"collisions", "collisions_with_outcome", "hit_rate"}
+    assert set(st["stats"]) == {"collisions", "collisions_with_outcome", "hit_rate",
+                                "spawned", "alive", "survival_rate"}
+
+
+def test_build_state_interrupt_first(spine_with_repos):
+    spine_mod.append_event(spine_with_repos, "decision", "manual", [],
+                           body="一般", when=_t(9, 0))
+    spine_mod.append_event(spine_with_repos, "suggestion", "timer", [],
+                           body="system-unsure：任務掛了", when=_t(9, 1))
+    st = webui.build_state(spine_with_repos)
+    assert st["unread"][0]["interrupt"] is True   # interrupt 置頂
+    assert st["unread"][0]["source"] == "timer"
+    assert "interrupt" not in st["unread"][1]
+
+
+def test_app_without_pywebview_exits_with_hint(spine, monkeypatch):
+    """桌面視窗模式缺 pywebview 時要講人話退場（附安裝指令），不是 traceback。"""
+    import builtins
+    real_import = builtins.__import__
+
+    def fake(name, *a, **kw):
+        if name == "webview":
+            raise ImportError("No module named 'webview'")
+        return real_import(name, *a, **kw)
+    monkeypatch.setattr(builtins, "__import__", fake)
+    with pytest.raises(SystemExit, match="pywebview"):
+        webui.serve_window(spine)
 
 
 def test_build_scan_fields(spine_with_repos):
@@ -39,20 +66,27 @@ def test_build_scan_fields(spine_with_repos):
 
 # ── L2：HTTP E2E ────────────────────────────────────────────
 
+_TOKEN = ""
+
+
 @pytest.fixture
 def server(spine_with_repos):
+    global _TOKEN
     srv = webui.make_server(spine_with_repos, port=0)
+    _TOKEN = srv.token
     th = threading.Thread(target=srv.serve_forever, daemon=True)
     th.start()
     base = f"http://127.0.0.1:{srv.server_address[1]}"
     yield base, spine_with_repos
+    srv.terms.kill_all()
     srv.shutdown()
     srv.server_close()
 
 
 def _get(base, path):
+    req = urllib.request.Request(base + path, headers={"X-Auth": _TOKEN})
     try:
-        with urllib.request.urlopen(base + path, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=10) as r:
             return r.status, r.read().decode("utf-8")
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8")
@@ -61,7 +95,8 @@ def _get(base, path):
 def _post(base, path, payload):
     req = urllib.request.Request(
         base + path, data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}, method="POST")
+        headers={"Content-Type": "application/json", "X-Auth": _TOKEN},
+        method="POST")
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
             return r.status, json.loads(r.read().decode("utf-8"))
@@ -76,18 +111,42 @@ def test_inv_binds_localhost_only(server):
 
 
 @pytest.mark.e2e
+def test_inv_requires_token(server):
+    """VDI 多使用者防護：沒 token 一律 403（/static 除外——只是前端函式庫）。"""
+    base, _ = server
+    for path in ("/", "/api/state", "/api/scan"):
+        try:
+            with urllib.request.urlopen(base + path, timeout=10) as r:
+                code = r.status
+        except urllib.error.HTTPError as e:
+            code = e.code
+        assert code == 403, path
+    code, _body = _get(base, "/static/xterm.css")  # 帶不帶 token 都可
+    assert code == 200
+
+
+@pytest.mark.e2e
 def test_page_and_state(server):
     base, _ = server
     code, html = _get(base, "/")
     assert code == 200
-    for key in ("監控台", "碰撞台", "需要你判斷的", "未讀事件", "深看",
-                "Repo 選取與狀態", "勾選存成組"):
+    for key in ("工作台", "碰撞台", "需要你判斷的", "未讀事件", "深看",
+                "Repo 選取與狀態", "勾選存成組", "終端", "事件流", "簡報"):
         assert key in html
     code, body = _get(base, "/api/state")
     st = json.loads(body)
     assert code == 200 and st["groups"][0]["name"] == "g1"
+    assert st["terms"] == []  # 終端清冊隨 state 輪詢
     code, body = _get(base, "/api/scan?group=g1")
     assert code == 200 and json.loads(body)["group"] == "g1"
+
+
+@pytest.mark.e2e
+def test_brief_via_api(server):
+    base, spine_dir = server
+    code, r = _post(base, "/api/brief", {"group": "g1"})
+    assert code == 200 and "早晨簡報" in r["text"] and "沉默摘要" in r["text"]
+    assert spine_mod.query(spine_dir, type="presented")  # presented 有留痕
 
 
 @pytest.mark.e2e

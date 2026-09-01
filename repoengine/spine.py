@@ -11,6 +11,7 @@
 import datetime as _dt
 import os
 import re
+import subprocess
 from pathlib import Path
 
 from .locking import FileLock
@@ -190,6 +191,25 @@ def stats(spine_dir):
         "collisions_with_outcome": h,
         "hit_rate": (h / n) if n else None,
     }
+
+
+def default_due_tokens(tokens, body, due_days, when=None):
+    """open-loop opened 未帶 due → 補預設到期（§3.4 openloop_default_due_days）。
+    closed 事件（狀態變化記新事件）不補。"""
+    tokens = list(tokens or [])
+    if any(t.startswith("due:") for t in tokens) or (body or "").lstrip().startswith("closed"):
+        return tokens
+    due = (when or _dt.datetime.now()) + _dt.timedelta(days=due_days)
+    return tokens + [f"due:{due:%Y-%m-%d}"]
+
+
+def batch_commit(spine_dir, message="spine: batch commit"):
+    """git 單一提交者的唯一入口（P10 三件套之三）：CLI `commit` 與 S6 timer 都走這裡，
+    其他進程只寫檔不碰 git。回傳 True＝有 commit，False＝無變更。"""
+    subprocess.run(["git", "add", "-A"], cwd=str(spine_dir), check=True)
+    r = subprocess.run(["git", "commit", "-q", "-m", message],
+                       cwd=str(spine_dir), capture_output=True, text=True)
+    return r.returncode == 0
 
 
 def last_seen_path(spine_dir):
