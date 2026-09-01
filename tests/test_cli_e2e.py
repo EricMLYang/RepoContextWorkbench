@@ -101,3 +101,22 @@ def test_audit_exit_code(tmp_path):
 def test_cli_refuses_non_spine_dir(tmp_path):
     r = run_cli("query", spine_dir=tmp_path / "empty")
     assert r.returncode != 0 and "不是 spine repo" in (r.stderr + r.stdout)
+
+
+def test_registry_set_field(tmp_path):
+    """回歸：registry set <id> <key> <value> 之前因 argparse 位置參數共用而寫錯欄位。"""
+    spine_dir = tmp_path / "s"
+    ra = make_git_repo(tmp_path, "repo-a", days_old=1)
+    run_cli("init", str(spine_dir), check=True)
+    run_cli("registry", "add", "repo-a", str(ra), "--tier", "paused",
+            spine_dir=spine_dir, check=True)
+    r = run_cli("registry", "set", "repo-a", "resume_when", "等 Q4",
+                spine_dir=spine_dir, check=True)
+    assert "resume_when" in r.stdout and "等 Q4" in r.stdout
+    reds = run_cli("registry", "audit", spine_dir=spine_dir)
+    assert reds.returncode == 0  # resume_when 補上後 audit 不再紅字
+    import yaml
+    data = yaml.safe_load((spine_dir / "registry.yaml").read_text(encoding="utf-8"))
+    entry = next(x for x in data["repos"] if x["id"] == "repo-a")
+    assert entry.get("resume_when") == "等 Q4"
+    assert "等 Q4" not in entry  # 沒有變成錯的 key 名

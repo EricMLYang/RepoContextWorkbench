@@ -63,8 +63,11 @@ def cmd_registry(args):
                                tier=args.tier, upstream=args.upstream)
         print(f"已登記：{e['id']} ({e['type']}/{e['tier']})")
     elif args.action == "set":
-        e = _registry.set_field(d, args.id, args.key, args.value)
-        print(f"已更新：{e['id']}.{args.key} = {args.value}")
+        # 位置參數在 argparse 裡與 add 共用同一組 slot（id/path_arg/key/value）；
+        # `registry set <id> <key> <value>` 實際落在 id/path_arg/key 三格，不是 id/key/value。
+        key, value = args.path_arg, args.key
+        e = _registry.set_field(d, args.id, key, value)
+        print(f"已更新：{e['id']}.{key} = {value}")
     elif args.action == "list":
         for r in _registry.load(d)["repos"]:
             print(f"{r['id']:<24} {r.get('type','mine'):<9} {r.get('tier','?'):<9} {r['path']}")
