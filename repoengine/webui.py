@@ -1,8 +1,14 @@
-"""S4 工作台（IDE 風格；2026-09-01 使用者裁定：要工作台不要玩具監控頁，
-內嵌 terminal 直接與 agent 對話——取代 v2 §7「不內嵌 terminal」舊裁定）。
+"""S4 工作台（三個一級物件：牌／收件匣／會話；2026-09-02 UI 檢討後重排）。
 
-版面＝IDE 三件套：左 sidebar（組＋repo 選取與狀態＋audit）｜中 main（事件流／簡報／深看分頁）
-｜下 terminal 面板（xterm.js＋PTY，shell 與帶料 agent 會話都開在這）｜狀態列（量測）。
+2026-09-01 裁定：要工作台不要玩具監控頁，內嵌 terminal 直接與 agent 對話。
+2026-09-02 檢討（`personal_agent_design/20260902_工作台UI_UX檢討.md`）：畫面曾是
+「監控頁黏 terminal」——行動出口是字不是按鈕、三種待辦格式疊加、會話無主。本輪重排：
+- 牌（sidebar）：組是一張卡；臨時組合＝未命名卡；repo 微標 icon 化
+- 收件匣（main）：統一卡片 {key, kind, title, lines, actions}，出口是真按鈕→呼叫引擎原語
+  →落 chosen 後卡消失；自己丟的碰撞＝「處理中」卡，回程原地換判定卡；
+  自己出手的留痕（presented/chosen/monitor decision）不進收件匣
+- 會話（sidebar 下段＋terminal 面板）：每個會話有主（origin＝哪張卡／哪次碰撞），title＝任務摘要
+- 早晨簡報＝收件匣的三段折疊視圖；「存成今日簡報」落 presented
 
 殼原則（v2 §1）不變：
 - /api/state  輕量輪詢（純脊椎/registry 檔案讀）＝「殼只 poll 脊椎未讀」
@@ -15,6 +21,7 @@
 - WS（terminal）同樣驗 token；WS 實作為 stdlib 手寫 RFC6455 最小子集（零依賴）
 """
 import base64
+import datetime as _dt
 import hashlib
 import json
 import queue
@@ -32,11 +39,17 @@ from . import collide as _collide
 from . import config as _config
 from . import notify as _notify
 from . import registry as _registry
+from . import route as _route
 from . import spine as _spine
 from . import term as _term
 from . import timer as _timer
 
 STATIC_DIR = Path(__file__).parent / "static"
+PAGE_PATH = Path(__file__).parent / "workbench.html"
+
+# 自己出手的留痕：不是要處理的事，不進收件匣（深看的事件表仍看得到）
+_OWN_RECORD_TYPES = ("presented", "chosen")
+_OWN_RECORD_SOURCES = ("monitor", "route", "spawn", "morning-brief")
 
 
 def _ev_dict(ev):
@@ -45,29 +58,211 @@ def _ev_dict(ev):
             "header": ev.header()}
 
 
+def _act(label, action, **payload):
+    return {"label": label, "action": action, "payload": payload}
+
+
+def _parse_judgement(body):
+    """判定卡 body（collide.run_judgement 寫的五欄位）→ dict；不是判定 body 回 None。"""
+    if not body.startswith("判定："):
+        return None
+    j = {}
+    for ln in body.splitlines():
+        if "：" in ln and not ln.startswith("〔"):
+            k, v = ln.split("：", 1)
+            j[k.strip()] = v.strip()
+    return j
+
+
+def normalize_dest(text):
+    """落點建議字串 → route dest（'repo:<id>' | 'group:<g>' | 'incubator'）。解不出回 None。"""
+    t = (text or "").strip()
+    if not t:
+        return None
+    if t.startswith("incubator"):
+        return "incubator"
+    for prefix in ("repo:", "group:"):
+        if t.startswith(prefix):
+            ident = t[len(prefix):].split("/", 1)[0].split(" ", 1)[0].strip()
+            return f"{prefix}{ident}" if ident else None
+    return None
+
+
+def _handled_keys(events):
+    """被 chosen ref 到的事件 key（'collision:<cid>' 或 '<type>:<HH:MM>'）＝已處理。"""
+    keys = set()
+    for ev in events:
+        if ev.type == "chosen":
+            ref = ev.kv("ref")
+            if ref:
+                keys.add(ref)
+    return keys
+
+
+def _collision_index(events):
+    """cid → {'idea', 'group', 'opened': ev, 'answered': bool}"""
+    idx = {}
+    for ev in events:
+        if ev.type != "collision":
+            continue
+        cid = ev.kv("id")
+        if not cid:
+            continue
+        rec = idx.setdefault(cid, {"idea": "", "group": None, "opened": None,
+                                   "answered": False})
+        if ev.body.startswith("opened"):
+            rec["opened"] = ev
+            rec["idea"] = ev.body.split("輸入：", 1)[-1].strip()
+            rec["group"] = ev.kv("group")
+        else:
+            rec["answered"] = True
+    return idx
+
+
+def _collision_scope(group):
+    """opened 事件的 group token → term_create 的 group/repos payload。"""
+    if not group:
+        return {}
+    if group.startswith("臨時(") and group.endswith(")"):
+        return {"repos": group[3:-1].split(",")}
+    return {"group": group}
+
+
+def build_cards(spine_dir, events, pending, loops):
+    """收件匣＝一種卡。順序：interrupt → 處理中 → 碰撞回程 → 其他未讀 → open loops。"""
+    handled = _handled_keys(events)
+    cidx = _collision_index(events)
+    cards = []
+    seen_cids = set()
+
+    def event_card(ev, interrupt):
+        cid = ev.kv("id") if ev.type == "collision" else None
+        if ev.type in _OWN_RECORD_TYPES or ev.source in _OWN_RECORD_SOURCES:
+            return None
+        if cid and ev.body.startswith("opened"):
+            return None                     # 自己的提問由 pending 卡呈現
+        if ev.type == "open-loop":
+            return None                     # loop 由 loop 卡呈現（不重複成一則未讀）
+        j = _parse_judgement(ev.body) if cid else None
+        key = f"collision:{cid}" if (cid and j) else f"{ev.type}:{ev.time}"
+        if key in handled or (cid and j and cid in seen_cids):
+            return None
+        if cid and j:
+            seen_cids.add(cid)
+            info = cidx.get(cid, {})
+            dest = normalize_dest(j.get("落點建議"))
+            scope = _collision_scope(info.get("group"))
+            task = (f"深撞碰撞 {cid}：想法「{info.get('idea', '')}」；判定 {j.get('判定', '')}，"
+                    f"理由：{j.get('理由', '')}。請對照組內文件驗證判定並提出落地步驟")
+            actions = []
+            if dest:
+                actions.append(_act(f"照建議落 {dest}", "route_collision", cid=cid, dest=dest))
+            actions.append(_act("改落點…", "route_pick", cid=cid))
+            if dest != "incubator":
+                actions.append(_act("升格 incubator", "route_collision", cid=cid, dest="incubator"))
+            actions.append(_act("深撞：開會話", "term_create", kind="agent", task=task,
+                                origin=f"collision:{cid}", **scope))
+            actions.append(_act("丟棄並記錄", "ignore", type=ev.type, time=ev.time,
+                                header=ev.header(), cid=cid))
+            return {"key": key, "kind": "collision", "cid": cid,
+                    "time": ev.time, "date": ev.date,
+                    "title": info.get("idea") or f"碰撞 {cid}",
+                    "verdict": j.get("判定", ""), "judgement": j,
+                    "lines": [f"{k}：{v}" for k, v in j.items() if k != "判定"],
+                    "actions": actions}
+        first = (ev.body or "").splitlines()
+        title = first[0] if first else " ".join(ev.tokens)
+        lines = first[1:6]
+        actions = [_act("忽略並記錄", "ignore", type=ev.type, time=ev.time,
+                        header=ev.header())]
+        if interrupt and cid:
+            actions.insert(0, _act("重跑判定", "collide_rerun", cid=cid))
+        return {"key": key, "kind": "interrupt" if interrupt else "event",
+                "time": ev.time, "date": ev.date, "etype": ev.type,
+                "source": ev.source, "title": title, "lines": lines,
+                "actions": actions}
+
+    for ev in pending["interrupt"]:
+        c = event_card(ev, True)
+        if c:
+            cards.append(c)
+    # 處理中：opened 未回程（不看 last_seen——沒回來就一直是處理中）
+    for cid, rec in sorted(cidx.items()):
+        if not rec["answered"] and rec["opened"] is not None \
+                and f"collision:{cid}" not in handled:
+            ev = rec["opened"]
+            cards.append({"key": f"pending:{cid}", "kind": "pending", "cid": cid,
+                          "time": ev.time, "date": ev.date, "title": rec["idea"],
+                          "lines": [f"送出於 {ev.date} {ev.time}｜範圍 {rec['group'] or '全部'}"],
+                          "actions": []})
+    normal_cards = []
+    for ev in pending["normal"]:
+        c = event_card(ev, False)
+        if c:
+            normal_cards.append(c)
+    normal_cards.sort(key=lambda c: 0 if c["kind"] == "collision" else 1)
+    cards += normal_cards
+    for ev in loops:
+        num = next((t for t in ev.tokens if t.startswith("#")), "#?")
+        first = (ev.body or "").splitlines()
+        title = first[0] if first else num
+        for pre in ("opened →", "opened"):
+            if title.startswith(pre):
+                title = title[len(pre):].strip()
+        cards.append({"key": f"loop:{num}", "kind": "loop", "num": num,
+                      "due": ev.kv("due"), "time": ev.time, "date": ev.date,
+                      "title": title.strip("「」"), "lines": [],
+                      "actions": [_act("開碰撞", "collide_prefill", text=title.strip("「」")),
+                                  _act("延 7 天", "loop_defer", num=num, days=7),
+                                  _act("關閉", "close_loop", num=num)]})
+    return cards
+
+
 def build_state(spine_dir):
     """輕量狀態（純檔案讀，供 5 秒輪詢）。interrupt 先於 normal（打斷要掙得，其餘累積）。"""
     data = _registry.load(spine_dir)
     p = _notify.pending(spine_dir)
+    events = list(_spine.iter_events(spine_dir))
+    loops = _spine.open_loops(spine_dir)
     vocab = list(_config.load(spine_dir)["tags"]["suggestions"])
     for t in _registry.all_tags(spine_dir):
         if t not in vocab:
             vocab.append(t)
+    recent = [_ev_dict(e) for e in events[-40:]][::-1]
     return {
         "groups": [{"name": g["name"], "members": g["members"]}
                    for g in data["groups"]],
         "repos": [r["id"] for r in data["repos"]],
+        "tiers": {r["id"]: r.get("tier", "active") for r in data["repos"]},
         "tags": {r["id"]: (r.get("tags") or []) for r in data["repos"]},
         "tag_vocab": vocab,
         "unread": [dict(_ev_dict(e), interrupt=True) for e in p["interrupt"]]
                   + [_ev_dict(e) for e in p["normal"]],
-        "loops": [_ev_dict(e) for e in _spine.open_loops(spine_dir)],
+        "loops": [_ev_dict(e) for e in loops],
+        "cards": build_cards(spine_dir, events, p, loops),
+        "recent": recent,
         "stats": {**_spine.stats(spine_dir), **_registry.survival(spine_dir)},
     }
 
 
+def _snoozed(spine_dir, today=None):
+    """defer 留痕（chosen [monitor] repo:<id> body 'snooze:<qkind> until:<date>'）→ {(repo, qkind)}。"""
+    today = today or f"{_dt.date.today():%Y-%m-%d}"
+    out = set()
+    for ev in _spine.query(spine_dir, type="chosen"):
+        body = ev.body or ""
+        if not body.startswith("snooze:"):
+            continue
+        head = body.splitlines()[0].split()
+        qkind = head[0][len("snooze:"):]
+        until = next((h[len("until:"):] for h in head if h.startswith("until:")), "")
+        if until >= today:
+            out.add((ev.kv("repo"), qkind))
+    return out
+
+
 def build_scan(spine_dir, group=None, repos=None):
-    """P3 採集＋閾值問句＋audit（開頁/切組/勾選/手動才跑，因為會打 git）。
+    """P3 採集＋閾值問句卡＋audit（開頁/切組/勾選/手動才跑，因為會打 git）。
     repos 給定＝臨時組合（P2 免建組），優先於 group。"""
     cfg = _config.load(spine_dir)
     if repos:
@@ -78,10 +273,16 @@ def build_scan(spine_dir, group=None, repos=None):
         entries = _registry.load(spine_dir)["repos"]
         gname = "全部"
     states = _collect.collect_group(entries, spine_dir)
+    snoozed = _snoozed(spine_dir)
+    cards = [c for c in _brief.build_question_cards(states, cfg["thresholds"])
+             if (c["repo"], c["qkind"]) not in snoozed]
+    quiet = len(states) - len({c["repo"] for c in cards})
     return {
         "group": gname,
         "states": states,
-        "questions": _brief.build_questions(states, cfg["thresholds"]),
+        "question_cards": cards,
+        "questions": [_brief.card_text(c) for c in cards],
+        "quiet": max(quiet, 0),
         # registry 稽核＋脊椎衛生迴圈併同一個紅字面（second-brain lint 課）
         "audit": _registry.audit(spine_dir) + _spine.lint(spine_dir),
     }
@@ -104,12 +305,18 @@ def _handle_action(spine_dir, action, payload, terms=None):
             return {"ok": True, "cid": cid, "judgement": j}
         _collide.spawn_detached(spine_dir, cid)
         return {"ok": True, "cid": cid}
+    if action == "collide_rerun":
+        cid = payload.get("cid") or ""
+        if not cid:
+            return {"error": "缺 cid"}
+        _collide.spawn_detached(spine_dir, cid)
+        return {"ok": True, "cid": cid}
     if action == "ignore":
         etype, etime = payload.get("type"), payload.get("time")
         if etype not in _spine.EVENT_TYPES:
             return {"error": f"未知事件型別: {etype}"}
-        _spine.append_event(spine_dir, "chosen", "monitor",
-                            [f"ref:{etype}:{etime}"],
+        ref = f"collision:{payload['cid']}" if payload.get("cid") else f"{etype}:{etime}"
+        _spine.append_event(spine_dir, "chosen", "monitor", [f"ref:{ref}"],
                             body=f"忽略並記錄：{payload.get('header', '')}")
         return {"ok": True}
     if action == "close_loop":
@@ -119,6 +326,66 @@ def _handle_action(spine_dir, action, payload, terms=None):
         _spine.append_event(spine_dir, "open-loop", "monitor", [num],
                             body="closed → 從工作台關閉")
         return {"ok": True}
+    if action == "loop_defer":
+        num = payload.get("num", "")
+        if not (num.startswith("#") and num[1:].isdigit()):
+            return {"error": f"loop 編號不合法: {num}"}
+        days = int(payload.get("days") or 7)
+        cur = next((e for e in _spine.open_loops(spine_dir) if num in e.tokens), None)
+        if cur is None:
+            return {"error": f"loop 不存在或已關: {num}"}
+        due = _dt.date.today() + _dt.timedelta(days=days)
+        first = (cur.body or "").splitlines()[0] if cur.body else ""
+        _spine.append_event(spine_dir, "open-loop", "monitor",
+                            [num, f"due:{due:%Y-%m-%d}"],
+                            body=f"{first}\n延期 {days} 天 → 從工作台")
+        return {"ok": True, "due": f"{due:%Y-%m-%d}"}
+    if action == "defer":
+        rid = payload.get("id") or ""
+        qkind = payload.get("qkind") or "question"
+        days = int(payload.get("days") or 7)
+        if not rid:
+            return {"error": "缺 repo id"}
+        until = _dt.date.today() + _dt.timedelta(days=days)
+        _spine.append_event(spine_dir, "chosen", "monitor", [f"repo:{rid}"],
+                            body=f"snooze:{qkind} until:{until:%Y-%m-%d}\n"
+                                 f"{payload.get('text', '')}".rstrip())
+        return {"ok": True, "until": f"{until:%Y-%m-%d}"}
+    if action == "tier":
+        rid, tier = payload.get("id") or "", payload.get("tier") or ""
+        if tier not in _registry.TIERS:
+            return {"error": f"tier 需為 {'|'.join(_registry.TIERS)}"}
+        old = _registry.get_repo(spine_dir, rid).get("tier")
+        _registry.set_field(spine_dir, rid, "tier", tier)
+        if tier == "paused" and payload.get("resume_when"):
+            _registry.set_field(spine_dir, rid, "resume_when", payload["resume_when"])
+        _spine.append_event(spine_dir, "decision", "monitor", [f"repo:{rid}"],
+                            body=f"tier {old} → {tier}（從工作台）")
+        return {"ok": True, "id": rid, "tier": tier}
+    if action == "remove_repo":
+        rid = payload.get("id") or ""
+        _registry.remove_repo(spine_dir, rid)
+        _spine.append_event(spine_dir, "decision", "monitor", [],
+                            body=f"移出 registry：{rid}（從工作台）")
+        return {"ok": True, "id": rid}
+    if action == "route_collision":
+        cid, dest = payload.get("cid") or "", payload.get("dest") or ""
+        dest = normalize_dest(dest)
+        if not cid or not dest:
+            return {"error": "dest 不合法（repo:<id> | group:<g> | incubator）"}
+        events = list(_spine.iter_events(spine_dir))
+        rec = _collision_index(events).get(cid)
+        if not rec:
+            return {"error": f"找不到碰撞: {cid}"}
+        judged = next((e for e in events if e.type == "collision"
+                       and e.kv("id") == cid and e.body.startswith("判定：")), None)
+        text = (f"# 碰撞 {cid}\n\n## 想法\n{rec['idea']}\n\n## 判定\n"
+                f"{judged.body if judged else '（尚無判定）'}\n\n"
+                f"（來源：{rec['opened'].date} {rec['opened'].time}｜範圍 {rec['group'] or '全部'}）\n")
+        target = _route.route(spine_dir, text, dest, title=f"collision-{cid}")
+        _spine.append_event(spine_dir, "chosen", "monitor", [f"ref:collision:{cid}"],
+                            body=f"落點：{dest} → {target.name}")
+        return {"ok": True, "cid": cid, "dest": dest, "file": str(target)}
     if action == "tag":
         rid = payload.get("id") or ""
         tags = _registry.tag_repo(spine_dir, rid,
@@ -147,9 +414,11 @@ def _handle_action(spine_dir, action, payload, terms=None):
                                    repos=payload.get("repos") or None,
                                    repo=payload.get("repo") or None,
                                    task=payload.get("task") or None,
-                                   agent=payload.get("agent") or "claude")
+                                   agent=payload.get("agent") or "claude",
+                                   origin=payload.get("origin") or None)
         else:
-            s = terms.create_shell(cwd=payload.get("cwd") or None)
+            s = terms.create_shell(cwd=payload.get("cwd") or None,
+                                   origin=payload.get("origin") or None)
         return {"ok": True, "sid": s.sid, "title": s.title}
     if action == "term_kill":
         if terms is None or not terms.kill(payload.get("sid", "")):
@@ -403,586 +672,4 @@ def serve(spine_dir, port=8765, open_browser=True):
         srv.server_close()
 
 
-PAGE = r"""<!doctype html>
-<html lang="zh-Hant"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>repo 工作台</title>
-<link rel="stylesheet" href="/static/xterm.css">
-<style>
-  :root{--bg:#1b1d23;--panel:#22252d;--panel2:#282c36;--line:#343945;
-        --ink:#d7dae0;--sub:#8b91a0;--accent:#6ca0dd;--red:#e06c75;
-        --warn:#d19a66;--ok:#98c379;--badge:#c74e39;--termh:280px;}
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);overflow:hidden;
-       font:13px/1.55 "Segoe UI","Microsoft JhengHei",system-ui,sans-serif;
-       display:grid;
-       grid-template:"top top" 44px "side main" 1fr "side term" var(--termh)
-                     "status status" 26px / 300px 1fr;}
-  button,input,select{font:inherit;border:1px solid var(--line);border-radius:5px;
-       background:var(--panel2);color:var(--ink);padding:3px 9px}
-  button{cursor:pointer}
-  button:hover{border-color:var(--accent);color:var(--accent)}
-  button.small{font-size:12px;padding:1px 7px}
-  h2{font-size:12px;margin:0 0 6px;color:var(--sub);font-weight:600;letter-spacing:.06em}
-  ::-webkit-scrollbar{width:9px;height:9px}
-  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
-
-  #top{grid-area:top;display:flex;align-items:center;gap:10px;padding:0 12px;
-       background:var(--panel);border-bottom:1px solid var(--line)}
-  #logo{font-weight:700;white-space:nowrap}
-  #collidewrap{flex:1;display:flex;gap:6px;align-items:center;min-width:0}
-  #collidewrap .clabel{color:var(--sub);font-size:12px;white-space:nowrap}
-  #idea{flex:1;min-width:0}
-  #badge{background:var(--badge);color:#fff;border-radius:9px;padding:0 8px;
-         font-size:12px;line-height:19px;display:none;white-space:nowrap}
-  #scope{color:var(--sub);font-size:12px;white-space:nowrap;max-width:220px;
-         overflow:hidden;text-overflow:ellipsis}
-
-  #side{grid-area:side;background:var(--panel);border-right:1px solid var(--line);
-        overflow-y:auto;padding:10px 10px 20px;display:flex;flex-direction:column;gap:10px}
-  .srow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  #repolist{display:flex;flex-direction:column}
-  .repo{display:flex;gap:6px;align-items:center;padding:3px 2px;border-radius:4px}
-  .repo:hover{background:var(--panel2)}
-  .repo .rid{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .repo.off .rid{color:var(--sub)}
-  .repo .st{font-size:11px;color:var(--sub);white-space:nowrap}
-  .repo .st.bad{color:var(--warn)}
-  /* 永遠可見——hover 才現身的按鈕在 5 秒輪詢重繪的清單裡點不到（隱形不吃 click），
-     L4 實錘「▶ 沒 work」的根因之一 */
-  .repo .go{font-size:11px;padding:0 5px;opacity:.5}
-  .repo:hover .go,.repo .go:hover{opacity:1}
-  .chip{font-size:11px;border:1px solid var(--line);border-radius:9px;
-        padding:0 8px 0 6px;cursor:pointer;color:var(--sub);white-space:nowrap;
-        background:none;line-height:17px;display:inline-flex;
-        align-items:center;gap:5px}
-  .chip .dot{margin:0}
-  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;
-       flex:none;cursor:pointer}
-  .repo{border-left:3px solid transparent;padding-left:5px}
-  .repo .dots{display:inline-flex;gap:3px;align-items:center;margin-left:2px}
-  #tagfilter{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 6px}
-  .tageditor{display:flex;flex-wrap:wrap;gap:4px;padding:5px 2px 9px 24px;
-             border-bottom:1px solid var(--line);align-items:center}
-  .tageditor input{width:96px;font-size:11px;padding:1px 6px}
-  #auditbox{font-size:12px}
-  #auditbox .red{color:var(--red)}
-  #auditbox .okline{color:var(--ok)}
-
-  #main{grid-area:main;overflow-y:auto;padding:12px 16px}
-  #tabs{display:flex;gap:2px;margin-bottom:10px;border-bottom:1px solid var(--line)}
-  #tabs button{border:none;background:none;border-radius:0;color:var(--sub);
-               padding:5px 14px;border-bottom:2px solid transparent}
-  #tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
-  .tabpane{display:none}
-  .tabpane.on{display:block}
-  section{background:var(--panel);border:1px solid var(--line);border-radius:7px;
-          padding:10px 14px;margin-bottom:12px}
-  .row{display:flex;gap:8px;align-items:flex-start;padding:7px 0;
-       border-top:1px solid var(--line)}
-  .row:first-of-type{border-top:none}
-  .meta{color:var(--sub);font-size:12px;white-space:nowrap;padding-top:2px}
-  .body{flex:1;white-space:pre-wrap;word-break:break-word}
-  .tag{font-size:11px;border:1px solid var(--line);border-radius:4px;
-       padding:0 5px;color:var(--sub);white-space:nowrap}
-  .tag.red,.body.red{color:var(--red);border-color:var(--red)}
-  .warn{color:var(--warn)}
-  #allclear{color:var(--ok);font-size:14px;padding:4px 0 10px}
-  #briefout{background:var(--panel);border:1px solid var(--line);border-radius:7px;
-            padding:12px;white-space:pre-wrap;font-size:13px}
-  table{border-collapse:collapse;width:100%;font-size:12.5px}
-  th,td{text-align:left;padding:4px 10px 4px 0;border-bottom:1px solid var(--line)}
-  th{color:var(--sub);font-weight:600;white-space:nowrap}
-  td.num,th.num{text-align:right}
-  #statsraw{color:var(--sub);font-size:12px;margin-top:8px}
-
-  #termpanel{grid-area:term;display:flex;flex-direction:column;min-height:0;
-             background:#161a20;border-top:1px solid var(--line)}
-  #termdrag{height:4px;cursor:ns-resize;background:transparent}
-  #termdrag:hover{background:var(--accent)}
-  #termbar{display:flex;align-items:center;gap:6px;padding:2px 10px 4px;flex-wrap:nowrap}
-  #termbar .tlabel{color:var(--sub);font-size:12px;letter-spacing:.06em}
-  #termtabs{display:flex;gap:4px;overflow-x:auto;flex:1}
-  .ttab{display:flex;gap:6px;align-items:center;border:1px solid var(--line);
-        border-radius:5px;padding:1px 8px;font-size:12px;color:var(--sub);
-        cursor:pointer;white-space:nowrap;background:var(--panel)}
-  .ttab.on{color:var(--ink);border-color:var(--accent)}
-  .ttab.dead{opacity:.55;text-decoration:line-through}
-  .ttab .x{color:var(--sub)}
-  .ttab .x:hover{color:var(--red)}
-  #termbody{flex:1;min-height:0;position:relative}
-  .termhost{position:absolute;inset:0 0 0 8px;display:none}
-  .termhost.on{display:block}
-  #termempty{position:absolute;inset:0;display:flex;align-items:center;
-             justify-content:center;color:var(--sub);font-size:13px}
-
-  #status{grid-area:status;display:flex;align-items:center;gap:16px;
-          padding:0 12px;background:var(--panel);border-top:1px solid var(--line);
-          color:var(--sub);font-size:12px;white-space:nowrap;overflow:hidden}
-  #toast{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);
-         background:#000c;color:#fff;border-radius:6px;padding:8px 16px;
-         opacity:0;transition:opacity .3s;pointer-events:none;max-width:70%;z-index:9}
-</style></head><body>
-
-<div id="top">
-  <span id="logo">⚙ repo 工作台</span>
-  <div id="collidewrap"><span class="clabel">碰撞台</span>
-    <input id="idea" placeholder="想法丟進來，Enter 送出（fire-and-forget，判定走未讀回程）">
-    <button id="collidebtn">丟進碰撞</button></div>
-  <span id="scope"></span>
-  <span id="badge"></span>
-  <button id="ackbtn" class="small">全部已讀</button>
-  <button id="rescan" class="small">重新採集</button>
-</div>
-
-<div id="side">
-  <div class="srow">組
-    <select id="group" style="flex:1"></select></div>
-  <div>
-    <h2>Repo 選取與狀態
-      <button id="checkall" class="small">全</button>
-      <button id="checknone" class="small">無</button></h2>
-    <div id="tagfilter" title="點 tag＝勾選有該 tag 的 repo（可多選聯集）"></div>
-    <div id="repolist"></div>
-    <div class="srow" style="margin-top:6px">
-      <input id="newgroup" placeholder="組名" style="width:100px">
-      <button id="savegroup" class="small">勾選存成組</button></div>
-  </div>
-  <div><h2>registry audit</h2><div id="auditbox"></div></div>
-</div>
-
-<div id="main">
-  <div id="tabs">
-    <button data-tab="events" class="on">事件流</button>
-    <button data-tab="brief">簡報</button>
-    <button data-tab="deep">深看</button>
-  </div>
-  <div id="tab-events" class="tabpane on">
-    <div id="allclear" hidden>✅ 一切正常。</div>
-    <section id="qsec" hidden><h2>需要你判斷的</h2><div id="questions"></div></section>
-    <section id="usec" hidden><h2>未讀事件</h2><div id="unread"></div></section>
-    <section id="lsec" hidden><h2>未結 open loops</h2><div id="loops"></div></section>
-  </div>
-  <div id="tab-brief" class="tabpane">
-    <div style="margin-bottom:10px"><button id="briefbtn">產生早晨簡報（目前範圍，落 presented 事件）</button></div>
-    <pre id="briefout">（還沒產生）</pre>
-  </div>
-  <div id="tab-deep" class="tabpane">
-    <section><h2>深看：全量狀態</h2><div id="deeptable"></div>
-      <div id="statsraw"></div></section>
-  </div>
-</div>
-
-<div id="termpanel">
-  <div id="termdrag" title="拖曳調整終端高度"></div>
-  <div id="termbar">
-    <span class="tlabel">終端</span>
-    <div id="termtabs"></div>
-    <button id="newshell" class="small">＋shell</button>
-    <select id="agentsel" class="small" title="開哪家 agent CLI（config agents: 註冊）"></select>
-    <button id="newagent" class="small">＋agent 會話（帶料）</button>
-  </div>
-  <div id="termbody"><div id="termempty">＋agent 會話＝打包目前勾選範圍開 claude；Ctrl+` 收合面板</div></div>
-</div>
-
-<div id="status">
-  <span id="statsline"></span><span id="scantime"></span><span id="scanscope"></span>
-</div>
-<div id="toast"></div>
-
-<script src="/static/xterm.js"></script>
-<script src="/static/addon-fit.js"></script>
-<script>
-const $=id=>document.getElementById(id);
-const TOKEN=new URLSearchParams(location.search).get("token")||"";
-let curGroup=localStorage.getItem("group")||"";
-let groupsData=[],allRepos=[],scopeRepos=[],lastStates=[],checked=new Set();
-let tagsMap={},tagVocab=[],activeTags=new Set(),editorFor=null;
-
-function toast(msg){const t=$("toast");t.textContent=msg;t.style.opacity=1;
-  setTimeout(()=>t.style.opacity=0,2600);}
-async function api(path,opts){
-  opts=opts||{};opts.headers=Object.assign({"X-Auth":TOKEN},opts.headers||{});
-  const r=await fetch(path,opts);const j=await r.json();
-  if(j.error){toast("錯誤："+j.error);throw new Error(j.error);}return j;}
-const post=o=>({method:"POST",headers:{"Content-Type":"application/json"},
-  body:JSON.stringify(o)});
-function el(tag,cls,text){const e=document.createElement(tag);
-  if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
-
-function loadChecked(){try{const raw=localStorage.getItem("checked:"+curGroup);
-  if(raw)return new Set(JSON.parse(raw));}catch(e){}return null;}
-function saveChecked(){try{localStorage.setItem("checked:"+curGroup,
-  JSON.stringify([...checked]));}catch(e){}}
-function scopeReposFor(g){if(!g)return allRepos.slice();
-  const hit=groupsData.find(x=>x.name===g);return hit?hit.members.slice():[];}
-function selectedRepos(){return scopeRepos.filter(r=>checked.has(r));}
-function partial(){const s=selectedRepos();return s.length&&s.length!==scopeRepos.length;}
-function scopePayload(){const p={};if(partial())p.repos=selectedRepos();
-  else if(curGroup)p.group=curGroup;return p;}
-function scanParam(){if(partial())return "repos="+encodeURIComponent(selectedRepos().join(","));
-  return curGroup?("group="+encodeURIComponent(curGroup)):"";}
-function updateScope(){$("scope").textContent=partial()
-  ?("臨時組合："+selectedRepos().join(", "))
-  :(curGroup?("組："+curGroup):"範圍：全部");}
-
-// ── 分頁 ──
-document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{
-  document.querySelectorAll("#tabs button").forEach(x=>x.classList.remove("on"));
-  document.querySelectorAll(".tabpane").forEach(x=>x.classList.remove("on"));
-  b.classList.add("on");$("tab-"+b.dataset.tab).classList.add("on");});
-
-// ── 事件流 ──
-const notified=new Set();
-function maybeNotify(ev){const key=ev.date+" "+ev.time+" "+ev.header;
-  if(notified.has(key))return;notified.add(key);
-  try{if(!("Notification" in window))return;
-    if(Notification.permission==="default")Notification.requestPermission();
-    if(Notification.permission==="granted")
-      new Notification("需要你看一下（system-unsure）",
-        {body:(ev.body||"").split("\n")[0]});}catch(e){}}
-
-function renderState(st){
-  groupsData=st.groups;allRepos=st.repos;
-  tagsMap=st.tags||{};tagVocab=st.tag_vocab||[];
-  if(scopeRepos.length)renderRepoList();
-  const n=st.unread.length;
-  $("badge").style.display=n?"inline-block":"none";
-  $("badge").textContent=n?("未讀 "+n):"";
-  const sel=$("group");
-  if(sel.options.length!==st.groups.length+1){
-    sel.innerHTML="";sel.append(new Option("（全部）",""));
-    st.groups.forEach(g=>sel.append(new Option(g.name,g.name)));
-    sel.value=curGroup;}
-  const u=$("unread");u.innerHTML="";
-  st.unread.forEach(ev=>{
-    const row=el("div","row");
-    row.append(el("span","meta",ev.date+" "+ev.time));
-    row.append(el("span","tag"+(ev.interrupt?" red":""),
-      (ev.interrupt?"⚠ ":"")+ev.type+" ["+ev.source+"]"));
-    row.append(el("div","body"+(ev.interrupt?" red":""),
-      ev.body||ev.tokens.join(" ")));
-    const btn=el("button","small","忽略並記錄");
-    btn.onclick=async()=>{await api("/api/ignore",
-      post({type:ev.type,time:ev.time,header:ev.header}));
-      toast("已忽略並記錄");refreshState();};
-    row.append(btn);u.append(row);
-    if(ev.interrupt)maybeNotify(ev);});
-  $("usec").hidden=!n;
-  const L=$("loops");L.innerHTML="";
-  st.loops.forEach(ev=>{
-    const num=(ev.tokens.find(t=>t.startsWith("#"))||"#?");
-    const due=(ev.tokens.find(t=>t.startsWith("due:"))||"").slice(4);
-    const row=el("div","row");
-    row.append(el("span","meta",num+(due?"（due "+due+"）":"")));
-    row.append(el("div","body",(ev.body||"").split("\n")[0]));
-    const btn=el("button","small","關閉");
-    btn.onclick=async()=>{await api("/api/close_loop",post({num}));
-      toast("已關閉 "+num);refreshState();};
-    row.append(btn);L.append(row);});
-  $("lsec").hidden=!st.loops.length;
-  const s=st.stats;
-  $("statsline").textContent="碰撞 "+s.collisions+"｜outcome 回連 "
-    +s.collisions_with_outcome+"｜命中率 "
-    +(s.hit_rate==null?"n/a":Math.round(s.hit_rate*100)+"%")
-    +"｜生出 repo "+s.spawned+"｜存活率 "
-    +(s.survival_rate==null?"n/a":Math.round(s.survival_rate*100)+"%");
-  const asel=$("agentsel");
-  if(st.agents&&asel.options.length!==st.agents.length){
-    const cur=asel.value;asel.innerHTML="";
-    st.agents.forEach(a=>asel.append(new Option(a,a)));
-    if(st.agents.includes(cur))asel.value=cur;}
-  syncTerms(st.terms||[]);
-  updateAllClear();
-}
-
-// ── tag：色點制——列上只有顏色（hover 看名、點了開編輯器才有字），
-//    同 tag 聚在一起（依主 tag 排序＋左緣同色描邊），篩選/編輯器同一套色 ──
-const TAGCOLORS=["#6ca0dd","#98c379","#d19a66","#c678dd","#56b6c2",
-                 "#e06c75","#e5c07b","#7f9f7f","#bf7fbf","#8fa1b3"];
-function tagColor(t){
-  let i=tagVocab.indexOf(t);
-  if(i<0){i=0;for(const c of t)i=(i*31+c.codePointAt(0))%997;}
-  return TAGCOLORS[i%TAGCOLORS.length];
-}
-function primaryOrder(id){
-  const ts=tagsMap[id]||[];
-  if(!ts.length)return 998;
-  const i=tagVocab.indexOf(ts[0]);
-  return i<0?997:i;
-}
-function makeDot(t,onclick){
-  const d=el("span","dot");d.style.background=tagColor(t);d.title=t;
-  if(onclick)d.onclick=onclick;return d;
-}
-function toggleTagFilter(t){
-  activeTags.has(t)?activeTags.delete(t):activeTags.add(t);
-  if(activeTags.size){
-    checked=new Set(scopeRepos.filter(r=>
-      (tagsMap[r]||[]).some(x=>activeTags.has(x))));
-    saveChecked();updateScope();rescan();
-  }
-  renderRepoList();
-}
-function renderTagFilter(){
-  const d=$("tagfilter");d.innerHTML="";
-  const used=new Set();Object.values(tagsMap).forEach(a=>a.forEach(t=>used.add(t)));
-  tagVocab.forEach(t=>{
-    const c=el("button","chip"+(activeTags.has(t)?" on":""));
-    c.append(makeDot(t),document.createTextNode(t));
-    if(activeTags.has(t)){c.style.borderColor=tagColor(t);c.style.color=tagColor(t);}
-    if(!used.has(t))c.style.opacity=.4;    // 詞彙裡有但還沒人用
-    c.onclick=()=>toggleTagFilter(t);d.append(c);});
-  if(activeTags.size){
-    const x=el("button","chip","✕ 清除篩選");
-    x.onclick=()=>{activeTags.clear();renderRepoList();};d.append(x);}
-}
-async function setTag(id,t,on){
-  const r=await api("/api/tag",post(on?{id,add:[t]}:{id,remove:[t]}));
-  tagsMap[id]=r.tags;renderRepoList();
-}
-function tagEditor(id){
-  const ed=el("div","tageditor");
-  const cur=new Set(tagsMap[id]||[]);
-  tagVocab.forEach(t=>{
-    const c=el("button","chip"+(cur.has(t)?" on":""));
-    c.append(makeDot(t),document.createTextNode(t));
-    if(cur.has(t)){c.style.borderColor=tagColor(t);c.style.color=tagColor(t);}
-    c.onclick=()=>setTag(id,t,!cur.has(t));ed.append(c);});
-  const inp=document.createElement("input");
-  inp.placeholder="新 tag，Enter";
-  inp.onkeydown=e=>{if(e.key==="Enter"&&inp.value.trim())
-    setTag(id,inp.value.trim(),true);};
-  ed.append(inp);
-  const done=el("button","chip","完成");
-  done.onclick=()=>{editorFor=null;renderRepoList();};ed.append(done);
-  return ed;
-}
-
-function renderRepoList(){
-  renderTagFilter();
-  const d=$("repolist");d.innerHTML="";
-  const byId={};lastStates.forEach(s=>byId[s.id]=s);
-  // 同 tag 聚在一起：依主 tag（詞彙順序）排序，左緣同色描邊做視覺分塊
-  const sorted=[...scopeRepos].sort((a,b)=>
-    primaryOrder(a)-primaryOrder(b)||a.localeCompare(b));
-  sorted.forEach(id=>{
-    const s=byId[id];
-    const row=el("div","repo"+(checked.has(id)?"":" off"));
-    const ts=tagsMap[id]||[];
-    if(ts.length)row.style.borderLeftColor=tagColor(ts[0]);
-    const cb=document.createElement("input");cb.type="checkbox";
-    cb.checked=checked.has(id);
-    cb.onchange=()=>{cb.checked?checked.add(id):checked.delete(id);
-      saveChecked();renderRepoList();updateScope();rescan();};
-    row.append(cb);
-    row.append(el("span","rid",id));
-    const dots=el("span","dots");   // 色點制：hover 看名、點了開編輯器才有字
-    ts.forEach(t=>dots.append(makeDot(t,
-      ()=>{editorFor=editorFor===id?null:id;renderRepoList();})));
-    row.append(dots);
-    if(s){
-      const bad=(s.dirty_days!=null&&s.dirty_days>=4)||!s.exists||s.note
-                ||(s.behind||0)>0;
-      const bits=[];
-      if((s.agents||[]).length)bits.push("🤖"+s.agents.join(","));  // agent 偵測（gitpane 課）
-      if(s.dirty)bits.push("dirty "+s.dirty+(s.dirty_days!=null?"×"+s.dirty_days.toFixed(0)+"d":""));
-      if(s.ahead)bits.push("↑"+s.ahead);      // 有 commit 沒 push
-      if(s.behind)bits.push("↓"+s.behind);    // 落後遠端（fetch 後才準）
-      if(s.worktrees)bits.push("wt×"+s.worktrees);
-      if(s.last_commit_days!=null)bits.push(s.last_commit_days.toFixed(0)+"d");
-      if(s.note)bits.push(s.note);
-      row.append(el("span","st"+(bad?" bad":""),bits.join("｜")||"✓"));
-    }else row.append(el("span","st","…"));
-    const tg=el("button","small go","🏷");
-    tg.title="編輯 tag";
-    tg.onclick=()=>{editorFor=editorFor===id?null:id;renderRepoList();};
-    row.append(tg);
-    const go=el("button","small go","▶");
-    go.title="在此 repo 開 agent 會話（帶料）";
-    go.onclick=()=>newTerm("agent",{repo:id,repos:[id]});
-    row.append(go);d.append(row);
-    if(editorFor===id)d.append(tagEditor(id));});
-}
-
-function renderScan(sc){
-  $("scantime").textContent="採集於 "+new Date().toLocaleTimeString();
-  $("scanscope").textContent="採集範圍："+sc.group;
-  sc.states.forEach(s=>{const i=lastStates.findIndex(x=>x.id===s.id);
-    if(i>=0)lastStates[i]=s;else lastStates.push(s);});
-  const q=$("questions");q.innerHTML="";
-  sc.questions.forEach((t,i)=>{const row=el("div","row");
-    row.append(el("span","meta",(i+1)+"."));
-    row.append(el("div","body warn",t));q.append(row);});
-  $("qsec").hidden=!sc.questions.length;
-  renderRepoList();
-  const a=$("auditbox");a.innerHTML="";
-  sc.audit.forEach(t=>a.append(el("div","red","🔴 "+t)));
-  if(!sc.audit.length)a.append(el("div","okline","零紅字 ✅"));
-  const d=$("deeptable");d.innerHTML="";
-  const tb=el("table");const hd=el("tr");
-  [["repo",""],["tags",""],["branch",""],["tier",""],["dirty","num"],["dirty天","num"],
-   ["末commit天","num"],["↑未push","num"],["↓落後","num"],["wt","num"],["agent",""],
-   ["最後 commit",""],["note",""]].forEach(([t,c])=>hd.append(el("th",c,t)));
-  tb.append(hd);
-  sc.states.forEach(s=>{const tr=el("tr");
-    const f=v=>v==null?"-":v.toFixed(1);
-    const n=v=>v==null?"-":String(v);
-    tr.append(el("td","",s.id));
-    tr.append(el("td","",(tagsMap[s.id]||[]).join("、")));
-    tr.append(el("td","",s.branch||"-"));
-    tr.append(el("td","",s.tier));
-    tr.append(el("td","num",String(s.dirty)));
-    tr.append(el("td","num",f(s.dirty_days)));
-    tr.append(el("td","num",f(s.last_commit_days)));
-    tr.append(el("td","num",n(s.ahead)));
-    tr.append(el("td","num",n(s.behind)));
-    tr.append(el("td","num",String(s.worktrees||0)));
-    tr.append(el("td","",(s.agents||[]).join(",")||"-"));
-    tr.append(el("td","",(s.last_subject||"").slice(0,60)));
-    tr.append(el("td","",s.note||""));tb.append(tr);});
-  d.append(tb);
-  $("statsraw").textContent=$("statsline").textContent;
-  updateAllClear();
-}
-function updateAllClear(){
-  $("allclear").hidden=!($("qsec").hidden&&$("usec").hidden&&$("lsec").hidden);}
-
-async function refreshState(){try{renderState(await api("/api/state"));
-  if(!scopeRepos.length)resetScope();}catch(e){}}
-function resetScope(){
-  scopeRepos=scopeReposFor(curGroup);
-  const saved=loadChecked();
-  checked=saved?new Set([...saved].filter(r=>scopeRepos.includes(r)))
-               :new Set(scopeRepos);
-  if(!checked.size)checked=new Set(scopeRepos);
-  renderRepoList();updateScope();}
-async function rescan(){try{const qp=scanParam();
-  renderScan(await api("/api/scan"+(qp?"?"+qp:"")));}catch(e){}}
-
-$("group").onchange=e=>{curGroup=e.target.value;
-  try{localStorage.setItem("group",curGroup);}catch(err){}
-  resetScope();rescan();};
-$("rescan").onclick=rescan;
-$("ackbtn").onclick=async()=>{await api("/api/ack",post({}));
-  toast("已全部標記已讀");refreshState();};
-$("checkall").onclick=()=>{checked=new Set(scopeRepos);saveChecked();
-  renderRepoList();updateScope();rescan();};
-$("checknone").onclick=()=>{checked=new Set();saveChecked();
-  renderRepoList();updateScope();};
-$("savegroup").onclick=async()=>{
-  const name=$("newgroup").value.trim();
-  if(!name){toast("先填組名");return;}
-  const r=await api("/api/save_group",post({name,repos:selectedRepos()}));
-  toast("組已建："+r.name);$("newgroup").value="";refreshState();};
-async function submitIdea(){
-  const v=$("idea").value.trim();if(!v)return;
-  $("idea").value="";
-  const r=await api("/api/collide",post(Object.assign({idea:v},scopePayload())));
-  toast("已丟進碰撞 "+r.cid+"（判定回來會出現在未讀）");refreshState();}
-$("collidebtn").onclick=submitIdea;
-$("idea").addEventListener("keydown",e=>{if(e.key==="Enter")submitIdea();});
-$("briefbtn").onclick=async()=>{
-  const r=await api("/api/brief",post(scopePayload()));
-  $("briefout").textContent=r.text;toast("簡報已產生（presented 已落脊椎）");
-  refreshState();};
-
-// ── 終端面板（xterm.js ＋ WS）──
-const terms=new Map();let activeSid=null;
-function termTheme(){return{background:"#161a20",foreground:"#d7dae0",
-  cursor:"#6ca0dd",selectionBackground:"#3a4150"};}
-function syncTerms(list){
-  list.forEach(s=>{
-    let rec=terms.get(s.sid);
-    if(!rec){addTab(s.sid,s.title);rec=terms.get(s.sid);}
-    rec.alive=s.alive;
-    rec.tab.classList.toggle("dead",!s.alive);});
-  for(const [sid,rec] of terms){
-    if(!list.find(s=>s.sid===sid)&&!rec.t){removeTab(sid);}}
-}
-function addTab(sid,title){
-  const tab=el("span","ttab");
-  tab.append(el("span","",title));
-  const x=el("span","x","✕");
-  x.onclick=async e=>{e.stopPropagation();
-    try{await api("/api/term_kill",post({sid}));}catch(err){}
-    removeTab(sid);};
-  tab.append(x);
-  tab.onclick=()=>selectTerm(sid);
-  $("termtabs").append(tab);
-  terms.set(sid,{tab,title,t:null,ws:null,el:null,alive:true});
-}
-function removeTab(sid){
-  const rec=terms.get(sid);if(!rec)return;
-  rec.tab.remove();if(rec.el)rec.el.remove();
-  if(rec.ws)try{rec.ws.close();}catch(e){}
-  terms.delete(sid);
-  if(activeSid===sid){activeSid=null;
-    const first=terms.keys().next();
-    if(!first.done)selectTerm(first.value);else $("termempty").style.display="";}
-}
-function selectTerm(sid){
-  const rec=terms.get(sid);if(!rec)return;
-  activeSid=sid;$("termempty").style.display="none";
-  for(const [id,r] of terms){r.tab.classList.toggle("on",id===sid);
-    if(r.el)r.el.classList.toggle("on",id===sid);}
-  if(!rec.t)attachTerm(sid);
-  else setTimeout(()=>{fitTerm(rec);rec.t.focus();},0);
-}
-function attachTerm(sid){
-  const rec=terms.get(sid);
-  const host=el("div","termhost on");$("termbody").append(host);
-  const t=new Terminal({fontSize:12.5,fontFamily:"Menlo,Consolas,monospace",
-    theme:termTheme(),cursorBlink:true,scrollback:5000});
-  const fit=new FitAddon.FitAddon();t.loadAddon(fit);t.open(host);
-  const ws=new WebSocket(
-    (location.protocol==="https:"?"wss://":"ws://")+location.host
-    +"/ws/term/"+sid+"?token="+TOKEN);
-  ws.binaryType="arraybuffer";
-  ws.onmessage=e=>t.write(new Uint8Array(e.data));
-  ws.onclose=()=>{try{t.write("\r\n\x1b[2m[連線已斷——點分頁重連]\x1b[0m\r\n");}catch(err){}
-    rec.t=null;rec.ws=null;host.remove();rec.el=null;};
-  t.onData(d=>{if(ws.readyState===1)ws.send(JSON.stringify({t:"i",d}));});
-  t.onResize(({cols,rows})=>{if(ws.readyState===1)
-    ws.send(JSON.stringify({t:"r",c:cols,r:rows}));});
-  ws.onopen=()=>{fitTerm({t,fit});t.focus();};
-  Object.assign(rec,{t,fit,ws,el:host});
-  for(const [id,r] of terms)if(r.el)r.el.classList.toggle("on",id===sid);
-}
-function fitTerm(rec){try{rec.fit&&rec.fit.fit();}catch(e){}}
-function fitAll(){for(const r of terms.values())if(r.t)fitTerm(r);}
-async function newTerm(kind,extra){
-  const payload=Object.assign({kind},kind==="agent"?scopePayload():{},extra||{});
-  if(kind==="agent")payload.agent=$("agentsel").value||"claude";
-  const r=await api("/api/term_create",post(payload));
-  if(!terms.has(r.sid))addTab(r.sid,r.title);
-  selectTerm(r.sid);
-  toast(kind==="agent"?(payload.agent+" 會話已開（料已打包）"):"shell 已開");}
-$("newshell").onclick=()=>newTerm("shell");
-$("newagent").onclick=()=>newTerm("agent");
-
-// 拖曳調整高度 ＋ Ctrl+` 收合
-let dragging=false,lastH=280;
-$("termdrag").onmousedown=e=>{dragging=true;e.preventDefault();};
-window.addEventListener("mousemove",e=>{if(!dragging)return;
-  const h=Math.min(Math.max(window.innerHeight-e.clientY-26,42),
-                   window.innerHeight-200);
-  document.documentElement.style.setProperty("--termh",h+"px");fitAll();});
-window.addEventListener("mouseup",()=>{if(dragging){dragging=false;fitAll();}});
-window.addEventListener("keydown",e=>{
-  if(e.ctrlKey&&e.key==="`"){e.preventDefault();
-    const cur=getComputedStyle(document.documentElement)
-      .getPropertyValue("--termh").trim();
-    if(cur==="42px"){document.documentElement.style
-      .setProperty("--termh",lastH+"px");}
-    else{lastH=parseInt(cur)||280;document.documentElement.style
-      .setProperty("--termh","42px");}
-    fitAll();}});
-window.addEventListener("resize",fitAll);
-
-(async()=>{await refreshState();resetScope();rescan();})();
-setInterval(refreshState,5000);   // 殼只 poll 脊椎：輕量輪詢
-setInterval(rescan,120000);       // P3 採集低頻；手動按鈕隨時可補
-</script></body></html>
-"""
+PAGE = PAGE_PATH.read_text(encoding="utf-8")

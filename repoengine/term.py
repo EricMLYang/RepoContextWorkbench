@@ -156,6 +156,16 @@ class TermSession:
             pass
 
 
+def agent_title(agent, scope, task=None, limit=40):
+    """會話標題＝任務摘要（2026-09-02 檢討 F5：會話要有主，開三個分得出誰是誰）。
+    沒任務才退回 agent · scope。"""
+    if task:
+        head = task.strip().splitlines()[0]
+        t = f"{agent} · {head}"
+        return t if len(t) <= limit else t[:limit - 1] + "…"
+    return f"{agent} · {scope}"
+
+
 def default_shell():
     if os.name == "nt":
         return [os.environ.get("COMSPEC", "cmd.exe")]
@@ -170,15 +180,17 @@ class TermManager:
         self.sessions = {}
         self._ids = itertools.count(1)
 
-    def create_shell(self, cwd=None):
+    def create_shell(self, cwd=None, origin=None):
         sid = f"t{next(self._ids)}"
         s = TermSession(sid, default_shell(), cwd=cwd or str(self.spine_dir),
-                        title="shell")
+                        title="shell · spine" if not cwd else "shell")
+        s.origin = origin
+        s.kind = "shell"
         self.sessions[sid] = s
         return s
 
     def create_agent(self, group=None, repos=None, repo=None, task=None,
-                     agent="claude"):
+                     agent="claude", origin=None):
         from . import agentmark as _agentmark
         from . import session as _session
         cwd, cmd, _pack = _session.build(self.spine_dir, group=group,
@@ -192,8 +204,12 @@ class TermManager:
             cmd = [sh, "-lc", "exec " + shlex.join(cmd)]
         sid = f"t{next(self._ids)}"
         scope = repo or group or ("臨時" if repos else "全部")
-        s = TermSession(sid, cmd, cwd=str(cwd), title=f"{agent}:{scope}",
+        s = TermSession(sid, cmd, cwd=str(cwd), title=agent_title(agent, scope, task),
                         on_exit=lambda: _agentmark.unmark(self.spine_dir, sid))
+        s.origin = origin      # 由哪張卡／哪次碰撞開的（卡 key 或 collision:<cid>）
+        s.kind = "agent"
+        s.scope = scope
+        s.task = task
         # agent 偵測（gitpane 課）：標記存活會話，P3 採集據此標「🤖 誰在跑」
         _agentmark.mark(self.spine_dir, sid, cwd, agent, s.pid)
         self.sessions[sid] = s
@@ -211,7 +227,11 @@ class TermManager:
         return s is not None
 
     def list(self):
-        return [{"sid": s.sid, "title": s.title, "alive": s.alive}
+        return [{"sid": s.sid, "title": s.title, "alive": s.alive,
+                 "kind": getattr(s, "kind", "shell"),
+                 "origin": getattr(s, "origin", None),
+                 "scope": getattr(s, "scope", None),
+                 "task": getattr(s, "task", None)}
                 for s in self.sessions.values()]
 
     def kill_all(self):

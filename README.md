@@ -11,7 +11,7 @@
 > 全部是 v2 既有原語（P1/P3/P6/P11）的延伸，未開新子系統。
 
 - **有**：P1 registry+audit+**scan**（mani「init 自動掃描＋手寫補語意」混合模式）｜P2 組（含臨時組合）｜P3 採集（欄位抄 gitpane 補完：worktree 數＋**agent 偵測**）｜P4 上游（gh api，無事不報）｜P5 增量 digest（便宜模型）｜P6 打包簡版＋**estimate 預算函數**＋**洩密哨兵**（Repomix/Secretlint 課）｜P7 兩段式碰撞｜P8 落｜P9 生（升格＋出生登記＋outcome 回連）｜P10 脊椎三件套｜P11 查詢＋品味量測（命中率＋存活率）＋**lint 衛生迴圈**（second-brain 課）｜P12 排程（timer 住殼內、當日補課跨日不補）｜P13 通知（interrupt 白名單分類）｜P15 provider（mock＋claude，judge＋自由文字）｜P16 會話（帶料開終端＋MCP 掛載）｜**MCP server**（stdio 零依賴，agent 的介面＝人的介面）｜早晨簡報產生器（樣貌 A 純事實版）｜S4 監控台網頁雛形（`ui`，有 schedule 時內建 S6 timer）。
-- **S4 是 IDE 風格工作台桌面 APP**（2026-09-01 兩輪使用者裁定；設計見 `../personal_agent_design/20260901_工作台設計_v1.md`）：`app` 子命令用 pywebview 開原生視窗——sidebar（組＋repo 勾選＋audit）｜事件流/簡報/深看分頁｜**內嵌 terminal 面板**（xterm.js＋PTY＋手寫 RFC6455 WS，shell 與帶料 agent 會話都開在這，會話生命週期獨立於視窗）｜狀態列量測。取代 v2 §7「不內嵌 terminal」舊裁定。`ui` 瀏覽器模式降為過渡替代。啟動隨機 token 防 VDI 多使用者（127.0.0.1＋URL token）。
+- **S4 是工作台桌面 APP，三個一級物件＝牌／收件匣／會話**（2026-09-01 裁定要 IDE 風格＋內嵌 terminal；2026-09-02 UI 檢討後重排，見 `../personal_agent_design/20260902_工作台UI_UX檢討.md`）：`app` 子命令用 pywebview 開原生視窗——**牌**（組是卡，點卡切範圍、展開勾成員；「＋臨時組」對話框挑一手牌）｜**收件匣**（統一卡片：准打斷／需要你判斷／處理中／碰撞回程／未結 loops，**每個出口都是真按鈕**→呼叫引擎原語→落 chosen→卡消失；碰撞台輸入框置頂）｜**會話**（sidebar 清單帶來源與任務摘要 title＋底部 terminal 面板：xterm.js＋PTY＋手寫 RFC6455 WS，會話生命週期獨立於視窗，沒會話自動收合）｜深看（全量表＋最近事件）。前端在 `repoengine/workbench.html`。`ui` 瀏覽器模式為過渡替代。啟動隨機 token 防 VDI 多使用者（127.0.0.1＋URL token）。
 - **無（留給正式 repo，VDI Day 0 smoke test 過了才蓋）**：真殼的常駐件——tray、全域 hotkey、OS toast、開機自啟；Windows terminal 需 pywinpty（未實測）。視窗內 badge＋瀏覽器通知是常駐件的等效替身。
 - 對 v2 的小偏差：kv token 多一個 `id:`（collision 回連需要，v2 的 kv 清單為例示性）；pack 用內建文件層選料（正式版換 Repomix）。
 
@@ -50,7 +50,8 @@ python -m repoengine --spine ... timer --once           # P12：跑一輪到期�
 python -m repoengine --spine ... commit                 # git 單一提交者（批次）
 python -m repoengine --spine ... session --group g1 --task "寫文"  # P16 帶料開 claude 終端
 python -m repoengine --spine ... mcp                    # MCP server（stdio；.mcp.json 由 session 產生）
-python -m repoengine --spine ... app                    # S4 工作台桌面視窗（IDE 風格＋內嵌 terminal）
+python -m repoengine --spine ... app                    # S4 工作台桌面視窗（牌／收件匣／會話＋內嵌 terminal）
+python scripts/screenshot.py <spine> --demo             # 改 UI 後先截圖自看（headless Edge；--demo 灌示範事件）
 python -m repoengine --spine ... ui                     # 瀏覽器模式（app 的過渡替代）
 ```
 

@@ -12,19 +12,60 @@ from . import config as _config
 from . import registry, spine
 
 
-def build_questions(states, thresholds):
-    qs = []
+def _act(label, action, **payload):
+    return {"label": label, "action": action, "payload": payload}
+
+
+def build_question_cards(states, thresholds):
+    """問句＝結構化卡（2026-09-02 UI 檢討 P0：出口是按鈕不是字）。
+    每張卡：repo／qkind／title（問句）／actions（label＋引擎原語＋payload）。
+    文字版（簡報 md、CLI）一律由 card_text 渲染而來，兩邊不會分岔。"""
+    cards = []
     for s in states:
+        rid = s["id"]
         if s["dirty_days"] is not None and s["dirty_days"] >= thresholds["dirty_stale_days"]:
-            qs.append(f"{s['id']} dirty 已 {s['dirty_days']:.0f} 天（{s['dirty']} 檔），本週要動它嗎？"
-                      f" → 〔開 agent 收尾〕〔標記本週不動〕")
+            cards.append({
+                "kind": "question", "qkind": "dirty", "repo": rid,
+                "key": f"q:dirty:{rid}",
+                "title": f"{rid} dirty 已 {s['dirty_days']:.0f} 天（{s['dirty']} 檔），本週要動它嗎？",
+                "actions": [
+                    _act("開 agent 收尾", "term_create", kind="agent", repo=rid,
+                         repos=[rid], task=f"收尾 {rid} 的 {s['dirty']} 個未提交檔：先看 git status 與 diff，"
+                                          f"判斷該 commit、丟棄或拆開，跟我確認後執行",
+                         origin=f"q:dirty:{rid}"),
+                    _act("標記本週不動", "defer", id=rid, qkind="dirty", days=7),
+                ]})
         elif (s["tier"] == "active" and s["last_commit_days"] is not None
               and s["last_commit_days"] >= thresholds["inactive_days"]):
-            qs.append(f"{s['id']} 掛 active 但已 {s['last_commit_days']:.0f} 天無 commit，"
-                      f"還算進行中嗎？ → 〔降 tier〕〔本週排進度〕")
+            cards.append({
+                "kind": "question", "qkind": "inactive", "repo": rid,
+                "key": f"q:inactive:{rid}",
+                "title": f"{rid} 掛 active 但已 {s['last_commit_days']:.0f} 天無 commit，還算進行中嗎？",
+                "actions": [
+                    _act("降 tier", "tier", id=rid, tier="dormant"),
+                    _act("本週排進度", "defer", id=rid, qkind="inactive", days=7),
+                ]})
         if not s["exists"] or s["note"] == "非 git repo":
-            qs.append(f"{s['id']} 採集失敗（{s['note'] or '路徑不存在'}），registry 要修嗎？ → 〔修 registry〕〔忽略並記錄〕")
-    return qs
+            cards.append({
+                "kind": "question", "qkind": "broken", "repo": rid,
+                "key": f"q:broken:{rid}",
+                "title": f"{rid} 採集失敗（{s['note'] or '路徑不存在'}），registry 要修嗎？",
+                "actions": [
+                    _act("修 registry", "term_create", kind="shell", origin=f"q:broken:{rid}"),
+                    _act("移出 registry", "remove_repo", id=rid),
+                    _act("忽略並記錄", "defer", id=rid, qkind="broken", days=7),
+                ]})
+    return cards
+
+
+def card_text(card):
+    """卡 → 一行文字（問句 → 〔出口〕〔出口〕），簡報 md 與 CLI 用。"""
+    outs = "".join(f"〔{a['label']}〕" for a in card["actions"])
+    return f"{card['title']} → {outs}" if outs else card["title"]
+
+
+def build_questions(states, thresholds):
+    return [card_text(c) for c in build_question_cards(states, thresholds)]
 
 
 def build_brief(spine_dir, group_name, states, when=None):

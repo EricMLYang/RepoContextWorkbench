@@ -41,6 +41,10 @@ v2 裡「現在不驗、三個月後才痛」的東西，全部釘成不變式�
   順手加固：agent 會話經 **登入 shell（$SHELL -lc）** spawn——PATH/profile 不受工作台
   怎麼被啟動影響，command not found 會顯示在終端裡而不是無聲失敗。
 
+- **2026-09-02 UI 檢討「沒有達到我要的效果」**→ 定性為**設計錯位不是 bug**：畫面是「監控頁黏 terminal」
+  （`../personal_agent_design/20260902_工作台UI_UX檢討.md`）。三個根因＝行動出口是字不是按鈕（F1）、
+  三種待辦格式疊加（F2）、自己丟的想法變成待忽略的未讀（F3）；會話無主（F5）。全部先補 failing test 再改
+  （見下「UI 第三輪」），並新增 `scripts/screenshot.py`——**功能測試通過 ≠ 體感通過**，每輪 UI 改動先截圖自看再進 L4。
 - **每一次「這則不該吵我／怎麼沒告訴我」**→ 改 `config.yaml` thresholds → 立刻補一條 L1 閾值測試釘住新手感。
 - **每一次 L4 發現的 bug** → 先寫 failing test（L1 或 L2）再修——原型期就維持紅綠循環。
 - **每一次真實碰撞的判定不準** → 改 prompt（`collide.py` 內）→ L3 重跑；判定標準的措辭本來就留給前三次真實碰撞調（v2 §9-2）。
@@ -168,3 +172,51 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
   併同一個紅字面
 - **MCP parity**（`test_mcpserver.py`）：`registry_scan`／`pack_estimate`／`spine_lint`
   三工具入表——agent 的介面＝人的介面，新原語不例外
+
+---
+
+## UI 第三輪（2026-09-02：UI/UX 檢討落地——「牌／收件匣／會話」三個一級物件）
+
+**觸發**：使用者裁定「沒有達到我要的效果」→ 先做檢討檔再動手。檢討方法＝用真 spine 跑起來截圖，對照
+收斂檔 §7 操作單位／§8 四判準／素材檔 §2 Orca 判斷逐項核對。**診斷：監控頁黏 terminal，不是工作台。**
+
+**引擎側（小改、結構化）**：
+- `brief.build_question_cards`：問句改結構化卡 `{kind, qkind, repo, key, title, actions[{label, action, payload}]}`；
+  `build_questions`／簡報 md 由 `card_text` 渲染而來，**文字版與按鈕版同源不分岔**。
+- `webui.build_cards`：收件匣＝一種卡。順序 interrupt → 處理中 → 碰撞回程 → 其他未讀 → open loops。
+  規則：自己出手的留痕（presented／chosen／monitor·route·spawn 的 decision）不進收件匣；
+  被 `chosen ref:` 到的事件＝已處理，**ack 前就消失**；collision `opened` 未回程＝「處理中」卡（無出口），
+  回程到了原地換判定卡；open-loop 事件只以 loop 卡呈現。
+- 新 action（全部只是呼叫既有原語再落脊椎）：`tier`（set_field＋decision）、`defer`（chosen `snooze:<qkind> until:<date>`，
+  scan 據此濾問句）、`remove_repo`、`route_collision`（P8 route＋chosen ref:collision）、`loop_defer`（同 # 新 due 再 opened）、
+  `collide_rerun`；`ignore` 對判定卡改 ref `collision:<cid>`；`term_create` 帶 `origin`。
+- `term.agent_title`：會話 title＝任務摘要（≤40 字），`TermManager.list` 帶 `kind/origin/scope/task`。
+
+**前端**（`repoengine/workbench.html`，從 webui.py 內嵌字串抽出成檔）：
+- 牌：組是卡（成員數＋異常數＋🤖），點卡切範圍、▶ 展開成員（勾選＝臨時子集、tier 點、icon 微標、▶ 開會話）；
+  「＋臨時組」對話框（tag 篩選＋勾選＋可存成組）取代常駐 tag 篩選列與 13 個 checkbox。
+- 收件匣：碰撞台輸入框置頂最亮；卡片依 kind 分段、出口是真按鈕（紫＝處理中含轉圈、藍＝碰撞回程含判定色）；
+  「改落點…」卡內展開 select；空狀態一行「一切正常」＋「其餘 N 個 repo 無異常」。
+- 會話：sidebar 清單（存活點、title、來源）＋ terminal 面板只顯示選中的會話；沒會話時面板自動收合。
+- 簡報：分頁移除；「存成今日簡報」在 topbar，產出落 presented 並在收件匣下方抽屜顯示。
+- 色彩語意表：紅只給准打斷；琥珀＝要判斷；藍＝資訊；綠＝正常；紫＝處理中。狀態列量測**有樣本才顯示**。
+- 輪詢改 **key-based diff**（卡與段標題都有 key，內容 sig 不變不重繪；正在改落點的卡不被重繪打斷）。
+
+**驗證（122 tests）**：
+| 條款 | 測試 |
+|---|---|
+| 問句卡結構化＋文字版同源 | `test_collect_brief.py::test_question_cards_structured` |
+| 處理中卡→判定卡；opened 不再是可忽略未讀；incubator 出口不重複 | `test_cards_collision_pending_then_judged` |
+| 自己的留痕不進收件匣；chosen ref 到的卡 ack 前消失 | `test_cards_hide_own_records_and_handled` |
+| interrupt 置頂；loop 卡三出口；open-loop 不重複成未讀 | `test_cards_interrupt_first_and_loops` |
+| 問句卡出口＝term_create／defer；defer 7 天內不再浮出且留 chosen | `test_scan_question_cards_and_defer` |
+| tier／route_collision／loop_defer 三個新 action 的 HTTP 全路徑與拒收 | `test_tier_action`／`test_route_collision_action`／`test_loop_defer_action` |
+| 會話 title＝任務摘要 | `test_agent_session_title_has_task` |
+| 頁面關鍵區塊（牌／收件匣／會話／臨時組／存成今日簡報） | `test_page_and_state` |
+| 既有 flaky（09:00 事件在 09:00 前 ack 不掉）改用 now-1min | `test_close_loop_and_ack` |
+
+**L4（人）**：真 spine 開 `app` → ① 三條問句能不離開畫面答掉（按下→卡消失→深看「最近事件」有 chosen）；
+② 丟一個想法，看它從 ◐ 處理中變 ✔ 判定卡，按〔照建議落〕檔案真的落到建議位置；
+③ 從判定卡〔深撞：開會話〕開的會話，sidebar 顯示「碰撞 <cid>」來源、title 是任務摘要；
+④ 「＋臨時組」挑 3 個 repo → 範圍 pill 變「3 個 repo（臨時）」→ 問句／碰撞／會話帶料都跟著縮。
+截圖自看：`python scripts/screenshot.py <spine> [--demo]`（headless Edge，30 秒）。

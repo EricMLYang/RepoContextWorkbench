@@ -130,8 +130,8 @@ def test_page_and_state(server):
     base, _ = server
     code, html = _get(base, "/")
     assert code == 200
-    for key in ("工作台", "碰撞台", "需要你判斷的", "未讀事件", "深看",
-                "Repo 選取與狀態", "勾選存成組", "終端", "事件流", "簡報"):
+    for key in ("工作台", "碰撞台", "收件匣", "需要你判斷", "深看",
+                "牌", "臨時組", "會話", "終端", "存成今日簡報", "一切正常"):
         assert key in html
     code, body = _get(base, "/api/state")
     st = json.loads(body)
@@ -180,8 +180,10 @@ def test_ignore_writes_chosen(server):
 @pytest.mark.e2e
 def test_close_loop_and_ack(server):
     base, spine_dir = server
+    # 事件時間要早於 ack 時刻，否則 ack 不掉（曾在 09:00 前跑出 flaky）
     spine_mod.append_event(spine_dir, "open-loop", "hotkey", ["#7"],
-                           body="opened →「待辦」", when=_t(9, 0))
+                           body="opened →「待辦」",
+                           when=dt.datetime.now() - dt.timedelta(minutes=1))
     assert len(spine_mod.open_loops(spine_dir)) == 1
     code, r = _post(base, "/api/close_loop", {"num": "#7"})
     assert code == 200 and not spine_mod.open_loops(spine_dir)
@@ -254,3 +256,143 @@ def test_save_group_api(server):
     assert code == 400
     code, r = _post(base, "/api/save_group", {"name": "g3", "repos": []})
     assert code == 400
+
+
+# ── UI 第三輪（2026-09-02 檢討：出口變按鈕／統一卡片／會話有主）────────────
+
+def _card_keys(st, kind=None):
+    return [c["key"] for c in st["cards"] if kind is None or c["kind"] == kind]
+
+
+def test_cards_collision_pending_then_judged(spine_with_repos):
+    """自己丟的想法＝「處理中」卡（無出口），不是一則待忽略的未讀；
+    判定回來→原地換成判定卡，帶五個真出口（route/深撞/丟棄）。"""
+    from repoengine import collide
+    cid = collide.submit(spine_with_repos, "測試想法", group="g1",
+                         when=dt.datetime.now() - dt.timedelta(minutes=2))
+    st = webui.build_state(spine_with_repos)
+    pend = [c for c in st["cards"] if c["kind"] == "pending"]
+    assert len(pend) == 1 and "測試想法" in pend[0]["title"]
+    assert pend[0]["actions"] == []
+    # opened 事件不會再以「一則可忽略的未讀」出現在收件匣
+    assert not any(c["kind"] == "event" and c["title"].startswith("opened")
+                   for c in st["cards"])
+    collide.run_judgement(spine_with_repos, cid, provider="mock",
+                          when=dt.datetime.now() - dt.timedelta(minutes=1))
+    st = webui.build_state(spine_with_repos)
+    assert not [c for c in st["cards"] if c["kind"] == "pending"]
+    judged = [c for c in st["cards"] if c["kind"] == "collision"]
+    assert len(judged) == 1
+    c = judged[0]
+    assert c["cid"] == cid and "測試想法" in c["title"]
+    assert c["judgement"]["判定"]
+    names = {a["action"] for a in c["actions"]}
+    assert {"route_collision", "term_create", "ignore"} <= names
+    labels = [a["label"] for a in c["actions"]]
+    assert any(l.startswith("照建議落") for l in labels)
+    assert "深撞" in "".join(labels) and "丟棄並記錄" in labels
+    assert len([l for l in labels if "incubator" in l]) == 1   # 建議＝incubator 時不重複出「升格」
+
+
+def test_cards_hide_own_records_and_handled(spine_with_repos):
+    """presented/chosen 是自己出手的留痕，不進收件匣；被 chosen ref 到的事件＝已處理，ack 前就消失。"""
+    t0 = dt.datetime.now() - dt.timedelta(minutes=3)
+    spine_mod.append_event(spine_with_repos, "presented", "morning-brief", [],
+                           body="呈現了", when=t0)
+    ev = spine_mod.append_event(spine_with_repos, "suggestion", "engine", [],
+                                body="upstream 有新 release",
+                                when=t0 + dt.timedelta(minutes=1))
+    st = webui.build_state(spine_with_repos)
+    assert _card_keys(st) == [f"suggestion:{ev.time}"]
+    webui._handle_action(spine_with_repos, "ignore",
+                         {"type": "suggestion", "time": ev.time, "header": ev.header()})
+    st = webui.build_state(spine_with_repos)
+    assert _card_keys(st) == []          # chosen 本身也不進收件匣
+
+
+def test_cards_interrupt_first_and_loops(spine_with_repos):
+    t0 = dt.datetime.now() - dt.timedelta(minutes=3)
+    spine_mod.append_event(spine_with_repos, "open-loop", "hotkey", ["#1", "due:2030-01-01"],
+                           body="opened →「試」", when=t0)
+    spine_mod.append_event(spine_with_repos, "collision", "engine", ["id:x1"],
+                           body="判定失敗（system-unsure，准打斷）：boom",
+                           when=t0 + dt.timedelta(minutes=1))
+    st = webui.build_state(spine_with_repos)
+    assert st["cards"][0]["kind"] == "interrupt"
+    loop = [c for c in st["cards"] if c["kind"] == "loop"][0]
+    assert loop["num"] == "#1" and loop["due"] == "2030-01-01"
+    assert {a["action"] for a in loop["actions"]} == {"collide_prefill", "loop_defer", "close_loop"}
+    # open-loop 事件只以 loop 卡呈現，不再重複成一則「其他未讀」
+    assert not [c for c in st["cards"] if c["kind"] == "event" and c.get("etype") == "open-loop"]
+
+
+def test_scan_question_cards_and_defer(spine_with_repos):
+    """問句是卡：有 kind/repo/actions；defer 後同一問句 7 天內不再浮出（chosen 留痕）。"""
+    sc = webui.build_scan(spine_with_repos, "g1")
+    qc = [c for c in sc["question_cards"] if c["repo"] == "repo-b"]
+    assert len(qc) == 1 and qc[0]["kind"] == "question"
+    assert {a["action"] for a in qc[0]["actions"]} == {"term_create", "defer"}
+    webui._handle_action(spine_with_repos, "defer",
+                         {"id": "repo-b", "qkind": qc[0]["qkind"], "days": 7,
+                          "text": qc[0]["title"]})
+    sc = webui.build_scan(spine_with_repos, "g1")
+    assert not [c for c in sc["question_cards"] if c["repo"] == "repo-b"]
+    assert not any("repo-b" in q for q in sc["questions"])
+    ch = spine_mod.query(spine_with_repos, type="chosen")
+    assert len(ch) == 1 and ch[0].kv("repo") == "repo-b" and "snooze" in ch[0].body
+
+
+@pytest.mark.e2e
+def test_tier_action(server):
+    base, spine_dir = server
+    code, r = _post(base, "/api/tier", {"id": "repo-a", "tier": "dormant"})
+    assert code == 200 and r["tier"] == "dormant"
+    from repoengine import registry
+    assert registry.get_repo(spine_dir, "repo-a")["tier"] == "dormant"
+    dec = spine_mod.query(spine_dir, type="decision")
+    assert dec and dec[-1].kv("repo") == "repo-a" and "dormant" in dec[-1].body
+    code, r = _post(base, "/api/tier", {"id": "repo-a", "tier": "bogus"})
+    assert code == 400
+
+
+@pytest.mark.e2e
+def test_route_collision_action(server):
+    base, spine_dir = server
+    code, r = _post(base, "/api/collide",
+                    {"idea": "落到 incubator 的想法", "group": "g1", "wait": True})
+    cid = r["cid"]
+    code, r = _post(base, "/api/route_collision", {"cid": cid, "dest": "incubator"})
+    assert code == 200 and r["ok"]
+    from pathlib import Path
+    files = list((Path(spine_dir) / "incubator").glob("*.md"))
+    assert len(files) == 1 and "落到 incubator 的想法" in files[0].read_text(encoding="utf-8")
+    ch = spine_mod.query(spine_dir, type="chosen")
+    assert ch and ch[-1].kv("ref") == f"collision:{cid}"
+    st = json.loads(_get(base, "/api/state")[1])
+    assert not [c for c in st["cards"] if c.get("cid") == cid]   # 落完就從收件匣消失
+    code, r = _post(base, "/api/route_collision", {"cid": cid, "dest": "mars"})
+    assert code == 400
+
+
+@pytest.mark.e2e
+def test_loop_defer_action(server):
+    base, spine_dir = server
+    today = dt.date.today()
+    spine_mod.append_event(spine_dir, "open-loop", "hotkey",
+                           ["#9", f"due:{today:%Y-%m-%d}"], body="opened →「明天再說」",
+                           when=dt.datetime.now() - dt.timedelta(minutes=1))
+    code, r = _post(base, "/api/loop_defer", {"num": "#9", "days": 7})
+    assert code == 200
+    loops = spine_mod.open_loops(spine_dir)
+    assert len(loops) == 1
+    assert loops[0].kv("due") == f"{today + dt.timedelta(days=7):%Y-%m-%d}"
+    code, r = _post(base, "/api/loop_defer", {"num": "9", "days": 7})
+    assert code == 400
+
+
+def test_agent_session_title_has_task():
+    """會話有主：title 用任務摘要，不再只有 claude:全部（開三個分得出誰是誰）。"""
+    from repoengine import term
+    assert term.agent_title("claude", "MI_PM", None) == "claude · MI_PM"
+    t = term.agent_title("claude", "全部", "把 §7 動詞鏈對到 MCP 工具清單，順便檢查 README")
+    assert t.startswith("claude · 把 §7 動詞鏈對到") and len(t) <= 40

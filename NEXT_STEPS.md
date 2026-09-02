@@ -1,7 +1,10 @@
-# NEXT_STEPS — 原型看過後的下一步（2026-09-01，拆機落地輪後更新）
+# NEXT_STEPS — 原型看過後的下一步（2026-09-02，UI 第三輪後更新）
 
-> 原型現況：**引擎原語 P1–P16＋MCP server＋IDE 工作台（內嵌 terminal）＋拆機報告五項設計課**；L1＋L2 全綠（117 tests）；L3/L4 待人。
-> 詳見 `VERIFICATION.md`＋設計檔 `../personal_agent_design/20260901_工作台設計_v1.md`。
+> 原型現況：**引擎原語 P1–P16＋MCP server＋工作台（牌／收件匣／會話三個一級物件＋內嵌 terminal）＋拆機報告五項設計課**；
+> L1＋L2 全綠（122 tests）；L3/L4 待人。
+> 詳見 `VERIFICATION.md`＋設計檔 `../personal_agent_design/20260901_工作台設計_v1.md`（v1.1 增補）
+> ＋檢討檔 `../personal_agent_design/20260902_工作台UI_UX檢討.md`。
+> **改 UI 先截圖自看**：`python scripts/screenshot.py <spine> --demo`（headless Edge，30 秒）。
 > 入口：`python -m repoengine --spine <spine> app`（桌面視窗；需 `pip install pywebview`）。
 
 ## 1. 跑 L4 驗收腳本（約 30 分鐘，`VERIFICATION.md` 有完整版）
@@ -20,7 +23,7 @@ python -m repoengine --spine <spine> digest  --group g1     # mock 摘要形狀�
 python -m repoengine --spine <spine> brief   --group g1     # 簡報一屏內？問句形狀對？
 python -m repoengine --spine <spine> pack --estimate --group g1  # 這組撞下去要花多少 token？
 python -m repoengine --spine <spine> lint                   # 脊椎衛生迴圈（用幾天後再跑一次看陳舊浮不浮）
-python -m repoengine --spine <spine> ui                     # 監控台＋碰撞台＋深看
+python -m repoengine --spine <spine> app                    # 工作台（牌／收件匣／會話；ui＝瀏覽器過渡模式）
 python -m repoengine --spine <spine> unread                 # 動作有留痕嗎
 ```
 
@@ -70,3 +73,6 @@ python -m repoengine --spine <spine> session --group g1 --task "隨便問脊椎�
 - **2026-09-01 拆機落地輪**：外部工具比對檔的五項「可抄設計決策」補完——P3 worktree＋agent 偵測（gitpane）
   ／P1 registry scan（mani）／P6 洩密哨兵＋estimate（Repomix）／P11 spine lint（second-brain＋Szapar）；
   MCP 三工具同步入表
+- **2026-09-02 UI 第三輪**：UI/UX 檢討落地——問句與碰撞回程的〔出口〕全部變真按鈕（tier／defer／route／深撞／延期）；
+  收件匣統一卡片（處理中／判定回程／准打斷／loop）、自己的留痕不進收件匣；會話有主（來源＋任務摘要 title）；
+  牌組卡＋臨時組對話框；沒會話終端自動收合；key-based diff 輪詢；`scripts/screenshot.py`

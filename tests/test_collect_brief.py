@@ -113,3 +113,21 @@ def test_brief_over_three_questions_warns(spine, tmp_path):
     registry.add_group(spine, "noisy", ids)
     _, text = brief.run(spine, "noisy")
     assert "> 3——過濾閾值該修了" in text   # 免費校準資料要浮出
+
+
+def test_question_cards_structured(spine_with_repos):
+    """問句改結構化卡：文字版（簡報 md）由卡渲染而來，兩者不會分岔。"""
+    from repoengine import config
+    states = collect.collect_group(registry.resolve_group(spine_with_repos, "g1")[1])
+    th = config.load(spine_with_repos)["thresholds"]
+    cards = brief.build_question_cards(states, th)
+    assert [c["repo"] for c in cards] == ["repo-b"]
+    c = cards[0]
+    assert c["qkind"] == "dirty" and "嗎？" in c["title"]
+    assert [a["label"] for a in c["actions"]] == ["開 agent 收尾", "標記本週不動"]
+    assert c["actions"][0]["action"] == "term_create"
+    assert c["actions"][0]["payload"]["repo"] == "repo-b"
+    assert c["actions"][1]["action"] == "defer"
+    texts = brief.build_questions(states, th)
+    assert texts == [brief.card_text(c) for c in cards]
+    assert "〔開 agent 收尾〕〔標記本週不動〕" in texts[0]
