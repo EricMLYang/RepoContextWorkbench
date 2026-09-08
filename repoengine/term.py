@@ -209,6 +209,7 @@ class TermManager:
         s.origin = origin      # 由哪張卡／哪次碰撞開的（卡 key 或 collision:<cid>）
         s.kind = "agent"
         s.scope = scope
+        s.scope_repos = list(repos) if isinstance(repos, list) else (repos.split(",") if repos else None)
         s.task = task
         # agent 偵測（gitpane 課）：標記存活會話，P3 採集據此標「🤖 誰在跑」
         _agentmark.mark(self.spine_dir, sid, cwd, agent, s.pid)

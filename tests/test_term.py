@@ -49,7 +49,7 @@ def test_manager_agent_spawns_via_login_shell(spine_with_repos, tmp_path):
         encoding="utf-8")
     m = term.TermManager(spine_with_repos)
     s = m.create_agent(agent="fake")   # 不給 group/repos＝（全部）
-    assert s.title == "fake:全部"
+    assert s.title == "fake · 全部"
     marker = "文件地圖".encode("utf-8")
     got = [s.attach(lambda d: None) or b""]
     deadline = time.time() + 15

@@ -264,3 +264,44 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
 ③ 牌組卡〔組會話〕開 claude，第一句回覆是這組的 3 行現況（成員角色、活動、未結）而不是「請問要做什麼」；
 ④ 臨時組對話框勾 MI_PM 按〔＋相關 repo〕自動帶上 MiCrawler。
 截圖自看：`python scripts/screenshot.py <spine> --demo`。
+
+## UI 第四輪（2026-09-08：成熟度檢討落地——範圍契約／可信狀態／工作區四分頁）
+
+**觸發**：檢討檔 `../personal_agent_design/20260908_工作台UI_UX成熟度檢討.md`——「骨架可用，但仍是工程原型感；缺口在工作焦點、
+資訊取捨、狀態可信度」。P0 兩條已實際重現：切組後收件匣仍出現他組任務；失敗／等待／恢復狀態不完整。
+落地記錄（含截圖）：`../personal_agent_design/20260908_工作台UI_UX成熟度檢討_落地記錄.md`。
+
+**引擎側**：
+- `webui.event_scopes(events, registry)`：每筆事件算歸屬 `{scope_kind, scope_label, scope_repos}`——`repo:` → repo、`group:` → 組
+  （含 `臨時(a,b)`）、碰撞回程繼承開場事件、同 ref 同日的決策繼承被引用事件、開場本身無範圍＝`global`、判不出＝`unclassified`
+  （**只讀 token，不從 body 猜**）。`build_cards` 與 `build_state.recent` 都帶歸屬；`recent` 改依 (date, time) 排序取 200 筆。
+- `close_loop`／`loop_defer` 保留原事件的 `repo:`／`group:` token；`build_scan` 與 `_handle_action` 對 `repos: []` 一律拒收
+  （「至少選擇一個 repo；空範圍不代表全部」），`/api/scan` 解析 query 保留空值以便拒收。
+- 新 action `session_result`：把會話結果落 `decision`（`ref:collision:<cid>`＋`group:`／`repo:`／`臨時(...)`），**不是 outcome**。
+  `term.create_agent` 加 `scope_repos` 供臨時組會話寫回歸屬。
+
+**前端**（`workbench.html` 拆成 HTML＋`static/workbench.css`＋`static/workbench.js`，既有 `/static/` handler 服務）：
+- 範圍契約：`scopedCards()` 只留 `scope_repos` 交集範圍的卡；跨組 interrupt 進「全域警示」段、其餘未分類進收合段；活動分頁同規則。
+  「所有組標為已讀…」確認框顯示影響則數。
+- 可信狀態：送出成功才清草稿（`localStorage` 保留）、`isComposing` 檢查；`stateError`／`scanError` → 頂列紅點＋橫幅；空狀態四種；
+  靜默行用 `scan.quiet`；`busyActions` 鎖鈕；`scanVersion` 防舊回應蓋新範圍。
+- 工作區：WORKSPACE 標題＋摘要＋「開啟組會話」；四分頁（待處理／Repo／活動／關係）＋搜尋＋類型篩選；卡片一主一次＋「更多」；
+  原生 `<dialog>`（焦點限制／Esc／回觸發鈕）；「選擇 repo」對話框（篩選只影響顯示、零選取停用、取消不動 registry）；
+  Repo 表 6 核心欄＋進階欄、可排序；牌組卡／會話列穩定節點更新；文案改白話（准打斷→需要立即處理 等）。
+
+**驗證（146 tests）**：
+| 條款 | 測試 |
+|---|---|
+| 碰撞回程繼承開場組；repo 事件歸 repo；無 token 的 interrupt 標未分類；route 後的 chosen 帶組 | `test_webui.py::test_event_scope_inherits_collision_and_keeps_unknown_unclassified` |
+| 臨時子集歸子集；無範圍碰撞＝global | `test_adhoc_scope_and_global_collision` |
+| loop 延期／關閉後歸屬不丟 | `test_loop_scope_survives_defer_and_close` |
+| recent 依事件時間排序（回填不亂序） | `test_recent_sorts_by_event_time_not_append_order` |
+| `repos: []` 在 collide／brief／term_create／scan 全部 400，且脊椎無新事件 | `test_empty_explicit_scope_never_expands_to_everything` |
+| session_result 落 decision 帶 group、拒空文字與未知 sid、不產生 outcome | `test_session_note_records_result_without_claiming_adoption` |
+| 頁面關鍵字改白話；`/static/workbench.css`／`.js` 可取得 | `test_page_and_state` |
+
+**瀏覽器走查（Chrome 1280×860，暫存 spine，5 repo／2 組／seed_demo＋組事件）**：切組內容一致、對話框 Esc 與焦點、
+四分頁、草稿保留、斷線橫幅——七項全過，console 無錯誤。截圖在 `../personal_agent_design/assets/20260908_ui_ux_implementation/`。
+
+**未做（不宣稱）**：中文 IME 選字 Enter 實測、Windows/VDI pywebview、螢幕閱讀器、真 Agent 生命週期、完整 WCAG、
+檢討 §5 第三輪、L4 真用（檢討 §5 的人工驗收任務）。

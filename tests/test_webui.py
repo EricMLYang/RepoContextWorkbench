@@ -130,10 +130,13 @@ def test_page_and_state(server):
     base, _ = server
     code, html = _get(base, "/")
     assert code == 200
-    for key in ("工作台", "碰撞台", "收件匣", "需要你判斷", "深看",
-                "牌", "臨時組", "會話", "終端", "存成今日簡報", "一切正常",
+    for key in ("工作台", "碰撞台", "收件匣", "待處理", "Repo 狀態",
+                "牌", "臨時組", "會話", "終端", "存成今日簡報", "活動記錄",
                 "關係", "組會話", "近期 commit", "相關 repo"):
         assert key in html
+    for asset in ("workbench.css", "workbench.js"):
+        assert f'/static/{asset}' in html
+        assert _get(base, f'/static/{asset}')[0] == 200
     code, body = _get(base, "/api/state")
     st = json.loads(body)
     assert code == 200 and st["groups"][0]["name"] == "g1"
@@ -416,3 +419,84 @@ def test_relations_api_and_pulse(server):
     assert sc["recent_commits"][0]["repo"] in ("repo-a", "repo-b")
     code, r = _post(base, "/api/unrelate", {"a": "repo-a", "b": "repo-b"})
     assert code == 200 and json.loads(_get(base, "/api/state")[1])["relations"] == []
+
+
+# Mature workbench: scope provenance, recovery contracts, and session records.
+def test_event_scope_inherits_collision_and_keeps_unknown_unclassified(spine_with_repos):
+    from repoengine import registry
+    sp = spine_with_repos
+    registry.add_group(sp, "g2", ["repo-b"])
+    t0 = dt.datetime.now() - dt.timedelta(minutes=5)
+    spine_mod.append_event(sp, "collision", "hotkey", ["id:scope-a", "group:g1"],
+                           body="opened\n輸入：A 組工作", when=t0)
+    spine_mod.append_event(sp, "collision", "engine", ["id:scope-a"],
+                           body="判定：真增量\n理由：有新內容\n落點建議：incubator",
+                           when=t0 + dt.timedelta(minutes=1))
+    spine_mod.append_event(sp, "suggestion", "engine", ["repo:repo-b"],
+                           body="B 的更新", when=t0 + dt.timedelta(minutes=2))
+    spine_mod.append_event(sp, "suggestion", "timer", [],
+                           body="system-unsure：全域排程失敗", when=t0 + dt.timedelta(minutes=3))
+    st = webui.build_state(sp)
+    reply = next(c for c in st["cards"] if c.get("cid") == "scope-a")
+    assert reply["scope_label"] == "g1"
+    assert set(reply["scope_repos"]) == {"repo-a", "repo-b"}
+    repo_card = next(c for c in st["cards"] if c["title"] == "B 的更新")
+    assert repo_card["scope_repos"] == ["repo-b"]
+    warning = next(c for c in st["cards"] if c["kind"] == "interrupt")
+    assert warning["scope_kind"] == "unclassified" and warning["scope_repos"] == []
+    webui._handle_action(sp, "route_collision", {"cid": "scope-a", "dest": "incubator"})
+    record = next(e for e in webui.build_state(sp)["recent"] if e["type"] == "chosen")
+    assert record["scope_label"] == "g1"
+
+
+def test_adhoc_scope_and_global_collision(spine_with_repos):
+    from repoengine import collide
+    sp = spine_with_repos
+    a = collide.submit(sp, "子集", repos=["repo-a"])
+    b = collide.submit(sp, "全域")
+    cards = {c["cid"]: c for c in webui.build_state(sp)["cards"] if c.get("cid")}
+    assert cards[a]["scope_repos"] == ["repo-a"]
+    assert cards[b]["scope_kind"] == "global"
+
+
+def test_loop_scope_survives_defer_and_close(spine_with_repos):
+    sp = spine_with_repos
+    spine_mod.append_event(sp, "open-loop", "hotkey", ["#42", "repo:repo-a"], body="opened →「跟進」")
+    webui._handle_action(sp, "loop_defer", {"num": "#42", "days": 7})
+    card = next(c for c in webui.build_state(sp)["cards"] if c["kind"] == "loop")
+    assert card["scope_repos"] == ["repo-a"]
+    webui._handle_action(sp, "close_loop", {"num": "#42"})
+    record = next(e for e in webui.build_state(sp)["recent"] if e["body"].startswith("closed"))
+    assert record["scope_repos"] == ["repo-a"]
+
+
+def test_recent_sorts_by_event_time_not_append_order(spine_with_repos):
+    sp = spine_with_repos
+    spine_mod.append_event(sp, "decision", "manual", body="newer", when=_t(15, 0))
+    spine_mod.append_event(sp, "decision", "manual", body="backfilled", when=_t(8, 0))
+    assert [e["body"] for e in webui.build_state(sp)["recent"]] == ["newer", "backfilled"]
+
+
+@pytest.mark.e2e
+def test_empty_explicit_scope_never_expands_to_everything(server):
+    base, sp = server
+    for action in ("collide", "brief", "term_create"):
+        code, r = _post(base, '/api/' + action, {"repos": [], "idea": "test", "kind": "agent"})
+        assert code == 400 and "空範圍" in r["error"]
+    assert not spine_mod.query(sp, type="collision")
+    with pytest.raises(ValueError, match="空範圍"):
+        webui.build_scan(sp, repos=[])
+
+
+def test_session_note_records_result_without_claiming_adoption(spine_with_repos):
+    from types import SimpleNamespace
+    s = SimpleNamespace(title="Agent 任務", scope="g1", origin="group:g1")
+    terms = SimpleNamespace(get=lambda sid: s if sid == "t1" else None)
+    sp = spine_with_repos
+    assert "error" in webui._handle_action(sp, "session_result", {"sid": "unknown", "text": "結果"}, terms)
+    assert "error" in webui._handle_action(sp, "session_result", {"sid": "t1", "text": " "}, terms)
+    result = webui._handle_action(sp, "session_result", {"sid": "t1", "text": "完成檢查，下一步確認部署條件"}, terms)
+    assert result["ok"]
+    events = spine_mod.query(sp, type="decision")
+    assert events[-1].kv("group") == "g1" and "完成檢查" in events[-1].body
+    assert not spine_mod.query(sp, type="outcome")

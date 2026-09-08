@@ -128,12 +128,68 @@ def _collision_scope(group):
     return {"group": group}
 
 
-def build_cards(spine_dir, events, pending, loops):
+def event_scopes(events, registry):
+    """Read-only provenance for cards/activity; never infer ownership from body text.
+
+    Collision replies inherit their opening scope; decisions inherit referenced
+    events. Unclassified records remain visible in their own explicitly named lane.
+    """
+    groups = {g["name"]: g["members"] for g in registry["groups"]}
+    openings = {e.kv("id"): e for e in events
+                if e.type == "collision" and e.body.startswith("opened")}
+    refs = {}
+    for e in events:
+        refs.setdefault(f"{e.type}:{e.time}", []).append(e)
+    cache = {}
+
+    def resolve(e, seen=None):
+        if id(e) in cache:
+            return cache[id(e)]
+        seen = set() if seen is None else set(seen)
+        if id(e) in seen:
+            return {"scope_kind": "unclassified", "scope_label": "未分類", "scope_repos": []}
+        seen.add(id(e))
+        rid, group = e.kv("repo"), e.kv("group")
+        if rid:
+            result = {"scope_kind": "repo", "scope_label": rid, "scope_repos": [rid]}
+        elif group:
+            if group.startswith("臨時(") and group.endswith(")"):
+                members = group[3:-1].split(",")
+            else:
+                members = groups.get(group, [])
+            result = {"scope_kind": "group", "scope_label": group, "scope_repos": members}
+        else:
+            ref = e.kv("ref") or ""
+            cid = e.kv("id") if e.type == "collision" else None
+            if ref.startswith("collision:"):
+                cid = ref[len("collision:"):]
+            parent = openings.get(cid) if cid else None
+            if parent is e:
+                result = {"scope_kind": "global", "scope_label": "所有 repo", "scope_repos": []}
+            else:
+                candidates = [x for x in refs.get(ref, []) if x.date == e.date and x is not e]
+                if parent is None and len(candidates) == 1:
+                    parent = candidates[0]
+                result = resolve(parent, seen) if parent else {
+                    "scope_kind": "unclassified", "scope_label": "未分類", "scope_repos": []}
+        cache[id(e)] = result
+        return result
+
+    return {id(e): resolve(e) for e in events}
+
+
+def build_cards(spine_dir, events, pending, loops, scopes=None):
     """收件匣＝一種卡。順序：interrupt → 處理中 → 碰撞回程 → 其他未讀 → open loops。"""
     handled = _handled_keys(events)
     cidx = _collision_index(events)
     cards = []
     seen_cids = set()
+    scopes = scopes or event_scopes(events, _registry.load(spine_dir))
+    by_record = {(e.date, e.header(), e.body): scopes[id(e)] for e in events}
+
+    def provenance(ev):
+        return by_record.get((ev.date, ev.header(), ev.body), {
+            "scope_kind": "unclassified", "scope_label": "未分類", "scope_repos": []})
 
     def event_card(ev, interrupt):
         cid = ev.kv("id") if ev.type == "collision" else None
@@ -165,6 +221,7 @@ def build_cards(spine_dir, events, pending, loops):
             actions.append(_act("丟棄並記錄", "ignore", type=ev.type, time=ev.time,
                                 header=ev.header(), cid=cid))
             return {"key": key, "kind": "collision", "cid": cid,
+                    **provenance(ev),
                     "time": ev.time, "date": ev.date,
                     "title": info.get("idea") or f"碰撞 {cid}",
                     "verdict": j.get("判定", ""), "judgement": j,
@@ -178,6 +235,7 @@ def build_cards(spine_dir, events, pending, loops):
         if interrupt and cid:
             actions.insert(0, _act("重跑判定", "collide_rerun", cid=cid))
         return {"key": key, "kind": "interrupt" if interrupt else "event",
+                **provenance(ev),
                 "time": ev.time, "date": ev.date, "etype": ev.type,
                 "source": ev.source, "title": title, "lines": lines,
                 "actions": actions}
@@ -192,6 +250,7 @@ def build_cards(spine_dir, events, pending, loops):
                 and f"collision:{cid}" not in handled:
             ev = rec["opened"]
             cards.append({"key": f"pending:{cid}", "kind": "pending", "cid": cid,
+                          **provenance(ev),
                           "time": ev.time, "date": ev.date, "title": rec["idea"],
                           "lines": [f"送出於 {ev.date} {ev.time}｜範圍 {rec['group'] or '全部'}"],
                           "actions": []})
@@ -210,6 +269,7 @@ def build_cards(spine_dir, events, pending, loops):
             if title.startswith(pre):
                 title = title[len(pre):].strip()
         cards.append({"key": f"loop:{num}", "kind": "loop", "num": num,
+                      **provenance(ev),
                       "due": ev.kv("due"), "time": ev.time, "date": ev.date,
                       "title": title.strip("「」"), "lines": [],
                       "actions": [_act("開碰撞", "collide_prefill", text=title.strip("「」")),
@@ -224,11 +284,13 @@ def build_state(spine_dir):
     p = _notify.pending(spine_dir)
     events = list(_spine.iter_events(spine_dir))
     loops = _spine.open_loops(spine_dir)
+    scopes = event_scopes(events, data)
     vocab = list(_config.load(spine_dir)["tags"]["suggestions"])
     for t in _registry.all_tags(spine_dir):
         if t not in vocab:
             vocab.append(t)
-    recent = [_ev_dict(e) for e in events[-40:]][::-1]
+    ordered = sorted(enumerate(events), key=lambda item: (item[1].date, item[1].time, item[0]), reverse=True)
+    recent = [dict(_ev_dict(e), **scopes[id(e)]) for _, e in ordered[:200]]
     return {
         "groups": [{"name": g["name"], "members": g["members"]}
                    for g in data["groups"]],
@@ -242,7 +304,7 @@ def build_state(spine_dir):
         "unread": [dict(_ev_dict(e), interrupt=True) for e in p["interrupt"]]
                   + [_ev_dict(e) for e in p["normal"]],
         "loops": [_ev_dict(e) for e in loops],
-        "cards": build_cards(spine_dir, events, p, loops),
+        "cards": build_cards(spine_dir, events, p, loops, scopes),
         "recent": recent,
         "stats": {**_spine.stats(spine_dir), **_registry.survival(spine_dir)},
     }
@@ -268,6 +330,8 @@ def build_scan(spine_dir, group=None, repos=None):
     """P3 採集＋閾值問句卡＋audit（開頁/切組/勾選/手動才跑，因為會打 git）。
     repos 給定＝臨時組合（P2 免建組），優先於 group。"""
     cfg = _config.load(spine_dir)
+    if repos is not None and not repos:
+        raise ValueError("至少選擇一個 repo；空範圍不代表全部")
     if repos:
         gname, entries = _registry.resolve_group(spine_dir, None, repos)
     elif group:
@@ -295,6 +359,8 @@ def build_scan(spine_dir, group=None, repos=None):
 
 
 def _handle_action(spine_dir, action, payload, terms=None):
+    if "repos" in payload and payload["repos"] == []:
+        return {"error": "至少選擇一個 repo；空範圍不代表全部"}
     if action == "ack":
         _spine.ack_unread(spine_dir)
         return {"ok": True}
@@ -343,7 +409,9 @@ def _handle_action(spine_dir, action, payload, terms=None):
         num = payload.get("num", "")
         if not (num.startswith("#") and num[1:].isdigit()):
             return {"error": f"loop 編號不合法: {num}"}
-        _spine.append_event(spine_dir, "open-loop", "monitor", [num],
+        cur = next((e for e in _spine.open_loops(spine_dir) if num in e.tokens), None)
+        tokens = [t for t in (cur.tokens if cur else []) if t.startswith(("repo:", "group:"))]
+        _spine.append_event(spine_dir, "open-loop", "monitor", [num, *tokens],
                             body="closed → 從工作台關閉")
         return {"ok": True}
     if action == "loop_defer":
@@ -357,7 +425,8 @@ def _handle_action(spine_dir, action, payload, terms=None):
         due = _dt.date.today() + _dt.timedelta(days=days)
         first = (cur.body or "").splitlines()[0] if cur.body else ""
         _spine.append_event(spine_dir, "open-loop", "monitor",
-                            [num, f"due:{due:%Y-%m-%d}"],
+                            [num, f"due:{due:%Y-%m-%d}",
+                             *[t for t in cur.tokens if t.startswith(("repo:", "group:"))]],
                             body=f"{first}\n延期 {days} 天 → 從工作台")
         return {"ok": True, "due": f"{due:%Y-%m-%d}"}
     if action == "defer":
@@ -444,6 +513,26 @@ def _handle_action(spine_dir, action, payload, terms=None):
         if terms is None or not terms.kill(payload.get("sid", "")):
             return {"error": f"未知會話: {payload.get('sid')}"}
         return {"ok": True}
+    if action == "session_result":
+        session = terms.get(payload.get("sid", "")) if terms else None
+        text = (payload.get("text") or "").strip()
+        if not session or not text:
+            return {"error": "請選擇會話並填寫結果"}
+        origin = getattr(session, "origin", "") or ""
+        tokens = [f"ref:{origin}"] if origin.startswith("collision:") else []
+        scope = getattr(session, "scope", "")
+        members = getattr(session, "scope_repos", None)
+        registry = _registry.load(spine_dir)
+        if scope in {g["name"] for g in registry["groups"]}:
+            tokens.append(f"group:{scope}")
+        elif scope in {r["id"] for r in registry["repos"]}:
+            tokens.append(f"repo:{scope}")
+        elif members:
+            tokens.append("group:臨時(" + ",".join(members) + ")")
+        # A session note is a decision record, not evidence of an adopted idea.
+        ev = _spine.append_event(spine_dir, "decision", "monitor", tokens,
+                                 body=f"會話結果：{session.title}\n{text}")
+        return {"ok": True, "date": ev.date, "time": ev.time}
     return {"error": f"未知 action: {action}"}
 
 
@@ -539,7 +628,7 @@ def _make_handler(spine_dir):
                     st["agents"] = list(_config.load(spine_dir)["agents"])
                     self._json(st)
                 elif u.path == "/api/scan":
-                    q = parse_qs(u.query)
+                    q = parse_qs(u.query, keep_blank_values=True)
                     self._json(build_scan(
                         spine_dir,
                         group=(q.get("group") or [None])[0],

@@ -11,13 +11,19 @@
 > 全部是 v2 既有原語（P1/P3/P6/P11）的延伸，未開新子系統。
 
 - **有**：P1 registry+audit+**scan**（mani「init 自動掃描＋手寫補語意」混合模式）｜P2 組（含臨時組合）｜P3 採集（欄位抄 gitpane 補完：worktree 數＋**agent 偵測**）｜P4 上游（gh api，無事不報）｜P5 增量 digest（便宜模型）｜P6 打包簡版＋**estimate 預算函數**＋**洩密哨兵**（Repomix/Secretlint 課）｜P7 兩段式碰撞｜P8 落｜P9 生（升格＋出生登記＋outcome 回連）｜P10 脊椎三件套｜P11 查詢＋品味量測（命中率＋存活率）＋**lint 衛生迴圈**（second-brain 課）｜P12 排程（timer 住殼內、當日補課跨日不補）｜P13 通知（interrupt 白名單分類）｜P15 provider（mock＋claude，judge＋自由文字）｜P16 會話（帶料開終端＋MCP 掛載）｜**MCP server**（stdio 零依賴，agent 的介面＝人的介面）｜早晨簡報產生器（樣貌 A 純事實版）｜S4 監控台網頁雛形（`ui`，有 schedule 時內建 S6 timer）。
-- **S4 是工作台桌面 APP，三個一級物件＝牌／收件匣／會話**（2026-09-01 裁定要 IDE 風格＋內嵌 terminal；2026-09-02 UI 檢討後重排，見 `../personal_agent_design/20260902_工作台UI_UX檢討.md`）：`app` 子命令用 pywebview 開原生視窗——**牌**（組是卡，點卡切範圍、展開勾成員；「＋臨時組」對話框挑一手牌）｜**收件匣**（統一卡片：准打斷／需要你判斷／處理中／碰撞回程／未結 loops，**每個出口都是真按鈕**→呼叫引擎原語→落 chosen→卡消失；碰撞台輸入框置頂）｜**會話**（sidebar 清單帶來源與任務摘要 title＋底部 terminal 面板：xterm.js＋PTY＋手寫 RFC6455 WS，會話生命週期獨立於視窗，沒會話自動收合）｜深看（全量表＋最近事件）。前端在 `repoengine/workbench.html`。`ui` 瀏覽器模式為過渡替代。啟動隨機 token 防 VDI 多使用者（127.0.0.1＋URL token）。
+- **S4 是工作台桌面 APP，三個一級物件＝牌／收件匣／會話**（2026-09-01 裁定要 IDE 風格＋內嵌 terminal；2026-09-02 UI 檢討後重排，見 `../personal_agent_design/20260902_工作台UI_UX檢討.md`）：`app` 子命令用 pywebview 開原生視窗——**牌**（組是卡，點卡切範圍、展開勾成員；「＋臨時組」對話框挑一手牌）｜**收件匣**（統一卡片：准打斷／需要你判斷／處理中／碰撞回程／未結 loops，**每個出口都是真按鈕**→呼叫引擎原語→落 chosen→卡消失；碰撞台輸入框置頂）｜**會話**（sidebar 清單帶來源與任務摘要 title＋底部 terminal 面板：xterm.js＋PTY＋手寫 RFC6455 WS，會話生命週期獨立於視窗，沒會話自動收合）｜深看（全量表＋最近事件）。前端＝`repoengine/workbench.html`＋`repoengine/static/workbench.css`＋`repoengine/static/workbench.js`（2026-09-08 第四輪拆檔）。`ui` 瀏覽器模式為過渡替代。啟動隨機 token 防 VDI 多使用者（127.0.0.1＋URL token）。
 - **組為單位輪（2026-09-08）**：① **關係層**——`registry relate A B --kind pm-of`（A 是 B 的 PM；詞彙 pm-of／feeds／derived-from／
   upstream-of／sibling-topic，config `relations.kinds` 可擴充），CLI／MCP／深看「關係」段三入口同源，臨時組〔＋相關 repo〕一鍵帶鄰居；
   ② **活動脈動**——採集加 7d／30d commit 數＋最近 5 則主旨，`pulse` 子命令、牌組卡 ⟳ 徽章、深看「近期 commit」表、簡報「脈動」行，
   audit 補反向 tier 漂移（dormant 卻有新 commit）；③ **組管家**——會話料改「組情境卡＋文件地圖」（成員角色含關係／脈動／本組未結／
   本組最近事件／角色說明），`group context`、MCP `group_context`、牌組卡〔組會話〕；沒給任務預設「3 行現況再問我」。
   設計：`../personal_agent_design/20260908_組為工作單位_Agent融入與關係設定_v1.md`。
+- **UI 第四輪（2026-09-08，成熟度檢討落地）**：① **範圍契約**——每筆事件／卡片帶歸屬（repo → 組 → 碰撞回程繼承開場 → 判不出標「未分類」，
+  不默默歸目前組），切組後待處理／活動／關係一致，跨組警示獨立「全域警示」段，「所有組標為已讀…」顯示影響則數；空 `repos:[]` 後端拒收。
+  ② **可信狀態**——送出成功才清草稿（草稿本機保留）、斷線紅點＋橫幅保留上次資料、空狀態四種、靜默行用 `scan.quiet`、動作執行中鎖鈕。
+  ③ **工作區重排**——WORKSPACE 標題＋一句摘要＋「開啟組會話」主鈕，四分頁（待處理／Repo／活動／關係），卡片一主一次＋「更多」，
+  原生 `<dialog>`（Esc／焦點回觸發鈕），Repo 表 6 核心欄＋進階欄，活動依事件時間排序，「記錄結果」落 decision（不是 outcome）。
+  檢討：`../personal_agent_design/20260908_工作台UI_UX成熟度檢討.md`；落地記錄同名 `_落地記錄.md`（含截圖）。
 - **無（留給正式 repo，VDI Day 0 smoke test 過了才蓋）**：真殼的常駐件——tray、全域 hotkey、OS toast、開機自啟；Windows terminal 需 pywinpty（未實測）。視窗內 badge＋瀏覽器通知是常駐件的等效替身。
 - 對 v2 的小偏差：kv token 多一個 `id:`（collision 回連需要，v2 的 kv 清單為例示性）；pack 用內建文件層選料（正式版換 Repomix）。
 
