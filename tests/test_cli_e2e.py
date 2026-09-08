@@ -248,3 +248,28 @@ def test_registry_remove(tmp_path):
     assert "repo-a" not in r.stdout
     r = run_cli("registry", "remove", "repo-a", spine_dir=spine_dir)
     assert r.returncode != 0  # 不存在要報錯
+
+
+def test_relations_context_pulse_cli(tmp_path):
+    """2026-09-08 組為單位輪：關係設定／查詢、組情境卡、活動脈動的 CLI 全路徑。"""
+    spine_dir = tmp_path / "s"
+    ra = make_git_repo(tmp_path, "repo-a", days_old=1)
+    rb = make_git_repo(tmp_path, "repo-b", days_old=3)
+    run_cli("init", str(spine_dir), check=True)
+    run_cli("registry", "add", "repo-a", str(ra), spine_dir=spine_dir, check=True)
+    run_cli("registry", "add", "repo-b", str(rb), spine_dir=spine_dir, check=True)
+    run_cli("group", "add", "g1", "repo-a,repo-b", spine_dir=spine_dir, check=True)
+    r = run_cli("registry", "relate", "repo-a", "repo-b", "--kind", "pm-of",
+                "--note", "a 規劃 b", spine_dir=spine_dir, check=True)
+    assert "pm-of" in r.stdout
+    r = run_cli("registry", "relations", "repo-b", spine_dir=spine_dir, check=True)
+    assert "PM 是" in r.stdout and "repo-a" in r.stdout
+    r = run_cli("registry", "relate", "repo-a", "repo-b", "--kind", "nope", spine_dir=spine_dir)
+    assert r.returncode != 0 and "kind" in (r.stdout + r.stderr)
+    r = run_cli("group", "context", "g1", spine_dir=spine_dir, check=True)
+    assert "# 組情境卡 g1" in r.stdout and "規劃（PM）→ repo-b" in r.stdout
+    r = run_cli("pulse", "--group", "g1", spine_dir=spine_dir, check=True)
+    assert "近 7 天" in r.stdout and "init" in r.stdout    # 最近 commit 主旨列出
+    run_cli("registry", "unrelate", "repo-a", "repo-b", spine_dir=spine_dir, check=True)
+    r = run_cli("registry", "relations", spine_dir=spine_dir, check=True)
+    assert "無關係" in r.stdout

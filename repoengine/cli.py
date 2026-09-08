@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import brief as _brief
 from . import collect as _collect
+from . import context as _context
 from . import collide as _collide
 from . import digest as _digest
 from . import notify as _notify
@@ -116,6 +117,33 @@ def cmd_registry(args):
                 print(f"[候選] {cid}: {path}")
             print(f"共 {len(cands)} 個未登記 git repo（加 --apply 登記）"
                   if cands else "無未登記 repo")
+    elif args.action == "relate":
+        # registry relate <A> <B> --kind pm-of [--note ...]（A 是 B 的 PM）
+        if not (args.id and args.path_arg and args.kind):
+            sys.exit("用法：registry relate <A> <B> --kind <kind> [--note 說明]")
+        e = _registry.relate(d, args.id, args.path_arg, args.kind, note=args.note)
+        k = _registry.relation_kinds(d)[args.kind]
+        print(f"已設關係：{args.id} {k['forward']}→ {args.path_arg}（{args.kind}）")
+    elif args.action == "unrelate":
+        if not (args.id and args.path_arg):
+            sys.exit("用法：registry unrelate <A> <B> [--kind <kind>]")
+        n = _registry.unrelate(d, args.id, args.path_arg, args.kind)
+        print(f"已刪 {n} 筆關係：{args.id} → {args.path_arg}")
+    elif args.action == "relations":
+        if args.id:
+            rows = _registry.relations_of(d, args.id)
+            for r in rows:
+                arrow = f"{args.id} {r['label']}→ {r['peer']}" if r["direction"] == "out" \
+                    else f"{args.id} 的{r['label']} {r['peer']}"
+                print(f"{arrow}（{r['kind']}）" + (f"  {r['note']}" if r.get("note") else ""))
+        else:
+            kinds = _registry.relation_kinds(d)
+            rows = _registry.relations(d)
+            for r in rows:
+                print(f"{r['from']} {kinds.get(r['kind'], {}).get('forward', r['kind'])}→ "
+                      f"{r['to']}（{r['kind']}）" + (f"  {r['note']}" if r.get("note") else ""))
+        if not rows:
+            print("（無關係）可用 kind：" + ", ".join(_registry.relation_kinds(d)))
     elif args.action == "audit":
         reds = _registry.audit(d, scan_dirs=args.scan or [])
         if reds:
@@ -140,6 +168,9 @@ def cmd_group(args):
     if args.action == "add":
         _registry.add_group(d, args.name, args.members.split(","))
         print(f"組已建：{args.name}")
+    elif args.action == "context":
+        # 組情境卡（P16 會話開場料同源；agent 用 MCP group_context 拿同一份）
+        print(_context.build_context(d, args.name or None, args.members or None))
     else:
         for g in _registry.load(d)["groups"]:
             print(f"{g['name']:<20} {','.join(g['members'])}")
@@ -149,6 +180,28 @@ def cmd_collect(args):
     d = _spine_dir(args)
     _, entries = _registry.resolve_group(d, args.group, args.repos)
     print(_collect.format_table(_collect.collect_group(entries, d)))
+
+
+def cmd_pulse(args):
+    """活動脈動：組的監控專注「活動頻繁度＋近期 commit 內容」（2026-09-08）。"""
+    d = _spine_dir(args)
+    gname, entries = _registry.resolve_group(d, args.group, args.repos)
+    states = _collect.collect_group(entries, d)
+    pulse = _collect.group_pulse(states)
+    print(f"# 脈動 {gname}")
+    print(_collect.pulse_line(pulse))
+    print()
+    print(f"{'repo':<24} {'7d':>3} {'30d':>3}  最近 commit")
+    for s in states:
+        if s.get("type", "mine") != "mine" or not s.get("exists"):
+            continue
+        rc = s.get("recent_commits") or []
+        head = f"{rc[0]['date']} {rc[0]['subject']}" if rc else "（無）"
+        print(f"{s['id']:<24} {s.get('commits_7d') or 0:>3} {s.get('commits_30d') or 0:>3}  {head}")
+    print()
+    print(f"# 近期 commit（新→舊，最多 {args.limit} 則）")
+    for c in _collect.recent_across(states, limit=args.limit):
+        print(f"{c['date']} {c['repo']:<24} {c['hash']} {c['subject']}")
 
 
 def cmd_pack(args):
@@ -356,9 +409,13 @@ def build_parser():
 
     s = sub.add_parser("registry", help="P1 登記/掃描/稽核/tag")
     s.add_argument("action",
-                   choices=["add", "set", "remove", "tag", "list", "scan", "audit"])
-    s.add_argument("id", nargs="?", help="scan 時＝要掃的目錄")
-    s.add_argument("path_arg", nargs="?")
+                   choices=["add", "set", "remove", "tag", "list", "scan", "audit",
+                            "relate", "unrelate", "relations"])
+    s.add_argument("id", nargs="?", help="scan 時＝要掃的目錄；relate 時＝來源 repo A")
+    s.add_argument("path_arg", nargs="?", help="relate 時＝目標 repo B")
+    s.add_argument("--kind", help="relate/unrelate：關係種類（pm-of/feeds/derived-from/"
+                                  "upstream-of/sibling-topic；config relations.kinds 可擴充）")
+    s.add_argument("--note", help="relate：一句說明")
     s.add_argument("key", nargs="?")
     s.add_argument("value", nargs="?")
     s.add_argument("--type", default="mine", choices=["mine", "external"])
@@ -372,11 +429,17 @@ def build_parser():
     s.add_argument("--remove", help="tag：移除（逗號分隔）")
     s.set_defaults(func=cmd_registry)
 
-    s = sub.add_parser("group", help="P2 組")
-    s.add_argument("action", choices=["add", "list"])
-    s.add_argument("name", nargs="?")
-    s.add_argument("members", nargs="?")
+    s = sub.add_parser("group", help="P2 組（context＝組情境卡）")
+    s.add_argument("action", choices=["add", "list", "context"])
+    s.add_argument("name", nargs="?", help="context 時可省略＝全部")
+    s.add_argument("members", nargs="?", help="context 時＝逗號分隔 repo id（臨時組合）")
     s.set_defaults(func=cmd_group)
+
+    s = sub.add_parser("pulse", help="活動脈動：7d/30d commit 數＋近期 commit 主旨（組的監控焦點）")
+    s.add_argument("--group")
+    s.add_argument("--repos")
+    s.add_argument("--limit", type=int, default=20)
+    s.set_defaults(func=cmd_pulse)
 
     for name, fn, hlp in [("collect", cmd_collect, "P3 採集"),
                           ("pack", cmd_pack, "P6 打包"),

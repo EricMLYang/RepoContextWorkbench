@@ -106,3 +106,13 @@ def test_remove_repo_cleans_groups(spine_with_repos):
     assert g1["members"] == ["repo-a"]  # membership 同步清掉
     with pytest.raises(ValueError):
         registry.remove_repo(spine_with_repos, "ghost")
+
+
+def test_audit_dormant_but_recently_active(spine, tmp_path):
+    """反向 tier 漂移（2026-09-08 真資料實錘）：dormant 卻近 7 天有 commit → 紅字。"""
+    from tests.conftest import make_git_repo
+    registry.add_repo(spine, "sleepy", make_git_repo(tmp_path, "sleepy", days_old=1), tier="dormant")
+    registry.add_repo(spine, "truly", make_git_repo(tmp_path, "truly", days_old=60), tier="dormant")
+    reds = registry.audit(spine)
+    assert any("sleepy" in r and "dormant 但" in r for r in reds)
+    assert not any("truly" in r for r in reds)

@@ -10,8 +10,11 @@ import sys
 from pathlib import Path
 
 from . import config as _config
+from . import context as _context
 from . import pack as _pack
-from . import registry
+from . import registry, spine
+
+DEFAULT_TASK = "先讀情境卡，用 3 行告訴我這組現況（活動、異常、未結），再問我要做什麼"
 
 
 def ensure_mcp_json(spine_dir):
@@ -47,18 +50,28 @@ def build(spine_dir, group=None, repos=None, repo=None, task=None,
     if spec is None:
         raise ValueError(f"未知 agent: {agent}（config agents: 目前有 "
                          f"{', '.join(cfg['agents'])}）")
-    _, entries = registry.resolve_group(spine_dir, group, repos)
-    # 會話料＝文件地圖（L4 回饋「料太長」）：agent 自己會讀檔，給地圖讓它先挑再細讀
-    text = _pack.pack_index(entries)
+    gname, entries = registry.resolve_group(spine_dir, group, repos)
+    now = _dt.datetime.now()
+    # 會話料＝組情境卡（成員角色／脈動／未結／最近事件／組管家角色）＋文件地圖
+    # （L4 回饋「料太長」：地圖不是全文，agent 自己會讀檔，先挑再細讀）
+    text = _context.build_context(spine_dir, group, repos, when=now) + "\n" \
+        + _pack.pack_index(entries)
     out = spine_dir / "groups" / (group or "adhoc") / "materials" / \
-        f"session-{_dt.datetime.now():%Y%m%d-%H%M%S}.md"
+        f"session-{now:%Y%m%d-%H%M%S}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
+    # 教練規格：開會話也是出手，留 presented（自己的留痕，不進收件匣）
+    spine.append_event(
+        spine_dir, "presented", "session",
+        ([f"group:{group}"] if group else []) + ([f"repo:{repo}"] if repo else []),
+        body=f"組情境卡＋文件地圖：{gname}（{len(entries)} repo）→ {out.name}"
+             + (f"；任務：{task.splitlines()[0][:60]}" if task else ""),
+        when=now)
     mcp_json = ensure_mcp_json(spine_dir)
     cwd = Path(registry.get_repo(spine_dir, repo)["path"]).expanduser() \
         if repo else spine_dir
-    prompt = (f"料（文件地圖）已備好：{out}——先讀地圖挑相關檔案自己細讀，"
-              f"不要整包讀完。任務：{task or '（未指定——先讀地圖，再問我要做什麼）'}")
+    prompt = (f"組情境卡＋文件地圖已備好：{out}——先讀情境卡（成員角色、脈動、未結、你的角色），"
+              f"需要細節再照地圖挑檔細讀，不要整包讀完。任務：{task or DEFAULT_TASK}")
     cmd = list(spec["cmd"])
     if repo and spec.get("mcp") == "mcp-config":
         # 等號形式必須：claude 的 --mcp-config 吃多值，空格形式會把後面的

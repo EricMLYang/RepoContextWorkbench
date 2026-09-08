@@ -62,3 +62,21 @@ def test_build_agent_registry(spine_with_repos):
     assert cmd[0] == "claude"
     with pytest.raises(ValueError, match="未知 agent"):
         session.build(spine_with_repos, group="g1", agent="nope")
+
+
+def test_build_includes_context_card_and_leaves_trace(spine_with_repos):
+    """2026-09-08 組為單位輪：會話料＝組情境卡＋文件地圖，prompt 先讀情境卡，開會話留 presented。"""
+    from repoengine import spine as spine_mod
+    registry.relate(spine_with_repos, "repo-a", "repo-b", "pm-of")
+    cwd, cmd, pack_path = session.build(spine_with_repos, group="g1")
+    text = pack_path.read_text(encoding="utf-8")
+    assert text.startswith("# 組情境卡 g1") and "## 你的角色" in text and "文件地圖" in text
+    assert "規劃（PM）→ repo-b" in text
+    prompt = cmd[-1]
+    assert "情境卡" in prompt and str(pack_path) in prompt
+    assert "3 行" in prompt                      # 沒給任務 → 預設任務：先給現況摘要再問
+    evs = spine_mod.query(spine_with_repos, type="presented")
+    assert len(evs) == 1 and evs[0].source == "session" and evs[0].kv("group") == "g1"
+    # 有任務時任務進 prompt、預設任務不出現
+    _, cmd, _ = session.build(spine_with_repos, group="g1", task="寫週報")
+    assert "寫週報" in cmd[-1] and "3 行" not in cmd[-1]

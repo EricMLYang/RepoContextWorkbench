@@ -12,6 +12,12 @@
 
 - **有**：P1 registry+audit+**scan**（mani「init 自動掃描＋手寫補語意」混合模式）｜P2 組（含臨時組合）｜P3 採集（欄位抄 gitpane 補完：worktree 數＋**agent 偵測**）｜P4 上游（gh api，無事不報）｜P5 增量 digest（便宜模型）｜P6 打包簡版＋**estimate 預算函數**＋**洩密哨兵**（Repomix/Secretlint 課）｜P7 兩段式碰撞｜P8 落｜P9 生（升格＋出生登記＋outcome 回連）｜P10 脊椎三件套｜P11 查詢＋品味量測（命中率＋存活率）＋**lint 衛生迴圈**（second-brain 課）｜P12 排程（timer 住殼內、當日補課跨日不補）｜P13 通知（interrupt 白名單分類）｜P15 provider（mock＋claude，judge＋自由文字）｜P16 會話（帶料開終端＋MCP 掛載）｜**MCP server**（stdio 零依賴，agent 的介面＝人的介面）｜早晨簡報產生器（樣貌 A 純事實版）｜S4 監控台網頁雛形（`ui`，有 schedule 時內建 S6 timer）。
 - **S4 是工作台桌面 APP，三個一級物件＝牌／收件匣／會話**（2026-09-01 裁定要 IDE 風格＋內嵌 terminal；2026-09-02 UI 檢討後重排，見 `../personal_agent_design/20260902_工作台UI_UX檢討.md`）：`app` 子命令用 pywebview 開原生視窗——**牌**（組是卡，點卡切範圍、展開勾成員；「＋臨時組」對話框挑一手牌）｜**收件匣**（統一卡片：准打斷／需要你判斷／處理中／碰撞回程／未結 loops，**每個出口都是真按鈕**→呼叫引擎原語→落 chosen→卡消失；碰撞台輸入框置頂）｜**會話**（sidebar 清單帶來源與任務摘要 title＋底部 terminal 面板：xterm.js＋PTY＋手寫 RFC6455 WS，會話生命週期獨立於視窗，沒會話自動收合）｜深看（全量表＋最近事件）。前端在 `repoengine/workbench.html`。`ui` 瀏覽器模式為過渡替代。啟動隨機 token 防 VDI 多使用者（127.0.0.1＋URL token）。
+- **組為單位輪（2026-09-08）**：① **關係層**——`registry relate A B --kind pm-of`（A 是 B 的 PM；詞彙 pm-of／feeds／derived-from／
+  upstream-of／sibling-topic，config `relations.kinds` 可擴充），CLI／MCP／深看「關係」段三入口同源，臨時組〔＋相關 repo〕一鍵帶鄰居；
+  ② **活動脈動**——採集加 7d／30d commit 數＋最近 5 則主旨，`pulse` 子命令、牌組卡 ⟳ 徽章、深看「近期 commit」表、簡報「脈動」行，
+  audit 補反向 tier 漂移（dormant 卻有新 commit）；③ **組管家**——會話料改「組情境卡＋文件地圖」（成員角色含關係／脈動／本組未結／
+  本組最近事件／角色說明），`group context`、MCP `group_context`、牌組卡〔組會話〕；沒給任務預設「3 行現況再問我」。
+  設計：`../personal_agent_design/20260908_組為工作單位_Agent融入與關係設定_v1.md`。
 - **無（留給正式 repo，VDI Day 0 smoke test 過了才蓋）**：真殼的常駐件——tray、全域 hotkey、OS toast、開機自啟；Windows terminal 需 pywinpty（未實測）。視窗內 badge＋瀏覽器通知是常駐件的等效替身。
 - 對 v2 的小偏差：kv token 多一個 `id:`（collision 回連需要，v2 的 kv 清單為例示性）；pack 用內建文件層選料（正式版換 Repomix）。
 
@@ -30,9 +36,13 @@ python -m repoengine --spine D:\some\spine-repo registry add my-repo C:\path\to\
 python -m repoengine --spine D:\some\spine-repo registry add ext-lib C:\x --type external --upstream owner/lib
 python -m repoengine --spine D:\some\spine-repo registry scan D:\Repo --apply  # 掃目錄批次登記（mani 混合模式；不加 --apply 只列候選）
 python -m repoengine --spine D:\some\spine-repo group add g1 my-repo
+python -m repoengine --spine D:\some\spine-repo registry relate my-pm my-code --kind pm-of --note "PM 規劃 code"  # 關係：A 是 B 的 PM
+python -m repoengine --spine D:\some\spine-repo registry relations my-code    # 站在 my-code 讀：PM 是 my-pm
 
 # 日常
 python -m repoengine --spine ... collect --group g1     # P3 採集
+python -m repoengine --spine ... pulse   --group g1     # 活動脈動：7d/30d commit 數＋近期 commit 主旨（組的監控焦點）
+python -m repoengine --spine ... group context g1       # 組情境卡（會話開場料同源；agent 用 MCP group_context 拿同一份）
 python -m repoengine --spine ... upstream --group g1    # P4 上游（新 release 落 suggestion 事件）
 python -m repoengine --spine ... digest  --group g1     # P5 增量摘要（水位線在脊椎裡）
 python -m repoengine --spine ... brief   --group g1     # 早晨簡報（落 presented 事件）
@@ -76,9 +86,13 @@ repoengine/
                ＋ lint 衛生迴圈（ref 斷鏈/逾期 loop/碰撞無回程/dead-letter 積壓）
                ＋ batch_commit（git 單一提交者唯一入口）＋ open-loop 預設 due
   registry.py  P1 registry+audit+scan（掃目錄自動登記下半身）＋ P2 組（含臨時組合）
-               ＋ 存活率視圖；寫入同一把 lock
+               ＋ 存活率視圖＋關係層（relate/unrelate/relations_of/related_ids/relation_lines；
+               詞彙 config 可擴充；audit 含關係斷鏈與反向 tier 漂移）；寫入同一把 lock
   collect.py   P3 git 狀態（欄位抄 gitpane：dirty 天數、末 commit 天數、ahead/behind、
-               worktree 數、agent 偵測）
+               worktree 數、agent 偵測）＋活動脈動（commits_7d/30d、recent_commits、
+               group_pulse／recent_across／pulse_line）
+  context.py   組情境卡（成員與角色含關係／脈動／本組未結／本組最近事件／組管家角色說明，
+               config session.role_prompt 可覆寫）——P16 會話開場料、CLI group context、MCP group_context 同源
   agentmark.py 工作台 agent 會話存活標記（P3 agent 偵測的資料源；pid 死了殘骸自動清）
   upstream.py  P4 上游（gh api release/commit；.state 記已見，同一筆不重報）
   digest.py    P5 增量摘要（水位線＝脊椎最後 digest 事件；便宜模型；失敗浮出）

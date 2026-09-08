@@ -220,3 +220,47 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
 ③ 從判定卡〔深撞：開會話〕開的會話，sidebar 顯示「碰撞 <cid>」來源、title 是任務摘要；
 ④ 「＋臨時組」挑 3 個 repo → 範圍 pill 變「3 個 repo（臨時）」→ 問句／碰撞／會話帶料都跟著縮。
 截圖自看：`python scripts/screenshot.py <spine> [--demo]`（headless Edge，30 秒）。
+
+## 組為單位輪（2026-09-08：「預設工作單位是一組 repo」——agent 融入、活動脈動、關係設定）
+
+**觸發**：使用者三個希望——① 預設 agent 要更融入「一組 repo」的工作方式（組內互動、資訊彙整更順）；
+② 組的監控專注在**活動頻繁度與近期 commit 內容**；③ repo 間的**關係**要能很友善地設定（例：A 是 B 的 PM）。
+設計檔：`../personal_agent_design/20260908_組為工作單位_Agent融入與關係設定_v1.md`。
+
+**引擎側**：
+- P1 關係層：`registry.relate/unrelate/relations/relations_of/related_ids`——關係存在來源 repo 的 `relations:` 欄
+  （`{to, kind, note?}`，v1 §3.1 草案落地）；詞彙表 `RELATION_KINDS`（pm-of／feeds／derived-from／upstream-of／sibling-topic）
+  可由 config `relations.kinds` 擴充；同一 (a,b,kind) 冪等；自指、未登記 id、未知 kind 拒寫；`remove_repo` 連帶清關係；
+  audit 加 `[關係斷鏈]`。CLI `registry relate|unrelate|relations`；MCP `registry_relate`／`registry_relations`；
+  工作台深看「關係」段＝列表＋新增表單＋✕，臨時組對話框〔＋相關 repo〕一鍵帶上一跳鄰居。
+- P3 活動脈動：`collect` 每 repo 加 `commits_7d`／`commits_30d`／`recent_commits[{date,hash,subject}]`（最新 5 則）；
+  `collect.group_pulse(states)` 組級彙總（7d/30d 總數、活躍／沉默 repo、最新一則）。`/api/scan` 帶 `pulse`；
+  CLI `pulse`；牌組卡 ⟳7d 徽章、成員列 ⟳N 微標（hover 看最近 commit）、深看加「近期 commit」表；
+  簡報加「脈動（一行）」段（樣貌 A v1.1，仍是資訊不是問句）。
+- P16 組情境卡：新模組 `context.build_context(spine, group|repos)`＝成員與角色（含關係）＋脈動＋本組未結 loops
+  ＋本組最近事件＋**組管家角色說明**（可由 config `session.role_prompt` 覆寫）。`session.build` 的會話料改為
+  「情境卡＋文件地圖」同一檔，prompt 先讀情境卡；沒給任務時預設任務＝「3 行現況摘要再問我要做什麼」；
+  開會話落 `presented [session] group:<g>`。CLI `group context`；MCP `group_context`；牌組卡〔組會話〕按鈕。
+
+**不變式維持**：引擎零私有字樣（角色說明是通用措辭）；關係寫入走同一把 lock；presented 是自己的留痕不進收件匣；
+無事不報——脈動只是一行資訊，不產生問句卡。
+
+**驗證**：
+| 條款 | 測試 |
+|---|---|
+| relate 冪等／拒自指／拒未登記／拒未知 kind；unrelate；relations_of 兩向標籤；related_ids 一跳 | `test_relations.py::test_relate_roundtrip_and_rejects`／`test_relations_of_labels_and_neighbors` |
+| config 擴充 kind；remove_repo 清關係；audit 關係斷鏈 | `test_relations.py::test_custom_kind_from_config`／`test_remove_repo_strips_relations_and_audit_dangling` |
+| collect 帶 7d/30d 計數與最近 commit；group_pulse 彙總 | `test_collect_brief.py::test_collect_activity_and_pulse` |
+| 簡報有脈動一行且不增加問句 | `test_collect_brief.py::test_brief_has_pulse_line` |
+| 情境卡：成員角色（含關係）、脈動、本組 loops、角色說明；config 覆寫角色說明 | `test_context.py::test_context_card_sections`／`test_context_role_prompt_override` |
+| session.build 料檔含情境卡＋地圖，prompt 先讀情境卡，落 presented [session] | `test_session.py::test_build_includes_context_card_and_leaves_trace` |
+| CLI relate/relations/context/pulse 全路徑 | `test_cli_e2e.py::test_relations_context_pulse_cli` |
+| audit 反向 tier 漂移：dormant 但 7 天內有 commit 紅字、真沉默不報 | `test_registry.py::test_audit_dormant_but_recently_active` |
+| MCP registry_relate／registry_relations／group_context | `test_mcpserver.py::test_relation_and_context_tools` |
+| /api/state 帶 relations＋rel_kinds；relate/unrelate action；/api/scan 帶 pulse；頁面有「關係」「組會話」「近期 commit」 | `test_webui.py::test_relations_api_and_pulse`／`test_page_and_state` |
+
+**L4（人）**：真 spine 開 `app` → ① 深看「關係」段設 `MI_PM pm-of MiCrawler`，牌展開 MI 組在 MI_PM 列 hover ⇄ 看得到「規劃（PM）→ MiCrawler」；
+② 牌組卡看得到 ⟳7d 數字、成員列 hover ⟳ 看到最近 commit 主旨、深看「近期 commit」表按日期排；
+③ 牌組卡〔組會話〕開 claude，第一句回覆是這組的 3 行現況（成員角色、活動、未結）而不是「請問要做什麼」；
+④ 臨時組對話框勾 MI_PM 按〔＋相關 repo〕自動帶上 MiCrawler。
+截圖自看：`python scripts/screenshot.py <spine> --demo`。

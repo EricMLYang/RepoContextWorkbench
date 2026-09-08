@@ -87,6 +87,15 @@
   .mrow .mst .bot{color:var(--blue)}
   .mrow .go{visibility:hidden;padding:0 5px;font-size:11px}
   .mrow:hover .go{visibility:visible}
+  .mrow .rel{color:var(--blue);font-size:11px;cursor:default;flex:none}
+  .gcard .gbtn{visibility:hidden;padding:0 6px;font-size:11px;white-space:nowrap}
+  .gcard:hover .gbtn,.gcard.on .gbtn{visibility:visible}
+  #relform{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:2px 0 8px}
+  #relform select,#relform input{font-size:var(--f0);padding:3px 6px}
+  #reltable .x{color:var(--dim);cursor:pointer;padding:0 6px}
+  #reltable .x:hover{color:var(--red)}
+  #reltable .kind{color:var(--blue)}
+  #recentcommits td.rc{color:var(--ink2);white-space:nowrap}
   .sessions{display:flex;flex-direction:column;gap:3px}
   .srow{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;cursor:pointer;
         border:1px solid transparent;font-size:var(--f0)}
@@ -272,6 +281,17 @@
   <div id="tab-deep" class="tabpane">
     <div class="secttl">全量狀態 <span class="n" id="deepscope"></span></div>
     <div class="tblwrap"><div id="deeptable"></div></div>
+    <div class="secttl">近期 commit <span class="n">（範圍內各 repo 最新 5 則攤平，新→舊——組的監控焦點）</span></div>
+    <div class="tblwrap"><div id="recentcommits"></div></div>
+    <div class="secttl">關係 <span class="n">（A 規劃（PM）→ B 這類 repo 間關係；存在 registry.yaml 的 relations:，也可直接手改）</span></div>
+    <div id="relform">
+      <select id="rela" title="來源 repo A"></select>
+      <select id="relkind" title="關係種類（config relations.kinds 可擴充）"></select>
+      <select id="relb" title="目標 repo B"></select>
+      <input id="relnote" placeholder="一句說明（可留空）" style="width:200px">
+      <button id="reladd" class="primary icon">新增關係</button>
+    </div>
+    <div class="tblwrap"><div id="reltable"></div></div>
     <div id="statsraw"></div>
     <div class="secttl">最近事件 <span class="n">（脊椎最後 40 則，含自己出手的留痕）</span></div>
     <div class="tblwrap"><div id="recent"></div></div>
@@ -305,6 +325,7 @@
   <div id="dlglist"></div>
   <div id="dlgfoot">
     <span id="dlgcount" class="muted" style="font-size:12px"></span>
+    <button id="dlgrel" class="ghost icon" title="把已勾 repo 的關係鄰居（一跳、兩向）一起帶上">＋相關 repo</button>
     <span class="sp"></span>
     <input id="dlgname" placeholder="組名（留空＝只用一次）" style="width:170px">
     <button id="dlgcancel" class="ghost">取消</button>
@@ -363,6 +384,18 @@ function groupStats(members){
   let bad=0,bots=0;members.forEach(m=>{const s=lastStates[m];if(repoBad(s))bad++;if(s&&(s.agents||[]).length)bots++;});
   return {bad,bots};}
 function tierOf(id){return state.tiers[id]||"active";}
+// 關係層（2026-09-08）：站在 id 立場兩向讀；forward＝我指向別人、inverse＝別人指向我
+function relsOf(id){const ks=state.rel_kinds||{};const out=[];
+  (state.relations||[]).forEach(r=>{const k=ks[r.kind]||{forward:r.kind,inverse:r.kind};
+    if(r.from===id)out.push({peer:r.to,dir:"out",label:k.forward,kind:r.kind,note:r.note});
+    else if(r.to===id)out.push({peer:r.from,dir:"in",label:k.inverse,kind:r.kind,note:r.note});});
+  return out;}
+function relText(id,r){return r.dir==="out"?(id+" "+r.label+"→ "+r.peer):(id+" 的"+r.label+" "+r.peer);}
+function neighborsOf(ids){const s=new Set(ids),out=new Set();
+  (state.relations||[]).forEach(r=>{if(s.has(r.from))out.add(r.to);if(s.has(r.to))out.add(r.from);});
+  ids.forEach(i=>out.delete(i));return out;}
+function commits7d(members){let n=0,known=false;members.forEach(m=>{const s=lastStates[m];if(s&&s.commits_7d!=null){known=true;n+=s.commits_7d;}});return known?n:null;}
+function recentTitle(s){const rc=s.recent_commits||[];return rc.length?("最近 commit：\n"+rc.map(c=>c.date+" "+c.subject).join("\n")):"近 30 天無 commit";}
 function memberRow(id,gname,inScope){
   const s=lastStates[id];
   const row=el("div","mrow"+(inScope?"":" off"));
@@ -376,8 +409,11 @@ function memberRow(id,gname,inScope){
   row.append(cb);
   const td=el("span","tier "+tierOf(id));td.title="tier："+tierOf(id);row.append(td);
   const mid=el("span","mid",id);mid.title=id+((state.tags[id]||[]).length?"  ·  "+state.tags[id].join("、"):"");row.append(mid);
+  const rels=relsOf(id);
+  if(rels.length){const rl=el("span","rel","⇄");rl.title=rels.map(r=>relText(id,r)).join("\n");row.append(rl);}
   const st=el("span","mst");
   if(s){
+    if(s.commits_7d){const b=el("span","","⟳"+s.commits_7d);b.title="近 7 天 "+s.commits_7d+" commits（30 天 "+(s.commits_30d||0)+"）\n"+recentTitle(s);st.append(b);}
     if((s.agents||[]).length){const b=el("span","bot","🤖");b.title="agent 在跑："+s.agents.join(",");st.append(b);}
     if(s.dirty){const b=el("span",repoBad(s)?"bad":"","✎"+s.dirty+(s.dirty_days!=null&&s.dirty_days>=1?"·"+s.dirty_days.toFixed(0)+"d":""));b.title="未提交 "+s.dirty+" 檔"+(s.dirty_days!=null?"，最舊 "+s.dirty_days.toFixed(0)+" 天":"");st.append(b);}
     if(s.ahead){const b=el("span","","↑"+s.ahead);b.title="有 commit 沒 push";st.append(b);}
@@ -403,7 +439,12 @@ function groupCard(name,members,label){
   const gs=groupStats(members);const bd=el("span","gbadges");
   if(gs.bad){const b=el("span","gb amber",gs.bad+" 異常");b.title="dirty 過期／落後遠端／採集失敗";bd.append(b);}
   if(gs.bots){const b=el("span","gb blue","🤖"+gs.bots);b.title="agent 在跑";bd.append(b);}
-  head.append(bd);card.append(head);
+  const c7=commits7d(members);
+  if(c7!=null){const b=el("span","gb blue","⟳"+c7);b.title="近 7 天 commit 數（組內合計）";bd.append(b);}
+  head.append(bd);
+  if(name!=="__adhoc__"){const gb=el("button","icon ghost gbtn","組會話");gb.title="以這組為工作單位開 agent 會話（帶組情境卡：成員角色／脈動／未結）";
+    gb.onclick=e=>{e.stopPropagation();newTerm("agent",{group:name||null,repos:null,origin:"group:"+(name||"全部")});};head.append(gb);}
+  card.append(head);
   const mem=el("div","members");
   const inScopeSet=new Set(on?scopeRepos():members);
   members.forEach(m=>mem.append(memberRow(m,name,inScopeSet.has(m))));
@@ -446,6 +487,8 @@ function renderDialog(){
     tags.append(add);row.append(tags);list.append(row);});
   $("dlgcount").textContent=dlgSel.size+" 個";}
 $("adhocbtn").onclick=openDialog;
+$("dlgrel").onclick=()=>{const nb=neighborsOf([...dlgSel]);if(!nb.size){toast("已勾的 repo 沒有設關係（深看→關係可以設）");return;}
+  nb.forEach(r=>dlgSel.add(r));renderDialog();toast("帶上 "+nb.size+" 個相關 repo：" + [...nb].join("、"));};
 $("dlgcancel").onclick=()=>$("dlg").classList.remove("on");
 $("dlg").onclick=e=>{if(e.target.id==="dlg")$("dlg").classList.remove("on");};
 $("dlgok").onclick=async()=>{
@@ -555,13 +598,34 @@ function renderState(st){
   const asel=$("agentsel");
   if(st.agents&&asel.options.length!==st.agents.length){const cur=asel.value;asel.innerHTML="";
     st.agents.forEach(a=>asel.append(new Option(a,a)));if(st.agents.includes(cur))asel.value=cur;}
-  renderDeck();renderCards();syncTerms(st.terms||[]);renderRecent(st.recent||[]);
+  renderDeck();renderCards();syncTerms(st.terms||[]);renderRecent(st.recent||[]);renderRelations();
   st.cards.filter(c=>c.kind==="interrupt").forEach(maybeNotify);
   const s=st.stats;const have=s.collisions>0||s.spawned>0;
   const line=have?("碰撞 "+s.collisions+"｜回連 "+s.collisions_with_outcome+"｜命中率 "+(s.hit_rate==null?"–":Math.round(s.hit_rate*100)+"%")
     +"｜生出 repo "+s.spawned+"｜存活率 "+(s.survival_rate==null?"–":Math.round(s.survival_rate*100)+"%")):"";
   $("statsline").textContent=line;$("statsraw").textContent=line||"（北極星量測：還沒有碰撞或生出的 repo，累積後才顯示）";
   $("sesscount").textContent=(st.terms||[]).filter(t=>t.alive).length?("會話 "+(st.terms||[]).filter(t=>t.alive).length):"";}
+function renderRelations(){
+  const ks=state.rel_kinds||{};const repos=(state.repos||[]).slice().sort();
+  const fill=(sel,items,fmt)=>{const cur=sel.value;if(sel.options.length!==items.length||sel.dataset.sig!==items.join("|")){
+    sel.innerHTML="";items.forEach(i=>sel.append(new Option(fmt?fmt(i):i,i)));sel.dataset.sig=items.join("|");if(items.includes(cur))sel.value=cur;}};
+  fill($("rela"),repos);fill($("relb"),repos);
+  fill($("relkind"),Object.keys(ks),k=>k+"（"+ks[k].forward+"）");
+  const d=$("reltable");const rels=state.relations||[];const sig=JSON.stringify(rels);
+  if(d.dataset.sig===sig)return;d.dataset.sig=sig;d.innerHTML="";
+  if(!rels.length){d.append(el("div","muted","（還沒有關係——上面表單設一條，例：MI 的 PM repo 規劃（PM）→ 它的 code repo）"));return;}
+  const tb=el("table");
+  rels.forEach(r=>{const k=ks[r.kind]||{forward:r.kind};const tr=el("tr");
+    tr.append(el("td","",r.from));tr.append(el("td","kind",k.forward+"→（"+r.kind+"）"));tr.append(el("td","",r.to));
+    tr.append(el("td","muted",r.note||""));
+    const x=el("td","x","✕");x.title="刪除這條關係";x.onclick=async()=>{await api("/api/unrelate",post({a:r.from,b:r.to,kind:r.kind}));toast("已刪關係");refreshState();};
+    tr.append(x);tb.append(tr);});
+  d.append(tb);}
+$("reladd").onclick=async()=>{const a=$("rela").value,b=$("relb").value,kind=$("relkind").value,note=$("relnote").value.trim();
+  if(a===b){toast("A 與 B 要不同");return;}
+  const r=await api("/api/relate",post({a,b,kind,note}));
+  if(r.error){toast(r.error);return;}
+  $("relnote").value="";toast("已設關係："+a+" "+((state.rel_kinds||{})[kind]||{forward:kind}).forward+"→ "+b);await refreshState();rescan();};
 function renderScan(sc){
   scan=sc;sc.states.forEach(s=>lastStates[s.id]=s);
   const t=new Date().toLocaleTimeString();
@@ -574,15 +638,27 @@ function renderScan(sc){
   $("auditcount").textContent=sc.audit.length?sc.audit.length+" 紅字":"";
   const d=$("deeptable");d.innerHTML="";
   const tb=el("table");const hd=el("tr");
-  [["repo",""],["tags",""],["branch",""],["tier",""],["dirty","num"],["dirty天","num"],["末commit天","num"],["↑未push","num"],["↓落後","num"],["wt","num"],["agent",""],["最後 commit",""],["note",""]]
+  [["repo",""],["tags",""],["branch",""],["tier",""],["dirty","num"],["dirty天","num"],["末commit天","num"],["7d","num"],["30d","num"],["↑未push","num"],["↓落後","num"],["wt","num"],["agent",""],["最後 commit",""],["note",""]]
     .forEach(([t,c])=>hd.append(el("th",c,t)));tb.append(hd);
   sc.states.forEach(s=>{const tr=el("tr");const f=v=>v==null?"–":v.toFixed(1);const n=v=>v==null?"–":String(v);
     tr.append(el("td","",s.id));tr.append(el("td","",(state.tags[s.id]||[]).join("、")));tr.append(el("td","",s.branch||"–"));
     tr.append(el("td","",s.tier));tr.append(el("td","num",String(s.dirty)));tr.append(el("td","num",f(s.dirty_days)));
-    tr.append(el("td","num",f(s.last_commit_days)));tr.append(el("td","num",n(s.ahead)));tr.append(el("td","num",n(s.behind)));
+    tr.append(el("td","num",f(s.last_commit_days)));
+    const c7=el("td","num",n(s.commits_7d));c7.title=recentTitle(s);tr.append(c7);tr.append(el("td","num",n(s.commits_30d)));
+    tr.append(el("td","num",n(s.ahead)));tr.append(el("td","num",n(s.behind)));
     tr.append(el("td","num",String(s.worktrees||0)));tr.append(el("td","",(s.agents||[]).join(",")||"–"));
     const lc=el("td","trunc",s.last_subject||"");lc.title=s.last_subject||"";tr.append(lc);tr.append(el("td","",s.note||""));tb.append(tr);});
-  d.append(tb);}
+  d.append(tb);
+  const rcd=$("recentcommits");rcd.innerHTML="";
+  const rcs=sc.recent_commits||[];
+  if(!rcs.length)rcd.append(el("div","muted","（範圍內近期沒有 commit）"));
+  else{const t2=el("table");const p=sc.pulse||{};
+    if(p.repos){const cap=el("tr");const td=el("td","muted");td.colSpan=4;
+      td.textContent="近 7 天 "+p.commits_7d+" commits／30 天 "+p.commits_30d+(p.most_active?"｜最活躍 "+p.most_active:"")+(p.quiet_30d&&p.quiet_30d.length?"｜30 天沉默："+p.quiet_30d.join("、"):"");
+      cap.append(td);t2.append(cap);}
+    rcs.forEach(c=>{const tr=el("tr");tr.append(el("td","rc",c.date));tr.append(el("td","",c.repo));tr.append(el("td","rc",c.hash));
+      const sb=el("td","trunc",c.subject);sb.title=c.subject;tr.append(sb);t2.append(tr);});
+    rcd.append(t2);}}
 function renderRecent(list){
   const d=$("recent");d.innerHTML="";const tb=el("table");
   list.forEach(e=>{const tr=el("tr","evrow");tr.append(el("td","",e.date+" "+e.time));tr.append(el("td","et",e.type+" ["+e.source+"]"));

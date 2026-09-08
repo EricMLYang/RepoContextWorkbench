@@ -131,3 +131,39 @@ def test_question_cards_structured(spine_with_repos):
     texts = brief.build_questions(states, th)
     assert texts == [brief.card_text(c) for c in cards]
     assert "〔開 agent 收尾〕〔標記本週不動〕" in texts[0]
+
+
+def test_collect_activity_and_pulse(spine_with_repos, tmp_path):
+    """2026-09-08 組為單位輪：監控專注活動頻繁度＋近期 commit 內容。"""
+    from pathlib import Path
+    from tests.conftest import _run_git
+    _, entries = registry.resolve_group(spine_with_repos, "g1")
+    ra = Path(entries[0]["path"])
+    (ra / "x.md").write_text("x\n", encoding="utf-8")
+    _run_git(ra, "add", "-A")
+    _run_git(ra, "commit", "-q", "-m", "feat: 加 x 頁")
+    states = {s["id"]: s for s in collect.collect_group(entries)}
+    a, b = states["repo-a"], states["repo-b"]
+    assert a["commits_7d"] == 2 and a["commits_30d"] == 2      # init（1 天前）＋ 今天
+    assert b["commits_7d"] == 1 and b["commits_30d"] == 1      # init（6 天前）
+    assert a["recent_commits"][0]["subject"] == "feat: 加 x 頁"
+    assert set(a["recent_commits"][0]) == {"date", "hash", "subject"}
+    pulse = collect.group_pulse(list(states.values()))
+    assert pulse["commits_7d"] == 3 and pulse["commits_30d"] == 3
+    assert pulse["most_active"] == "repo-a"
+    assert pulse["latest"]["repo"] == "repo-a" and "加 x 頁" in pulse["latest"]["subject"]
+    assert pulse["quiet_30d"] == []                            # 兩個都有 30 天內 commit
+    table = collect.format_table(list(states.values()))
+    assert "7d" in table
+    # 近期 commit 清單（跨 repo 按日期新→舊）
+    recent = collect.recent_across(list(states.values()), limit=10)
+    assert recent[0]["repo"] == "repo-a" and recent[0]["subject"] == "feat: 加 x 頁"
+    assert len(recent) == 3
+
+
+def test_brief_has_pulse_line(spine_with_repos):
+    _, text = brief.run(spine_with_repos, "g1")
+    assert "## 脈動（一行）" in text and "近 7 天" in text
+    # 脈動是資訊不是問句：判斷段仍只有 dirty 那一條
+    judge = text.split("## 未結")[0]
+    assert judge.count("嗎？") == 1

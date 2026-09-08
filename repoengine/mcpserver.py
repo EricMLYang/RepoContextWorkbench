@@ -11,6 +11,7 @@ import sys
 
 from . import brief as _brief
 from . import collect as _collect
+from . import context as _context
 from . import collide as _collide
 from . import config as _config
 from . import digest as _digest
@@ -80,6 +81,30 @@ def _t_pack_estimate(d, a):
     lines.append(f"合計 ~{total} tokens／預算 {budget} → "
                  + ("裝得下" if total <= budget else "超預算（挑細一點）"))
     return "\n".join(lines)
+
+
+def _t_registry_relate(d, a):
+    e = _registry.relate(d, a["a"], a["b"], a["kind"], note=a.get("note"))
+    k = _registry.relation_kinds(d)[a["kind"]]
+    return f"已設關係：{a['a']} {k['forward']}→ {a['b']}（{e['kind']}）"
+
+
+def _t_registry_relations(d, a):
+    if a.get("id"):
+        rows = _registry.relations_of(d, a["id"])
+        out = [(f"{a['id']} {r['label']}→ {r['peer']}" if r["direction"] == "out"
+                else f"{a['id']} 的{r['label']} {r['peer']}") + f"（{r['kind']}）"
+               + (f"  {r['note']}" if r.get("note") else "") for r in rows]
+    else:
+        kinds = _registry.relation_kinds(d)
+        out = [f"{r['from']} {kinds.get(r['kind'], {}).get('forward', r['kind'])}→ {r['to']}"
+               f"（{r['kind']}）" + (f"  {r['note']}" if r.get("note") else "")
+               for r in _registry.relations(d)]
+    return "\n".join(out) or ("（無關係）可用 kind：" + ", ".join(_registry.relation_kinds(d)))
+
+
+def _t_group_context(d, a):
+    return _context.build_context(d, a.get("group"), a.get("repos"))
 
 
 def _t_group_list(d, a):
@@ -208,6 +233,14 @@ TOOLS = {
     "registry_audit": ("P1 稽核（tier 漂移/路徑失效/未登記）", _s(scan_dirs=_ARR), _t_registry_audit),
     "registry_scan": ("P1 掃目錄找未登記 git repo（apply=true 才登記；mani 混合模式）",
                       _s(dir=_STR, apply=_BOOL, _req=["dir"]), _t_registry_scan),
+    "registry_relate": ("P1 設 repo 間關係 a --kind--> b（例 a pm-of b＝a 是 b 的 PM；"
+                        "kind: pm-of/feeds/derived-from/upstream-of/sibling-topic）",
+                        _s(a=_STR, b=_STR, kind=_STR, note=_STR, _req=["a", "b", "kind"]),
+                        _t_registry_relate),
+    "registry_relations": ("P1 讀關係（id 給定＝站在該 repo 立場兩向讀；省略＝全部）",
+                           _s(id=_STR), _t_registry_relations),
+    "group_context": ("組情境卡：成員與角色（含關係）／脈動／本組未結／最近事件／你的角色——"
+                      "會話開場料同源，隨時重抓", _s(**_SCOPE), _t_group_context),
     "group_list": ("P2 列組", _s(), _t_group_list),
     "group_add": ("P2 建組", _s(name=_STR, members=_ARR, _req=["name", "members"]), _t_group_add),
     "collect": ("P3 採集 git 狀態", _s(**_SCOPE), _t_collect),

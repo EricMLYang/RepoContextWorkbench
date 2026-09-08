@@ -131,7 +131,8 @@ def test_page_and_state(server):
     code, html = _get(base, "/")
     assert code == 200
     for key in ("工作台", "碰撞台", "收件匣", "需要你判斷", "深看",
-                "牌", "臨時組", "會話", "終端", "存成今日簡報", "一切正常"):
+                "牌", "臨時組", "會話", "終端", "存成今日簡報", "一切正常",
+                "關係", "組會話", "近期 commit", "相關 repo"):
         assert key in html
     code, body = _get(base, "/api/state")
     st = json.loads(body)
@@ -396,3 +397,22 @@ def test_agent_session_title_has_task():
     assert term.agent_title("claude", "MI_PM", None) == "claude · MI_PM"
     t = term.agent_title("claude", "全部", "把 §7 動詞鏈對到 MCP 工具清單，順便檢查 README")
     assert t.startswith("claude · 把 §7 動詞鏈對到") and len(t) <= 40
+
+
+@pytest.mark.e2e
+def test_relations_api_and_pulse(server):
+    """2026-09-08 組為單位輪：state 帶關係與詞彙、relate/unrelate action、scan 帶脈動。"""
+    base, sp = server
+    code, r = _post(base, "/api/relate", {"a": "repo-a", "b": "repo-b", "kind": "pm-of", "note": "n"})
+    assert code == 200 and r["ok"]
+    code, r = _post(base, "/api/relate", {"a": "repo-a", "b": "repo-b", "kind": "boss"})
+    assert code == 400
+    st = json.loads(_get(base, "/api/state")[1])
+    assert st["relations"] == [{"from": "repo-a", "to": "repo-b", "kind": "pm-of", "note": "n"}]
+    assert "pm-of" in st["rel_kinds"] and st["rel_kinds"]["pm-of"]["forward"] == "規劃（PM）"
+    sc = json.loads(_get(base, "/api/scan?group=g1")[1])
+    assert sc["pulse"]["commits_7d"] == 2 and sc["pulse"]["most_active"]
+    assert sc["states"][0]["commits_7d"] is not None and sc["states"][0]["recent_commits"]
+    assert sc["recent_commits"][0]["repo"] in ("repo-a", "repo-b")
+    code, r = _post(base, "/api/unrelate", {"a": "repo-a", "b": "repo-b"})
+    assert code == 200 and json.loads(_get(base, "/api/state")[1])["relations"] == []

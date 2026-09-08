@@ -236,6 +236,9 @@ def build_state(spine_dir):
         "tiers": {r["id"]: r.get("tier", "active") for r in data["repos"]},
         "tags": {r["id"]: (r.get("tags") or []) for r in data["repos"]},
         "tag_vocab": vocab,
+        # 關係層（2026-09-08）：前端算鄰居、畫 ⇄、深看關係段都從這兩個欄位來
+        "relations": _registry.relations(spine_dir),
+        "rel_kinds": _registry.relation_kinds(spine_dir),
         "unread": [dict(_ev_dict(e), interrupt=True) for e in p["interrupt"]]
                   + [_ev_dict(e) for e in p["normal"]],
         "loops": [_ev_dict(e) for e in loops],
@@ -280,6 +283,9 @@ def build_scan(spine_dir, group=None, repos=None):
     return {
         "group": gname,
         "states": states,
+        # 活動脈動（2026-09-08）：組的監控焦點＝活動頻繁度＋近期 commit 內容
+        "pulse": _collect.group_pulse(states),
+        "recent_commits": _collect.recent_across(states, limit=30),
         "question_cards": cards,
         "questions": [_brief.card_text(c) for c in cards],
         "quiet": max(quiet, 0),
@@ -292,6 +298,20 @@ def _handle_action(spine_dir, action, payload, terms=None):
     if action == "ack":
         _spine.ack_unread(spine_dir)
         return {"ok": True}
+    if action == "relate":
+        try:
+            e = _registry.relate(spine_dir, payload.get("a", ""), payload.get("b", ""),
+                                 payload.get("kind", ""), note=payload.get("note") or None)
+        except ValueError as err:
+            return {"error": str(err)}
+        return {"ok": True, "relation": e}
+    if action == "unrelate":
+        try:
+            n = _registry.unrelate(spine_dir, payload.get("a", ""), payload.get("b", ""),
+                                   payload.get("kind") or None)
+        except ValueError as err:
+            return {"error": str(err)}
+        return {"ok": True, "removed": n}
     if action == "collide":
         idea = (payload.get("idea") or "").strip()
         if not idea:

@@ -1,6 +1,7 @@
 """早晨簡報產生器（v2 §4.5 樣貌 A，純事實版、無 LLM）。
 
 三段固定結構：需要你判斷的（≤3 條問句＋出口）／未結 open loops／沉默摘要一行。
+v1.1（2026-09-08）：沉默摘要前多一行「脈動」（近 7/30 天 commit 數＋最新一則主旨）——資訊不是問句。
 超過 3 條問句＝過濾閾值錯了（照樣印，但標警語——這是免費校準資料）。
 產出同時寫 groups/<g>/briefs/ 並落 presented 事件（教練規格：出手即留痕）。
 """
@@ -99,6 +100,8 @@ def build_brief(spine_dir, group_name, states, when=None):
         lines.append("（今天沒有需要判斷的事）")
     lines += ["", "## 未結（open loops，只列到期與新增）"]
     lines += loop_lines if loop_lines else ["（無到期或新增）"]
+    lines += ["", "## 脈動（一行）",
+              _collect.pulse_line(_collect.group_pulse(states))]
     lines += ["", "## 沉默摘要（一行）",
               f"其餘 {max(quiet, 0)} 個 repo 無異常、無變化。", ""]
     return "\n".join(lines)

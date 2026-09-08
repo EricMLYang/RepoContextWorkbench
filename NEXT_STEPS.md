@@ -1,7 +1,7 @@
 # NEXT_STEPS — 原型看過後的下一步（2026-09-02，UI 第三輪後更新）
 
-> 原型現況：**引擎原語 P1–P16＋MCP server＋工作台（牌／收件匣／會話三個一級物件＋內嵌 terminal）＋拆機報告五項設計課**；
-> L1＋L2 全綠（122 tests）；L3/L4 待人。
+> 原型現況：**引擎原語 P1–P16＋MCP server＋工作台（牌／收件匣／會話三個一級物件＋內嵌 terminal）＋拆機報告五項設計課
+> ＋組為單位輪（關係層／活動脈動／組管家情境卡）**；L1＋L2 全綠（136 tests）；L3/L4 待人。
 > 詳見 `VERIFICATION.md`＋設計檔 `../personal_agent_design/20260901_工作台設計_v1.md`（v1.1 增補）
 > ＋檢討檔 `../personal_agent_design/20260902_工作台UI_UX檢討.md`。
 > **改 UI 先截圖自看**：`python scripts/screenshot.py <spine> --demo`（headless Edge，30 秒）。
@@ -17,7 +17,10 @@ python -m repoengine --spine <spine> registry scan <repo群目錄>          # �
 python -m repoengine --spine <spine> registry scan <repo群目錄> --apply  # 批次登記，上半身再手補
 python -m repoengine --spine <spine> registry add <外部id> <路徑> --type external --upstream owner/repo
 python -m repoengine --spine <spine> group add g1 <id1>,<id2>
+python -m repoengine --spine <spine> registry relate <pm-repo> <code-repo> --kind pm-of  # 關係：A 是 B 的 PM
 python -m repoengine --spine <spine> collect --group g1     # 採集對不對？
+python -m repoengine --spine <spine> pulse   --group g1     # 這組在忙什麼？7d/30d 數＋近期 commit 主旨
+python -m repoengine --spine <spine> group context g1       # 組情境卡一屏內讀得完？角色說明對味嗎？
 python -m repoengine --spine <spine> upstream --group g1    # 上游查得到嗎（需 gh 登入）
 python -m repoengine --spine <spine> digest  --group g1     # mock 摘要形狀對嗎（真摘要換 --provider claude）
 python -m repoengine --spine <spine> brief   --group g1     # 簡報一屏內？問句形狀對？
@@ -73,6 +76,9 @@ python -m repoengine --spine <spine> session --group g1 --task "隨便問脊椎�
 - **2026-09-01 拆機落地輪**：外部工具比對檔的五項「可抄設計決策」補完——P3 worktree＋agent 偵測（gitpane）
   ／P1 registry scan（mani）／P6 洩密哨兵＋estimate（Repomix）／P11 spine lint（second-brain＋Szapar）；
   MCP 三工具同步入表
+- **2026-09-08 組為單位輪**：使用者三個希望（agent 融入「一組 repo」／監控看活動與近期 commit／關係友善設定）落地——
+  registry 關係層＋三入口（CLI／MCP／深看表單）＋臨時組〔＋相關 repo〕；採集脈動＋`pulse`＋牌 ⟳ 徽章＋深看「近期 commit」表
+  ＋簡報脈動行＋audit 反向漂移；會話料改組情境卡＋預設任務「3 行現況」＋〔組會話〕；真 spine 設 6 條關係實測
 - **2026-09-02 UI 第三輪**：UI/UX 檢討落地——問句與碰撞回程的〔出口〕全部變真按鈕（tier／defer／route／深撞／延期）；
   收件匣統一卡片（處理中／判定回程／准打斷／loop）、自己的留痕不進收件匣；會話有主（來源＋任務摘要 title）；
   牌組卡＋臨時組對話框；沒會話終端自動收合；key-based diff 輪詢；`scripts/screenshot.py`

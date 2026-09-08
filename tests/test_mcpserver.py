@@ -91,3 +91,20 @@ def test_collide_submit_wait_writes_two_events(spine_with_repos):
 def test_stats_includes_survival(spine):
     text = _tool(spine, "spine_stats")["result"]["content"][0]["text"]
     assert "靈感命中率" in text and "存活率" in text
+
+
+def test_relation_and_context_tools(spine_with_repos):
+    """2026-09-08 組為單位輪：agent 也能設關係、讀關係、隨時重抓組情境卡。"""
+    names = {t["name"] for t in _call(spine_with_repos, "tools/list")["result"]["tools"]}
+    assert {"registry_relate", "registry_relations", "group_context"} <= names
+    t = _tool(spine_with_repos, "registry_relate",
+              {"a": "repo-a", "b": "repo-b", "kind": "pm-of"})["result"]["content"][0]["text"]
+    assert "pm-of" in t
+    t = _tool(spine_with_repos, "registry_relations",
+              {"id": "repo-a"})["result"]["content"][0]["text"]
+    assert "repo-b" in t and "規劃（PM）" in t
+    r = _tool(spine_with_repos, "registry_relate",
+              {"a": "repo-a", "b": "repo-a", "kind": "pm-of"})
+    assert r["result"].get("isError") and "自己" in r["result"]["content"][0]["text"]
+    t = _tool(spine_with_repos, "group_context", {"group": "g1"})["result"]["content"][0]["text"]
+    assert t.startswith("# 組情境卡 g1") and "## 脈動" in t
