@@ -1,12 +1,15 @@
 [project]
-name = "repoengine"
+name = "repo-context-workbench"
 version = "0.1.0"
-description = "personal repo engine prototype (build-to-delete)"
+description = "Repo Context Workbench — group your repos, turn each group into context for your agents"
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6"]
 
+[project.scripts]
+ctx = "repo_context.cli:main"
+
 [project.optional-dependencies]
-app = ["pywebview>=5"]  # 桌面視窗模式（`repoengine app`）；引擎本體零 GUI 依賴
+app = ["pywebview>=5"]  # 桌面視窗模式（`ctx app`）；引擎本體零 GUI 依賴
 
 [tool.pytest.ini_options]
 markers = [
@@ -14,3 +17,13 @@ markers = [
     "agent: needs a logged-in claude CLI (manual/L3)",
 ]
 addopts = "-p no:cacheprovider"
+
+[tool.setuptools.packages.find]
+include = ["repo_context*"]
+
+[tool.setuptools.package-data]
+repo_context = ["*.html", "static/*"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

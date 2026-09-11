@@ -6,8 +6,8 @@ import urllib.request
 
 import pytest
 
-from repoengine import spine as spine_mod
-from repoengine import webui
+from repo_context import spine as spine_mod
+from repo_context import webui
 
 
 def _t(h, m):
@@ -235,7 +235,7 @@ def test_tag_api(server):
     base, spine_dir = server
     code, r = _post(base, "/api/tag", {"id": "repo-a", "add": ["PM", "開發"]})
     assert code == 200 and r["tags"] == ["PM", "開發"]
-    from repoengine import registry
+    from repo_context import registry
     assert registry.get_repo(spine_dir, "repo-a")["tags"] == ["PM", "開發"]
     _, body = _get(base, "/api/state")
     st = json.loads(body)
@@ -253,7 +253,7 @@ def test_save_group_api(server):
     code, r = _post(base, "/api/save_group",
                     {"name": "g2", "repos": ["repo-b"]})
     assert code == 200 and r["name"] == "g2"
-    from repoengine import registry
+    from repo_context import registry
     _, entries = registry.resolve_group(spine_dir, "g2")
     assert [e["id"] for e in entries] == ["repo-b"]
     code, r = _post(base, "/api/save_group", {"name": "", "repos": ["repo-a"]})
@@ -271,7 +271,7 @@ def _card_keys(st, kind=None):
 def test_cards_collision_pending_then_judged(spine_with_repos):
     """自己丟的想法＝「處理中」卡（無出口），不是一則待忽略的未讀；
     判定回來→原地換成判定卡，帶五個真出口（route/深撞/丟棄）。"""
-    from repoengine import collide
+    from repo_context import collide
     cid = collide.submit(spine_with_repos, "測試想法", group="g1",
                          when=dt.datetime.now() - dt.timedelta(minutes=2))
     st = webui.build_state(spine_with_repos)
@@ -351,7 +351,7 @@ def test_tier_action(server):
     base, spine_dir = server
     code, r = _post(base, "/api/tier", {"id": "repo-a", "tier": "dormant"})
     assert code == 200 and r["tier"] == "dormant"
-    from repoengine import registry
+    from repo_context import registry
     assert registry.get_repo(spine_dir, "repo-a")["tier"] == "dormant"
     dec = spine_mod.query(spine_dir, type="decision")
     assert dec and dec[-1].kv("repo") == "repo-a" and "dormant" in dec[-1].body
@@ -396,7 +396,7 @@ def test_loop_defer_action(server):
 
 def test_agent_session_title_has_task():
     """會話有主：title 用任務摘要，不再只有 claude:全部（開三個分得出誰是誰）。"""
-    from repoengine import term
+    from repo_context import term
     assert term.agent_title("claude", "MI_PM", None) == "claude · MI_PM"
     t = term.agent_title("claude", "全部", "把 §7 動詞鏈對到 MCP 工具清單，順便檢查 README")
     assert t.startswith("claude · 把 §7 動詞鏈對到") and len(t) <= 40
@@ -423,7 +423,7 @@ def test_relations_api_and_pulse(server):
 
 # Mature workbench: scope provenance, recovery contracts, and session records.
 def test_event_scope_inherits_collision_and_keeps_unknown_unclassified(spine_with_repos):
-    from repoengine import registry
+    from repo_context import registry
     sp = spine_with_repos
     registry.add_group(sp, "g2", ["repo-b"])
     t0 = dt.datetime.now() - dt.timedelta(minutes=5)
@@ -450,7 +450,7 @@ def test_event_scope_inherits_collision_and_keeps_unknown_unclassified(spine_wit
 
 
 def test_adhoc_scope_and_global_collision(spine_with_repos):
-    from repoengine import collide
+    from repo_context import collide
     sp = spine_with_repos
     a = collide.submit(sp, "子集", repos=["repo-a"])
     b = collide.submit(sp, "全域")

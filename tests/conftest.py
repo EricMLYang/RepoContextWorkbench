@@ -9,8 +9,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from repoengine import registry  # noqa: E402
-from repoengine.cli import cmd_init  # noqa: E402
+from repo_context import registry  # noqa: E402
+from repo_context.cli import cmd_init  # noqa: E402
 
 
 def _run_git(cwd, *args, env=None):
@@ -78,7 +78,7 @@ def run_cli(*args, spine_dir=None, env=None, check=False):
              GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
     if env:
         e.update(env)
-    cmd = [sys.executable, "-m", "repoengine"]
+    cmd = [sys.executable, "-m", "repo_context"]
     if spine_dir:
         cmd += ["--spine", str(spine_dir)]
     cmd += list(args)

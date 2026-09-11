@@ -219,14 +219,14 @@ def test_mcp_stdio_roundtrip(tmp_path):
     import os
     env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
     r = subprocess.run(
-        [sys.executable, "-m", "repoengine", "--spine", str(spine_dir), "mcp"],
+        [sys.executable, "-m", "repo_context", "--spine", str(spine_dir), "mcp"],
         input="\n".join(_json.dumps(m, ensure_ascii=False) for m in msgs) + "\n",
         capture_output=True, text=True, encoding="utf-8", cwd=ROOT, env=env,
         timeout=60)
     lines = [_json.loads(x) for x in r.stdout.strip().splitlines()]
     assert len(lines) == 4  # notification 不回
     by_id = {x["id"]: x for x in lines}
-    assert by_id[1]["result"]["serverInfo"]["name"] == "repoengine"
+    assert by_id[1]["result"]["serverInfo"]["name"] == "repo_context"
     assert any(t["name"] == "collide_submit" for t in by_id[2]["result"]["tools"])
     assert by_id[3]["result"]["isError"] is False
     assert by_id[4]["result"]["isError"] is True

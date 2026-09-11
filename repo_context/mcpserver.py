@@ -284,7 +284,7 @@ def handle_message(spine_dir, msg):
     if method == "initialize":
         return ok({"protocolVersion": PROTOCOL_VERSION,
                    "capabilities": {"tools": {}},
-                   "serverInfo": {"name": "repoengine", "version": "0.1.0"}})
+                   "serverInfo": {"name": "repo_context", "version": "0.1.0"}})
     if method == "ping":
         return ok({})
     if method == "tools/list":

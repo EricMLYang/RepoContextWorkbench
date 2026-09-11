@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from repoengine import registry, session
+from repo_context import registry, session
 
 
 def test_build_packs_and_mounts_via_cwd(spine_with_repos):
@@ -15,9 +15,9 @@ def test_build_packs_and_mounts_via_cwd(spine_with_repos):
     assert "文件地圖" in text and "README.md" in text and "notes/plan.md" in text
     assert "widget 快取設計" not in text
     mcp = json.loads((Path(spine_with_repos) / ".mcp.json").read_text(encoding="utf-8"))
-    args = mcp["mcpServers"]["repoengine"]["args"]
+    args = mcp["mcpServers"]["repo_context"]["args"]
     assert args[-1] == "mcp" and "-m" in args and "--spine" in args
-    assert mcp["mcpServers"]["repoengine"]["env"]["PYTHONUTF8"] == "1"
+    assert mcp["mcpServers"]["repo_context"]["env"]["PYTHONUTF8"] == "1"
 
 
 def test_build_with_repo_cwd_uses_mcp_config_flag(spine_with_repos):
@@ -66,7 +66,7 @@ def test_build_agent_registry(spine_with_repos):
 
 def test_build_includes_context_card_and_leaves_trace(spine_with_repos):
     """2026-09-08 組為單位輪：會話料＝組情境卡＋文件地圖，prompt 先讀情境卡，開會話留 presented。"""
-    from repoengine import spine as spine_mod
+    from repo_context import spine as spine_mod
     registry.relate(spine_with_repos, "repo-a", "repo-b", "pm-of")
     cwd, cmd, pack_path = session.build(spine_with_repos, group="g1")
     text = pack_path.read_text(encoding="utf-8")

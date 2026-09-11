@@ -5,7 +5,7 @@ FORBIDDEN = ["Eric", "PM_Head", "AgentCodingPM", "1806011"]
 
 
 def test_inv_no_private_names_in_engine():
-    src = Path(__file__).resolve().parents[1] / "repoengine"
+    src = Path(__file__).resolve().parents[1] / "repo_context"
     hits = []
     for f in src.rglob("*.py"):
         text = f.read_text(encoding="utf-8")

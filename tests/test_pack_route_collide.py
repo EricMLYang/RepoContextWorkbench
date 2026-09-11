@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from repoengine import collide, pack, registry, route, spine as spine_mod
+from repo_context import collide, pack, registry, route, spine as spine_mod
 
 
 def test_pack_budget_and_exclusion(spine_with_repos):
@@ -98,7 +98,7 @@ def test_collide_two_stage_mock(spine_with_repos):
 
 def test_collide_inner_validation_retry(spine_with_repos, monkeypatch):
     """內層驗證失敗重試一次：第 1 次壞、第 2 次好 → 成功。"""
-    from repoengine.agents import MockProvider
+    from repo_context.agents import MockProvider
     MockProvider._calls = 0
     monkeypatch.setenv("REPOENGINE_MOCK_FAIL", "1")
     cid = collide.submit(spine_with_repos, "重試路徑測試", group="g1")
@@ -108,7 +108,7 @@ def test_collide_inner_validation_retry(spine_with_repos, monkeypatch):
 
 def test_collide_system_unsure_surfaces(spine_with_repos, monkeypatch):
     """兩次都壞 → 不准沉默：落 system-unsure 事件、回傳 None。"""
-    from repoengine.agents import MockProvider
+    from repo_context.agents import MockProvider
     MockProvider._calls = 0
     monkeypatch.setenv("REPOENGINE_MOCK_FAIL", "5")
     cid = collide.submit(spine_with_repos, "必敗測試", group="g1")
@@ -126,7 +126,7 @@ def test_collision_id_sequence(spine_with_repos):
 
 
 def test_agent_raw_log_written(spine_with_repos):
-    from repoengine.agents import MockProvider
+    from repo_context.agents import MockProvider
     MockProvider._calls = 0
     os.environ.pop("REPOENGINE_MOCK_FAIL", None)
     cid = collide.submit(spine_with_repos, "raw log 測試", group="g1")
@@ -137,7 +137,7 @@ def test_agent_raw_log_written(spine_with_repos):
 
 def test_mock_verdict_follows_idea_not_template(spine_with_repos):
     """回歸：prompt 模板含三個判定詞，mock 只准看【想法】段。"""
-    from repoengine.agents import MockProvider
+    from repo_context.agents import MockProvider
     import os
     MockProvider._calls = 0
     os.environ.pop("REPOENGINE_MOCK_FAIL", None)
@@ -152,7 +152,7 @@ def test_mock_verdict_follows_idea_not_template(spine_with_repos):
 def test_collide_adhoc_repos_token_roundtrip(spine_with_repos):
     """P2 臨時組合免建組：submit(repos=...) 落 group:臨時(...) token，
     run_judgement 不帶參數也能從事件解回選料範圍（detached 進程同路徑）。"""
-    from repoengine.agents import MockProvider
+    from repo_context.agents import MockProvider
     import os
     MockProvider._calls = 0
     os.environ.pop("REPOENGINE_MOCK_FAIL", None)

@@ -3,8 +3,8 @@ import datetime as dt
 import json
 from pathlib import Path
 
-from repoengine import timer
-from repoengine import spine as spine_mod
+from repo_context import timer
+from repo_context import spine as spine_mod
 
 SCHED = [{"task": "brief", "at": "07:30", "group": "g1"}]
 KEY = "brief@07:30@g1"

@@ -96,7 +96,7 @@ def run_judgement(spine_dir, cid, group=None, repos=None, provider=None, when=No
 
 def spawn_detached(spine_dir, cid, group=None, provider=None):
     """段二丟 detached 進程（Windows：DETACHED_PROCESS｜其他：start_new_session）。"""
-    cmd = [sys.executable, "-m", "repoengine", "--spine", str(spine_dir),
+    cmd = [sys.executable, "-m", "repo_context", "--spine", str(spine_dir),
            "collide", "run", cid]
     if group:
         cmd += ["--group", group]

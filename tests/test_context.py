@@ -2,7 +2,7 @@
 import datetime as dt
 from pathlib import Path
 
-from repoengine import context, registry, spine as spine_mod
+from repo_context import context, registry, spine as spine_mod
 
 
 def test_context_card_sections(spine_with_repos):

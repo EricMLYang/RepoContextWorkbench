@@ -18,18 +18,18 @@ DEFAULT_TASK = "先讀情境卡，用 3 行告訴我這組現況（活動、異�
 
 
 def ensure_mcp_json(spine_dir):
-    """寫 spine repo 的 .mcp.json（已存在且含 repoengine 就不動）。回傳路徑。"""
+    """寫 spine repo 的 .mcp.json（已存在且含 repo_context 就不動）。回傳路徑。"""
     p = Path(spine_dir) / ".mcp.json"
     if p.exists():
         try:
-            if "repoengine" in json.loads(p.read_text(encoding="utf-8")).get(
+            if "repo_context" in json.loads(p.read_text(encoding="utf-8")).get(
                     "mcpServers", {}):
                 return p
         except (json.JSONDecodeError, OSError):
             pass
-    data = {"mcpServers": {"repoengine": {
+    data = {"mcpServers": {"repo_context": {
         "command": sys.executable,
-        "args": ["-m", "repoengine", "--spine", str(Path(spine_dir).resolve()), "mcp"],
+        "args": ["-m", "repo_context", "--spine", str(Path(spine_dir).resolve()), "mcp"],
         "env": {"PYTHONUTF8": "1"},
     }}}
     p.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")

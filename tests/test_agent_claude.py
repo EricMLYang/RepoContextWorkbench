@@ -8,7 +8,7 @@ import shutil
 
 import pytest
 
-from repoengine import collide, spine as spine_mod
+from repo_context import collide, spine as spine_mod
 
 pytestmark = pytest.mark.agent
 

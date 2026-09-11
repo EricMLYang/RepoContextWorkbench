@@ -1,7 +1,7 @@
 # VERIFICATION.md — 原型的驗證與回饋設計（先於程式碼寫成）
 
 > 本檔是 loop engineering 的骨架：**驗證方向先定，程式碼照著驗證長**。
-> 規格上游：`../personal_agent_design/20260901_工具開發規格_v2.md`（以下簡稱 v2）。
+> 規格上游：`docs/20260901_工具開發規格_v2.md`（以下簡稱 v2）。
 > 原則：coding agent 先把 L1/L2 跑到全綠才交人；人只做 L3/L4（機器測不了的部分）。
 
 ## 驗證四層
@@ -21,7 +21,7 @@ v2 裡「現在不驗、三個月後才痛」的東西，全部釘成不變式�
 2. **不合格拒寫**：壞標頭經任何入口都寫不進 `spine/events/`；人的入口（`--dead-letter`）原文落 dead-letter 檔且未讀數 +1；程式入口回傳錯誤訊息（給 agent 自我修正）。
 3. **git 單一提交者**：`append`/`route`/`collide` 等指令**絕不**產生 git commit；只有 `spine commit` 會（E2E 數 commit 數）。
 4. **lock 範圍含 registry**：兩個行程同時寫（spine append × registry edit）不產生撕裂寫入（併發測試：多進程各寫 N 筆，事後全部 parse 得回來、registry YAML 仍合法）。
-5. **引擎無私有字樣**：`repoengine/` 原始碼 grep 不到私有專名（引擎/私有分離鐵律的可證偽版）。
+5. **引擎無私有字樣**：`repo_context/` 原始碼 grep 不到私有專名（引擎/私有分離鐵律的可證偽版）。
 6. **靈感命中率算得出來**（v2 M2 驗收③）：`spine query --stats` 能從 `collision`/`outcome` 事件算出命中率——用 fixture 資料手算對照。
 7. **chosen 可回連 presented**（v2 M2 驗收①）：`chosen` 事件帶 `ref:presented:HH:MM` 時，query 能解回原事件。
 
@@ -42,7 +42,7 @@ v2 裡「現在不驗、三個月後才痛」的東西，全部釘成不變式�
   怎麼被啟動影響，command not found 會顯示在終端裡而不是無聲失敗。
 
 - **2026-09-02 UI 檢討「沒有達到我要的效果」**→ 定性為**設計錯位不是 bug**：畫面是「監控頁黏 terminal」
-  （`../personal_agent_design/20260902_工作台UI_UX檢討.md`）。三個根因＝行動出口是字不是按鈕（F1）、
+  （`docs/20260902_工作台UI_UX檢討.md`）。三個根因＝行動出口是字不是按鈕（F1）、
   三種待辦格式疊加（F2）、自己丟的想法變成待忽略的未讀（F3）；會話無主（F5）。全部先補 failing test 再改
   （見下「UI 第三輪」），並新增 `scripts/screenshot.py`——**功能測試通過 ≠ 體感通過**，每輪 UI 改動先截圖自看再進 L4。
 - **每一次「這則不該吵我／怎麼沒告訴我」**→ 改 `config.yaml` thresholds → 立刻補一條 L1 閾值測試釘住新手感。
@@ -53,12 +53,12 @@ v2 裡「現在不驗、三個月後才痛」的東西，全部釘成不變式�
 
 原型可看之後，依序做（預計 20 分鐘）：
 
-1. `python -m repoengine init <某個空資料夾>` — 建 spine repo scaffold
+1. `python -m repo_context init <某個空資料夾>` — 建 spine repo scaffold
 2. 編 `config.yaml`／用 `registry add` 登記 3–5 個真實 repo，建一個組
-3. `python -m repoengine collect --group <g>` — 看採集結果對不對（dirty/天數）
-4. `python -m repoengine brief --group <g>` — 看早晨簡報 md：一屏內？問句形狀對嗎？
-5. `python -m repoengine collide submit "一個真想法" --group <g> --provider claude --wait` — 看判定五欄位可信度
-6. `python -m repoengine unread` → `spine query --today` — 以上動作全部留痕了嗎
+3. `python -m repo_context collect --group <g>` — 看採集結果對不對（dirty/天數）
+4. `python -m repo_context brief --group <g>` — 看早晨簡報 md：一屏內？問句形狀對嗎？
+5. `python -m repo_context collide submit "一個真想法" --group <g> --provider claude --wait` — 看判定五欄位可信度
+6. `python -m repo_context unread` → `spine query --today` — 以上動作全部留痕了嗎
 7. 回饋收進本檔「回饋迴路」，決定要不要移植成正式 repo
 
 ## 原型範圍（對照 v2 里程碑）
@@ -72,7 +72,7 @@ v2 裡「現在不驗、三個月後才痛」的東西，全部釘成不變式�
 ## UI 增補（2026-09-01 第二輪：S4 監控台雛形）
 
 **範圍修訂**：原「不做」清單中的監控台改為**做網頁雛形**（P14-lite + S2-lite 碰撞輸入框 + S3-lite 組切換）。
-形態＝`python -m repoengine ui`：stdlib http.server 綁 127.0.0.1、瀏覽器開頁，零新依賴（v2 §9-8 耗材原則）。
+形態＝`python -m repo_context ui`：stdlib http.server 綁 127.0.0.1、瀏覽器開頁，零新依賴（v2 §9-8 耗材原則）。
 tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke test 過了才蓋）。
 
 **殼原則的落實（可測）**：
@@ -117,7 +117,7 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
 
 ## 工作台輪（2026-09-01 第四輪：「要 IDE 風格工作台＋terminal 跟 Agent 溝通，目前太像玩具」）
 
-**裁定**：S4 從監控頁升級為 IDE 工作台（設計檔＝`../personal_agent_design/20260901_工作台設計_v1.md`）；
+**裁定**：S4 從監控頁升級為 IDE 工作台（設計檔＝`docs/20260901_工作台設計_v1.md`）；
 內嵌 terminal 取代 v2 §7「不內嵌 terminal」舊裁定。桌面視窗＝pywebview（前一輪裁定 ①）。
 
 **新驗收條款（全部已釘成測試，98 tests）**：
@@ -150,7 +150,7 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
 
 ## 拆機落地輪（2026-09-01 第五輪：外部工具比對檔的「可抄設計決策」補完）
 
-**範圍裁定**：依 `../personal_agent_design/20260901_外部工具比對_逐一介紹.md`，把報告點名
+**範圍裁定**：依 `docs/20260901_外部工具比對_逐一介紹.md`，把報告點名
 「可抄」而原型尚缺的五項設計課落地；全部是 v2 既有原語（P1/P3/P6/P11）的延伸，
 與 v2 無新偏差（規格收斂檢查：未動分層、未動鐵律、未加依賴）。
 
@@ -192,7 +192,7 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
   `collide_rerun`；`ignore` 對判定卡改 ref `collision:<cid>`；`term_create` 帶 `origin`。
 - `term.agent_title`：會話 title＝任務摘要（≤40 字），`TermManager.list` 帶 `kind/origin/scope/task`。
 
-**前端**（`repoengine/workbench.html`，從 webui.py 內嵌字串抽出成檔）：
+**前端**（`repo_context/workbench.html`，從 webui.py 內嵌字串抽出成檔）：
 - 牌：組是卡（成員數＋異常數＋🤖），點卡切範圍、▶ 展開成員（勾選＝臨時子集、tier 點、icon 微標、▶ 開會話）；
   「＋臨時組」對話框（tag 篩選＋勾選＋可存成組）取代常駐 tag 篩選列與 13 個 checkbox。
 - 收件匣：碰撞台輸入框置頂最亮；卡片依 kind 分段、出口是真按鈕（紫＝處理中含轉圈、藍＝碰撞回程含判定色）；
@@ -225,7 +225,7 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
 
 **觸發**：使用者三個希望——① 預設 agent 要更融入「一組 repo」的工作方式（組內互動、資訊彙整更順）；
 ② 組的監控專注在**活動頻繁度與近期 commit 內容**；③ repo 間的**關係**要能很友善地設定（例：A 是 B 的 PM）。
-設計檔：`../personal_agent_design/20260908_組為工作單位_Agent融入與關係設定_v1.md`。
+設計檔：`docs/20260908_組為工作單位_Agent融入與關係設定_v1.md`。
 
 **引擎側**：
 - P1 關係層：`registry.relate/unrelate/relations/relations_of/related_ids`——關係存在來源 repo 的 `relations:` 欄
@@ -267,9 +267,9 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
 
 ## UI 第四輪（2026-09-08：成熟度檢討落地——範圍契約／可信狀態／工作區四分頁）
 
-**觸發**：檢討檔 `../personal_agent_design/20260908_工作台UI_UX成熟度檢討.md`——「骨架可用，但仍是工程原型感；缺口在工作焦點、
+**觸發**：檢討檔 `docs/20260908_工作台UI_UX成熟度檢討.md`——「骨架可用，但仍是工程原型感；缺口在工作焦點、
 資訊取捨、狀態可信度」。P0 兩條已實際重現：切組後收件匣仍出現他組任務；失敗／等待／恢復狀態不完整。
-落地記錄（含截圖）：`../personal_agent_design/20260908_工作台UI_UX成熟度檢討_落地記錄.md`。
+落地記錄（含截圖）：`docs/20260908_工作台UI_UX成熟度檢討_落地記錄.md`。
 
 **引擎側**：
 - `webui.event_scopes(events, registry)`：每筆事件算歸屬 `{scope_kind, scope_label, scope_repos}`——`repo:` → repo、`group:` → 組
@@ -301,7 +301,7 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
 | 頁面關鍵字改白話；`/static/workbench.css`／`.js` 可取得 | `test_page_and_state` |
 
 **瀏覽器走查（Chrome 1280×860，暫存 spine，5 repo／2 組／seed_demo＋組事件）**：切組內容一致、對話框 Esc 與焦點、
-四分頁、草稿保留、斷線橫幅——七項全過，console 無錯誤。截圖在 `../personal_agent_design/assets/20260908_ui_ux_implementation/`。
+四分頁、草稿保留、斷線橫幅——七項全過，console 無錯誤。截圖在 `docs/assets/20260908_ui_ux_implementation/`。
 
 **未做（不宣稱）**：中文 IME 選字 Enter 實測、Windows/VDI pywebview、螢幕閱讀器、真 Agent 生命週期、完整 WCAG、
 檢討 §5 第三輪、L4 真用（檢討 §5 的人工驗收任務）。

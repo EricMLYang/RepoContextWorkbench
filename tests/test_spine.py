@@ -3,7 +3,7 @@ import datetime as dt
 
 import pytest
 
-from repoengine.spine import (
+from repo_context.spine import (
     ValidationError, ack_unread, append_event, get_unread,
     lint, open_loops, query, stats,
 )

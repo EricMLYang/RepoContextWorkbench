@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from repoengine import collide, registry, spawn
-from repoengine import spine as spine_mod
+from repo_context import collide, registry, spawn
+from repo_context import spine as spine_mod
 
 
 def test_spawn_from_collision_closes_the_loop(spine, tmp_path):

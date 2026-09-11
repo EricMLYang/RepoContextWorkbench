@@ -1,7 +1,7 @@
 """L1：P3 採集 ＋ 早晨簡報（樣貌 A：問句形狀、三段結構、presented 留痕）。"""
 import datetime as dt
 
-from repoengine import brief, collect, registry, spine as spine_mod
+from repo_context import brief, collect, registry, spine as spine_mod
 
 
 def test_collect_states(spine_with_repos):
@@ -38,7 +38,7 @@ def test_collect_agent_detection(spine_with_repos):
     import os
     import subprocess
     import sys
-    from repoengine import agentmark
+    from repo_context import agentmark
     ra = registry.get_repo(spine_with_repos, "repo-a")["path"]
     # 活會話（用自己的 pid＝必活）
     agentmark.mark(spine_with_repos, "t1", ra, "claude", os.getpid())
@@ -117,7 +117,7 @@ def test_brief_over_three_questions_warns(spine, tmp_path):
 
 def test_question_cards_structured(spine_with_repos):
     """問句改結構化卡：文字版（簡報 md）由卡渲染而來，兩者不會分岔。"""
-    from repoengine import config
+    from repo_context import config
     states = collect.collect_group(registry.resolve_group(spine_with_repos, "g1")[1])
     th = config.load(spine_with_repos)["thresholds"]
     cards = brief.build_question_cards(states, th)

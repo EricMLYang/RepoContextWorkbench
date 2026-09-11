@@ -2,32 +2,32 @@
 
 > 原型現況：**引擎原語 P1–P16＋MCP server＋工作台（牌／收件匣／會話三個一級物件＋內嵌 terminal）＋拆機報告五項設計課
 > ＋組為單位輪（關係層／活動脈動／組管家情境卡）＋UI 第四輪（範圍契約／可信狀態／工作區四分頁）**；L1＋L2 全綠（146 tests）；L3/L4 待人。
-> 詳見 `VERIFICATION.md`＋設計檔 `../personal_agent_design/20260901_工作台設計_v1.md`（v1.1 增補）
-> ＋檢討檔 `../personal_agent_design/20260902_工作台UI_UX檢討.md`、`../personal_agent_design/20260908_工作台UI_UX成熟度檢討.md`（落地記錄同名 `_落地記錄.md`）。
+> 詳見 `VERIFICATION.md`＋設計檔 `docs/20260901_工作台設計_v1.md`（v1.1 增補）
+> ＋檢討檔 `docs/20260902_工作台UI_UX檢討.md`、`docs/20260908_工作台UI_UX成熟度檢討.md`（落地記錄同名 `_落地記錄.md`）。
 > **改 UI 先截圖自看**：`python scripts/screenshot.py <spine> --demo`（headless Edge，30 秒）。
-> 入口：`python -m repoengine --spine <spine> app`（桌面視窗；需 `pip install pywebview`）。
+> 入口：`python -m repo_context --spine <spine> app`（桌面視窗；需 `pip install pywebview`）。
 
 ## 1. 跑 L4 驗收腳本（約 30 分鐘，`VERIFICATION.md` 有完整版）
 
 ```powershell
 $env:PYTHONUTF8 = "1"
-cd repo_engine_prototype
-python -m repoengine init <某個空資料夾>                    # 建 spine repo
-python -m repoengine --spine <spine> registry scan <repo群目錄>          # 先看候選（mani 混合模式）
-python -m repoengine --spine <spine> registry scan <repo群目錄> --apply  # 批次登記，上半身再手補
-python -m repoengine --spine <spine> registry add <外部id> <路徑> --type external --upstream owner/repo
-python -m repoengine --spine <spine> group add g1 <id1>,<id2>
-python -m repoengine --spine <spine> registry relate <pm-repo> <code-repo> --kind pm-of  # 關係：A 是 B 的 PM
-python -m repoengine --spine <spine> collect --group g1     # 採集對不對？
-python -m repoengine --spine <spine> pulse   --group g1     # 這組在忙什麼？7d/30d 數＋近期 commit 主旨
-python -m repoengine --spine <spine> group context g1       # 組情境卡一屏內讀得完？角色說明對味嗎？
-python -m repoengine --spine <spine> upstream --group g1    # 上游查得到嗎（需 gh 登入）
-python -m repoengine --spine <spine> digest  --group g1     # mock 摘要形狀對嗎（真摘要換 --provider claude）
-python -m repoengine --spine <spine> brief   --group g1     # 簡報一屏內？問句形狀對？
-python -m repoengine --spine <spine> pack --estimate --group g1  # 這組撞下去要花多少 token？
-python -m repoengine --spine <spine> lint                   # 脊椎衛生迴圈（用幾天後再跑一次看陳舊浮不浮）
-python -m repoengine --spine <spine> app                    # 工作台（牌／收件匣／會話；ui＝瀏覽器過渡模式）
-python -m repoengine --spine <spine> unread                 # 動作有留痕嗎
+cd RepoContextWorkbench
+python -m repo_context init <某個空資料夾>                    # 建 spine repo
+python -m repo_context --spine <spine> registry scan <repo群目錄>          # 先看候選（mani 混合模式）
+python -m repo_context --spine <spine> registry scan <repo群目錄> --apply  # 批次登記，上半身再手補
+python -m repo_context --spine <spine> registry add <外部id> <路徑> --type external --upstream owner/repo
+python -m repo_context --spine <spine> group add g1 <id1>,<id2>
+python -m repo_context --spine <spine> registry relate <pm-repo> <code-repo> --kind pm-of  # 關係：A 是 B 的 PM
+python -m repo_context --spine <spine> collect --group g1     # 採集對不對？
+python -m repo_context --spine <spine> pulse   --group g1     # 這組在忙什麼？7d/30d 數＋近期 commit 主旨
+python -m repo_context --spine <spine> group context g1       # 組情境卡一屏內讀得完？角色說明對味嗎？
+python -m repo_context --spine <spine> upstream --group g1    # 上游查得到嗎（需 gh 登入）
+python -m repo_context --spine <spine> digest  --group g1     # mock 摘要形狀對嗎（真摘要換 --provider claude）
+python -m repo_context --spine <spine> brief   --group g1     # 簡報一屏內？問句形狀對？
+python -m repo_context --spine <spine> pack --estimate --group g1  # 這組撞下去要花多少 token？
+python -m repo_context --spine <spine> lint                   # 脊椎衛生迴圈（用幾天後再跑一次看陳舊浮不浮）
+python -m repo_context --spine <spine> app                    # 工作台（牌／收件匣／會話；ui＝瀏覽器過渡模式）
+python -m repo_context --spine <spine> unread                 # 動作有留痕嗎
 ```
 
 ## 2. 開 L3 真 agent 冒煙（會花 claude 額度，預設 skip）
@@ -40,13 +40,13 @@ python -m pytest tests -q -m agent
 或直接對真實組撞一次看判定五欄位可信度：
 
 ```powershell
-python -m repoengine --spine <spine> collide submit "一個真想法" --group g1 --wait --provider claude
+python -m repo_context --spine <spine> collide submit "一個真想法" --group g1 --wait --provider claude
 ```
 
 MCP 也可直接掛給 Claude Code 驗（P16 會自動產 `.mcp.json`）：
 
 ```powershell
-python -m repoengine --spine <spine> session --group g1 --task "隨便問脊椎一件事"
+python -m repo_context --spine <spine> session --group g1 --task "隨便問脊椎一件事"
 # 或手動：在 spine repo 目錄開 claude，MCP tools（spine_append/collide_submit/…）應該掛上
 ```
 

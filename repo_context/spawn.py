@@ -18,9 +18,9 @@ from . import registry, spine
 def _git(cwd, *args):
     env = dict(os.environ)
     for k in ("GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"):
-        env.setdefault(k, "repoengine")
+        env.setdefault(k, "repo_context")
     for k in ("GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"):
-        env.setdefault(k, "repoengine@local")
+        env.setdefault(k, "repo_context@local")
     subprocess.run(["git", "-C", str(cwd)] + list(args),
                    check=True, capture_output=True, env=env)
 

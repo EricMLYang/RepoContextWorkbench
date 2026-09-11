@@ -399,7 +399,7 @@ def cmd_app(args):
 
 
 def build_parser():
-    p = argparse.ArgumentParser(prog="repoengine", description="個人 repo 引擎原型")
+    p = argparse.ArgumentParser(prog="ctx", description="repo-context 工作台：把一群 repo 分成組，每組組成一份 context")
     p.add_argument("--spine", help="spine repo 路徑（預設 $REPOENGINE_SPINE 或 cwd）")
     sub = p.add_subparsers(dest="cmd", required=True)
 

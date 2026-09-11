@@ -1,8 +1,8 @@
 """MCP server：JSON-RPC 分派、tools 清單、拒寫去向（validator 錯誤原樣回 agent）、原語往返。"""
 import datetime as dt
 
-from repoengine import mcpserver
-from repoengine import spine as spine_mod
+from repo_context import mcpserver
+from repo_context import spine as spine_mod
 
 
 def _call(spine_dir, method, params=None, mid=1):
@@ -17,7 +17,7 @@ def _tool(spine_dir, name, args=None):
 
 def test_initialize_and_tools_list(spine):
     r = _call(spine, "initialize")
-    assert r["result"]["serverInfo"]["name"] == "repoengine"
+    assert r["result"]["serverInfo"]["name"] == "repo_context"
     r = _call(spine, "tools/list")
     names = {t["name"] for t in r["result"]["tools"]}
     # 原語全覆蓋：P1–P13、P15/P16 相關工具都在

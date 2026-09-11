@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from repoengine import registry
+from repo_context import registry
 
 
 def test_relate_roundtrip_and_rejects(spine_with_repos):

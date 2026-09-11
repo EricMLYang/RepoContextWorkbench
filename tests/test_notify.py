@@ -1,6 +1,6 @@
 """P13 通知：interrupt 白名單分類（system-unsure 打斷、其餘未讀累積）＋render 文字。"""
-from repoengine import notify
-from repoengine import spine as spine_mod
+from repo_context import notify
+from repo_context import spine as spine_mod
 
 
 def test_classify_interrupt_vs_normal(spine):

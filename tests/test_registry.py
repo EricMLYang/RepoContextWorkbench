@@ -1,7 +1,7 @@
 """L1：P1 registry / P2 組 / audit 紅字。"""
 import pytest
 
-from repoengine import registry
+from repo_context import registry
 from tests.conftest import make_git_repo
 
 

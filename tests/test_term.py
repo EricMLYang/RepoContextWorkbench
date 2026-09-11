@@ -10,7 +10,7 @@ import urllib.request
 
 import pytest
 
-from repoengine import term, webui
+from repo_context import term, webui
 
 posix_only = pytest.mark.skipif(os.name == "nt", reason="POSIX pty；Windows 走 pywinpty")
 

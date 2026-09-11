@@ -1,7 +1,7 @@
 """P5 digest：mock provider——首輪產摘要落事件、二輪水位線擋住（一律增量）、失敗浮出。"""
-from repoengine import digest
-from repoengine import spine as spine_mod
-from repoengine.agents import AgentUnsure
+from repo_context import digest
+from repo_context import spine as spine_mod
+from repo_context.agents import AgentUnsure
 
 
 def test_digest_then_incremental_watermark(spine_with_repos):

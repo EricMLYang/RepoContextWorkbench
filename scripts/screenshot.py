@@ -20,7 +20,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from repoengine import spine, webui  # noqa: E402
+from repo_context import spine, webui  # noqa: E402
 
 EDGE = [r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
         r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"]
@@ -45,7 +45,7 @@ def seed_demo(sp):
     spine.append_event(sp, "open-loop", "hotkey", ["#3", f"due:{now:%Y-%m-%d}"],
                        body="opened →「驗證 pywinpty 在 VDI 上能不能開 claude」", when=t(30))
     # 關係層 demo：前兩個登記的 repo 之間設一條 pm-of（牌展開看 ⇄、深看關係段有列）
-    from repoengine import registry as _reg
+    from repo_context import registry as _reg
     ids = [r["id"] for r in _reg.load(sp)["repos"]]
     if len(ids) >= 2 and not _reg.relations(sp):
         _reg.relate(sp, ids[0], ids[1], "pm-of", note="demo")
@@ -57,7 +57,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("spine")
     ap.add_argument("--demo", action="store_true")
-    ap.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "repoengine-shots"))
+    ap.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "repo_context-shots"))
     ap.add_argument("--size", default="1280x860")
     ap.add_argument("--hash", default="", help="頁面 hash：deep＝直接開深看、adhoc＝開臨時組對話框")
     a = ap.parse_args()

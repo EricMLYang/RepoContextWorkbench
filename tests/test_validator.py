@@ -1,7 +1,7 @@
 """L1：脊椎標頭嚴格文法（P10 三件套之一）。"""
 import pytest
 
-from repoengine.spine import ValidationError, parse_header, validate_block, EVENT_TYPES
+from repo_context.spine import ValidationError, parse_header, validate_block, EVENT_TYPES
 
 
 GOOD = [

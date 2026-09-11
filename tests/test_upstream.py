@@ -1,8 +1,8 @@
 """P4 上游：fake fetch 注入——新 release 落事件、同一筆不重報（無事不報）、kinds/prerelease 過濾。"""
 from pathlib import Path
 
-from repoengine import registry, upstream
-from repoengine import spine as spine_mod
+from repo_context import registry, upstream
+from repo_context import spine as spine_mod
 
 
 def _reg_external(spine_dir, tmp_path, rid="ext-lib", upstream_field="owner/lib"):

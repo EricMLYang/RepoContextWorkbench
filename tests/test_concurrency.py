@@ -9,14 +9,14 @@ from pathlib import Path
 
 import yaml
 
-from repoengine import registry, spine as spine_mod
+from repo_context import registry, spine as spine_mod
 
 ROOT = Path(__file__).resolve().parents[1]
 
 WRITER = """
 import sys
 sys.path.insert(0, r"{root}")
-from repoengine import spine, registry
+from repo_context import spine, registry
 d = r"{spine}"
 who = sys.argv[1]
 for i in range(8):
