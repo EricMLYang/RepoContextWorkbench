@@ -19,6 +19,12 @@
 - 只綁 127.0.0.1 ＋ 每次啟動隨機 token——URL 帶 token 才服務（/static 除外）；
   pywebview 視窗拿完整 URL，其他本機使用者猜不到
 - WS（terminal）同樣驗 token；WS 實作為 stdlib 手寫 RFC6455 最小子集（零依賴）
+
+2026-09-12 UX 檢討落地（工作連續性）：
+- /api/scan 多帶 `summary`（本組工作摘要：目標／上次進度／變化／可接續的一步，每格帶來源）
+- /api/state 的會話清冊多帶 `report`：會話開始後、範圍內的最後一筆脊椎留痕——
+  沒有留痕就是「尚無回報」，程序存活不當成進度（§5）
+- 新增 action：set_goal（組目標）、session_draft（交接草稿）、scan_dir／register_repos（首次建組）
 """
 import base64
 import datetime as _dt
@@ -41,6 +47,7 @@ from . import notify as _notify
 from . import registry as _registry
 from . import route as _route
 from . import spine as _spine
+from . import summary as _summary
 from . import term as _term
 from . import timer as _timer
 
@@ -216,7 +223,7 @@ def build_cards(spine_dir, events, pending, loops, scopes=None):
             actions.append(_act("改落點…", "route_pick", cid=cid))
             if dest != "incubator":
                 actions.append(_act("升格 incubator", "route_collision", cid=cid, dest="incubator"))
-            actions.append(_act("深撞：開會話", "term_create", kind="agent", task=task,
+            actions.append(_act("與 Agent 深入討論", "term_create", kind="agent", task=task,
                                 origin=f"collision:{cid}", **scope))
             actions.append(_act("丟棄並記錄", "ignore", type=ev.type, time=ev.time,
                                 header=ev.header(), cid=cid))
@@ -278,6 +285,109 @@ def build_cards(spine_dir, events, pending, loops, scopes=None):
     return cards
 
 
+# 會話回報（2026-09-12 檢討 §5）：程序存活只代表程序活著。
+# 「工作是否推進」只認脊椎留痕；presented/chosen 是工作台自己的簿記，不算回報。
+_REPORT_SKIP_TYPES = ("presented", "chosen")
+
+
+def _session_scope(term, data):
+    """會話範圍 → (group, ids)。認不出來就回 (None, None)＝不限範圍（會照實說明依據）。"""
+    scope = term.get("scope")
+    groups = {g["name"]: g["members"] for g in data["groups"]}
+    if scope in groups:
+        return scope, list(groups[scope])
+    if scope in {r["id"] for r in data["repos"]}:
+        return None, [scope]
+    members = list(term.get("scope_repos") or [])
+    return None, members or None
+
+
+def session_report(term, events, data):
+    """會話開始後、範圍內的最後一筆脊椎留痕；沒有就 None。
+
+    回傳帶 source／type／時間——使用者要看得出這筆是 agent 寫的還是工作台寫的，
+    才判斷得了「現在輪到誰」。不做任何由程序狀態推進度的推論。"""
+    started = term.get("started")
+    if not started:
+        return None
+    group, ids = _session_scope(term, data)
+    best = None
+    for ev in events:
+        if ev.type in _REPORT_SKIP_TYPES:
+            continue
+        if f"{ev.date} {ev.time}" < started:
+            continue
+        if not _spine.in_scope(ev, group, ids):
+            continue
+        if best is None or (ev.date, ev.time) >= (best.date, best.time):
+            best = ev
+    if best is None:
+        return None
+    first = (best.body or "").splitlines()[0] if best.body else " ".join(best.tokens)
+    return {"text": first, "type": best.type, "source": best.source,
+            "at": f"{best.date} {best.time}"}
+
+
+def annotate_terms(spine_dir, terms, events=None, data=None):
+    """替會話清冊補上回報狀態（清冊本身由 TermManager 給，這裡只加脊椎那一半）。"""
+    events = list(_spine.iter_events(spine_dir)) if events is None else events
+    data = data or _registry.load(spine_dir)
+    out = []
+    for t in terms:
+        rec = dict(t)
+        if t.get("kind") != "agent":
+            rec["report"], rec["report_basis"] = None, "shell 會話不回報"
+        else:
+            group, ids = _session_scope(t, data)
+            rec["report"] = session_report(t, events, data)
+            # 依據要說得出口：範圍認得出來就講範圍，認不出來就說沒再過濾
+            rec["report_basis"] = (
+                f"會話開始後、範圍內（{group or '、'.join(ids)}）的脊椎留痕"
+                if (group or ids) else
+                "會話開始後的脊椎留痕（此會話範圍是全部 repo，未再依組過濾）")
+        out.append(rec)
+    return out
+
+
+def session_draft(spine_dir, term, events=None, data=None):
+    """交接草稿＝會話期間的脊椎留痕彙整。是草稿不是成果，尚未寫入任何事件。
+
+    2026-09-12 檢討 §5：「記錄結果」原本是空白表單，使用者得自己翻終端整理。
+    這裡只把已經存在的留痕排好給人確認——沒有留痕就直說沒有，不編造成果。"""
+    events = list(_spine.iter_events(spine_dir)) if events is None else events
+    data = data or _registry.load(spine_dir)
+    started = term.get("started")
+    group, ids = _session_scope(term, data)
+    traces = [ev for ev in events
+              if ev.type not in _REPORT_SKIP_TYPES
+              and (not started or f"{ev.date} {ev.time}" >= started)
+              and _spine.in_scope(ev, group, ids)]
+    loops = [ev for ev in _spine.open_loops(spine_dir)
+             if _spine.in_scope(ev, group, ids)]
+    lines = [f"會話：{term.get('title') or term.get('sid')}"
+             f"（範圍 {term.get('scope') or '本機 Shell'}"
+             + (f"，開始於 {started}" if started else "") + "）", ""]
+    lines.append("完成了什麼（以下是會話期間的脊椎留痕，請確認後再存）：")
+    if traces:
+        for ev in traces[-8:]:
+            first = (ev.body or "").splitlines()[0] if ev.body else " ".join(ev.tokens)
+            lines.append(f"- {ev.date} {ev.time} {ev.type} [{ev.source}] {first}")
+    else:
+        lines.append("- （會話期間沒有留痕，請自己補；下次可請 agent 用 spine_append 留判斷）")
+    lines += ["", "還沒結束的事："]
+    if loops:
+        for ev in loops[:6]:
+            num = next((t for t in ev.tokens if t.startswith("#")), "#?")
+            first = (ev.body or "").splitlines()[0] if ev.body else ""
+            due = ev.kv("due")
+            lines.append(f"- {num}「{first}」" + (f"（due {due}）" if due else ""))
+    else:
+        lines.append("- （本範圍目前沒有未結事項）")
+    lines += ["", "下次從哪裡接回：", "- （請補上）"]
+    return {"text": "\n".join(lines), "traces": len(traces), "loops": len(loops),
+            "note": "草稿由脊椎留痕組成，尚未儲存；存檔會落一筆 decision，不代表成果已被採納。"}
+
+
 def build_state(spine_dir):
     """輕量狀態（純檔案讀，供 5 秒輪詢）。interrupt 先於 normal（打斷要掙得，其餘累積）。"""
     data = _registry.load(spine_dir)
@@ -292,7 +402,8 @@ def build_state(spine_dir):
     ordered = sorted(enumerate(events), key=lambda item: (item[1].date, item[1].time, item[0]), reverse=True)
     recent = [dict(_ev_dict(e), **scopes[id(e)]) for _, e in ordered[:200]]
     return {
-        "groups": [{"name": g["name"], "members": g["members"]}
+        "groups": [{"name": g["name"], "members": g["members"],
+                    "goal": g.get("goal") or "", "goal_at": g.get("goal_at") or ""}
                    for g in data["groups"]],
         "repos": [r["id"] for r in data["repos"]],
         "tiers": {r["id"]: r.get("tier", "active") for r in data["repos"]},
@@ -315,10 +426,11 @@ def _snoozed(spine_dir, today=None):
     today = today or f"{_dt.date.today():%Y-%m-%d}"
     out = set()
     for ev in _spine.query(spine_dir, type="chosen"):
-        body = ev.body or ""
-        if not body.startswith("snooze:"):
+        # 人話寫在第一行、snooze: token 可能在任一行（舊事件在第一行，兩種都認）
+        head = next((ln.split() for ln in (ev.body or "").splitlines()
+                     if ln.startswith("snooze:")), None)
+        if not head:
             continue
-        head = body.splitlines()[0].split()
         qkind = head[0][len("snooze:"):]
         until = next((h[len("until:"):] for h in head if h.startswith("until:")), "")
         if until >= today:
@@ -347,6 +459,9 @@ def build_scan(spine_dir, group=None, repos=None):
     return {
         "group": gname,
         "states": states,
+        # 本組工作摘要（§3）：目標／上次進度／變化／可接續的一步，每格帶來源
+        "summary": _summary.build_summary(spine_dir, group=group, repos=repos,
+                                          states=states, cards=cards),
         # 活動脈動（2026-09-08）：組的監控焦點＝活動頻繁度＋近期 commit 內容
         "pulse": _collect.group_pulse(states),
         "recent_commits": _collect.recent_across(states, limit=30),
@@ -436,10 +551,16 @@ def _handle_action(spine_dir, action, payload, terms=None):
         if not rid:
             return {"error": "缺 repo id"}
         until = _dt.date.today() + _dt.timedelta(days=days)
-        _spine.append_event(spine_dir, "chosen", "monitor", [f"repo:{rid}"],
-                            body=f"snooze:{qkind} until:{until:%Y-%m-%d}\n"
-                                 f"{payload.get('text', '')}".rstrip())
-        return {"ok": True, "until": f"{until:%Y-%m-%d}"}
+        # 按鈕說「七天後再提醒」，做的就是延後提醒——留痕第一行也要這樣寫，
+        # 使用者翻活動記錄時才說得出系統究竟做了什麼（2026-09-12 檢討 §6.1）
+        _spine.append_event(
+            spine_dir, "chosen", "monitor", [f"repo:{rid}"],
+            body=f"{days} 天後再提醒（{rid} 的「{_brief.qkind_name(qkind)}」"
+                 f"提醒延到 {until:%Y-%m-%d}；"
+                 f"沒有安排任何進度）\n"
+                 f"snooze:{qkind} until:{until:%Y-%m-%d}\n"
+                 f"{payload.get('text', '')}".rstrip())
+        return {"ok": True, "until": f"{until:%Y-%m-%d}", "days": days}
     if action == "tier":
         rid, tier = payload.get("id") or "", payload.get("tier") or ""
         if tier not in _registry.TIERS:
@@ -490,6 +611,69 @@ def _handle_action(spine_dir, action, payload, terms=None):
             return {"error": "至少勾選一個 repo"}
         _registry.add_group(spine_dir, name, members)
         return {"ok": True, "name": name}
+    if action == "set_goal":
+        name = (payload.get("group") or "").strip()
+        text = (payload.get("text") or "").strip()
+        if not name:
+            return {"error": "目標只能記在已儲存的牌組上；先把這個範圍存成牌組"}
+        if len(text) > 300:
+            return {"error": "目標請寫一句話（300 字以內）"}
+        now = _dt.datetime.now()
+        try:
+            _registry.set_group_field(spine_dir, name, "goal", text)
+            _registry.set_group_field(spine_dir, name, "goal_at",
+                                      f"{now:%Y-%m-%d %H:%M}" if text else "")
+        except ValueError as err:
+            return {"error": str(err)}
+        _spine.append_event(spine_dir, "decision", "monitor", [f"group:{name}"],
+                            body=(f"本組目標：{text}（從工作台）" if text
+                                  else "清除本組目標（從工作台）"), when=now)
+        return {"ok": True, "group": name, "goal": text}
+    if action == "session_draft":
+        session = terms.get(payload.get("sid", "")) if terms else None
+        if not session:
+            return {"error": f"未知會話: {payload.get('sid')}"}
+        info = {"sid": session.sid, "title": session.title,
+                "kind": getattr(session, "kind", "shell"),
+                "scope": getattr(session, "scope", None),
+                "scope_repos": getattr(session, "scope_repos", None),
+                "started": getattr(session, "started", None)}
+        return {"ok": True, **session_draft(spine_dir, info)}
+    if action == "scan_dir":
+        base = (payload.get("dir") or "").strip()
+        if not base:
+            return {"error": "請填要掃描的資料夾路徑"}
+        try:
+            found = _registry.scan_dir(spine_dir, base)
+        except ValueError as err:
+            return {"error": str(err)}
+        return {"ok": True, "dir": base,
+                "candidates": [{"path": str(p), "id": cid} for p, cid in found]}
+    if action == "register_repos":
+        items = payload.get("repos") or []
+        if not items:
+            return {"error": "至少選一個 repo 才建得起工作範圍"}
+        name = (payload.get("group") or "").strip()
+        added = []
+        try:
+            for it in items:
+                rid = (it.get("id") or "").strip()
+                path = (it.get("path") or "").strip()
+                if not rid or not path:
+                    raise ValueError("每個 repo 都需要 id 與路徑")
+                _registry.add_repo(spine_dir, rid, path)
+                added.append(rid)
+            if name:
+                _registry.add_group(spine_dir, name, added)
+        except ValueError as err:
+            return {"error": str(err), "added": added}
+        _spine.append_event(spine_dir, "decision", "monitor",
+                            ([f"group:{name}"] if name else []),
+                            body=f"登記 {len(added)} 個 repo："
+                                 f"{'、'.join(added)}"
+                                 + (f"，建立牌組「{name}」" if name else "")
+                                 + "（從工作台）")
+        return {"ok": True, "added": added, "group": name or None}
     if action == "brief":
         out, text = _brief.run(spine_dir, payload.get("group") or None,
                                payload.get("repos") or None)
@@ -624,7 +808,8 @@ def _make_handler(spine_dir):
                     self._bytes(PAGE.encode("utf-8"), "text/html; charset=utf-8")
                 elif u.path == "/api/state":
                     st = build_state(spine_dir)
-                    st["terms"] = self.server.terms.list()
+                    st["terms"] = annotate_terms(spine_dir,
+                                                 self.server.terms.list())
                     st["agents"] = list(_config.load(spine_dir)["agents"])
                     self._json(st)
                 elif u.path == "/api/scan":

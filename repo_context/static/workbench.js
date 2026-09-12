@@ -2,6 +2,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const TOKEN = new URLSearchParams(location.search).get('token') || '';
+const TIERNAME={active:'進行中',paused:'已暫停',dormant:'休眠',archived:'已封存'};
 const KINDNAME = {interrupt:'需要立即處理',question:'需要你判斷',collision:'分析結果',event:'其他未讀',loop:'待跟進',pending:'處理中'};
 const paths = {
   stack:'M3 7l9-4 9 4-9 4-9-4m0 5 9 4 9-4M3 17l9 4 9-4',
@@ -18,7 +19,8 @@ function button(text,fn,cls=''){const b=el('button',cls,text);b.type='button';b.
 function save(key,value){try{localStorage.setItem('workbench:'+key,JSON.stringify(value));}catch{}}
 function load(key,fallback){try{return JSON.parse(localStorage.getItem('workbench:'+key))??fallback;}catch{return fallback;}}
 let state={groups:[],repos:[],tiers:{},tags:{},tag_vocab:[],cards:[],terms:[],agents:[],recent:[],relations:[],rel_kinds:{},stats:{}};
-let scan={states:[],question_cards:[],quiet:0,audit:[],recent_commits:[]};
+const EMPTY_SCAN={states:[],question_cards:[],quiet:0,audit:[],recent_commits:[],summary:null};
+let scan={...EMPTY_SCAN};
 let scope=load('scope',{group:null,repos:null});
 if(!scope||typeof scope!=='object'||(scope.repos!==null&&!Array.isArray(scope.repos)))scope={group:null,repos:null};
 let openGroups=new Set(load('openGroups',[])), lastStates={}, activeTab='inbox';
@@ -40,7 +42,7 @@ function scanQuery(){const p=scopePayload();return p.repos?'?repos='+encodeURICo
 function matchesScope(item){if(!scope.group&&!Array.isArray(scope.repos))return true;return(item.scope_repos||[]).some(r=>scopeRepos().includes(r));}
 function isUnscoped(item){return['global','unclassified'].includes(item.scope_kind);}
 function matchesSearch(item){return!query||JSON.stringify(item).toLocaleLowerCase().includes(query);}
-function setScope(next){scope=next;save('scope',scope);scanVersion++;scanReady=false;scanError='';scan={states:[],question_cards:[],quiet:0,audit:[],recent_commits:[]};render();rescan();}
+function setScope(next){scope=next;save('scope',scope);scanVersion++;scanReady=false;scanError='';scan={...EMPTY_SCAN};render();rescan();}
 function scopedCards(){const set=new Set(scopeRepos());return scan.question_cards.filter(c=>set.has(c.repo)).map(c=>({...c,scope_label:c.repo,scope_repos:[c.repo],scope_kind:'repo'})).concat(state.cards.filter(c=>matchesScope(c)&&!isUnscoped(c)));}
 function renderConnection(){const err=stateError||scanError;$('connection').textContent=err?'連線或更新異常':scanLoading?'正在更新…':stateReady?'已連接 · 本機':'正在連接…';$('connection').classList.toggle('offline',!!err);
   $('syncerror').hidden=!err;$('syncerror').textContent=err?(err+' 目前可能顯示上次成功取得的資料。可按「更新狀態」重試。'):'';
@@ -69,7 +71,8 @@ function renderDeck(){const data=[{name:null,members:state.repos},...state.group
     expand.onclick=()=>{opened?openGroups.delete(key):openGroups.add(key);save('openGroups',[...openGroups]);renderDeck();};
     const members=n.querySelector('.members');members.hidden=!opened;if(opened&&changed('members:'+key,[g.members,state.tiers]))members.replaceChildren(...g.members.map(r=>{const b=button('',()=>showRepo(r),'member ghost');b.append(icon('file'),el('span','',r));b.title=r;return b;}));}
   for(const n of existing.values())n.remove();}
-function actionLabel(a){if(a.action==='route_collision')return a.payload.dest==='incubator'?'移入孵化區':'存入 '+a.payload.dest.replace(/^(repo|group):/,'');return{term_create:'與 Agent 討論',route_pick:'選擇儲存位置',ignore:'忽略並記錄',collide_prefill:'分析這個問題',close_loop:'完成跟進',collide_rerun:'重新分析'}[a.action]||a.label;}
+function actionLabel(a){if(a.action==='route_collision')return a.payload.dest==='incubator'?'移入孵化區':'存入 '+a.payload.dest.replace(/^(repo|group):/,'');
+  return{route_pick:'選擇儲存位置',ignore:'忽略並記錄',collide_prefill:'分析這個問題',close_loop:'完成跟進',collide_rerun:'重新分析'}[a.action]||a.label;}
 function primaryAction(c){return(c.actions||[]).find(a=>a.action==='route_collision')||(c.actions||[]).find(a=>!['ignore','defer','route_pick'].includes(a.action));}
 function buildCard(c){const d=el('article','card '+c.kind);d.dataset.key=c.key;const h=el('div','cardhead'),ic=el('span','cardicon');
   ic.append(c.kind==='pending'?el('span','spin'):icon({interrupt:'alert',question:'alert',collision:'check',loop:'clock'}[c.kind]||'file'));
@@ -83,6 +86,35 @@ function buildCard(c){const d=el('article','card '+c.kind);d.dataset.key=c.key;c
   if(c.kind!=='pending')acts.append(button('查看詳情',()=>showCard(c),'ghost'));
   if((c.actions||[]).some(a=>a!==primary))acts.append(button('更多 ···',()=>showCard(c,true),'ghost more'));
   if(acts.children.length)d.append(acts);const err=el('p','error carderror');err.hidden=true;err.setAttribute('role','alert');d.append(err);return d;}
+function sumItem(label,item,fallback){const row=el('div','sumrow');row.append(el('div','sumlabel',label));const copy=el('div','sumcopy');
+  if(item){copy.append(el('p','sumtext',item.text),el('p','sumsrc','依據：'+item.source+(item.at?' · '+item.at:'')));}
+  else copy.append(el('p','sumtext missing',fallback||'目前沒有可引用的依據。'));
+  row.append(copy);return row;}
+function sumChanges(s){const row=el('div','sumrow');row.append(el('div','sumlabel','變化'));const copy=el('div','sumcopy');
+  copy.append(el('p','sumsrc','範圍：'+(s.changes_window||'近期')));
+  if(s.changes?.length)for(const c of s.changes.slice(0,5))copy.append(el('p','sumtext',c.text),el('p','sumsrc','依據：'+c.source+(c.at?' · '+c.at:'')));
+  else copy.append(el('p','sumtext missing',s.changes_gap||'本次採集沒有看到變化。'));
+  row.append(copy);return row;}
+function renderSummary(){const s=scan.summary,root=$('summary');
+  if(!changed('summary',[s,scanReady,scanError,scanAt,scopeKey(),stateReady&&state.repos.length]))return;
+  if(!stateReady||!state.repos.length){root.replaceChildren(el('p','small muted','登記 repo 後，這裡會顯示這組在做什麼、上次做到哪裡。'));return;}
+  if(!s||!scanReady||scanError){root.replaceChildren(el('p','small muted',scanError?'工作摘要需要一次成功的更新才顯示；目前無法確認現況。':'正在整理本組工作摘要…'));return;}
+  const head=el('div','sumhead');head.append(el('h2','','本組工作摘要'),el('span','spacer'),el('span','small muted','採集於 '+(scanAt||s.at)));
+  const body=el('div','sumbody');
+  body.append(sumItem('目前目標',s.goal,s.goal_gap),sumItem('上次進度',s.progress,s.progress_gap),
+              sumChanges(s),sumItem('可接續的一步',s.next,s.next_gap));
+  const acts=el('div','sumacts');
+  acts.append(button('接續上次工作',()=>openSession({task:s.resume_task,origin:'resume:'+(s.saved_group||s.group)}),'primary'));
+  if(s.next&&s.next.text.startsWith('接續 #'))acts.append(button('查看這件未結',()=>showTab('inbox'),'ghost small'));
+  acts.append(button(s.goal?'修改目標':'寫下這組的目標',()=>goalDialog(s),'ghost'));
+  acts.append(el('span','small muted','摘要只引用登記的目標與脊椎留痕；沒有依據的欄位會直說沒有。'));
+  root.replaceChildren(head,body,acts);}
+function goalDialog(s){const saved=s.saved_group;const body=showDetail(saved?'這組在做什麼？':'目標需要先有牌組','GROUP GOAL');
+  if(!saved){body.append(el('p','dialogmessage',(s.goal_gap||'')+'\n\n用左欄的「＋」把目前範圍存成牌組，就能記下目標。'));
+    $('detailactions').append(button('知道了',()=>$('detaildialog').close(),'primary'));return;}
+  body.append(el('p','detailmeta','牌組：'+saved+'　目標只有你能寫；工作台不會用 commit 數替你推測進度。'));
+  const f=el('label','field','一句話：這組現在要達成什麼？'),input=el('input');input.maxLength=300;input.value=s.goal?.text||'';f.append(input);body.append(f);
+  $('detailactions').append(button('儲存目標',async e=>{const b=e.currentTarget;b.disabled=true;try{await api('/api/set_goal',{group:saved,text:input.value.trim()});$('detaildialog').close();toast('目標已儲存');await refreshState();await rescan();}catch(err){errorAt('detailerror',err.message);}finally{b.disabled=false;}},'primary'));input.focus();}
 function renderCards(){const root=$('cards');const local=scopedCards();const extras=state.cards.filter(c=>isUnscoped(c)||c.kind==='interrupt'&&!matchesScope(c));
   const accept=c=>matchesSearch(c)&&(filter==='all'||c.kind===filter);const sections=[];
   const globalWarnings=extras.filter(c=>c.kind==='interrupt'&&accept(c));if(globalWarnings.length)sections.push({key:'global',title:'全域警示',note:'跨組顯示，操作只影響卡片標示的來源。',cards:globalWarnings});
@@ -98,13 +130,14 @@ function renderCards(){const root=$('cards');const local=scopedCards();const ext
       if(prev?prev.nextSibling!==item.el:parent.firstChild!==item.el)parent.insertBefore(item.el,prev?prev.nextSibling:parent.firstChild);prev=item.el;}
     if(previous?previous.nextSibling!==rec.el:root.firstChild!==rec.el)root.insertBefore(rec.el,previous?previous.nextSibling:root.firstChild);previous=rec.el;}
   for(const[key,rec]of cardNodes)if(!keep.has(key)){rec.el.remove();cardNodes.delete(key);}
-  const empty=$('allclear');empty.hidden=sections.some(s=>!['global','unclassified'].includes(s.key));let title='',text='';
+  const empty=$('allclear');empty.hidden=sections.some(s=>!['global','unclassified'].includes(s.key));let title='',text='',onboard=false;
   if(!stateReady){title=stateError?'無法載入工作空間':'正在載入工作空間';text=stateError?'請確認本機服務，再按更新狀態。':'正在取得 repo 與事件。';}
-  else if(!state.repos.length){title='建立你的第一個工作範圍';text='先用 registry add 或 registry scan 登記 repo，再回到這裡更新狀態。';}
+  else if(!state.repos.length){title='建立你的第一個工作範圍';text='選一個放 repo 的資料夾，工作台會掃出裡面的 git repo，讓你直接建第一組；也可以用 registry add／registry scan 從命令列登記。';onboard=true;}
   else if(!scanReady||scanError){title=scanError?'無法確認目前狀態':'正在檢查這組 repo';text=scanError?'更新成功後，才能確認是否有待處理事項。':'收件匣會在採集完成後更新。';}
   else if(query||filter!=='all'){title='沒有符合條件的事項';text='試著清除搜尋或選擇其他類型。';}
   else{title='目前沒有待處理事項';text='新的分析結果與需要判斷的變化會出現在這裡。';}
-  if(changed('empty',[title,text]))empty.replaceChildren(icon('check'),el('h2','',title),el('p','',text));
+  if(changed('empty',[title,text,onboard])){empty.replaceChildren(icon('check'),el('h2','',title),el('p','',text));
+    if(onboard)empty.append(button('選擇資料夾，掃描 repo',openOnboarding,'primary'));}
   $('quietline').textContent=scanReady&&!scanError?`本次檢查 ${scan.states.length} 個 repo · ${scan.quiet} 個未觸發提醒條件`:'';}
 function showDetail(title,eyebrow='DETAILS'){if($('detaildialog').open)$('detaildialog').close();$('detailtitle').textContent=title;$('detaileyebrow').textContent=eyebrow;$('detailbody').replaceChildren();$('detailactions').replaceChildren();errorAt('detailerror','');$('detaildialog').showModal();return $('detailbody');}
 $('detailclose').onclick=()=>$('detaildialog').close();
@@ -121,7 +154,7 @@ async function runAction(c,a,dom,trigger){if(busyActions.has(c.key))return;
   if(a.action==='tier'&&a.payload?.tier==='paused'&&!a.payload.resume_when){const body=showDetail('設定復工條件');const label=el('label','field','什麼條件下恢復工作？'),input=el('input');label.append(input);body.append(label);$('detailactions').append(button('暫停 repo',()=>{if(!input.value.trim()){errorAt('detailerror','請填寫復工條件。');return;}runAction(c,{...a,payload:{...a.payload,resume_when:input.value.trim()}},null);},'primary'));input.focus();return;}
   busyActions.add(c.key);const controls=dom?[...dom.querySelectorAll('button')]:[...$('detailactions').querySelectorAll('button')];controls.forEach(b=>b.disabled=true);
   const err=dom?.querySelector('.carderror');if(err)err.hidden=true;errorAt('detailerror','');
-  try{const r=await api('/api/'+a.action,a.payload||{});if($('detaildialog').open)$('detaildialog').close();toast(actionLabel(a)+'：完成'+(r.file?' · '+r.file.split(/[\\/]/).pop():r.due?' · '+r.due:''));await refreshState();if(['tier','defer','remove_repo'].includes(a.action))await rescan();}
+  try{const r=await api('/api/'+a.action,a.payload||{});if($('detaildialog').open)$('detaildialog').close();toast(actionLabel(a)+'：完成'+(r.file?' · '+r.file.split(/[\\/]/).pop():r.until?' · 下次提醒 '+r.until:r.due?' · '+r.due:''));await refreshState();if(['tier','defer','remove_repo'].includes(a.action))await rescan();}
   catch(e){if(err){err.textContent=e.message;err.hidden=false;}else errorAt('detailerror',e.message);}
   finally{busyActions.delete(c.key);controls.forEach(b=>b.disabled=false);renderCards();}}
 function openDestination(c){const body=showDetail('選擇儲存位置','分析結果');const label=el('label','field','存入'),select=el('select');select.append(new Option('孵化區','incubator'));state.groups.forEach(g=>select.append(new Option('牌組 · '+g.name,'group:'+g.name)));state.repos.forEach(r=>select.append(new Option('Repo · '+r,'repo:'+r)));label.append(select);body.append(label);$('detailactions').append(button('儲存',()=>runAction(c,{action:'route_collision',payload:{cid:c.cid,dest:select.value}},null),'primary'));}
@@ -130,8 +163,8 @@ function renderRepos(){const rows=scan.states.filter(matchesSearch).slice().sort
   if(!rows.length){wrap.append(el('div','emptyline',scanError?'更新失敗，請重試':!scanReady?'等待 repo 狀態…':'沒有符合條件的 repo'));return;}
   const columns=[['id','Repo'],['tier','狀態'],['branch','分支'],['dirty','未提交'],['commits_7d','7 天活動'],['agents','Agent']];if($('morecols').checked)columns.push(['dirty_days','未提交天數'],['last_commit_days','距末次 commit'],['ahead','未推送'],['behind','落後'],['worktrees','Worktree']);
   const table=el('table'),thead=el('thead'),head=el('tr');for(const[key,label]of columns){const th=el('th');th.setAttribute('scope','col');th.setAttribute('aria-sort',sortColumn===key?(sortDirection===1?'ascending':'descending'):'none');th.append(button(label+(sortColumn===key?(sortDirection===1?' ↑':' ↓'):''),()=>{sortDirection=sortColumn===key?-sortDirection:1;sortColumn=key;renderRepos();},'ghost'));head.append(th);}thead.append(head);table.append(thead);const tb=el('tbody');
-  for(const s of rows){const tr=el('tr');for(const[key]of columns){const td=el('td');if(key==='id'){const b=button(s.id,()=>showRepo(s.id),'ghost');b.title=s.id;td.append(b);}else if(key==='tier'){td.textContent=s.note?'需檢查':({active:'進行中',paused:'已暫停',dormant:'休眠',archived:'已封存'}[s.tier]||s.tier);if(s.note)td.title=s.note;}else if(key==='agents')td.textContent=(s.agents||[]).join('、')||'—';else td.textContent=s[key]==null?'—':typeof s[key]==='number'?String(Math.round(s[key]))+(key==='dirty'?' 檔':key==='commits_7d'?' commits':''):s[key];tr.append(td);}tb.append(tr);}table.append(tb);wrap.append(table);}
-function showRepo(id){const s=lastStates[id]||{id};const body=showDetail(id,'REPO DETAILS'),dl=el('dl');for(const[label,value]of [['分支',s.branch],['狀態',s.tier],['未提交',s.dirty==null?'尚未採集':s.dirty+' 檔'],['最近 commit',s.last_subject],['7 天 / 30 天',(s.commits_7d??'—')+' / '+(s.commits_30d??'—')],['未推送 / 落後',(s.ahead??'—')+' / '+(s.behind??'—')],['Worktree',s.worktrees],['路徑',s.path],['備註',s.note]]){const row=el('div','detailrow');row.append(el('dt','',label),el('dd','',value??'—'));dl.append(row);}body.append(dl);
+  for(const s of rows){const tr=el('tr');for(const[key]of columns){const td=el('td');if(key==='id'){const b=button(s.id,()=>showRepo(s.id),'ghost');b.title=s.id;td.append(b);}else if(key==='tier'){td.textContent=s.note?'需檢查':(TIERNAME[s.tier]||s.tier);if(s.note)td.title=s.note;}else if(key==='agents')td.textContent=(s.agents||[]).join('、')||'—';else td.textContent=s[key]==null?'—':typeof s[key]==='number'?String(Math.round(s[key]))+(key==='dirty'?' 檔':key==='commits_7d'?' commits':''):s[key];tr.append(td);}tb.append(tr);}table.append(tb);wrap.append(table);}
+function showRepo(id){const s=lastStates[id]||{id};const body=showDetail(id,'REPO DETAILS'),dl=el('dl');for(const[label,value]of [['分支',s.branch],['狀態',TIERNAME[s.tier]||s.tier],['未提交',s.dirty==null?'尚未採集':s.dirty+' 檔'],['最近 commit',s.last_subject],['7 天 / 30 天',(s.commits_7d??'—')+' / '+(s.commits_30d??'—')],['未推送 / 落後',(s.ahead??'—')+' / '+(s.behind??'—')],['Worktree',s.worktrees],['路徑',s.path],['備註',s.note]]){const row=el('div','detailrow');row.append(el('dt','',label),el('dd','',value??'—'));dl.append(row);}body.append(dl);
   const field=el('label','field','標籤（以逗號分隔）'),input=el('input');input.value=(state.tags[id]||[]).join(', ');field.append(input);body.append(field);
   $('detailactions').append(button('儲存標籤',async e=>{const b=e.currentTarget;b.disabled=true;try{const next=[...new Set(input.value.split(/[,，]/).map(x=>x.trim()).filter(Boolean))],old=state.tags[id]||[];await api('/api/tag',{id,add:next.filter(t=>!old.includes(t)),remove:old.filter(t=>!next.includes(t))});await refreshState();toast('標籤已儲存');$('detaildialog').close();}catch(e){errorAt('detailerror',e.message);}finally{b.disabled=false;}}),button('開啟 Agent 會話',()=>openSession({repo:id,repos:[id],origin:'repo:'+id}),'primary'));}
 function recordRow(title,meta,time,onClick){const row=el('div','record');row.append(el('time','recordtime',time));const copy=el('div','recordcopy');copy.append(button(title,onClick,'recordtitle ghost'),el('div','recordmeta',meta));row.append(copy);return row;}
@@ -140,13 +173,19 @@ function renderActivity(){const commits=(scan.recent_commits||[]).filter(matches
   const renderEvents=(id,list)=>{if(!changed(id,list))return;$(id).replaceChildren(...(list.length?list.map(e=>recordRow(e.body.split('\n')[0]||e.type,`${e.scope_label} · ${e.type} · ${e.source}`,e.date+' '+e.time,()=>fullText(e.body.split('\n')[0]||e.type,e.body,e.date+' '+e.time+' · '+e.scope_label))):[el('p','emptyline','沒有符合條件的事件')]));};
   const local=state.recent.filter(e=>matchesScope(e)&&!isUnscoped(e)&&matchesSearch(e)),global=state.recent.filter(e=>isUnscoped(e)&&matchesSearch(e));renderEvents('recent',local);renderEvents('recentglobal',global);$('globalactivitycount').textContent=global.length;$('globalactivity').hidden=!global.length;
   const s=state.stats;$('statsraw').textContent=s.collisions?`所有組累計：${s.collisions} 次分析 · ${s.collisions_with_outcome} 次成果回連${s.spawned?' · '+s.spawned+' 個新 repo':''}`:'';}
+const RELTASK={'pm-of':(a,b)=>`檢查規劃與實作是否一致：${a} 是 ${b} 的 PM。請比對 ${a} 的規劃／需求文件與 ${b} 的實作與驗收條件，列出不一致、缺漏與已過期的部分，每條標明來自哪個 repo 的哪份檔，再跟我確認要改哪一邊。`,
+  'feeds':(a,b)=>`檢查供料是否還新：${a} 供料給 ${b}。請確認 ${b} 目前用的內容是不是 ${a} 的最新版本，列出落差與需要重新供料的部分，標明來源檔案。`,
+  'derived-from':(a,b)=>`檢查衍生落差：${a} 衍生自 ${b}。請比對兩邊自分家後的差異，說明哪些該回流、哪些是刻意分開，標明來源檔案。`,
+  'upstream-of':(a,b)=>`檢查上游影響：${a} 是 ${b} 的上游。請看 ${a} 近期變更有沒有影響 ${b}，列出需要跟進的項目與依據。`,
+  'sibling-topic':(a,b)=>`比對同主題內容：${a} 與 ${b} 講同一件事。請找出重複、矛盾與只有一邊有的內容，標明來源檔案，再建議怎麼收斂。`};
+function relationTask(r){return (RELTASK[r.kind]||((a,b)=>`釐清 ${a} 與 ${b} 的關係現在是否還成立：比對兩邊近期內容，說明依據，再建議要不要調整這條關係。`))(r.from,r.to);}
 function renderRelations(){const members=new Set(scopeRepos());const list=state.relations.filter(r=>(members.has(r.from)||members.has(r.to))&&matchesSearch(r));if(!changed('relations',[list,state.rel_kinds]))return;
-  $('reltable').replaceChildren(...(list.length?list.map(r=>{const n=el('div','relation'),copy=el('div','relationcopy'),name=el('div','relationname');name.append(document.createTextNode(r.from),el('span','',(state.rel_kinds[r.kind]?.forward||r.kind)+' →'),document.createTextNode(r.to));copy.append(name,el('p','',r.note||'尚未填寫說明'));n.append(copy,button('管理',()=>manageRelation(r),'ghost small'));return n;}):[el('div','emptystate','還沒有符合範圍的關係。新增一條，讓組內角色更清楚。')]));}
+  $('reltable').replaceChildren(...(list.length?list.map(r=>{const n=el('div','relation'),copy=el('div','relationcopy'),name=el('div','relationname');name.append(document.createTextNode(r.from),el('span','',(state.rel_kinds[r.kind]?.forward||r.kind)+' →'),document.createTextNode(r.to));copy.append(name,el('p','',r.note||'尚未填寫說明'));const acts=el('div','relacts');acts.append(button('用這條關係開工作',()=>openSession({repos:[r.from,r.to],task:relationTask(r),origin:'relation:'+r.from+'>'+r.to}),'small'),button('管理',()=>manageRelation(r),'ghost small'));n.append(copy,acts);return n;}):[el('div','emptystate','還沒有符合範圍的關係。新增一條，讓組內角色更清楚。')]));}
 function relationForm(){const body=showDetail('新增 Repo 關係','RELATIONSHIP');const fields={};for(const[key,title,items]of [['a','來源 repo',scopeRepos()],['kind','如何連結',Object.keys(state.rel_kinds)],['b','目標 repo',state.repos]]){const field=el('label','field',title),select=el('select');items.forEach(v=>select.append(new Option(key==='kind'?state.rel_kinds[v].forward:v,v)));fields[key]=select;field.append(select);body.append(field);}
   if(fields.a.value===fields.b.value&&fields.b.options.length>1)fields.b.selectedIndex=fields.b.selectedIndex===0?1:0;
   const field=el('label','field','說明（選填）'),note=el('input');field.append(note);body.append(field);$('detailactions').append(button('新增關係',async e=>{if(fields.a.value===fields.b.value){errorAt('detailerror','來源與目標需要是不同 repo。');return;}const b=e.currentTarget;b.disabled=true;try{await api('/api/relate',{a:fields.a.value,b:fields.b.value,kind:fields.kind.value,note:note.value.trim()});$('detaildialog').close();toast('關係已建立');await refreshState();}catch(e){errorAt('detailerror',e.message);}finally{b.disabled=false;}},'primary'));}
 function manageRelation(r){const body=showDetail('管理關係');body.append(el('p','dialogmessage',`${r.from} ${state.rel_kinds[r.kind]?.forward||r.kind} → ${r.to}\n${r.note||''}\n\n移除只會解除這條關係，repo 與檔案會保留。`));$('detailactions').append(button('取消',()=>$('detaildialog').close()),button('移除這條關係',async e=>{const b=e.currentTarget;b.disabled=true;try{await api('/api/unrelate',{a:r.from,b:r.to,kind:r.kind});$('detaildialog').close();await refreshState();toast('關係已移除');}catch(e){errorAt('detailerror',e.message);}finally{b.disabled=false;}},'danger'));}
-function render(){renderHeader();renderDeck();renderCards();renderRepos();renderActivity();renderRelations();syncTerms();renderConnection();}
+function render(){renderHeader();renderDeck();renderSummary();renderCards();renderRepos();renderActivity();renderRelations();syncTerms();renderConnection();}
 async function refreshState(){if(stateFlight)return stateFlight;stateFlight=(async()=>{try{const next=await api('/api/state');state=next;stateReady=true;stateError='';
     if(scope.group&&!state.groups.some(g=>g.name===scope.group)||Array.isArray(scope.repos)&&!scope.repos.some(r=>state.repos.includes(r))){scope={group:null,repos:null};save('scope',scope);scanReady=false;scanVersion++;queueMicrotask(rescan);toast('原工作範圍已不存在，已返回所有 repo');}
     render();return true;}catch(e){stateError=e.message;renderConnection();renderCards();return false;}finally{stateFlight=null;}})();return stateFlight;}
@@ -189,22 +228,66 @@ $('adhocbtn').onclick=openPicker;$('picksearch').oninput=()=>{pickQuery=$('picks
 $('pickrelated').onclick=()=>{const before=new Set(pickSelected);for(const r of state.relations){if(before.has(r.from))pickSelected.add(r.to);if(before.has(r.to))pickSelected.add(r.from);}renderPicker();toast(pickSelected.size===before.size?'沒有其他相關 repo':'已加入 '+(pickSelected.size-before.size)+' 個相關 repo');};
 $('pickform').onsubmit=async e=>{e.preventDefault();if(pickerBusy||!pickSelected.size)return;const repos=[...pickSelected],name=$('pickname').value.trim();pickerBusy=true;renderPickCount();try{if(name){await api('/api/save_group',{name,repos});await refreshState();}setScope(name?{group:name,repos:null}:{group:null,repos});$('pickdialog').close();toast(name?'已儲存牌組「'+name+'」':'已套用 '+repos.length+' 個 repo');}catch(e){errorAt('pickerror',e.message);}finally{pickerBusy=false;renderPickCount();}};
 
+// First run: pick a folder, preview repos, create the first group — all in the UI.
+function openOnboarding(){let found=[],picked=new Set(),busy=false;
+  const body=showDetail('建立第一個工作範圍','FIRST RUN');
+  body.append(el('p','detailmeta','工作台只讀這個資料夾下一層有沒有 .git，掃描不會改動任何 repo。'));
+  const df=el('label','field','放 repo 的資料夾'),dir=el('input');dir.placeholder='例如 /Users/you/Coding';df.append(dir);body.append(df);
+  const list=el('div','onboardlist');body.append(list);
+  const nf=el('label','field','第一組的名稱');const nameHint=el('span','muted small',' 選填，留空只登記 repo');nf.append(nameHint);const name=el('input');name.placeholder='例如：產品開發';name.maxLength=100;nf.append(name);nf.hidden=true;body.append(nf);
+  const create=button('登記並建立這一組',async()=>{if(busy||!picked.size)return;busy=true;create.disabled=true;errorAt('detailerror','');
+    try{const repos=found.filter(c=>picked.has(c.path));const r=await api('/api/register_repos',{repos,group:name.value.trim()});
+      $('detaildialog').close();await refreshState();if(r.group)setScope({group:r.group,repos:null});else await rescan();
+      toast('已登記 '+r.added.length+' 個 repo'+(r.group?'，並建立牌組「'+r.group+'」':''));}
+    catch(e){errorAt('detailerror',e.message);}finally{busy=false;create.disabled=!picked.size;}},'primary');
+  create.disabled=true;
+  const renderFound=()=>{nf.hidden=!found.length;create.disabled=!picked.size;
+    list.replaceChildren(...(found.length?found.map(c=>{const row=el('label','pickrow'),cb=el('input');cb.type='checkbox';cb.checked=picked.has(c.path);cb.setAttribute('aria-label','登記 '+c.id);
+      cb.onchange=()=>{cb.checked?picked.add(c.path):picked.delete(c.path);create.disabled=!picked.size;};
+      const copy=el('span','pickcopy',c.id);copy.append(el('span','picktags',c.path));row.append(cb,copy);return row;}):[el('p','emptyline','這個資料夾下一層沒有尚未登記的 git repo。')]));};
+  const preview=button('預覽這個資料夾',async e=>{const b=e.currentTarget;b.disabled=true;errorAt('detailerror','');
+    try{const r=await api('/api/scan_dir',{dir:dir.value.trim()});found=r.candidates;picked=new Set(found.map(c=>c.path));renderFound();}
+    catch(err){found=[];picked=new Set();renderFound();errorAt('detailerror',err.message);}finally{b.disabled=false;}});
+  dir.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();preview.click();}};
+  $('detailactions').append(preview,create);dir.focus();}
+
 // Sessions retain their own immutable scope; creating one is an explicit form.
+function taskEntries(){const out=[];const s=scan.summary;
+  if(s)out.push(['接續上次工作',s.resume_task]);
+  out.push(['整理本組現況','先讀情境卡，用 3 行說明：你拿到哪些脈絡、這次預計產出什麼、哪些動作需要我先確認，再問我要做什麼。']);
+  const members=new Set(scopeRepos());
+  const rel=state.relations.find(r=>members.has(r.from)&&members.has(r.to));
+  if(rel)out.push([(state.rel_kinds[rel.kind]?.forward||rel.kind)+'：'+rel.from+' → '+rel.to,relationTask(rel)]);
+  return out;}
 function openSession(extra={}){const payload={...scopePayload(),...extra};if(extra.group){delete payload.repos;}if(extra.repo){delete payload.group;payload.repos=[extra.repo];}
   const body=showDetail('開啟 Agent 會話','NEW SESSION');const target=payload.repo||payload.group||(payload.repos?'臨時工作組 · '+payload.repos.length+' 個 repo':'所有 repo');body.append(el('p','detailmeta','工作範圍：'+target));
+  body.append(el('p','sumsrc','Agent 開場會拿到：組情境卡（成員與關係、脈動、未結、最近事件）＋文件地圖，並被要求先說明拿到什麼、預計產出什麼、哪些動作要你確認。'));
+  body.append(el('p','sumsrc','工作範圍是行為約定，不是工具層的權限限制——Agent 手上的工具碰得到組外檔案，所以它被要求越界前先問你。'));
   const field=el('label','field','使用的 Agent'),select=el('select');(state.agents||[]).forEach(a=>select.append(new Option(a,a)));select.value=load('agent',state.agents?.[0]||'claude');if(!select.value&&select.options.length)select.selectedIndex=0;field.append(select);body.append(field);
-  const tf=el('label','field','這次想完成什麼？'),task=el('textarea');task.rows=3;task.value=extra.task||'';task.placeholder='留空時，Agent 會先整理這組 repo 的現況。';tf.append(task);body.append(tf);
+  const tf=el('label','field','這次想完成什麼？'),task=el('textarea');task.rows=4;task.value=extra.task||'';task.placeholder='留空時，Agent 會先整理這組 repo 的現況。';tf.append(task);body.append(tf);
+  const hints=el('div','taskhints');hints.append(el('span','small muted','有情境的起手：'));
+  for(const[label,text]of taskEntries())hints.append(button(label,()=>{task.value=text;task.focus();},'chip'));
+  body.append(hints);
   const b=button('開始會話',async()=>{b.disabled=true;errorAt('detailerror','');try{save('agent',select.value);const r=await api('/api/term_create',{...payload,kind:'agent',agent:select.value,task:task.value.trim(),origin:payload.origin||'scope'});$('detaildialog').close();await refreshState();selectTerm(r.sid);toast('會話已開啟');}catch(e){errorAt('detailerror',e.message);}finally{b.disabled=false;}},'primary');b.disabled=!state.agents?.length;$('detailactions').append(b);}
 $('newagent').onclick=()=>openSession({origin:'group:'+scopeLabel()});
 $('newshell').onclick=async e=>{const b=e.currentTarget;b.disabled=true;try{const r=await api('/api/term_create',{kind:'shell'});await refreshState();selectTerm(r.sid);}catch(e){toast(e.message);}finally{b.disabled=false;}};
 const terms=new Map();let activeSid=null,collapsed=true,termHeight=260;
+// 程序活著不等於工作在推進：回報狀態只認脊椎留痕，沒有留痕就說沒有。
+function reportLine(s){if(s.kind!=='agent')return '本機 Shell，不回報';
+  if(s.report)return '最近留痕 '+s.report.at+'（'+s.report.type+' · 來自 '+s.report.source+'）：'+s.report.text;
+  return '尚無回報——這個會話期間，範圍內還沒有任何脊椎留痕';}
+function sessionMeta(s){const proc=s.alive?'程序執行中':'程序已結束';
+  const work=s.kind!=='agent'?'Shell':(s.report?'最近留痕 '+s.report.at.slice(11):'尚無回報');
+  return proc+' · '+work+' · '+(s.scope||'本機 Shell');}
 function syncTerms(){const list=state.terms||[],ids=new Set(list.map(s=>s.sid));for(const[sid,rec]of terms)if(!ids.has(sid)){disposeTerm(rec);terms.delete(sid);if(activeSid===sid)activeSid=null;}
   const parent=$('sessions');for(const s of list){let rec=terms.get(s.sid);if(!rec){rec={info:s,t:null,ws:null,el:null,connected:false};terms.set(s.sid,rec);}rec.info=s;
     if(!rec.row){rec.row=el('div','session');const b=button('',()=>selectTerm(s.sid),'ghost');b.append(el('span','dot'),el('span','sessioncopy'));rec.row.append(b);parent.append(rec.row);}
-    rec.row.classList.toggle('on',activeSid===s.sid);const b=rec.row.firstChild;b.setAttribute('aria-pressed',String(activeSid===s.sid));b.title=s.title+'\n'+(s.task||'')+'\n範圍：'+(s.scope||'本機 Shell');
-    const sig=JSON.stringify(s);if(rec.sig!==sig){rec.sig=sig;b.querySelector('.dot').classList.toggle('dead',!s.alive);b.querySelector('.sessioncopy').replaceChildren(el('span','sessiontitle',s.title),el('span','sessionmeta',(s.alive?'執行中':'已結束')+' · '+(s.scope||'本機 Shell')));}}
+    rec.row.classList.toggle('on',activeSid===s.sid);const b=rec.row.firstChild;b.setAttribute('aria-pressed',String(activeSid===s.sid));
+    b.title=s.title+'\n'+(s.task||'')+'\n範圍：'+(s.scope||'本機 Shell')+'\n'+reportLine(s)+'\n依據：'+(s.report_basis||'—');
+    const sig=JSON.stringify(s);if(rec.sig!==sig){rec.sig=sig;const dot=b.querySelector('.dot');dot.classList.toggle('dead',!s.alive);dot.classList.toggle('silent',s.alive&&s.kind==='agent'&&!s.report);
+      b.querySelector('.sessioncopy').replaceChildren(el('span','sessiontitle',s.title),el('span','sessionmeta',sessionMeta(s)));}}
   $('sessempty').hidden=!!list.length;$('sessiontotal').textContent=list.length||'';$('sesscount').textContent=list.filter(s=>s.alive).length+' 個執行中會話';updateTermBar();}
-function updateTermBar(){const rec=terms.get(activeSid);$('termtitle').textContent=rec?rec.info.title+' · '+(rec.info.scope||'本機 Shell')+(!rec.connected&&rec.t?' · 連線已中斷':''):'尚未選擇會話';$('termkill').disabled=!rec;$('termresult').disabled=!rec;$('termreconnect').hidden=!rec?.t||rec.connected;$('termempty').hidden=!!rec;}
+function updateTermBar(){const rec=terms.get(activeSid);$('termtitle').textContent=rec?rec.info.title+' · '+(rec.info.scope||'本機 Shell')+' · '+reportLine(rec.info)+(!rec.connected&&rec.t?' · 連線已中斷（畫面可能不是最新）':''):'尚未選擇會話';$('termkill').disabled=!rec;$('termresult').disabled=!rec;$('termreconnect').hidden=!rec?.t||rec.connected;$('termempty').hidden=!!rec;}
 function disposeTerm(rec){if(rec.ws){rec.ws.onclose=null;rec.ws.close();}rec.t?.dispose();rec.el?.remove();rec.row?.remove();}
 function selectTerm(sid){const rec=terms.get(sid);if(!rec)return;activeSid=sid;if(collapsed)toggleTerm();for(const[id,r]of terms)r.el?.classList.toggle('on',id===sid);if(!rec.t)attachTerm(sid);else{fitTerm(rec);rec.t.focus();}syncTerms();}
 function attachTerm(sid){const rec=terms.get(sid);if(!rec)return;if(rec.ws){rec.ws.onclose=null;rec.ws.close();}rec.t?.dispose();rec.el?.remove();
@@ -216,7 +299,11 @@ function attachTerm(sid){const rec=terms.get(sid);if(!rec)return;if(rec.ws){rec.
 function fitTerm(rec){try{rec.fit?.fit();}catch{}}
 function fitAll(){for(const rec of terms.values())if(rec.t)fitTerm(rec);}
 $('termreconnect').onclick=()=>attachTerm(activeSid);
-function sessionResult(sid,after){const rec=terms.get(sid);if(!rec)return;const body=showDetail('記錄會話結果','SESSION RESULT');body.append(el('p','detailmeta',rec.info.title+' · '+(rec.info.scope||'本機 Shell')));const label=el('label','field','完成了什麼？還有哪些下一步？'),input=el('textarea');input.rows=5;label.append(input);body.append(label);$('detailactions').append(button('儲存記錄',async e=>{const b=e.currentTarget;if(!input.value.trim()){errorAt('detailerror','請填寫結果。');return;}b.disabled=true;try{await api('/api/session_result',{sid,text:input.value.trim()});$('detaildialog').close();toast('結果已儲存，可在活動記錄查看');await refreshState();if(after)after();}catch(e){errorAt('detailerror',e.message);}finally{b.disabled=false;}},'primary'));input.focus();}
+function sessionResult(sid,after){const rec=terms.get(sid);if(!rec)return;const body=showDetail('記錄會話結果','SESSION RESULT');body.append(el('p','detailmeta',rec.info.title+' · '+(rec.info.scope||'本機 Shell')+' · '+reportLine(rec.info)));
+  const note=el('p','sumsrc','正在整理交接草稿…');body.append(note);
+  const label=el('label','field','完成了什麼？還有哪些下一步？'),input=el('textarea');input.rows=9;label.append(input);body.append(label);
+  api('/api/session_draft',{sid}).then(r=>{if(!input.value.trim())input.value=r.text;note.textContent=r.note+(r.traces?'':'（這個會話期間沒有留痕，草稿只有骨架。）');})
+    .catch(e=>{note.textContent='無法整理草稿：'+e.message+' 可以直接自己填寫。';});$('detailactions').append(button('確認並儲存',async e=>{const b=e.currentTarget;if(!input.value.trim()){errorAt('detailerror','請填寫結果。');return;}b.disabled=true;try{await api('/api/session_result',{sid,text:input.value.trim()});$('detaildialog').close();toast('結果已儲存（記為 decision，不代表成果已被採納）');await refreshState();if(after)after();}catch(e){errorAt('detailerror',e.message);}finally{b.disabled=false;}},'primary'));input.focus();}
 $('termresult').onclick=()=>sessionResult(activeSid);
 function confirmKill(sid){const rec=terms.get(sid);if(!rec)return;const body=showDetail('結束這個會話程序？','SESSION');body.append(el('p','dialogmessage',rec.info.title+'\n\n這會停止程序並移除會話。若只想保留工作並收起畫面，請使用「收合」。'));$('detailactions').append(button('先記錄結果',()=>sessionResult(sid,()=>confirmKill(sid))),button('保留並收合',()=>{$('detaildialog').close();if(!collapsed)toggleTerm();}),button('結束程序',async e=>{const b=e.currentTarget;b.disabled=true;try{await api('/api/term_kill',{sid});$('detaildialog').close();await refreshState();toast('會話程序已結束');}catch(e){errorAt('detailerror',e.message);}finally{b.disabled=false;}},'danger'));}
 $('termkill').onclick=()=>confirmKill(activeSid);

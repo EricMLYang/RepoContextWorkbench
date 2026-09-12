@@ -124,13 +124,58 @@ def test_question_cards_structured(spine_with_repos):
     assert [c["repo"] for c in cards] == ["repo-b"]
     c = cards[0]
     assert c["qkind"] == "dirty" and "嗎？" in c["title"]
-    assert [a["label"] for a in c["actions"]] == ["開 agent 收尾", "標記本週不動"]
+    assert "dirty" not in c["title"]        # 內部術語不丟給人看（§8）
+    assert [a["label"] for a in c["actions"]] == ["與 Agent 一起收尾", "七天後再提醒"]
     assert c["actions"][0]["action"] == "term_create"
     assert c["actions"][0]["payload"]["repo"] == "repo-b"
     assert c["actions"][1]["action"] == "defer"
     texts = brief.build_questions(states, th)
     assert texts == [brief.card_text(c) for c in cards]
-    assert "〔開 agent 收尾〕〔標記本週不動〕" in texts[0]
+    assert "〔與 Agent 一起收尾〕〔七天後再提醒〕" in texts[0]
+
+
+def test_defer_label_matches_behaviour(spine, tmp_path):
+    """2026-09-12 §6.1：「本週排進度」其實只呼叫 defer(days=7)，沒有安排任何進度。
+    文案改成「七天後再提醒」——按鈕說什麼，程式就做什麼。"""
+    from tests.conftest import make_git_repo
+    from repo_context import config
+    p = make_git_repo(tmp_path, "stale-repo", days_old=40)
+    registry.add_repo(spine, "stale-repo", p)
+    states = collect.collect_group([registry.get_repo(spine, "stale-repo")])
+    cards = brief.build_question_cards(states, config.load(spine)["thresholds"])
+    card = next(c for c in cards if c["qkind"] == "inactive")
+    labels = [a["label"] for a in card["actions"]]
+    assert "本週排進度" not in labels
+    defer = next(a for a in card["actions"] if a["action"] == "defer")
+    assert defer["label"] == "七天後再提醒" and defer["payload"]["days"] == 7
+    # 主要動作＝先看變化（工作），不是維護登記狀態（§3）
+    assert card["actions"][0]["action"] == "term_create"
+    assert [a["action"] for a in card["actions"]] == ["term_create", "tier", "defer"]
+
+
+def test_brief_loops_stay_inside_the_named_group(spine, tmp_path):
+    """2026-09-12 §6.2：組別簡報不得混入其他組的待辦；全域／未分類獨立標示。"""
+    import datetime as dt
+    from tests.conftest import make_git_repo
+    today = f"{dt.date.today():%Y-%m-%d}"
+    for name in ("prod", "notes"):
+        registry.add_repo(spine, name, make_git_repo(tmp_path, name, days_old=1))
+    registry.add_group(spine, "產品開發", ["prod"])
+    registry.add_group(spine, "知識研究", ["notes"])
+    spine_mod.append_event(spine, "open-loop", "hotkey",
+                           ["#1", "group:產品開發", f"due:{today}"],
+                           body="確認規劃與實作的驗收條件是否一致")
+    spine_mod.append_event(spine, "open-loop", "hotkey", ["#2", f"due:{today}"],
+                           body="備份脊椎")           # 全域：沒有 group／repo token
+    _, text = brief.run(spine, "知識研究")
+    assert "驗收條件" not in text                     # 別組的待辦不進來
+    assert "備份脊椎" in text and "全域／未分類" in text  # 全域的保留但獨立標示
+    own_section = text.split("## 未結（全域")[0]
+    assert "備份脊椎" not in own_section
+    _, prod = brief.run(spine, "產品開發")
+    assert "驗收條件" in prod
+    # 沉默摘要只講採集支持得起的話
+    assert "未觸發提醒條件" in prod and "無異常、無變化" not in prod
 
 
 def test_collect_activity_and_pulse(spine_with_repos, tmp_path):

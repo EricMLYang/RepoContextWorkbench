@@ -18,6 +18,7 @@ from . import route as _route
 from . import session as _session
 from . import spawn as _spawn
 from . import spine as _spine
+from . import summary as _summary
 from . import pack as _pack
 from . import config as _config
 from . import timer as _timer
@@ -171,6 +172,25 @@ def cmd_group(args):
     elif args.action == "context":
         # 組情境卡（P16 會話開場料同源；agent 用 MCP group_context 拿同一份）
         print(_context.build_context(d, args.name or None, args.members or None))
+    elif args.action == "summary":
+        # 本組工作摘要（2026-09-12 §3）：工作台首屏同一份資料，每格帶依據
+        print(_summary.format_summary(
+            _summary.build_summary(d, args.name or None, args.members or None)))
+    elif args.action == "goal":
+        # 目標只有人能寫（機器不替你發明）；不給 --text＝只讀
+        if not args.name:
+            sys.exit("group goal 需要組名")
+        if args.text is None:
+            print(_registry.get_group(d, args.name).get("goal") or "（尚未登記目標）")
+        else:
+            now = _dt.datetime.now()
+            _registry.set_group_field(d, args.name, "goal", args.text)
+            _registry.set_group_field(d, args.name, "goal_at",
+                                      f"{now:%Y-%m-%d %H:%M}" if args.text else "")
+            _spine.append_event(d, "decision", "manual", [f"group:{args.name}"],
+                                body=(f"本組目標：{args.text}（從 CLI）" if args.text
+                                      else "清除本組目標（從 CLI）"), when=now)
+            print(f"目標已記在 {args.name}" if args.text else f"已清除 {args.name} 的目標")
     else:
         for g in _registry.load(d)["groups"]:
             print(f"{g['name']:<20} {','.join(g['members'])}")
@@ -429,10 +449,11 @@ def build_parser():
     s.add_argument("--remove", help="tag：移除（逗號分隔）")
     s.set_defaults(func=cmd_registry)
 
-    s = sub.add_parser("group", help="P2 組（context＝組情境卡）")
-    s.add_argument("action", choices=["add", "list", "context"])
-    s.add_argument("name", nargs="?", help="context 時可省略＝全部")
-    s.add_argument("members", nargs="?", help="context 時＝逗號分隔 repo id（臨時組合）")
+    s = sub.add_parser("group", help="P2 組（context＝組情境卡；summary＝工作摘要；goal＝一句話目標）")
+    s.add_argument("action", choices=["add", "list", "context", "summary", "goal"])
+    s.add_argument("name", nargs="?", help="context／summary 時可省略＝全部")
+    s.add_argument("members", nargs="?", help="context／summary 時＝逗號分隔 repo id（臨時組合）")
+    s.add_argument("--text", help="goal：這組要達成什麼（一句話）；不給＝只讀目前目標")
     s.set_defaults(func=cmd_group)
 
     s = sub.add_parser("pulse", help="活動脈動：7d/30d commit 數＋近期 commit 主旨（組的監控焦點）")

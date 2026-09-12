@@ -1,9 +1,11 @@
-# NEXT_STEPS — 原型看過後的下一步（2026-09-08，UI 第四輪後更新）
+# NEXT_STEPS — 原型看過後的下一步（2026-09-12，UX 與 Agent 角色輪後更新）
 
 > 原型現況：**引擎原語 P1–P16＋MCP server＋工作台（牌／收件匣／會話三個一級物件＋內嵌 terminal）＋拆機報告五項設計課
-> ＋組為單位輪（關係層／活動脈動／組管家情境卡）＋UI 第四輪（範圍契約／可信狀態／工作區四分頁）**；L1＋L2 全綠（146 tests）；L3/L4 待人。
+> ＋組為單位輪（關係層／活動脈動／組管家情境卡）＋UI 第四輪（範圍契約／可信狀態／工作區四分頁）
+> ＋UX 與 Agent 角色輪（本組工作摘要／會話回報與交接草稿／關係工作入口／介面內建組）**；L1＋L2 全綠（159 tests）；L3/L4 待人。
 > 詳見 `VERIFICATION.md`＋設計檔 `docs/20260901_工作台設計_v1.md`（v1.1 增補）
-> ＋檢討檔 `docs/20260902_工作台UI_UX檢討.md`、`docs/20260908_工作台UI_UX成熟度檢討.md`（落地記錄同名 `_落地記錄.md`）。
+> ＋檢討檔 `docs/20260902_工作台UI_UX檢討.md`、`docs/20260908_工作台UI_UX成熟度檢討.md`、
+> `docs/20260912_工作台UX與Agent角色檢討.md`（落地記錄同名 `_落地記錄.md`）。
 > **改 UI 先截圖自看**：`python scripts/screenshot.py <spine> --demo`（headless Edge，30 秒）。
 > 入口：`python -m repo_context --spine <spine> app`（桌面視窗；需 `pip install pywebview`）。
 

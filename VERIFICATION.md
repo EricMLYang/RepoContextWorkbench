@@ -305,3 +305,42 @@ tray／全域 hotkey／OS 通知仍不做（那是真殼的範圍，VDI smoke te
 
 **未做（不宣稱）**：中文 IME 選字 Enter 實測、Windows/VDI pywebview、螢幕閱讀器、真 Agent 生命週期、完整 WCAG、
 檢討 §5 第三輪、L4 真用（檢討 §5 的人工驗收任務）。
+
+---
+
+## UX 與 Agent 角色輪（2026-09-12，檢討檔 `docs/20260912_工作台UX與Agent角色檢討.md`）
+
+**後端**：
+- 範圍判定收斂成一份：`spine.in_scope()`／`spine.unscoped()`——情境卡、簡報、工作摘要、會話回報同規則。
+- `brief.scope_loops()`：未結分「本組」與「全域／未分類」，別組的不進來；沉默摘要改「未觸發提醒條件」。
+- 行動文案＝實際行為：`defer` 一律「七天後再提醒」，留痕第一行講人話（`snooze:` token 退到第二行，舊事件仍認得）。
+- `summary.py`（新）：本組工作摘要＝目標／上次進度／變化／可接續的一步，每格帶 `source`＋時間，沒有依據就給 `*_gap` 直說。
+- `webui.session_report()`／`annotate_terms()`／`session_draft()`：程序存活與工作回報分開；交接草稿只彙整既有留痕。
+- 新 action：`set_goal`（組層 `goal`／`goal_at`）、`session_draft`、`scan_dir`（只讀預覽）、`register_repos`。
+- CLI 同源：`group summary`（`summary.format_summary()`）、`group goal --text`（寫目標留 `decision`）。
+- `ROLE_PROMPT`：開場三件事、四階段責任、**範圍／行為約定／實際權限三分**（明說不是工具層權限限制）。
+
+**前端**：摘要區塊（四格＋依據＋「接續上次工作」／「寫下這組的目標」）；會話列「程序執行中 · 尚無回報 · 範圍」
+（琥珀點＝執行中但沒留痕）；「記錄結果」帶出交接草稿；關係列〔用這條關係開工作〕；空狀態〔選擇資料夾，掃描 repo〕
+四步建第一組；卡片區 `max-width:1040px`；`dirty`／`active` 等術語退出使用者可見文案。
+
+**驗證（159 tests）**：
+| 條款 | 測試 |
+|---|---|
+| defer 按鈕文案＝行為（不叫「本週排進度」）、主要動作是工作不是改 tier | `test_collect_brief.py::test_defer_label_matches_behaviour` |
+| defer 留痕講得出系統做了什麼，且 snooze 仍生效 | `test_webui.py::test_defer_trace_says_what_it_actually_did` |
+| 組別簡報不含別組待辦；全域／未分類獨立標示 | `test_collect_brief.py::test_brief_loops_stay_inside_the_named_group` |
+| 摘要每格帶依據；沒有依據直說；commit 不當進度 | `test_summary.py`（5 條） |
+| `/api/scan` 帶 summary；`set_goal` 落 decision；臨時範圍講清楚限制 | `test_webui.py::test_scan_carries_work_summary` |
+| 會話回報只認「開始後、範圍內」的留痕，程序活著不算 | `test_webui.py::test_session_report_needs_a_trace_not_a_live_process` |
+| 交接草稿只彙整既有留痕，沒有就直說 | `test_webui.py::test_session_draft_only_assembles_existing_traces` |
+| 首次使用：掃描預覽（只讀）→ 登記 → 建組，錯誤路徑有話講 | `test_webui.py::test_first_run_scan_and_register` |
+| CLI 拿得到同一份摘要與目標，且寫目標留痕 | `test_cli_e2e.py::test_group_summary_and_goal_cli` |
+
+**瀏覽器走查（Chrome 1280×900，暫存 spine，3 repo／2 組／1 條 PM 關係／1 筆到期未結）**：
+首屏摘要四格帶依據、切組後別組內容不外洩、開會話表單講清楚脈絡與權限、假 agent 從「尚無回報」變「最近留痕」、
+交接草稿帶出留痕與未結、空 spine 四步建完第一組——七項全過，console 無錯誤。
+截圖在 `docs/assets/20260912_ux_implementation/`。
+
+**未做（不宣稱）**：真 Agent 會話與其留痕行為、會話「等待回答／阻塞」狀態（目前只做到有無留痕）、
+關係建議、Windows/VDI、螢幕閱讀器、完整 WCAG、檢討 §9 的五項人工驗收（L4 真用）。

@@ -273,3 +273,27 @@ def test_relations_context_pulse_cli(tmp_path):
     run_cli("registry", "unrelate", "repo-a", "repo-b", spine_dir=spine_dir, check=True)
     r = run_cli("registry", "relations", spine_dir=spine_dir, check=True)
     assert "無關係" in r.stdout
+
+
+def test_group_summary_and_goal_cli(tmp_path):
+    """2026-09-12 §3：工作摘要與組目標在命令列也拿得到（跟工作台同一份資料）。"""
+    spine_dir = tmp_path / "s"
+    ra = make_git_repo(tmp_path, "repo-a", days_old=1)
+    run_cli("init", str(spine_dir), check=True)
+    run_cli("registry", "add", "repo-a", str(ra), spine_dir=spine_dir, check=True)
+    run_cli("group", "add", "g1", "repo-a", spine_dir=spine_dir, check=True)
+    # 還沒登記目標／沒有進度 → 摘要直說沒有依據，不編話
+    r = run_cli("group", "summary", "g1", spine_dir=spine_dir, check=True)
+    assert "# 本組工作摘要 g1" in r.stdout
+    assert "尚未登記這組的目標" in r.stdout and "脊椎沒有本組的進度紀錄" in r.stdout
+    r = run_cli("group", "goal", "g1", spine_dir=spine_dir, check=True)
+    assert "尚未登記目標" in r.stdout
+    # 寫目標＝人的動作，留痕
+    run_cli("group", "goal", "g1", "--text", "把兩個 repo 的說法對齊",
+            spine_dir=spine_dir, check=True)
+    r = run_cli("group", "summary", "g1", spine_dir=spine_dir, check=True)
+    assert "把兩個 repo 的說法對齊" in r.stdout and "registry.yaml" in r.stdout
+    r = run_cli("query", "--type", "decision", spine_dir=spine_dir, check=True)
+    assert "decision [manual] group:g1" in r.stdout      # 寫目標是人的出手，留痕
+    day = next((spine_dir / "spine" / "events").glob("*.md"))
+    assert "本組目標：把兩個 repo 的說法對齊（從 CLI）" in day.read_text(encoding="utf-8")

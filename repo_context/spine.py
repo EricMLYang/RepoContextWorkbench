@@ -157,6 +157,25 @@ def query(spine_dir, type=None, date=None, group=None, since=None):
     return out
 
 
+def in_scope(ev, group=None, ids=None):
+    """事件是否屬於某個工作組範圍：group token 相符，或 repo token 在成員內。
+    group 與 ids 都沒給＝不限範圍（「全部」）。
+
+    範圍判定只有這一份（2026-09-12 UX 檢討 §6.2：畫面宣告的組別與內容必須一致）——
+    情境卡、簡報、工作摘要、會話回報都走這裡，不各自用各自的規則。"""
+    if not group and not ids:
+        return True
+    if group is not None and ev.kv("group") == group:
+        return True
+    rid = ev.kv("repo")
+    return bool(rid and rid in set(ids or []))
+
+
+def unscoped(ev):
+    """既非某組也非某 repo 的事件（全域或未分類）——要保留就獨立標示，不併進某一組。"""
+    return not ev.kv("group") and not ev.kv("repo")
+
+
 def open_loops(spine_dir):
     """未結清單＝算出來的視圖：opened 過、之後沒有 closed 事件 ref 到它。"""
     opened, closed = {}, set()

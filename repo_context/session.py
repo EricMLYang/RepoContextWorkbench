@@ -14,7 +14,8 @@ from . import context as _context
 from . import pack as _pack
 from . import registry, spine
 
-DEFAULT_TASK = "先讀情境卡，用 3 行告訴我這組現況（活動、異常、未結），再問我要做什麼"
+DEFAULT_TASK = ("先讀情境卡，用 3 行說明：你拿到哪些脈絡、這次預計產出什麼、"
+                "哪些動作需要我先確認，再問我要做什麼")
 
 
 def ensure_mcp_json(spine_dir):

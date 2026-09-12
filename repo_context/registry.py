@@ -148,6 +148,30 @@ def add_group(spine_dir, name, members, landing="default"):
     save(spine_dir, data)
 
 
+def get_group(spine_dir, name):
+    for g in load(spine_dir)["groups"]:
+        if g["name"] == name:
+            return g
+    raise ValueError(f"組不存在: {name}")
+
+
+def set_group_field(spine_dir, name, key, value):
+    """組層欄位就地更新（目前用於 `goal`：使用者一句話的工作目標）。
+    值為空＝刪掉這個欄位（2026-09-12 §3：目標只有人能給，沒給就誠實說沒有）。"""
+    if key not in ("goal", "goal_at", "landing"):
+        raise ValueError(f"不支援的組欄位: {key}")
+    data = load(spine_dir)
+    for g in data["groups"]:
+        if g["name"] == name:
+            if value in (None, ""):
+                g.pop(key, None)
+            else:
+                g[key] = value
+            save(spine_dir, data)
+            return g
+    raise ValueError(f"組不存在: {name}")
+
+
 def resolve_group(spine_dir, name=None, repos=None):
     """回傳 (組名, [repo entries])。repos 給定＝臨時組合免建組（P2）；
     name=None 且無 repos＝全部（工作台的（全部）範圍——L4 bug：以前這裡直接炸）。"""

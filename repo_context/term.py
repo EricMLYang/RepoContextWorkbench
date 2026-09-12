@@ -9,6 +9,7 @@ PTY 會話管理：
   TUI 的 escape sequence 與半個 UTF-8 序列都不會被折斷）
 """
 import collections
+import datetime as _dt
 import itertools
 import os
 import shutil
@@ -25,6 +26,9 @@ class TermSession:
         self.sid = sid
         self.title = title or os.path.basename(str(cmd[0]))
         self.alive = True
+        # 開始時間＝之後判斷「這個會話期間有沒有留痕」的起點
+        # （2026-09-12 檢討 §5：程序存活不等於工作在推進）
+        self.started = f"{_dt.datetime.now():%Y-%m-%d %H:%M}"
         self._on_exit = on_exit   # 進程自然結束時回呼（agent 偵測 marker 清理）
         self._buf = collections.deque()   # bytes chunks
         self._buf_len = 0
@@ -232,6 +236,8 @@ class TermManager:
                  "kind": getattr(s, "kind", "shell"),
                  "origin": getattr(s, "origin", None),
                  "scope": getattr(s, "scope", None),
+                 "scope_repos": getattr(s, "scope_repos", None),
+                 "started": getattr(s, "started", None),
                  "task": getattr(s, "task", None)}
                 for s in self.sessions.values()]
 

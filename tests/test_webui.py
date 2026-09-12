@@ -132,7 +132,7 @@ def test_page_and_state(server):
     assert code == 200
     for key in ("工作台", "碰撞台", "收件匣", "待處理", "Repo 狀態",
                 "牌", "臨時組", "會話", "終端", "存成今日簡報", "活動記錄",
-                "關係", "組會話", "近期 commit", "相關 repo"):
+                "關係", "組會話", "近期 commit", "相關 repo", "工作摘要"):
         assert key in html
     for asset in ("workbench.css", "workbench.js"):
         assert f'/static/{asset}' in html
@@ -294,7 +294,7 @@ def test_cards_collision_pending_then_judged(spine_with_repos):
     assert {"route_collision", "term_create", "ignore"} <= names
     labels = [a["label"] for a in c["actions"]]
     assert any(l.startswith("照建議落") for l in labels)
-    assert "深撞" in "".join(labels) and "丟棄並記錄" in labels
+    assert "與 Agent 深入討論" in labels and "丟棄並記錄" in labels
     assert len([l for l in labels if "incubator" in l]) == 1   # 建議＝incubator 時不重複出「升格」
 
 
@@ -500,3 +500,101 @@ def test_session_note_records_result_without_claiming_adoption(spine_with_repos)
     events = spine_mod.query(sp, type="decision")
     assert events[-1].kv("group") == "g1" and "完成檢查" in events[-1].body
     assert not spine_mod.query(sp, type="outcome")
+
+# ── 2026-09-12 UX 檢討落地 ────────────────────────────────
+
+def test_defer_trace_says_what_it_actually_did(spine_with_repos):
+    """§6.1 驗收：按鈕文字、執行效果、成功回傳與活動紀錄要講同一件事。"""
+    r = webui._handle_action(spine_with_repos, "defer",
+                             {"id": "repo-b", "qkind": "dirty", "days": 7})
+    assert r["ok"] and r["until"] and r["days"] == 7
+    ev = spine_mod.query(spine_with_repos, type="chosen")[-1]
+    first = ev.body.splitlines()[0]
+    assert "7 天後再提醒" in first and "沒有安排任何進度" in first
+    assert "排進度" not in ev.body
+    # 人話在前，機器仍讀得到 snooze token（同一問句 7 天內不再浮出）
+    assert not [c for c in webui.build_scan(spine_with_repos, "g1")["question_cards"]
+                if c["repo"] == "repo-b"]
+
+
+def test_scan_carries_work_summary(spine_with_repos):
+    """§3：首屏要能回答『這組在做什麼、上次做到哪、接下來一步』，每格帶依據。"""
+    sc = webui.build_scan(spine_with_repos, "g1")
+    s = sc["summary"]
+    assert s["group"] == "g1" and set(s) >= {"goal", "progress", "changes", "next",
+                                             "gaps", "resume_task"}
+    assert s["goal"] is None and s["goal_gap"]      # 沒登記目標就直說
+    r = webui._handle_action(spine_with_repos, "set_goal",
+                             {"group": "g1", "text": "把兩個 repo 的說法對齊"})
+    assert r["ok"]
+    s2 = webui.build_scan(spine_with_repos, "g1")["summary"]
+    assert s2["goal"]["text"] == "把兩個 repo 的說法對齊" and s2["goal"]["at"]
+    assert spine_mod.query(spine_with_repos, type="decision")[-1].kv("group") == "g1"
+    # 臨時範圍沒有牌組可掛目標 → 講清楚，不靜默失敗
+    assert "error" in webui._handle_action(spine_with_repos, "set_goal",
+                                           {"group": "", "text": "x"})
+
+
+def test_session_report_needs_a_trace_not_a_live_process(spine_with_repos):
+    """§5：程序存活不代表工作在推進——沒有留痕就是『尚無回報』。"""
+    started = f"{dt.datetime.now():%Y-%m-%d} 09:00"
+    term = {"sid": "t1", "title": "claude · 對齊驗收", "kind": "agent",
+            "scope": "g1", "scope_repos": ["repo-a", "repo-b"],
+            "started": started, "alive": True}
+    rows = webui.annotate_terms(spine_with_repos, [term])
+    assert rows[0]["report"] is None and rows[0]["report_basis"]
+    # 會話開始前的留痕不算
+    spine_mod.append_event(spine_with_repos, "decision", "agent", ["group:g1"],
+                           body="開會話前就寫過的判斷", when=_t(8, 0))
+    assert webui.annotate_terms(spine_with_repos, [term])[0]["report"] is None
+    # 別組的留痕也不算
+    spine_mod.append_event(spine_with_repos, "decision", "agent", ["group:other"],
+                           body="別組的判斷", when=_t(10, 0))
+    assert webui.annotate_terms(spine_with_repos, [term])[0]["report"] is None
+    # 會話期間、本組的留痕才是回報，而且看得出是誰寫的
+    spine_mod.append_event(spine_with_repos, "decision", "agent", ["group:g1"],
+                           body="比對完兩邊驗收條件", when=_t(11, 0))
+    rep = webui.annotate_terms(spine_with_repos, [term])[0]["report"]
+    assert rep["text"] == "比對完兩邊驗收條件" and rep["source"] == "agent"
+    assert rep["type"] == "decision" and rep["at"].endswith("11:00")
+
+
+def test_session_draft_only_assembles_existing_traces(spine_with_repos):
+    """§5：交接草稿由既有留痕組成——沒有留痕就直說沒有，不編造成果。"""
+    started = f"{dt.datetime.now():%Y-%m-%d} 09:00"
+    term = {"sid": "t1", "title": "claude · 對齊驗收", "kind": "agent",
+            "scope": "g1", "scope_repos": ["repo-a", "repo-b"], "started": started}
+    d = webui.session_draft(spine_with_repos, term)
+    assert d["traces"] == 0 and "沒有留痕" in d["text"]
+    assert "下次從哪裡接回" in d["text"] and "尚未儲存" in d["note"]
+    spine_mod.append_event(spine_with_repos, "decision", "agent", ["group:g1"],
+                           body="比對完兩邊驗收條件", when=_t(11, 0))
+    spine_mod.append_event(spine_with_repos, "open-loop", "agent",
+                           ["#3", "group:g1", "due:2099-01-01"],
+                           body="補齊缺的驗收條件", when=_t(11, 5))
+    d2 = webui.session_draft(spine_with_repos, term)
+    assert d2["traces"] == 2 and "比對完兩邊驗收條件" in d2["text"]
+    assert "#3" in d2["text"] and d2["loops"] == 1
+
+
+@pytest.mark.e2e
+def test_first_run_scan_and_register(server, tmp_path):
+    """§7：首次使用可以在介面完成——選資料夾 → 預覽 → 建第一組。"""
+    from tests.conftest import make_git_repo
+    base = tmp_path / "workspace"
+    make_git_repo(base, "fresh-one", days_old=1)
+    make_git_repo(base, "fresh-two", days_old=1)
+    (base / "not-a-repo").mkdir()
+    base_, spine_dir = server
+    code, r = _post(base_, "/api/scan_dir", {"dir": str(base)})
+    assert code == 200 and {c["id"] for c in r["candidates"]} == {"fresh-one", "fresh-two"}
+    code, bad = _post(base_, "/api/scan_dir", {"dir": str(tmp_path / "nope")})
+    assert code == 400 and "目錄不存在" in bad["error"]
+    code, r = _post(base_, "/api/register_repos",
+                    {"repos": r["candidates"], "group": "第一組"})
+    assert code == 200 and r["added"] == ["fresh-one", "fresh-two"] and r["group"] == "第一組"
+    from repo_context import registry
+    assert registry.get_group(spine_dir, "第一組")["members"] == ["fresh-one", "fresh-two"]
+    assert "登記 2 個 repo" in spine_mod.query(spine_dir, type="decision")[-1].body
+    code, r = _post(base_, "/api/register_repos", {"repos": []})
+    assert code == 400
