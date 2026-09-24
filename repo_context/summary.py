@@ -101,6 +101,27 @@ def _changes(states, spine_dir, gkey, ids, scoped, since, limit=4):
     return out
 
 
+_HANDOFF_NEXT = "下次從這裡接："
+
+
+def _handoff_next(spine_dir, gkey, ids, scoped):
+    """本組最後一筆交接 decision 的「下次從這裡接」；沒有就 None。"""
+    best = None
+    for ev in spine.iter_events(spine_dir):
+        if ev.type != "decision" or not (ev.body or "").startswith("交接"):
+            continue
+        if scoped and not spine.in_scope(ev, gkey, ids):
+            continue
+        best = ev
+    if best is None:
+        return None
+    line = next((ln for ln in best.body.splitlines() if ln.startswith(_HANDOFF_NEXT)), "")
+    text = line[len(_HANDOFF_NEXT):].strip()
+    if not text:
+        return None
+    return _fact(text, f"脊椎 交接 decision [{best.source}]", _stamp(best))
+
+
 def _next_step(spine_dir, gkey, ids, scoped, cards, today):
     """可接續的一步＝有依據的一件事：先看到期未結，再看觸發閾值的問句。"""
     due_best = None
@@ -112,6 +133,12 @@ def _next_step(spine_dir, gkey, ids, scoped, cards, today):
             continue
         if due_best is None or due < due_best[0]:
             due_best = (due, ev)
+    overdue = due_best and due_best[0] < today
+    if not overdue:
+        # 上次交接留下的下一步（agentapi.handoff 寫的 decision）排在逾期之後、一般到期之前
+        ho = _handoff_next(spine_dir, gkey, ids, scoped)
+        if ho:
+            return ho, None
     if due_best:
         due, ev = due_best
         num = next((t for t in ev.tokens if t.startswith("#")), "#?")

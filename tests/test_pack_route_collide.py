@@ -162,3 +162,13 @@ def test_collide_adhoc_repos_token_roundtrip(spine_with_repos):
     assert opened.kv("group") == "臨時(repo-a)"
     j = collide.run_judgement(spine_with_repos, cid)  # 不給 group/repos
     assert j is not None and j["判定"] in ("已知", "衝突", "真增量")
+
+
+def test_doc_files_keep_non_ascii_names(tmp_path):
+    """git 預設把非 ASCII 路徑跳脫加引號——中文檔名的卡片曾經整批被略過（2026-09-25）。"""
+    from tests.conftest import make_git_repo
+    r = make_git_repo(tmp_path, "cards")
+    (r / "卡片").mkdir()
+    (r / "卡片" / "決策平台.md").write_text("# 決策平台\n", encoding="utf-8")
+    names = {p.name for p in pack._doc_files(r)}
+    assert "決策平台.md" in names

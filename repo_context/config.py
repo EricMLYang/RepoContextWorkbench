@@ -47,3 +47,44 @@ def load(spine_dir):
     if p.exists():
         data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     return _merge(DEFAULTS, data)
+
+
+# ---- 使用者層設定（2026-09-25 Agent 友善輪）----
+# agent 從任何 repo 開起來都要找得到 spine：不能每個指令都帶 --spine、也不能靠 cwd。
+# 解析順序：--spine ＞ $REPOENGINE_SPINE ＞ 使用者設定檔 ＞ cwd。`ctx setup` 寫這個檔。
+
+def user_config_path():
+    import os
+    base = os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")
+    return Path(base) / "repo-context" / "config.json"
+
+
+def load_user_config():
+    import json
+    try:
+        return json.loads(user_config_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_user_config(data):
+    import json
+    p = user_config_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    return p
+
+
+def is_spine(d):
+    d = Path(d)
+    return (d / "config.yaml").exists() or (d / "registry.yaml").exists()
+
+
+def find_spine(explicit=None):
+    """回傳 spine 路徑或 None（呼叫端決定要報錯還是靜默——hook 要靜默）。"""
+    import os
+    for cand in (explicit, os.environ.get("REPOENGINE_SPINE"),
+                 load_user_config().get("spine"), "."):
+        if cand and is_spine(Path(cand).expanduser()):
+            return Path(cand).expanduser().resolve()
+    return None

@@ -26,6 +26,23 @@ def qkind_name(qkind):
     return QKIND_NAME.get(qkind, qkind)
 
 
+def snoozed(spine_dir, today=None):
+    """defer 留痕（chosen [monitor] repo:<id> body 'snooze:<qkind> until:<date>'）→ {(repo, qkind)}。"""
+    today = today or f"{_dt.date.today():%Y-%m-%d}"
+    out = set()
+    for ev in spine.query(spine_dir, type="chosen"):
+        # 人話寫在第一行、snooze: token 可能在任一行（舊事件在第一行，兩種都認）
+        head = next((ln.split() for ln in (ev.body or "").splitlines()
+                     if ln.startswith("snooze:")), None)
+        if not head:
+            continue
+        qkind = head[0][len("snooze:"):]
+        until = next((h[len("until:"):] for h in head if h.startswith("until:")), "")
+        if until >= today:
+            out.add((ev.kv("repo"), qkind))
+    return out
+
+
 def _act(label, action, **payload):
     return {"label": label, "action": action, "payload": payload}
 

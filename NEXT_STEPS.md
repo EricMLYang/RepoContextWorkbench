@@ -9,6 +9,17 @@
 > **改 UI 先截圖自看**：`python scripts/screenshot.py <spine> --demo`（headless Edge，30 秒）。
 > 入口：`python -m repo_context --spine <spine> app`（桌面視窗；需 `pip install pywebview`）。
 
+## 0. 先掛上 agent（2026-09-25 Agent 友善輪，約 10 分鐘）
+
+```powershell
+ctx setup --spine <spine> --claude --dry-run   # 看會改哪些檔（~/.claude/settings.json 會先備份 .bak-ctx）
+ctx setup --spine <spine> --claude
+```
+
+然後在兩個已登記的真 repo 各開一次 Claude Code：開場有沒有注入「你在 X，工作範圍 Y」？
+叫它做一件小事並收尾——它有沒有呼叫 `handoff`？隔天再開，「上次交接」與「下一步」接得上嗎？
+沒交接就關掉的會話，工作台收件匣應該出現一筆「agent 會話結束但沒有交接」。
+
 ## 1. 跑 L4 驗收腳本（約 30 分鐘，`VERIFICATION.md` 有完整版）
 
 ```powershell

@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from . import agentapi as _api
 from . import brief as _brief
 from . import collect as _collect
 from . import context as _context
@@ -51,12 +52,45 @@ pack:
 SCAFFOLD_GITIGNORE = ".engine.lock\n.state/\n.agent_logs/\n"
 
 
+# exit code 約定（agent 靠它分支，不必讀中文）：
+#   0 成功｜1 稽核／lint 有紅字或一般失敗｜2 用法錯誤或 agent 請求被拒（--json 時 stdout 有 {ok:false,...}）
+#   3 找不到 spine（先 `ctx init` 或 `ctx setup --spine <路徑>`）
+EXIT_FINDINGS, EXIT_REJECTED, EXIT_NO_SPINE = 1, 2, 3
+
+
 def _spine_dir(args):
-    d = args.spine or os.environ.get("REPOENGINE_SPINE") or "."
-    d = Path(d).expanduser()
-    if not (d / "config.yaml").exists() and not (d / "registry.yaml").exists():
-        sys.exit(f"錯誤：{d} 不是 spine repo（找不到 config.yaml；先跑 init）")
+    """--spine ＞ $REPOENGINE_SPINE ＞ 使用者設定檔（ctx setup 寫的）＞ cwd。"""
+    explicit = getattr(args, "spine", None)
+    if explicit and not _config.is_spine(Path(explicit).expanduser()):
+        _fail(args, "no_spine", f"{explicit} 不是 spine repo（找不到 config.yaml；先跑 init）",
+              code=EXIT_NO_SPINE)
+    d = _config.find_spine(explicit)
+    if d is None:
+        _fail(args, "no_spine",
+              "找不到 spine repo：用 --spine 指定、設 REPOENGINE_SPINE，"
+              "或跑一次 `ctx setup --spine <路徑>` 記住它",
+              code=EXIT_NO_SPINE)
     return d
+
+
+def _fail(args, error, message, hint=None, code=EXIT_REJECTED):
+    if getattr(args, "json", False):
+        out = {"ok": False, "error": error, "message": message}
+        if hint:
+            out["hint"] = hint
+        print(json.dumps(out, ensure_ascii=False))
+        sys.exit(code)
+    sys.exit(f"錯誤：{message}" + (f"\n提示：{hint}" if hint else ""))
+
+
+def _emit(args, obj, human):
+    """--json 印 obj；否則印 human(obj) 回傳的文字。"""
+    if getattr(args, "json", False):
+        print(json.dumps(obj, ensure_ascii=False, indent=1))
+    else:
+        text = human(obj)
+        if text:
+            print(text)
 
 
 def cmd_init(args):
@@ -98,8 +132,9 @@ def cmd_registry(args):
             remove=args.remove.split(",") if args.remove else None)
         print(f"{args.id} tags: {', '.join(tags) or '（無）'}")
     elif args.action == "list":
-        for r in _registry.load(d)["repos"]:
-            print(f"{r['id']:<24} {r.get('type','mine'):<9} {r.get('tier','?'):<9} {r['path']}")
+        _emit(args, _registry.load(d)["repos"], lambda rows: "\n".join(
+            f"{r['id']:<24} {r.get('type','mine'):<9} {r.get('tier','?'):<9} {r['path']}"
+            for r in rows))
     elif args.action == "scan":
         # mani「init 自動掃描＋手寫補語意」混合模式：預設只列候選，--apply 才登記
         base = args.id
@@ -174,8 +209,8 @@ def cmd_group(args):
         print(_context.build_context(d, args.name or None, args.members or None))
     elif args.action == "summary":
         # 本組工作摘要（2026-09-12 §3）：工作台首屏同一份資料，每格帶依據
-        print(_summary.format_summary(
-            _summary.build_summary(d, args.name or None, args.members or None)))
+        _emit(args, _summary.build_summary(d, args.name or None, args.members or None),
+              _summary.format_summary)
     elif args.action == "goal":
         # 目標只有人能寫（機器不替你發明）；不給 --text＝只讀
         if not args.name:
@@ -192,14 +227,14 @@ def cmd_group(args):
                                       else "清除本組目標（從 CLI）"), when=now)
             print(f"目標已記在 {args.name}" if args.text else f"已清除 {args.name} 的目標")
     else:
-        for g in _registry.load(d)["groups"]:
-            print(f"{g['name']:<20} {','.join(g['members'])}")
+        _emit(args, _registry.load(d)["groups"], lambda gs: "\n".join(
+            f"{g['name']:<20} {','.join(g['members'])}" for g in gs))
 
 
 def cmd_collect(args):
     d = _spine_dir(args)
     _, entries = _registry.resolve_group(d, args.group, args.repos)
-    print(_collect.format_table(_collect.collect_group(entries, d)))
+    _emit(args, _collect.collect_group(entries, d), _collect.format_table)
 
 
 def cmd_pulse(args):
@@ -280,7 +315,11 @@ def cmd_query(args):
         print(f"生出 repo {sv['spawned']} 個｜存活 {sv['alive']}｜存活率 {srate}")
         return
     date = f"{_dt.date.today():%Y-%m-%d}" if args.today else args.date
-    for ev in _spine.query(d, type=args.type, date=date, group=args.group):
+    evs = _spine.query(d, type=args.type, date=date, group=args.group)
+    if args.json:
+        _emit(args, [_api.event_dict(ev) for ev in evs], None)
+        return
+    for ev in evs:
         print(f"{ev.date} {ev.header()}")
         if args.verbose and ev.body:
             print("   " + ev.body.replace("\n", "\n   "))
@@ -289,6 +328,13 @@ def cmd_query(args):
 def cmd_loops(args):
     d = _spine_dir(args)
     loops = _spine.open_loops(d)
+    if args.group or args.repos:
+        _, entries = _registry.resolve_group(d, args.group, args.repos)
+        ids = [e["id"] for e in entries]
+        loops = [ev for ev in loops if _spine.in_scope(ev, args.group, ids)]
+    if args.json:
+        _emit(args, [_api.loop_dict(ev) for ev in loops], None)
+        return
     if not loops:
         print("無未結 open loops")
     for ev in loops:
@@ -404,7 +450,7 @@ def cmd_session(args):
 
 def cmd_mcp(args):
     from . import mcpserver
-    mcpserver.serve(_spine_dir(args))
+    mcpserver.serve(_spine_dir(args), admin=args.admin)
 
 
 def cmd_ui(args):
@@ -418,9 +464,172 @@ def cmd_app(args):
     webui.serve_window(_spine_dir(args), port=args.port)
 
 
+# ---- agent 介面（2026-09-25 Agent 友善輪）：agentapi 的 CLI 入口，--json 回結構化結果 ----
+
+def _agent_call(args, fn, human, **kw):
+    d = _spine_dir(args)
+    try:
+        res = fn(d, **{k: v for k, v in kw.items() if v not in (None, "")})
+    except _api.AgentError as e:
+        _fail(args, e.code, e.message, e.hint)
+    except ValueError as e:  # registry 找不到組／repo 等
+        _fail(args, "bad_request", str(e))
+    _emit(args, res, human)
+
+
+def _h_where(r):
+    if r.get("repo"):
+        g = "、".join(r["groups"]) or "（不在任何組）"
+        out = f"repo：{r['repo']['id']}（{r['repo']['path']}）\n組：{g}"
+    else:
+        out = "這個目錄沒有登記" + ("（在 spine 裡）" if r["in_spine"] else "")
+    for k in ("note", "hint"):
+        if r.get(k):
+            out += f"\n{r[k]}"
+    return out
+
+
+def _h_next(r):
+    out = [f"# 下一步（{r['scope']['label']}）"]
+    if r.get("goal"):
+        out.append(f"目標：{r['goal']}")
+    for i, it in enumerate(r["items"], 1):
+        tag = it.get("id") or it.get("ref") or it.get("repo") or ""
+        out.append(f"{i}. [{it['kind']}] {tag} {it['text']}".replace("  ", " "))
+        out.append(f"   為什麼：{it['why']}")
+    if r.get("note"):
+        out.append(r["note"])
+    return "\n".join(out)
+
+
+def _h_search(r):
+    out = [f"# 相關度（{r['scope']}，索引 {r.get('indexed_files', 0)} 檔）：{r['query'][:40]}"]
+    if r.get("note"):
+        out.append(r["note"])
+    if r["repos"]:
+        out.append("repo 排名：" + "、".join(f"{x['repo']}({x['score']})" for x in r["repos"][:6]))
+    for f in r["files"]:
+        out.append(f"- {f['repo']}/{f['file']}  {f['score']}")
+        for sn in f["snippets"]:
+            out.append(f"    L{sn['line']}: {sn['text']}")
+    return "\n".join(out)
+
+
+def _h_written(r):
+    ev = r.get("event") or {}
+    bits = [r.get("ref") or r.get("id") or ""]
+    if r.get("todos"):
+        bits.append("新未結 " + " ".join(r["todos"]))
+    if ev.get("text"):
+        bits.append(ev["text"])
+    return "已寫入：" + "｜".join(b for b in bits if b)
+
+
+def cmd_where(args):
+    _agent_call(args, _api.where_am_i, _h_where, cwd=args.cwd)
+
+
+def cmd_context(args):
+    _agent_call(args, _api.context_for, lambda r: r.get("card") or "",
+                cwd=args.cwd, group=args.group, repos=args.repos)
+
+
+def cmd_next(args):
+    _agent_call(args, _api.next_work, _h_next, cwd=args.cwd, group=args.group,
+                repos=args.repos, limit=args.limit)
+
+
+def cmd_log(args):
+    _agent_call(args, _api.log_decision, _h_written, text=args.text, ref=args.ref,
+                cwd=args.cwd, group=args.group, repos=args.repos,
+                cross_scope_ok=args.cross_scope_ok, source=args.source)
+
+
+def cmd_todo(args):
+    if args.action == "add":
+        _agent_call(args, _api.add_todo, _h_written, text=args.text, due=args.due,
+                    cwd=args.cwd, group=args.group, repos=args.repos,
+                    cross_scope_ok=args.cross_scope_ok, source=args.source)
+    else:
+        _agent_call(args, _api.close_todo,
+                    lambda r: f"已關閉 {r['id']}：{r['closed']}",
+                    id=args.text, note=args.note, cwd=args.cwd,
+                    cross_scope_ok=args.cross_scope_ok, source=args.source)
+
+
+def cmd_status(args):
+    _agent_call(args, _api.report_status,
+                lambda r: f"狀態：{r['status']['status']}（{r['status']['scope']}）",
+                status=args.status, text=args.text, cwd=args.cwd,
+                group=args.group, repos=args.repos)
+
+
+def cmd_handoff(args):
+    _agent_call(args, _api.handoff, _h_written, done=args.done,
+                next_step=args.next_step, remaining=args.remaining, cwd=args.cwd,
+                group=args.group, repos=args.repos,
+                cross_scope_ok=args.cross_scope_ok, source=args.source)
+
+
+def cmd_search(args):
+    _agent_call(args, _api.search_knowledge, _h_search,
+                query=" ".join(args.query) if args.query else
+                (Path(args.file).read_text(encoding="utf-8") if args.file else ""),
+                cwd=args.cwd, group=args.group, repos=args.repos,
+                everywhere=not args.here, limit=args.limit,
+                exclude_paths=[args.file] if args.file else None)
+
+
+def cmd_hook(args):
+    """Claude Code hook 入口：stdin 是 hook JSON。永遠 exit 0——hook 壞掉不能擋住開 agent。"""
+    from . import hooks as _hooks
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+    except ValueError:
+        payload = {}
+    d = _config.find_spine(args.spine)
+    if d is None:
+        return
+    if args.event == "session-start":
+        out = _hooks.session_start(d, payload)
+        if out:
+            print(out)
+    else:
+        _hooks.session_end(d, payload)
+
+
+def cmd_instructions(args):
+    """給 agent 的使用說明（skill 本體）——可貼進 AGENTS.md／GEMINI.md 給沒有 skill 機制的 agent。"""
+    from . import agentsetup as _setup
+    print(_setup.skill_text(frontmatter=False))
+
+
+def cmd_setup(args):
+    from . import agentsetup as _setup
+    spine_arg = args.spine_path or args.spine
+    if spine_arg:
+        d = Path(spine_arg).expanduser().resolve()
+        if not _config.is_spine(d):
+            _fail(args, "no_spine", f"{d} 不是 spine repo（先跑 `ctx init {d}`）",
+                  code=EXIT_NO_SPINE)
+    else:
+        d = _spine_dir(args)
+    steps = _setup.plan(d, claude=args.claude)
+    for st in steps:
+        print(("（試跑）" if args.dry_run else "") + st["desc"])
+        if not args.dry_run:
+            msg = st["run"]()
+            if msg:
+                print(f"  → {msg}")
+    if args.dry_run:
+        print("加上不帶 --dry-run 再跑一次才會真的寫入。")
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="ctx", description="repo-context 工作台：把一群 repo 分成組，每組組成一份 context")
-    p.add_argument("--spine", help="spine repo 路徑（預設 $REPOENGINE_SPINE 或 cwd）")
+    p.add_argument("--spine", help="spine repo 路徑（預設 $REPOENGINE_SPINE → ctx setup 記住的 → cwd）")
+    p.add_argument("--json", action="store_true",
+                   help="結構化輸出（agent 用；錯誤也是 JSON，exit code 見 cli.py 開頭）")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("init", help="建 spine repo scaffold")
@@ -492,7 +701,9 @@ def build_parser():
     s.add_argument("-v", "--verbose", action="store_true")
     s.set_defaults(func=cmd_query)
 
-    s = sub.add_parser("loops", help="未結 open loops（P11 視圖）")
+    s = sub.add_parser("loops", help="未結 open loops（P11 視圖；可依組過濾）")
+    s.add_argument("--group")
+    s.add_argument("--repos")
     s.set_defaults(func=cmd_loops)
 
     s = sub.add_parser("lint", help="脊椎衛生迴圈（ref 斷鏈/逾期 loop/碰撞無回程/dead-letter）")
@@ -560,7 +771,9 @@ def build_parser():
                    help="只印指令不開視窗")
     s.set_defaults(func=cmd_session)
 
-    s = sub.add_parser("mcp", help="MCP server（stdio；agent 的介面＝人的介面）")
+    s = sub.add_parser("mcp", help="MCP server（stdio）；預設只開工作層工具，--admin 另開維護工具")
+    s.add_argument("--admin", action="store_true", default=None,
+                   help="另開管理層工具（registry／組／打包／碰撞／升格）")
     s.set_defaults(func=cmd_mcp)
 
     s = sub.add_parser("app", help="S4 工作台桌面視窗（IDE 風格＋內嵌 terminal；"
@@ -572,11 +785,95 @@ def build_parser():
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--no-browser", action="store_true")
     s.set_defaults(func=cmd_ui)
+
+    # ---- agent 介面 ----
+    def scoped(sp, write=False):
+        sp.add_argument("--cwd", help="用哪個目錄推主場（預設目前目錄）")
+        sp.add_argument("--group", help="組名（省略＝主場）")
+        sp.add_argument("--repos", help="逗號分隔 repo id（臨時組合）")
+        if write:
+            sp.add_argument("--cross-scope-ok", dest="cross_scope_ok", action="store_true",
+                            help="寫入主場以外（使用者同意後才用）")
+            sp.add_argument("--source", default="agent",
+                            help="留痕來源（預設 agent；人手動記用 manual）")
+
+    s = sub.add_parser("where", help="我在哪：cwd 屬於哪個 repo／組（agent 開場用）")
+    s.add_argument("--cwd")
+    s.set_defaults(func=cmd_where)
+
+    s = sub.add_parser("context", help="主場的完整脈絡（--json：目標／交接／下一步／未結／事件）")
+    scoped(s)
+    s.set_defaults(func=cmd_context)
+
+    s = sub.add_parser("next", help="接下來值得做什麼（每項附依據）")
+    scoped(s)
+    s.add_argument("--limit", type=int, default=5)
+    s.set_defaults(func=cmd_next)
+
+    s = sub.add_parser("log", help="記一筆判斷（decision），回傳可引用的 ref")
+    s.add_argument("text")
+    s.add_argument("--ref", help="相關事件 ref，例 decision:2026-09-25-d1")
+    scoped(s, write=True)
+    s.set_defaults(func=cmd_log)
+
+    s = sub.add_parser("todo", help="未結事項：add <文字> [--due] ／ close <#N> [--note]")
+    s.add_argument("action", choices=["add", "close"])
+    s.add_argument("text", help="add：要做的事；close：編號（#3 或 3）")
+    s.add_argument("--due", help="YYYY-MM-DD")
+    s.add_argument("--note", help="close 時：怎麼結的")
+    scoped(s, write=True)
+    s.set_defaults(func=cmd_todo)
+
+    s = sub.add_parser("status", help="回報 agent 階段：working／waiting／blocked／done")
+    s.add_argument("status", choices=list(_api.STATUSES))
+    s.add_argument("text", nargs="?", default="")
+    scoped(s)
+    s.set_defaults(func=cmd_status)
+
+    s = sub.add_parser("handoff", help="收尾交接：--done 完成了什麼 --next 下次從哪接 [--remaining 新事項 ...]")
+    s.add_argument("--done", required=True)
+    s.add_argument("--next", dest="next_step", required=True)
+    s.add_argument("--remaining", action="append", help="還沒做完的新事項（可重複；各開一個未結）")
+    scoped(s, write=True)
+    s.set_defaults(func=cmd_handoff)
+
+    s = sub.add_parser("search", help="知識 ↔ repo 相關度：這段文字跟哪些 repo 的哪些檔最相關")
+    s.add_argument("query", nargs="*")
+    s.add_argument("--file", help="拿一個檔的內容當查詢（例：一張新卡片）")
+    s.add_argument("--here", action="store_true", help="只搜主場範圍（預設搜全部 repo）")
+    s.add_argument("--limit", type=int, default=8)
+    scoped(s)
+    s.set_defaults(func=cmd_search)
+
+    s = sub.add_parser("hook", help="Claude Code hook 入口（stdin 讀 hook JSON；ctx setup --claude 會掛好）")
+    s.add_argument("event", choices=["session-start", "session-end"])
+    s.set_defaults(func=cmd_hook)
+
+    s = sub.add_parser("instructions", help="印出給 agent 的使用說明（可貼進 AGENTS.md）")
+    s.set_defaults(func=cmd_instructions)
+
+    s = sub.add_parser("setup", help="記住 spine 位置；--claude 另外掛 MCP（user scope）＋hooks＋skill")
+    s.add_argument("--spine", dest="spine_path", help="spine repo 路徑")
+    s.add_argument("--claude", action="store_true",
+                   help="註冊 Claude Code：MCP server、SessionStart/SessionEnd hooks、skill")
+    s.add_argument("--dry-run", action="store_true", help="只列出會做什麼")
+    s.set_defaults(func=cmd_setup)
     return p
 
 
 def main(argv=None):
+    # 不再需要先設 PYTHONUTF8：輸出一律 UTF-8（Windows cp950 主控台也不會炸）
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
+    # --json 放在子命令前後都認（agent 自然會寫 `ctx where --json`）
+    argv = list(sys.argv[1:] if argv is None else argv)
+    as_json = "--json" in argv
+    argv = [a for a in argv if a != "--json"]
     args = build_parser().parse_args(argv)
+    args.json = as_json
     if args.cmd == "collide" and args.action == "run":
         args.cid = args.cid or args.idea  # collide run <cid> 位置參數
     args.func(args)

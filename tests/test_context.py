@@ -26,7 +26,7 @@ def test_context_card_sections(spine_with_repos):
     assert "#7" in text and "驗證 Y" in text
     assert "決定先做 a" in text and "別組的事" not in text
     # 角色說明是通用措辭：講「組管家」，並點名留痕工具
-    assert "組管家" in text and "spine_append" in text
+    assert "組管家" in text and "log_decision" in text and "handoff" in text
 
 
 def test_context_role_prompt_override(spine_with_repos):

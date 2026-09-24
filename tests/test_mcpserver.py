@@ -5,10 +5,11 @@ from repo_context import mcpserver
 from repo_context import spine as spine_mod
 
 
-def _call(spine_dir, method, params=None, mid=1):
+def _call(spine_dir, method, params=None, mid=1, admin=True, cwd=None):
+    # 這支檔測原語往返，預設開管理層；工作層與分層規則見 test_agentapi.py
     return mcpserver.handle_message(
         spine_dir, {"jsonrpc": "2.0", "id": mid, "method": method,
-                    "params": params or {}})
+                    "params": params or {}}, admin=admin, cwd=cwd)
 
 
 def _tool(spine_dir, name, args=None):

@@ -39,6 +39,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from . import agentapi as _agentapi
 from . import brief as _brief
 from . import collect as _collect
 from . import collide as _collide
@@ -340,6 +341,9 @@ def annotate_terms(spine_dir, terms, events=None, data=None):
         else:
             group, ids = _session_scope(t, data)
             rec["report"] = session_report(t, events, data)
+            # agent 自己回報的階段（report_status）——只認會話開始後的，舊的不算
+            st = _agentapi.get_status(spine_dir, {"group": group, "repos": ids})
+            rec["agent_status"] = st if st and st.get("at", "") >= (t.get("started") or "~") else None
             # 依據要說得出口：範圍認得出來就講範圍，認不出來就說沒再過濾
             rec["report_basis"] = (
                 f"會話開始後、範圍內（{group or '、'.join(ids)}）的脊椎留痕"
@@ -373,7 +377,7 @@ def session_draft(spine_dir, term, events=None, data=None):
             first = (ev.body or "").splitlines()[0] if ev.body else " ".join(ev.tokens)
             lines.append(f"- {ev.date} {ev.time} {ev.type} [{ev.source}] {first}")
     else:
-        lines.append("- （會話期間沒有留痕，請自己補；下次可請 agent 用 spine_append 留判斷）")
+        lines.append("- （會話期間沒有留痕，請自己補；下次可請 agent 收尾時呼叫 handoff）")
     lines += ["", "還沒結束的事："]
     if loops:
         for ev in loops[:6]:
@@ -421,21 +425,8 @@ def build_state(spine_dir):
     }
 
 
-def _snoozed(spine_dir, today=None):
-    """defer 留痕（chosen [monitor] repo:<id> body 'snooze:<qkind> until:<date>'）→ {(repo, qkind)}。"""
-    today = today or f"{_dt.date.today():%Y-%m-%d}"
-    out = set()
-    for ev in _spine.query(spine_dir, type="chosen"):
-        # 人話寫在第一行、snooze: token 可能在任一行（舊事件在第一行，兩種都認）
-        head = next((ln.split() for ln in (ev.body or "").splitlines()
-                     if ln.startswith("snooze:")), None)
-        if not head:
-            continue
-        qkind = head[0][len("snooze:"):]
-        until = next((h[len("until:"):] for h in head if h.startswith("until:")), "")
-        if until >= today:
-            out.add((ev.kv("repo"), qkind))
-    return out
+# defer 的七天提醒過濾搬到 brief.snoozed（agent 介面 next_work 也要同一份規則）
+_snoozed = _brief.snoozed
 
 
 def build_scan(spine_dir, group=None, repos=None):

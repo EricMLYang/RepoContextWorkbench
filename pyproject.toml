@@ -22,7 +22,7 @@ addopts = "-p no:cacheprovider"
 include = ["repo_context*"]
 
 [tool.setuptools.package-data]
-repo_context = ["*.html", "static/*"]
+repo_context = ["*.html", "static/*", "assets/*"]
 
 [build-system]
 requires = ["setuptools>=68"]

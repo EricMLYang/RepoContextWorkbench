@@ -219,7 +219,7 @@ def test_mcp_stdio_roundtrip(tmp_path):
     import os
     env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
     r = subprocess.run(
-        [sys.executable, "-m", "repo_context", "--spine", str(spine_dir), "mcp"],
+        [sys.executable, "-m", "repo_context", "--spine", str(spine_dir), "mcp", "--admin"],
         input="\n".join(_json.dumps(m, ensure_ascii=False) for m in msgs) + "\n",
         capture_output=True, text=True, encoding="utf-8", cwd=ROOT, env=env,
         timeout=60)

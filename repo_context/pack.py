@@ -34,12 +34,14 @@ def secret_hits(text):
 
 def _doc_files(repo_path):
     root = Path(repo_path).expanduser()
+    # -z：不然 git 會把非 ASCII 路徑加引號跳脫（core.quotePath），
+    # 中文檔名的 md 全部「不存在」而被默默略過（2026-09-25 搜尋測試抓到）
     r = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-co", "--exclude-standard",
+        ["git", "-C", str(root), "ls-files", "-z", "-co", "--exclude-standard",
          "--", "*.md"],
         capture_output=True, text=True, encoding="utf-8")
     if r.returncode == 0:  # tracked ＋ untracked-not-ignored
-        return [root / ln for ln in r.stdout.splitlines()
+        return [root / ln for ln in r.stdout.split("\0")
                 if ln and (root / ln).is_file()]
     out = []
     for p in root.rglob("*.md"):

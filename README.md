@@ -27,15 +27,26 @@
   ③ **工作區重排**——WORKSPACE 標題＋一句摘要＋「開啟組會話」主鈕，四分頁（待處理／Repo／活動／關係），卡片一主一次＋「更多」，
   原生 `<dialog>`（Esc／焦點回觸發鈕），Repo 表 6 核心欄＋進階欄，活動依事件時間排序，「記錄結果」落 decision（不是 outcome）。
   檢討：`docs/20260908_工作台UI_UX成熟度檢討.md`；落地記錄同名 `_落地記錄.md`（含截圖）。
+- **Agent 友善輪（2026-09-25）**：agent 從任何 repo 打開都接得上——① `agentapi.py` 工作層動作
+  （where_am_i／context_for／next_work／log_decision／add_todo／close_todo／report_status／handoff／search_knowledge），
+  MCP 預設只開這 9 個（JSON 回傳、結構化錯誤），維護工具移到 `ctx mcp --admin`；② 主場依 cwd 推出，寫到別組被拒（`cross_scope`），
+  使用者同意才放行；③ Claude Code hooks：SessionStart 注入脈絡、SessionEnd 記下沒交接的會話；④ CLI `--json`＋exit code＋skill；
+  ⑤ `knowledge.py` 知識 ↔ repo 相關度（BM25、中文 bigram）；⑥ `ctx setup --claude` 一次掛好 MCP／hooks／skill。
+  順手修掉中文檔名 md 被 `git ls-files` 跳脫而全部略過的舊 bug。記錄：`docs/20260925_Agent友善輪.md`。
 - **未做（VDI Day 0 smoke test 過了才蓋）**：真殼的常駐件——tray、全域 hotkey、OS toast、開機自啟；Windows terminal 需 pywinpty（未實測）。視窗內 badge＋瀏覽器通知是常駐件的等效替身。
 - 對 v2 的小偏差：kv token 多一個 `id:`（collision 回連需要，v2 的 kv 清單為例示性）；pack 用內建文件層選料（正式版換 Repomix）。
 
 ## 快速開始
 
 ```powershell
-$env:PYTHONUTF8 = "1"   # 必設（v2 §7：脊椎全中文，cp950 會炸）
 cd RepoContextWorkbench
 pip install -e .        # 裝完就有短指令 ctx；下面每個 `python -m repo_context` 都可換成 `ctx`
+                        # （輸出已自行設為 UTF-8，不必再先設 PYTHONUTF8）
+
+# 讓 agent 從任何 repo 都接得上（一次性）
+ctx setup --spine D:\some\spine-repo --claude --dry-run   # 先看會做什麼
+ctx setup --spine D:\some\spine-repo --claude             # 記住 spine＋掛 MCP（user scope）＋hooks＋skill
+ctx instructions                                           # 給沒有 skill 機制的 agent：貼進 AGENTS.md
 
 # 自我驗證（agent 每次改完必跑；等同 scripts/check.ps1）
 python -m pytest tests -q -m "not agent"
@@ -71,6 +82,16 @@ python -m repo_context --spine ... commit                 # git 單一提交者�
 python -m repo_context --spine ... session --group g1 --task "寫文"  # P16 帶料開 claude 終端
 python -m repo_context --spine ... mcp                    # MCP server（stdio；.mcp.json 由 session 產生）
 python -m repo_context --spine ... app                    # S4 工作台桌面視窗（牌／收件匣／會話＋內嵌 terminal）
+
+# agent 的節奏（在任何已登記 repo 裡；都可加 --json）
+ctx where                        # 我在哪：repo／組／主場
+ctx context --json               # 開工脈絡：目標／上次交接／下一步／未結／最近事件
+ctx next                         # 下一步（每項附依據）
+ctx log "結論…依據…"             # 記判斷 → 回傳 ref
+ctx todo add "要做的事"  ／  ctx todo close '#3' --note "…"
+ctx status waiting "在等使用者決定 X"
+ctx handoff --done "…" --next "…" --remaining "…"
+ctx search --file 某張卡片.md     # 知識 ↔ repo 相關度
 python scripts/screenshot.py <spine> --demo             # 改 UI 後先截圖自看（headless Edge；--demo 灌示範事件）
 python -m repo_context --spine ... ui                     # 瀏覽器模式（app 的過渡替代）
 ```
@@ -116,7 +137,11 @@ repo_context/
   notify.py    P13（interrupt 白名單分類：system-unsure 打斷、其餘未讀累積）
   agents.py    P15 provider 介面（mock／claude；judge 五欄位驗證＋run_text；重試一次＋raw log）
   session.py   P16 帶料備會話（.mcp.json 產生；cwd 掛載或 --mcp-config）
-  mcpserver.py MCP server（stdio JSON-RPC 零依賴；validator 錯誤原樣回 agent）
+  agentapi.py  agent 工作層（主場推定、範圍檢查、留痕／交接／狀態；MCP・CLI・hooks 同源）
+  knowledge.py 知識 ↔ repo 相關度（BM25、中文 bigram、洩密檔不索引、mtime 快取）
+  hooks.py     Claude Code SessionStart／SessionEnd（注入脈絡、記下沒交接的會話）
+  agentsetup.py ctx setup（使用者設定、claude mcp add、hooks 合併、skill 安裝）
+  mcpserver.py MCP server（stdio JSON-RPC 零依賴；工作層預設、管理層 --admin）
   term.py      內嵌 terminal 的 PTY 會話管理（POSIX pty／Windows pywinpty；
                ring buffer replay，會話生命週期獨立於視窗）
   cli.py       全部原語的人用介面

@@ -273,18 +273,20 @@ $('newagent').onclick=()=>openSession({origin:'group:'+scopeLabel()});
 $('newshell').onclick=async e=>{const b=e.currentTarget;b.disabled=true;try{const r=await api('/api/term_create',{kind:'shell'});await refreshState();selectTerm(r.sid);}catch(e){toast(e.message);}finally{b.disabled=false;}};
 const terms=new Map();let activeSid=null,collapsed=true,termHeight=260;
 // 程序活著不等於工作在推進：回報狀態只認脊椎留痕，沒有留痕就說沒有。
+const STATUS_TXT={working:'處理中',waiting:'等你回應',blocked:'卡住了',done:'已交接'};
 function reportLine(s){if(s.kind!=='agent')return '本機 Shell，不回報';
+  if(s.agent_status)return 'Agent 回報「'+(STATUS_TXT[s.agent_status.status]||s.agent_status.status)+'」'+s.agent_status.at.slice(11)+(s.agent_status.text?'：'+s.agent_status.text:'');
   if(s.report)return '最近留痕 '+s.report.at+'（'+s.report.type+' · 來自 '+s.report.source+'）：'+s.report.text;
   return '尚無回報——這個會話期間，範圍內還沒有任何脊椎留痕';}
 function sessionMeta(s){const proc=s.alive?'程序執行中':'程序已結束';
-  const work=s.kind!=='agent'?'Shell':(s.report?'最近留痕 '+s.report.at.slice(11):'尚無回報');
+  const work=s.kind!=='agent'?'Shell':(s.agent_status?(STATUS_TXT[s.agent_status.status]||s.agent_status.status):(s.report?'最近留痕 '+s.report.at.slice(11):'尚無回報'));
   return proc+' · '+work+' · '+(s.scope||'本機 Shell');}
 function syncTerms(){const list=state.terms||[],ids=new Set(list.map(s=>s.sid));for(const[sid,rec]of terms)if(!ids.has(sid)){disposeTerm(rec);terms.delete(sid);if(activeSid===sid)activeSid=null;}
   const parent=$('sessions');for(const s of list){let rec=terms.get(s.sid);if(!rec){rec={info:s,t:null,ws:null,el:null,connected:false};terms.set(s.sid,rec);}rec.info=s;
     if(!rec.row){rec.row=el('div','session');const b=button('',()=>selectTerm(s.sid),'ghost');b.append(el('span','dot'),el('span','sessioncopy'));rec.row.append(b);parent.append(rec.row);}
     rec.row.classList.toggle('on',activeSid===s.sid);const b=rec.row.firstChild;b.setAttribute('aria-pressed',String(activeSid===s.sid));
     b.title=s.title+'\n'+(s.task||'')+'\n範圍：'+(s.scope||'本機 Shell')+'\n'+reportLine(s)+'\n依據：'+(s.report_basis||'—');
-    const sig=JSON.stringify(s);if(rec.sig!==sig){rec.sig=sig;const dot=b.querySelector('.dot');dot.classList.toggle('dead',!s.alive);dot.classList.toggle('silent',s.alive&&s.kind==='agent'&&!s.report);
+    const sig=JSON.stringify(s);if(rec.sig!==sig){rec.sig=sig;const dot=b.querySelector('.dot');dot.classList.toggle('dead',!s.alive);dot.classList.toggle('silent',s.alive&&s.kind==='agent'&&!s.report&&!s.agent_status);dot.classList.toggle('needs',!!s.agent_status&&['waiting','blocked'].includes(s.agent_status.status));
       b.querySelector('.sessioncopy').replaceChildren(el('span','sessiontitle',s.title),el('span','sessionmeta',sessionMeta(s)));}}
   $('sessempty').hidden=!!list.length;$('sessiontotal').textContent=list.length||'';$('sesscount').textContent=list.filter(s=>s.alive).length+' 個執行中會話';updateTermBar();}
 function updateTermBar(){const rec=terms.get(activeSid);$('termtitle').textContent=rec?rec.info.title+' · '+(rec.info.scope||'本機 Shell')+' · '+reportLine(rec.info)+(!rec.connected&&rec.t?' · 連線已中斷（畫面可能不是最新）':''):'尚未選擇會話';$('termkill').disabled=!rec;$('termresult').disabled=!rec;$('termreconnect').hidden=!rec?.t||rec.connected;$('termempty').hidden=!!rec;}
