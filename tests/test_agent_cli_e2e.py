@@ -105,3 +105,26 @@ def test_hook_commands_via_stdin(env_spine, tmp_path):
 def test_instructions_print_skill_without_frontmatter(tmp_path):
     r = _ctx("instructions", cwd=tmp_path)
     assert r.returncode == 0 and "handoff" in r.stdout and not r.stdout.startswith("---")
+
+
+def test_mcp_add_name_before_variadic_env(monkeypatch):
+    """claude mcp add 的 -e 吃多值：名稱放在 -e 後面會被當成環境變數吞掉
+    （2026-09-25 真機 setup：Invalid environment variable format: repo-context）。"""
+    from repo_context import agentsetup
+    cmd = agentsetup.mcp_add_command()
+    assert cmd.index(agentsetup.MCP_NAME) < cmd.index("-e") < cmd.index("--")
+
+
+def test_setup_mcp_failure_is_nonzero(env_spine, tmp_path):
+    """註冊失敗不能 exit 0——使用者（或 agent）會以為掛好了。"""
+    sp, _, _ = env_spine
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "claude").write_text("#!/bin/sh\necho boom >&2\nexit 1\n")
+    (fake / "claude").chmod(0o755)
+    import os
+    r = _ctx("setup", "--spine", str(sp), "--claude", cwd=tmp_path, home=home,
+             env={"PATH": f"{fake}{os.pathsep}{os.environ['PATH']}"})
+    assert "註冊失敗" in r.stdout and r.returncode == 1

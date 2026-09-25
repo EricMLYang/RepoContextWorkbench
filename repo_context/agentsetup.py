@@ -36,8 +36,9 @@ def hook_command(event):
 
 
 def mcp_add_command():
-    return ["claude", "mcp", "add", "--scope", "user", "-e", "PYTHONUTF8=1",
-            MCP_NAME, "--", _python(), "-m", "repo_context", "mcp"]
+    # 名稱要放在 -e 前面：-e 吃多值，放後面會被當成環境變數吞掉（2026-09-25 真機 setup 踩到）
+    return ["claude", "mcp", "add", "--scope", "user", MCP_NAME, "-e", "PYTHONUTF8=1",
+            "--", _python(), "-m", "repo_context", "mcp"]
 
 
 def claude_home():

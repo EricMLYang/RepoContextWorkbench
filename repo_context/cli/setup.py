@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .. import config as _config
 
-from .common import EXIT_NO_SPINE, _fail, _spine_dir
+from .common import EXIT_FINDINGS, EXIT_NO_SPINE, _fail, _spine_dir
 
 
 def cmd_hook(args):
@@ -44,14 +44,18 @@ def cmd_setup(args):
     else:
         d = _spine_dir(args)
     steps = _setup.plan(d, claude=args.claude)
+    failed = False
     for st in steps:
         print(("（試跑）" if args.dry_run else "") + st["desc"])
         if not args.dry_run:
             msg = st["run"]()
             if msg:
                 print(f"  → {msg}")
+                failed = failed or "失敗" in msg
     if args.dry_run:
         print("加上不帶 --dry-run 再跑一次才會真的寫入。")
+    if failed:  # 有一步沒成就不能回 0：呼叫的人（或 agent）會以為掛好了
+        sys.exit(EXIT_FINDINGS)
 
 
 def register(sub):
