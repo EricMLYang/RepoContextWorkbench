@@ -48,8 +48,8 @@ class MockProvider:
     name = "mock"
     _calls = 0
 
-    def run_text(self, prompt, spine_dir, model=None):
-        _raw_log(spine_dir, {"provider": "mock", "mode": "text",
+    def run_text(self, prompt, spine_dir, model=None, cwd=None, read_only=False):
+        _raw_log(spine_dir, {"provider": "mock", "mode": "text", "cwd": str(cwd or ""),
                              "prompt": prompt[:2000]})
         return f"mock 摘要：輸入 {len(prompt.splitlines())} 行——重點請看 diff。"
 
@@ -78,16 +78,27 @@ class ClaudeProvider:
     """claude -p --output-format json；外層包裝由 CLI 保證，內層欄位另驗。"""
 
     name = "claude"
+    # read_only：給「到別的 repo 開一個 agent 回答問題」（ask_repo）用——只准讀，不准改檔、不准跑指令。
+    # -p 模式下沒列在 allowedTools 的工具一律拒絕，再明列 disallowed 當第二道保險。
+    READ_ONLY_ARGS = ["--allowedTools", "Read", "Grep", "Glob", "LS",
+                      "--disallowedTools", "Edit", "Write", "Bash", "NotebookEdit"]
 
-    def _call(self, prompt, spine_dir, model=None):
+    def build_cmd(self, prompt, model=None, read_only=False):
         cmd = ["claude", "-p", prompt, "--output-format", "json"]
         if model:
             cmd += ["--model", model]
+        if read_only:
+            cmd += self.READ_ONLY_ARGS
+        return cmd
+
+    def _call(self, prompt, spine_dir, model=None, cwd=None, read_only=False):
+        cmd = self.build_cmd(prompt, model, read_only)
         env = dict(os.environ, PYTHONUTF8="1")
         r = subprocess.run(cmd, capture_output=True, text=True,
-                           encoding="utf-8", env=env, timeout=600)
+                           encoding="utf-8", env=env, timeout=600,
+                           cwd=str(cwd) if cwd else None)
         _raw_log(spine_dir, {"provider": "claude", "cmd": cmd[:2] + ["<prompt>"] + cmd[3:],
-                             "prompt": prompt, "rc": r.returncode,
+                             "cwd": str(cwd or ""), "prompt": prompt, "rc": r.returncode,
                              "stdout": r.stdout, "stderr": r.stderr})
         if r.returncode != 0:
             raise AgentUnsure(f"claude CLI 失敗 rc={r.returncode}: {(r.stderr or '')[:300]}")
@@ -96,8 +107,8 @@ class ClaudeProvider:
     def run_judgement(self, prompt, spine_dir, model=None):
         return _extract_json(self._call(prompt, spine_dir, model))
 
-    def run_text(self, prompt, spine_dir, model=None):
-        return self._call(prompt, spine_dir, model)
+    def run_text(self, prompt, spine_dir, model=None, cwd=None, read_only=False):
+        return self._call(prompt, spine_dir, model, cwd=cwd, read_only=read_only)
 
 
 PROVIDERS = {"mock": MockProvider, "claude": ClaudeProvider}
@@ -117,13 +128,16 @@ def judge(provider_name, prompt, spine_dir, model=None):
     raise AgentUnsure(f"輸出驗證兩次皆失敗: {last_err}")
 
 
-def run_text(provider_name, prompt, spine_dir, model=None):
-    """自由文字輸出（P5 digest 用），空輸出視為失敗重試一次；仍壞 → AgentUnsure。"""
+def run_text(provider_name, prompt, spine_dir, model=None, cwd=None, read_only=False):
+    """自由文字輸出（P5 digest、ask_repo 用），空輸出視為失敗重試一次；仍壞 → AgentUnsure。
+    cwd＝在哪個目錄跑（ask_repo：對方 repo，它的 AGENTS.md／skill 才會生效）。"""
+    if provider_name not in PROVIDERS:
+        raise AgentUnsure(f"未知 provider: {provider_name}（可用：{', '.join(PROVIDERS)}）")
     provider = PROVIDERS[provider_name]()
     last_err = None
     for attempt in (1, 2):
         try:
-            out = provider.run_text(prompt, spine_dir, model)
+            out = provider.run_text(prompt, spine_dir, model, cwd=cwd, read_only=read_only)
             if out and out.strip():
                 return out.strip()
             last_err = ValueError("空輸出")

@@ -20,6 +20,19 @@ ctx setup --spine <spine> --claude
 叫它做一件小事並收尾——它有沒有呼叫 `handoff`？隔天再開，「上次交接」與「下一步」接得上嗎？
 沒交接就關掉的會話，工作台收件匣應該出現一筆「agent 會話結束但沒有交接」。
 
+## 0.5 跨 repo 參考上真資料（2026-09-25 跨 repo 參考輪，約 20 分鐘）
+
+```bash
+ctx refs check                                   # 先看：agent 文件裡失效的跨 repo 路徑（真資料 16 處）
+ctx registry export <repo> <名稱> <路徑> --note "…"   # 宣告 3～5 個真的 export（書摘、規格、inbox…）
+ctx registry relate <上游> <下游> --kind feeds --export <名稱>
+ctx repo <id>                                    # 狀態卡；再跑一次應該只剩「之後的變化」
+```
+
+開一個下游 repo 的 Claude Code：開場有沒有「鄰居 repo」段？叫它找上游的某份資料——
+它有沒有直接 `read_from <repo>:<export>/…`，而不是自己 grep 或猜路徑？
+一週後 `ctx refs suggest` 看建議宣告的 export 合不合理。
+
 ## 1. 跑 L4 驗收腳本（約 30 分鐘，`VERIFICATION.md` 有完整版）
 
 ```powershell

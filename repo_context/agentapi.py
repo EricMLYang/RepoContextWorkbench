@@ -8,6 +8,8 @@
 這一層把「agent 一次工作」需要的動作收成幾個函數，全部回 JSON-able dict：
     where_am_i → context_for → next_work → log_decision / add_todo / close_todo
     → report_status → handoff；另有 search_knowledge（知識 ↔ repo 相關度）。
+跨 repo 參考輪（同日第二輪）加：resolve_ref／read_from／ask_repo／repo_status——
+讀別的 repo 用名字（`<repo>:<export>/子路徑`），讀了會記引用；搜尋依主場的關係加分。
 MCP 工作層、CLI（--json）、Claude Code hooks 都呼叫這裡——同一份邏輯，三個入口。
 
 範圍紀律（從約定變成機制）：
@@ -25,6 +27,8 @@ from . import brief as _brief
 from . import collect as _collect
 from . import config as _config
 from . import context as _context
+from . import crossref as _xref
+from . import repocard as _repocard
 from . import knowledge as _knowledge
 from . import registry, spine
 from . import summary as _summary
@@ -249,6 +253,9 @@ def context_for(spine_dir, cwd=None, group=None, repos=None, card=True):
         "attention": [{"repo": c["repo"], "kind": _brief.qkind_name(c["qkind"]),
                        "text": c["title"]} for c in cards],
     }
+    rid = (where.get("repo") or {}).get("id")
+    out["neighbors"] = _xref.neighbors(spine_dir, rid) if rid else []
+    out["drift"] = _xref.drift(spine_dir, consumer=rid) if rid else []
     if card:
         out["card"] = _context.build_context(
             spine_dir, scope["group"],
@@ -297,22 +304,91 @@ def next_work(spine_dir, cwd=None, group=None, repos=None, limit=5):
     return out
 
 
+def _search_boosts(spine_dir, where):
+    """主場 repo 的鄰居加分、鄰居 export 內的檔再加分——「上游的書摘」該排在不相關 repo 前面。"""
+    rid = (where.get("repo") or {}).get("id")
+    if not rid:
+        return {}
+    repos, paths = {}, []
+    for n in _xref.neighbors(spine_dir, rid):
+        repos[n["peer"]] = (1.5, f"跟 {rid} 有關係（{n['peer']} {n['label']}）")
+        for name, v in n["exports"].items():
+            if n.get("uses") and name not in n["uses"]:
+                continue
+            prefix = v["path"].rstrip("/")
+            paths.append((n["peer"], "" if prefix == "." else prefix + "/", 1.2,
+                          f"在 {n['peer']}:{name} 內"))
+    return {"repos": repos, "paths": paths}
+
+
 def search_knowledge(spine_dir, query, cwd=None, group=None, repos=None,
-                     everywhere=True, limit=8, exclude_paths=()):
-    """知識 ↔ repo 相關度。預設搜全部已登記 repo（知識本來就跨組）；everywhere=false 只搜主場。"""
+                     everywhere=True, limit=8, exclude_paths=(), code=True):
+    """知識 ↔ repo 相關度（L1 定位）。預設搜全部已登記 repo（知識本來就跨組）；everywhere=false 只搜主場。
+    md 走 BM25（標題加權、依主場關係加分），程式碼走 git grep（code=false 可關）。
+    每筆結果帶 why；要讀內容用 read_from（ref 已附在結果裡）。"""
     if not (query or "").strip():
         raise AgentError("bad_request", "query 不能是空的", "給一段文字、一個想法或一段卡片內容。")
+    where = where_am_i(spine_dir, cwd)
     if everywhere and not (group or repos):
         entries = registry.load(spine_dir)["repos"]
         label = "全部"
     else:
-        where = where_am_i(spine_dir, cwd)
         scope = _scope_of(spine_dir, where, group, repos)
         label = scope["label"]
         entries = _entries(spine_dir, scope)
     res = _knowledge.search(entries, query, limit=limit, spine_dir=spine_dir,
-                            exclude_paths=exclude_paths)
-    return {"ok": True, "scope": label, **res}
+                            exclude_paths=exclude_paths, boosts=_search_boosts(spine_dir, where))
+    for f in res["files"]:
+        f["ref"] = f"{f['repo']}:{f['file']}"
+    out = {"ok": True, "scope": label, **res}
+    if code:
+        hits = _xref.code_search(entries, query, limit=max(3, limit // 2))
+        for h in hits:
+            h["ref"] = f"{h['repo']}:{h['file']}"
+        out["code"] = hits
+    return out
+
+
+def _ref_call(fn, *a, **kw):
+    try:
+        return fn(*a, **kw)
+    except _xref.RefError as e:
+        raise AgentError(e.code, e.message, e.hint) from e
+    except ValueError as e:
+        raise AgentError("bad_request", str(e)) from e
+
+
+def resolve_ref(spine_dir, ref):
+    """名字 → 實際路徑（`<repo>`、`<repo>:<export>[/子路徑]`、`<repo>:<相對路徑>`）。不記引用。"""
+    return _ref_call(_xref.resolve, spine_dir, ref)
+
+
+def read_from(spine_dir, ref, lines=None, cwd=None):
+    """讀別的 repo 的檔案或目錄（L2）。回傳附 commit；讀了會記一筆引用（主場 repo → 對方）。
+    讀跨組 repo 不用先問——只讀、留紀錄；寫入才受範圍限制。"""
+    where = where_am_i(spine_dir, cwd)
+    consumer = (where.get("repo") or {}).get("id")
+    return _ref_call(_xref.read, spine_dir, ref, consumer=consumer, lines=lines)
+
+
+def ask_repo(spine_dir, repo, question, cwd=None, provider=None):
+    """在對方 repo 開一個唯讀 agent 回答（L3，幾十秒、花錢）：需要整理歸納的問題才用，
+    找單一檔案用 search_knowledge＋read_from。回傳結論＋引用（repo 內路徑），引用會記下來。"""
+    where = where_am_i(spine_dir, cwd)
+    consumer = (where.get("repo") or {}).get("id")
+    return _ref_call(_xref.ask_repo, spine_dir, repo, question, consumer=consumer,
+                     provider=provider)
+
+
+def repo_status(spine_dir, repo=None, cwd=None, since=None):
+    """repo 狀態卡（agent 版：不推使用者的已讀水位線）。repo 省略＝cwd 所在 repo。"""
+    if not repo:
+        where = where_am_i(spine_dir, cwd)
+        if not where.get("repo"):
+            raise AgentError("bad_request", "cwd 不在已登記的 repo 裡，請指定 repo",
+                             where.get("hint") or where.get("note"))
+        repo = where["repo"]["id"]
+    return _ref_call(_repocard.build, spine_dir, repo, since=since or "recent", mark=False)
 
 
 # ---------------------------------------------------------------- 寫

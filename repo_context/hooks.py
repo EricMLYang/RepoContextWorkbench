@@ -18,10 +18,11 @@ import subprocess
 from pathlib import Path
 
 from . import agentapi as _api
+from . import crossref as _xref
 from . import spine as _spine
 
 TOOLS_LINE = ("context_for／next_work／log_decision／add_todo／close_todo／"
-              "report_status／handoff／search_knowledge")
+              "report_status／handoff／search_knowledge／read_from／ask_repo／repo_status")
 
 
 def _marker_dir(spine_dir):
@@ -64,6 +65,14 @@ def render_start(ctx):
     st = ctx.get("agent_status")
     if st and st.get("status") in ("waiting", "blocked"):
         out.append(f"上一個 agent 的狀態：{st['status']}（{st['at']}）{st.get('text', '')}")
+    nbs = ctx.get("neighbors") or []
+    if nbs:
+        out.append("")
+        out.append("## 鄰居 repo（有關係的；要它們的東西用 read_from `<repo>:<export>/子路徑`，不要寫死路徑）")
+        out += _xref.neighbor_lines(nbs)
+    if ctx.get("drift"):
+        out.append("你之前引用過的上游檔之後又改了（本地的副本或結論可能過期）：")
+        out += _xref.drift_lines(ctx["drift"], limit=3)
     out += [
         "",
         "## 工作約定（repo-context）",
@@ -71,6 +80,8 @@ def render_start(ctx):
         f"- 工具（MCP repo-context）：{TOOLS_LINE}。"
         "沒掛 MCP 就用 `ctx <where|context|next|log|todo|status|handoff|search> --json`。",
         "- 做了判斷→log_decision；發現待辦→add_todo；等使用者或卡住→report_status。",
+        "- 要別的 repo 的資料：search_knowledge 找 → read_from 讀（會記引用）；"
+        "要對方整理歸納才用 ask_repo（慢、花錢）。",
         "- 收尾一定呼叫 handoff（完成了什麼、剩什麼、下次從哪接）；沒交接的會話會被記成未交接。",
     ]
     return "\n".join(out)

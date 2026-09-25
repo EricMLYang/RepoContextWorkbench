@@ -1,7 +1,8 @@
 """MCP server——兩層工具（2026-09-25 Agent 友善輪）。
 
 **工作層（預設）**：照 agent 一次工作的節奏切——where_am_i／context_for／next_work／
-log_decision／add_todo／close_todo／report_status／handoff／search_knowledge。
+log_decision／add_todo／close_todo／report_status／handoff／search_knowledge，
+加上跨 repo 參考輪的 read_from／ask_repo／repo_status。
 依 server 的 cwd（或參數 cwd）推出主場範圍；回傳 JSON（帶可引用的 ref／id）；
 錯誤是結構化的 {ok:false, error, message, hint}；寫入主場以外會被拒（cross_scope）。
 邏輯全在 agentapi.py，CLI `--json` 與 hooks 同源。
@@ -23,6 +24,7 @@ from . import brief as _brief
 from . import collect as _collect
 from . import context as _context
 from . import collide as _collide
+from . import crossref as _xref
 from . import config as _config
 from . import digest as _digest
 from . import notify as _notify
@@ -94,7 +96,8 @@ def _t_pack_estimate(d, a):
 
 
 def _t_registry_relate(d, a):
-    e = _registry.relate(d, a["a"], a["b"], a["kind"], note=a.get("note"))
+    e = _registry.relate(d, a["a"], a["b"], a["kind"], note=a.get("note"),
+                         exports=a.get("exports"))
     k = _registry.relation_kinds(d)[a["kind"]]
     return f"已設關係：{a['a']} {k['forward']}→ {a['b']}（{e['kind']}）"
 
@@ -111,6 +114,25 @@ def _t_registry_relations(d, a):
                f"（{r['kind']}）" + (f"  {r['note']}" if r.get("note") else "")
                for r in _registry.relations(d)]
     return "\n".join(out) or ("（無關係）可用 kind：" + ", ".join(_registry.relation_kinds(d)))
+
+
+def _t_registry_export(d, a):
+    if a.get("remove"):
+        ok = _registry.remove_export(d, a["id"], a["name"])
+        return f"已刪 export：{a['id']}:{a['name']}" if ok else f"{a['id']} 沒有 export {a['name']}"
+    e = _registry.set_export(d, a["id"], a["name"], a["path"], desc=a.get("desc"))
+    return f"已登記 export：{e['repo']}:{e['name']} → {e['path']}"
+
+
+def _t_refs_check(d, a):
+    broken = _xref.lint_doc_refs(d)
+    dr = _xref.drift(d)
+    sug = _xref.suggest_exports(d)
+    out = [f"[失效路徑] {b['repo']}/{b['doc']}:{b['line']} `{b['ref']}` → {b['fix']}" for b in broken]
+    out += [f"[上游有變]{ln[1:]}" for ln in _xref.drift_lines(dr, limit=50)]
+    out += [f"[建議 export] {s['repo']}:{s['path']} 被引用 {s['cites']} 次（{', '.join(s['consumers'])}）"
+            f"→ {s['command']}" for s in sug]
+    return "\n".join(out) or "跨 repo 參考零紅字 OK"
 
 
 def _t_group_context(d, a):
@@ -310,12 +332,35 @@ WORK_TOOLS = {
         _w(_api.handoff, "done", "next_step", "remaining", "cwd", "group", "repos",
            "cross_scope_ok")),
     "search_knowledge": (
-        "知識 ↔ repo 相關度：給一段文字（想法、卡片內容、問題），找出各 repo 裡最相關的 md 檔"
-        "（附行號片段）與最相關的 repo 排名。預設搜全部已登記 repo。",
+        "找其他 repo 的相關內容（跨 repo 參考的第一步）：給一段文字（問題、想法、卡片內容），"
+        "回傳 files（md，附行號片段、why、可直接給 read_from 的 ref）、code（git grep 命中的程式碼）"
+        "與 repo 排名。跟你所在 repo 有關係的 repo、以及它們宣告的 exports 會加分。預設搜全部已登記 repo。",
         _s(query=_d(_STR, "要比對的文字"),
            everywhere=_d(_BOOL, "true（預設）＝搜全部 repo；false＝只搜主場範圍"),
+           code=_d(_BOOL, "是否也搜程式碼（預設 true）"),
            limit=_d(_INT, "最多回幾個檔，預設 8"), **_CWD, **_SCOPE, _req=["query"]),
-        _w(_api.search_knowledge, "query", "everywhere", "limit", "cwd", "group", "repos")),
+        _w(_api.search_knowledge, "query", "everywhere", "code", "limit", "cwd", "group", "repos")),
+    "read_from": (
+        "讀別的 repo 的檔案或目錄。ref 用名字不用路徑：`<repo>:<export>/子路徑`（export 見開場的鄰居地圖）、"
+        "`<repo>:<相對路徑>`，或 search_knowledge 回傳的 ref。回傳內容＋commit；目錄回清單。"
+        "讀了會記一筆引用（之後上游改了會提醒）。讀組外 repo 不用先問，寫入才要。",
+        _s(ref=_d(_STR, "例 notes:書摘/Chapter03.md、impl:src/app.py、impl（只給 repo＝看根目錄）"),
+           lines=_d(_STR, "只讀某段，例 120-180"), **_CWD, _req=["ref"]),
+        _w(_api.read_from, "ref", "lines", "cwd")),
+    "ask_repo": (
+        "在另一個 repo 開一個唯讀 agent 回答問題（它會照那個 repo 自己的 AGENTS.md 慣例找資料），"
+        "只回結論＋引用，不把檔案塞進你的 context。慢（幾十秒）而且花錢——需要整理歸納時才用；"
+        "找單一檔案用 search_knowledge＋read_from。",
+        _s(repo=_d(_STR, "repo id"), question=_d(_STR, "要問的問題，寫清楚要什麼"),
+           provider=_d(_STR, "claude（預設看 config provider.ask）或 mock"),
+           **_CWD, _req=["repo", "question"]),
+        _w(_api.ask_repo, "repo", "question", "provider", "cwd")),
+    "repo_status": (
+        "repo 狀態卡：最近變化與改動集中的目錄、沒 commit 的檔與放了幾天、正在跑的 dev server"
+        "（啟動後有沒有檔案又改過＝要不要重開）、最後交接、agent 文件裡失效的跨 repo 路徑、上游變動。",
+        _s(repo=_d(_STR, "repo id；省略＝你所在的 repo"),
+           since=_d(_STR, "7d／30d 或 commit hash；省略＝最近 5 則"), **_CWD),
+        _w(_api.repo_status, "repo", "since", "cwd")),
 }
 
 # ---- 管理層：維護 registry／組／採集／打包／碰撞（預設不開）----
@@ -332,10 +377,18 @@ ADMIN_TOOLS = {
                       _s(dir=_STR, apply=_BOOL, _req=["dir"]), _t_registry_scan),
     "registry_relate": ("設 repo 間關係 a --kind--> b（例 a pm-of b＝a 是 b 的 PM；"
                         "kind: pm-of/feeds/derived-from/upstream-of/sibling-topic）",
-                        _s(a=_STR, b=_STR, kind=_STR, note=_STR, _req=["a", "b", "kind"]),
+                        _s(a=_STR, b=_STR, kind=_STR, note=_STR,
+                           exports=_d(_STR, "逗號分隔：這條關係用到 a 的哪些 export"),
+                           _req=["a", "b", "kind"]),
                         _t_registry_relate),
     "registry_relations": ("讀 repo 間關係（給 id＝站在該 repo 兩向讀；省略＝全部）",
                            _s(id=_STR), _t_registry_relations),
+    "registry_export": ("登記 repo 對外提供的東西（export）：名稱→repo 內路徑；remove=true 刪除。"
+                        "agent 之後用 `<repo>:<名稱>/子路徑` 引用",
+                        _s(id=_STR, name=_STR, path=_STR, desc=_STR, remove=_BOOL,
+                           _req=["id", "name"]), _t_registry_export),
+    "refs_check": ("跨 repo 參考檢查：agent 文件裡失效的跨 repo 路徑、引用過的上游有變、建議宣告的 export",
+                   _s(), _t_refs_check),
     "group_context": ("組情境卡（markdown）：成員與角色、脈動、本組未結、最近事件、角色說明",
                       _s(**_SCOPE), _t_group_context),
     "group_list": ("列出所有組與成員", _s(), _t_group_list),

@@ -33,6 +33,16 @@
   使用者同意才放行；③ Claude Code hooks：SessionStart 注入脈絡、SessionEnd 記下沒交接的會話；④ CLI `--json`＋exit code＋skill；
   ⑤ `knowledge.py` 知識 ↔ repo 相關度（BM25、中文 bigram）；⑥ `ctx setup --claude` 一次掛好 MCP／hooks／skill。
   順手修掉中文檔名 md 被 `git ls-files` 跳脫而全部略過的舊 bug。記錄：`docs/20260925_Agent友善輪.md`。
+- **跨 repo 參考輪（2026-09-25 同日第二輪）**：agent 在 A repo 要又快又準地拿到 B repo 的東西——
+  ① **exports**：repo 宣告對外提供什麼（`registry export <repo> 書摘 books/`），agent 用名字
+  `<repo>:<export>/子路徑` 引用、`ctx resolve` 換路徑，不再寫死 `../x/y`；關係可標用到哪些 export；
+  ② 四層由便宜到貴：開場注入**鄰居地圖** → `search_knowledge`（標題加權、鄰居加分、why、程式碼 git grep）
+  → `read_from`（附 commit）→ `ask_repo`（對方 repo 開唯讀 agent，只回結論＋引用）；
+  ③ **引用紀錄**（`refs/cites.jsonl`，不進收件匣）→ 上游改了提醒下游（drift）、常被引用的目錄建議宣告 export；
+  ④ **repo 狀態卡** `ctx repo <id>`：上次看過後的變化、改動集中的目錄、沒 commit 的檔與天數、
+  正在跑的 dev server 與它啟動後改過的檔（要不要重開）、最後交接、失效的跨 repo 路徑；
+  ⑤ `refs check`／`registry audit` 掃各 repo agent 文件裡指向其他 repo 卻已失效的路徑。
+  記錄：`docs/20260925_跨repo參考輪.md`。
 - **未做（VDI Day 0 smoke test 過了才蓋）**：真殼的常駐件——tray、全域 hotkey、OS toast、開機自啟；Windows terminal 需 pywinpty（未實測）。視窗內 badge＋瀏覽器通知是常駐件的等效替身。
 - 對 v2 的小偏差：kv token 多一個 `id:`（collision 回連需要，v2 的 kv 清單為例示性）；pack 用內建文件層選料（正式版換 Repomix）。
 
@@ -92,6 +102,16 @@ ctx todo add "要做的事"  ／  ctx todo close '#3' --note "…"
 ctx status waiting "在等使用者決定 X"
 ctx handoff --done "…" --next "…" --remaining "…"
 ctx search --file 某張卡片.md     # 知識 ↔ repo 相關度
+
+# 跨 repo 參考（在任何已登記 repo 裡；都可加 --json）
+ctx registry export notes 書摘 books/ --note "逐章書摘"   # 宣告 export（repo 的 API）
+ctx registry relate notes course --kind feeds --export 書摘
+ctx resolve notes:書摘/ch01.md    # 名字 → 路徑
+ctx read notes:書摘/ch01.md [--lines 10-40]   # 讀＋附 commit＋記引用
+ctx ask notes "快取失效怎麼處理？"            # 對方 repo 開唯讀 agent（慢、花錢）
+ctx repo [<id>] [--since 7d] [--peek]        # 狀態卡（人看會記已讀；--peek 不記）
+ctx refs check                    # 失效的跨 repo 路徑＋上游變動＋建議 export
+ctx refs cite notes:書摘/ch01.md --note "複製進講義"   # 手動複製時記下版本
 python scripts/screenshot.py <spine> --demo             # 改 UI 後先截圖自看（headless Edge；--demo 灌示範事件）
 python -m repo_context --spine ... ui                     # 瀏覽器模式（app 的過渡替代）
 ```
@@ -138,7 +158,10 @@ repo_context/
   agents.py    P15 provider 介面（mock／claude；judge 五欄位驗證＋run_text；重試一次＋raw log）
   session.py   P16 帶料備會話（.mcp.json 產生；cwd 掛載或 --mcp-config）
   agentapi.py  agent 工作層（主場推定、範圍檢查、留痕／交接／狀態；MCP・CLI・hooks 同源）
-  knowledge.py 知識 ↔ repo 相關度（BM25、中文 bigram、洩密檔不索引、mtime 快取）
+  knowledge.py 知識 ↔ repo 相關度（BM25、中文 bigram、標題另建索引加權、boosts＋why、洩密檔不索引、mtime 快取）
+  crossref.py  跨 repo 參考（resolve／read＋引用紀錄／drift／建議 export／鄰居地圖／程式碼 git grep／
+               ask_repo 唯讀委派／agent 文件失效路徑 lint）
+  repocard.py  repo 狀態卡（已讀水位線、目錄彙總、dirty 天數、正在跑的程序與啟動後改過的檔、交接、drift）
   hooks.py     Claude Code SessionStart／SessionEnd（注入脈絡、記下沒交接的會話）
   agentsetup.py ctx setup（使用者設定、claude mcp add、hooks 合併、skill 安裝）
   mcpserver.py MCP server（stdio JSON-RPC 零依賴；工作層預設、管理層 --admin）
