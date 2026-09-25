@@ -150,6 +150,33 @@ def _t_group_add(d, a):
     return f"組已建：{a['name']}"
 
 
+def _t_group_update(d, a):
+    """組的維護（管理層）：add／remove 組員、rename 改名；可同一次一起給。"""
+    name, steps = a["name"], []
+    if a.get("add"):
+        _registry.add_group_members(d, name, a["add"])
+        steps.append(f"加入 {','.join(a['add'])}")
+    if a.get("remove"):
+        _registry.remove_group_members(d, name, a["remove"])
+        steps.append(f"移出 {','.join(a['remove'])}")
+    if a.get("rename"):
+        name = _registry.rename_group(d, name, a["rename"])["group"]["name"]
+        steps.append(f"改名 {a['name']} → {name}")
+    if not steps:
+        raise ValueError("沒有要改的：給 add／remove／rename 至少一項")
+    _spine.append_event(d, "decision", "agent", [f"group:{name}"],
+                        body=f"編輯組：{'；'.join(steps)}（從 MCP）")
+    return f"{name}\t{','.join(_registry.get_group(d, name)['members'])}"
+
+
+def _t_group_remove(d, a):
+    r = _registry.remove_group(d, a["name"])
+    _spine.append_event(d, "decision", "agent", [f"group:{a['name']}"],
+                        body="刪除組（repo 登記保留）（從 MCP）")
+    return f"已刪除組：{a['name']}（repo 登記保留" + (
+        f"；料留在 {r['kept_dir']}" if r["kept_dir"] else "") + "）"
+
+
 def _t_collect(d, a):
     _, entries = _registry.resolve_group(d, a.get("group"), a.get("repos"))
     return _collect.format_table(_collect.collect_group(entries, d))
@@ -393,6 +420,11 @@ ADMIN_TOOLS = {
                       _s(**_SCOPE), _t_group_context),
     "group_list": ("列出所有組與成員", _s(), _t_group_list),
     "group_add": ("建一個組", _s(name=_STR, members=_ARR, _req=["name", "members"]), _t_group_add),
+    "group_update": ("改組：add／remove 組員（repo 登記不動）、rename 改名；可一次給多項",
+                     _s(name=_STR, add=_ARR, remove=_ARR, rename=_STR, _req=["name"]),
+                     _t_group_update),
+    "group_remove": ("刪除一個組（只刪組定義；repo 登記與 groups/<組>/ 的料保留）",
+                     _s(name=_STR, _req=["name"]), _t_group_remove),
     "collect": ("採集 git 狀態（dirty、末次 commit、ahead/behind、worktree）", _s(**_SCOPE), _t_collect),
     "pack": ("把範圍內的 md 文件打包成一份全文（含洩密過濾）", _s(**_SCOPE, budget=_INT), _t_pack),
     "pack_estimate": ("只估算範圍內 md 文件的 token 成本，不打包", _s(**_SCOPE), _t_pack_estimate),

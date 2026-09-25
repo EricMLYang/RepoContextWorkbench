@@ -9,7 +9,8 @@ const paths = {
   check:'M5 12l4 4L19 6', alert:'M12 8v5m0 3v.1M10 3 2 19h20L14 3z',
   arrow:'M5 12h14m-5-5 5 5-5 5', clock:'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
   file:'M14 2H5v20h14V7zm0 0v5h5M8 12h8m-8 4h8',
-  chat:'M4 4h16v12H9l-5 4z', chevron:'m9 5 7 7-7 7'
+  chat:'M4 4h16v12H9l-5 4z', chevron:'m9 5 7 7-7 7',
+  edit:'M4 20h4L19 9l-4-4L4 16zM13 7l4 4'
 };
 function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');
@@ -55,21 +56,22 @@ function renderHeader(){const repos=scopeRepos(), local=scopedCards();const todo
 function renderDeck(){const data=[{name:null,members:state.repos},...state.groups];if(Array.isArray(scope.repos))data.push({name:'__adhoc__',members:scopeRepos()});
   if(!changed('deck',[data,scope,[...openGroups],lastStates]))return;
   const parent=$('deck'), existing=new Map([...parent.children].map(n=>[n.dataset.key,n]));
-  for(const g of data){const key=g.name||'*';let n=existing.get(key);existing.delete(key);
+  data.forEach((g,i)=>{const key=g.name||'*';let n=existing.get(key);existing.delete(key);
     const sig=JSON.stringify([g,scope,[...openGroups],g.members.map(r=>lastStates[r])]);
-    if(!n){n=el('div','gcard');n.dataset.key=key;parent.append(n);}
+    if(!n){n=el('div','gcard');n.dataset.key=key;}if(parent.children[i]!==n)parent.insertBefore(n,parent.children[i]||null);  // 改名後的卡留在原位
     const on=g.name==='__adhoc__'?Array.isArray(scope.repos):!Array.isArray(scope.repos)&&scope.group===g.name;
-    n.classList.toggle('on',on);if(n.dataset.sig===sig)continue;n.dataset.sig=sig;
+    n.classList.toggle('on',on);if(n.dataset.sig===sig)return;n.dataset.sig=sig;
     // Keep the selection and expansion buttons stable across polling.
-    let head=n.querySelector('.ghead');if(!head){head=el('div','ghead');const select=button('',()=>{},'gselect');select.append(icon('stack'),el('span','gcopy'));head.append(select,button('›',()=>{},'gexpand ghost'));n.append(head,el('div','members'));}
-    const select=head.children[0], expand=head.children[1], copy=select.querySelector('.gcopy');
+    let head=n.querySelector('.ghead');if(!head){head=el('div','ghead');const select=button('',()=>{},'gselect');select.append(icon('stack'),el('span','gcopy'));head.append(select);if(g.name&&g.name!=='__adhoc__'){const ed=button('',()=>{},'gedit ghost');ed.append(icon('edit'));head.append(ed);}head.append(button('›',()=>{},'gexpand ghost'));n.append(head,el('div','members'));}
+    const select=head.children[0], expand=head.querySelector('.gexpand'), edit=head.querySelector('.gedit'), copy=select.querySelector('.gcopy');
     const title=g.name==='__adhoc__'?'臨時工作組':g.name||'所有 repo';select.setAttribute('aria-label','選擇牌組：'+title);select.setAttribute('aria-pressed',String(on));select.title=title;
     select.onclick=()=>g.name==='__adhoc__'?openPicker():setScope({group:g.name,repos:null});
+    if(edit){edit.setAttribute('aria-label','編輯牌組：'+title);edit.title='編輯牌組（成員／名稱／刪除）';edit.onclick=()=>openPicker(g);}
     const count=g.members.reduce((a,r)=>a+(lastStates[r]?.commits_7d||0),0), bad=g.members.filter(r=>lastStates[r]?.note||!lastStates[r]?.exists&&lastStates[r]).length;
     copy.replaceChildren(el('span','gname',title),el('span','gmeta',`${g.members.length} repo${g.members.length&&g.members.every(r=>lastStates[r]?.commits_7d!=null)?' · 7 天 '+count+' commits':' · 尚未完整採集'}${bad?' · '+bad+' 項需檢查':''}`));
     const opened=openGroups.has(key);expand.textContent=opened?'⌄':'›';expand.setAttribute('aria-label',(opened?'收合':'展開')+title);expand.setAttribute('aria-expanded',String(opened));
     expand.onclick=()=>{opened?openGroups.delete(key):openGroups.add(key);save('openGroups',[...openGroups]);renderDeck();};
-    const members=n.querySelector('.members');members.hidden=!opened;if(opened&&changed('members:'+key,[g.members,state.tiers]))members.replaceChildren(...g.members.map(r=>{const b=button('',()=>showRepo(r),'member ghost');b.append(icon('file'),el('span','',r));b.title=r;return b;}));}
+    const members=n.querySelector('.members');members.hidden=!opened;if(opened&&changed('members:'+key,[g.members,state.tiers]))members.replaceChildren(...g.members.map(r=>{const b=button('',()=>showRepo(r),'member ghost');b.append(icon('file'),el('span','',r));b.title=r;return b;}));});
   for(const n of existing.values())n.remove();}
 function actionLabel(a){if(a.action==='route_collision')return a.payload.dest==='incubator'?'移入孵化區':'存入 '+a.payload.dest.replace(/^(repo|group):/,'');
   return{route_pick:'選擇儲存位置',ignore:'忽略並記錄',collide_prefill:'分析這個問題',close_loop:'完成跟進',collide_rerun:'重新分析'}[a.action]||a.label;}
@@ -218,15 +220,25 @@ $('ackbtn').onclick=()=>{const count=state.unread?.length||0,body=showDetail('�
 // Native dialogs provide focus containment, Escape, and return focus.
 for(const d of document.querySelectorAll('dialog'))d.addEventListener('click',e=>{if(e.target!==d)return;const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();});
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>$(b.dataset.close).close());
-let pickSelected=new Set(),pickTags=new Set(),pickQuery='',pickerBusy=false;
+let pickSelected=new Set(),pickTags=new Set(),pickQuery='',pickerBusy=false,pickEditing=null;
 function pickMatches(r){return r.toLocaleLowerCase().includes(pickQuery)&&(!pickTags.size||(state.tags[r]||[]).some(t=>pickTags.has(t)));}
-function openPicker(){pickSelected=new Set(scopeRepos());pickTags.clear();pickQuery='';$('picksearch').value='';$('pickname').value='';errorAt('pickerror','');renderPicker();$('pickdialog').showModal();$('picksearch').focus();}
-function renderPickCount(){$('pickcount').textContent='已選 '+pickSelected.size+' 個';$('pickok').disabled=pickerBusy||!pickSelected.size;}
+// openPicker(group)＝編輯既有牌組：同一個選擇視窗，預勾現有成員，可改名、刪除。
+function openPicker(group=null){pickEditing=group?group.name:null;pickSelected=new Set(group?group.members:scopeRepos());pickTags.clear();pickQuery='';$('picksearch').value='';$('pickname').value=group?group.name:'';errorAt('pickerror','');
+  $('picktitle').textContent=group?'編輯牌組':'選擇 repo';$('picksub').textContent=group?'勾選＝這組的成員；取消勾選只是移出這組，repo 登記不受影響。':'組成臨時工作範圍，或儲存成常用牌組。';
+  $('picknamelabel').firstChild.textContent=group?'牌組名稱 ':'儲存牌組名稱 ';$('picknamehint').hidden=!!group;$('pickdelete').hidden=!group;renderPicker();$('pickdialog').showModal();$('picksearch').focus();}
+function renderPickCount(){$('pickcount').textContent='已選 '+pickSelected.size+' 個';$('pickok').disabled=pickerBusy||!pickSelected.size;$('pickok').textContent=pickEditing?'儲存變更':'套用範圍';$('pickdelete').disabled=pickerBusy;}
 function renderPicker(){const used=[...new Set(Object.values(state.tags).flat())].sort();$('picktags').replaceChildren(...used.map(t=>{const b=button(t,()=>{pickTags.has(t)?pickTags.delete(t):pickTags.add(t);renderPicker();},'chip'+(pickTags.has(t)?' on':''));b.setAttribute('aria-pressed',String(pickTags.has(t)));return b;}));
   const visible=state.repos.filter(pickMatches).slice().sort();$('picklist').replaceChildren(...(visible.length?visible.map(r=>{const row=el('label','pickrow'),cb=el('input');cb.type='checkbox';cb.checked=pickSelected.has(r);cb.setAttribute('aria-label','選取 '+r);cb.onchange=()=>{cb.checked?pickSelected.add(r):pickSelected.delete(r);renderPickCount();};const copy=el('span','pickcopy',r);copy.append(el('span','picktags',(state.tags[r]||[]).join(' · ')));row.append(cb,copy);return row;}):[el('p','emptyline','沒有符合篩選的 repo；已選項目仍會保留。')]));renderPickCount();}
 $('adhocbtn').onclick=openPicker;$('picksearch').oninput=()=>{pickQuery=$('picksearch').value.toLocaleLowerCase();renderPicker();};$('pickall').onclick=()=>{state.repos.filter(pickMatches).forEach(r=>pickSelected.add(r));renderPicker();};$('picknone').onclick=()=>{pickSelected.clear();renderPicker();};
 $('pickrelated').onclick=()=>{const before=new Set(pickSelected);for(const r of state.relations){if(before.has(r.from))pickSelected.add(r.to);if(before.has(r.to))pickSelected.add(r.from);}renderPicker();toast(pickSelected.size===before.size?'沒有其他相關 repo':'已加入 '+(pickSelected.size-before.size)+' 個相關 repo');};
-$('pickform').onsubmit=async e=>{e.preventDefault();if(pickerBusy||!pickSelected.size)return;const repos=[...pickSelected],name=$('pickname').value.trim();pickerBusy=true;renderPickCount();try{if(name){await api('/api/save_group',{name,repos});await refreshState();}setScope(name?{group:name,repos:null}:{group:null,repos});$('pickdialog').close();toast(name?'已儲存牌組「'+name+'」':'已套用 '+repos.length+' 個 repo');}catch(e){errorAt('pickerror',e.message);}finally{pickerBusy=false;renderPickCount();}};
+$('pickform').onsubmit=async e=>{e.preventDefault();if(pickerBusy||!pickSelected.size)return;const repos=[...pickSelected],name=$('pickname').value.trim();if(pickEditing)return saveGroupEdit(repos,name);pickerBusy=true;renderPickCount();try{if(name){await api('/api/save_group',{name,repos});await refreshState();}setScope(name?{group:name,repos:null}:{group:null,repos});$('pickdialog').close();toast(name?'已儲存牌組「'+name+'」':'已套用 '+repos.length+' 個 repo');}catch(e){errorAt('pickerror',e.message);}finally{pickerBusy=false;renderPickCount();}};
+
+async function saveGroupEdit(repos,name){const old=pickEditing;if(!name)return errorAt('pickerror','牌組名稱不可為空');pickerBusy=true;renderPickCount();
+  try{const r=await api('/api/update_group',{name:old,repos,new_name:name});if(scope.group===old)setScope({group:r.name,repos:null});if(openGroups.has(old)&&r.name!==old){openGroups.delete(old);openGroups.add(r.name);save('openGroups',[...openGroups]);}
+    await refreshState();$('pickdialog').close();toast('已更新牌組「'+r.name+'」 · '+r.members.length+' 個 repo');}catch(e){errorAt('pickerror',e.message);}finally{pickerBusy=false;renderPickCount();}}
+$('pickdelete').onclick=()=>{const name=pickEditing,g=state.groups.find(x=>x.name===name);if(!g)return;$('pickdialog').close();
+  const body=showDetail('刪除牌組「'+name+'」？','GROUP');body.append(el('p','dialogmessage',`只會刪除這個牌組的定義。\n\n裡面的 ${g.members.length} 個 repo 仍保留登記；這組過去的簡報與存料（groups/${name}/）也會留著。`));
+  $('detailactions').append(button('取消',()=>{$('detaildialog').close();openPicker(g);}),button('刪除牌組',async e=>{const b=e.currentTarget;b.disabled=true;try{await api('/api/remove_group',{name});if(scope.group===name)setScope({group:null,repos:null});openGroups.delete(name);save('openGroups',[...openGroups]);$('detaildialog').close();await refreshState();toast('已刪除牌組「'+name+'」');}catch(e){errorAt('detailerror',e.message);}finally{b.disabled=false;}},'danger'));};
 
 // First run: pick a folder, preview repos, create the first group — all in the UI.
 function openOnboarding(){let found=[],picked=new Set(),busy=false;

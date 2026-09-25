@@ -602,6 +602,41 @@ def _handle_action(spine_dir, action, payload, terms=None):
             return {"error": "至少勾選一個 repo"}
         _registry.add_group(spine_dir, name, members)
         return {"ok": True, "name": name}
+    if action == "update_group":
+        # 編輯牌組：勾選結果＝新名單；new_name 不同才改名（groups/<組>/ 跟著搬）
+        name = (payload.get("name") or "").strip()
+        members = payload.get("repos") or []
+        new_name = (payload.get("new_name") or "").strip() or name
+        if not members:
+            return {"error": "至少勾選一個 repo（要整組拿掉請用刪除）"}
+        try:
+            before = list(_registry.get_group(spine_dir, name)["members"])
+            g = _registry.set_group_members(spine_dir, name, members)
+            if new_name != name:
+                try:
+                    g = _registry.rename_group(spine_dir, name, new_name)["group"]
+                except ValueError:
+                    _registry.set_group_members(spine_dir, name, before)  # 不留半套
+                    raise
+        except ValueError as e:
+            return {"error": str(e)}
+        added = [m for m in g["members"] if m not in before]
+        dropped = [m for m in before if m not in g["members"]]
+        parts = ([f"改名 {name} → {new_name}"] if new_name != name else []) + \
+                ([f"加入 {','.join(added)}"] if added else []) + \
+                ([f"移出 {','.join(dropped)}"] if dropped else [])
+        _spine.append_event(spine_dir, "decision", "monitor", [f"group:{new_name}"],
+                            body=f"編輯牌組：{'；'.join(parts) or '無變更'}（從工作台）")
+        return {"ok": True, "name": new_name, "members": g["members"]}
+    if action == "remove_group":
+        name = (payload.get("name") or "").strip()
+        try:
+            r = _registry.remove_group(spine_dir, name)
+        except ValueError as e:
+            return {"error": str(e)}
+        _spine.append_event(spine_dir, "decision", "monitor", [f"group:{name}"],
+                            body="刪除牌組（repo 登記保留）（從工作台）")
+        return {"ok": True, **r}
     if action == "set_goal":
         name = (payload.get("group") or "").strip()
         text = (payload.get("text") or "").strip()

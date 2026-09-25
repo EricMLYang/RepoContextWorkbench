@@ -67,6 +67,11 @@ python -m repo_context --spine D:\some\spine-repo registry add my-repo C:\path\t
 python -m repo_context --spine D:\some\spine-repo registry add ext-lib C:\x --type external --upstream owner/lib
 python -m repo_context --spine D:\some\spine-repo registry scan D:\Repo --apply  # 掃目錄批次登記（mani 混合模式；不加 --apply 只列候選）
 python -m repo_context --spine D:\some\spine-repo group add g1 my-repo
+python -m repo_context --spine D:\some\spine-repo group add-member g1 repo-x,repo-y   # 加入組員（repo 需已登記）
+python -m repo_context --spine D:\some\spine-repo group remove-member g1 repo-x        # 移出組（登記保留；整個移出 registry 用 registry remove）
+python -m repo_context --spine D:\some\spine-repo group rename g1 產品研究              # 改名（groups/<組>/ 的料跟著搬）
+python -m repo_context --spine D:\some\spine-repo group remove g1                       # 刪組（repo 登記與 groups/<組>/ 的料保留）
+# 工作台：牌組旁的 ✎ ＝ 同一套（改成員／改名／刪除）；MCP 管理層：group_update／group_remove
 python -m repo_context --spine D:\some\spine-repo registry relate my-pm my-code --kind pm-of --note "PM 規劃 code"  # 關係：A 是 B 的 PM
 python -m repo_context --spine D:\some\spine-repo registry relations my-code    # 站在 my-code 讀：PM 是 my-pm
 

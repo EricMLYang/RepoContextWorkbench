@@ -230,6 +230,12 @@ def cmd_group(args):
     if args.action == "add":
         _registry.add_group(d, args.name, args.members.split(","))
         print(f"組已建：{args.name}")
+    elif args.action in ("add-member", "remove-member", "rename", "remove"):
+        if not args.name or (args.action != "remove" and not args.members):
+            sys.exit(f"用法：ctx group {args.action} <組名>"
+                     + ("" if args.action == "remove" else
+                        " <新組名>" if args.action == "rename" else " <repo,...>"))
+        _group_edit(d, args.action, args.name, args.members)
     elif args.action == "context":
         # 組情境卡（P16 會話開場料同源；agent 用 MCP group_context 拿同一份）
         print(_context.build_context(d, args.name or None, args.members or None))
@@ -255,6 +261,33 @@ def cmd_group(args):
     else:
         _emit(args, _registry.load(d)["groups"], lambda gs: "\n".join(
             f"{g['name']:<20} {','.join(g['members'])}" for g in gs))
+
+
+def _group_edit(d, action, name, arg):
+    """組的維護（CLI）：改 registry ＋ 落一筆 decision（跟工作台同一個留痕口徑）。"""
+    ids = [i for i in (arg or "").split(",") if i.strip()]
+    if action == "add-member":
+        g = _registry.add_group_members(d, name, ids)
+        body = f"組員加入：{','.join(ids)}"
+    elif action == "remove-member":
+        g = _registry.remove_group_members(d, name, ids)
+        body = f"組員移出：{','.join(ids)}（登記保留）"
+    elif action == "rename":
+        r = _registry.rename_group(d, name, arg)
+        g, body = r["group"], f"組改名：{name} → {r['group']['name']}"
+        if r["moved_dir"]:
+            print(f"groups/{name}/ 已搬到 groups/{g['name']}/")
+    else:
+        r = _registry.remove_group(d, name)
+        g, body = None, "刪除組（repo 登記保留）"
+        if r["kept_dir"]:
+            print(f"保留了這組的料：{r['kept_dir']}")
+    refs = (r.get("schedule_refs") if action in ("rename", "remove") else None) or []
+    if refs:
+        print(f"注意：config.yaml 排程還指著「{name}」：{', '.join(refs)}（請自行更新）")
+    _spine.append_event(d, "decision", "manual",
+                        [f"group:{g['name'] if g else name}"], body=body + "（從 CLI）")
+    print(f"{g['name']}：{','.join(g['members']) or '（空組）'}" if g else f"已刪除組：{name}")
 
 
 def cmd_collect(args):
@@ -813,10 +846,14 @@ def build_parser():
     s.add_argument("--remove", help="tag：移除（逗號分隔）")
     s.set_defaults(func=cmd_registry)
 
-    s = sub.add_parser("group", help="P2 組（context＝組情境卡；summary＝工作摘要；goal＝一句話目標）")
-    s.add_argument("action", choices=["add", "list", "context", "summary", "goal"])
+    s = sub.add_parser("group", help="P2 組（add／add-member／remove-member／rename／remove；"
+                                     "context＝組情境卡；summary＝工作摘要；goal＝一句話目標）")
+    s.add_argument("action", choices=["add", "list", "context", "summary", "goal",
+                                      "add-member", "remove-member", "rename", "remove"])
     s.add_argument("name", nargs="?", help="context／summary 時可省略＝全部")
-    s.add_argument("members", nargs="?", help="context／summary 時＝逗號分隔 repo id（臨時組合）")
+    s.add_argument("members", nargs="?",
+                   help="add／add-member／remove-member＝逗號分隔 repo id；rename＝新組名；"
+                        "context／summary＝臨時組合")
     s.add_argument("--text", help="goal：這組要達成什麼（一句話）；不給＝只讀目前目標")
     s.set_defaults(func=cmd_group)
 
