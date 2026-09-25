@@ -54,8 +54,8 @@ def _progress(spine_dir, gkey, ids, scoped):
     """上次進度＝脊椎最後一筆本組 decision／outcome。沒有就說沒有，不拿 commit 充數。"""
     best = None
     for ev in spine.iter_events(spine_dir):
-        if ev.type not in _PROGRESS_TYPES:
-            continue
+        if ev.type not in _PROGRESS_TYPES or (ev.body or "").startswith(spine.ADMIN_TAG):
+            continue  # 改設定（建組、改目標、改 tier…）不是工作進度
         if scoped and not spine.in_scope(ev, gkey, ids):
             continue
         if best is None or (ev.date, ev.time) >= (best.date, best.time):

@@ -178,3 +178,39 @@ def test_webui_update_group_no_half_apply(three):
                              {"name": "g1", "repos": ["repo-c"], "new_name": "g2"})
     assert "組已存在" in r["error"]
     assert _members(three, "g1") == ["repo-a", "repo-b"]
+
+
+def test_own_edits_stay_out_of_inbox_agent_edits_surface(three):
+    """自己（CLI／工作台）改組只留痕不進收件匣；agent 經 MCP 改的要讓使用者看得到。"""
+    from repo_context import ops
+    ops.call(three, "group_update", {"name": "g1", "add": ["repo-c"]}, via="cli")
+    ops.call(three, "group_update", {"name": "g1", "remove": ["repo-c"]}, via="ui")
+    st = webui.build_state(three)
+    assert not [c for c in st["cards"] if "編輯組" in " ".join(c.get("lines", []) + [c.get("title", "")])]
+    ops.call(three, "group_update", {"name": "g1", "rename": "g9"}, via="mcp")
+    st = webui.build_state(three)
+    assert [c for c in st["cards"] if "改名 g1 → g9" in str(c)]
+
+
+def test_ops_table_is_the_single_source(three):
+    """MCP 管理層的寫入工具＝操作表的全部操作（加一個 @op 就自動多一個工具，schema 同源）。"""
+    from repo_context import ops
+    tools = mcpserver.tool_table(three, admin=True)
+    for name, o in ops.OPS.items():
+        assert tools[name][1] == o.schema()
+    import pytest
+    with pytest.raises(ValueError, match="不認得參數"):
+        ops.call(three, "group_remove", {"name": "g1", "force": True}, via="cli")
+    with pytest.raises(ValueError, match="缺參數"):
+        ops.call(three, "group_add", {"name": "x"}, via="cli")
+
+
+def test_admin_edits_are_not_progress(three):
+    """改設定（建組、改組、改目標）不是工作進度：摘要的「上次進度」不拿它充數。"""
+    from repo_context import ops, summary
+    ops.call(three, "group_update", {"name": "g1", "add": ["repo-c"]}, via="ui")
+    ops.call(three, "group_goal", {"name": "g1", "text": "做完 X"}, via="cli")
+    s = summary.build_summary(three, "g1")
+    assert s["progress"] is None and "沒有本組的進度紀錄" in s["progress_gap"]
+    spine_mod.append_event(three, "decision", "monitor", ["group:g1"], body="會話結果：做完第一步")
+    assert "會話結果" in summary.build_summary(three, "g1")["progress"]["text"]

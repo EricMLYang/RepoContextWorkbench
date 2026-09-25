@@ -71,6 +71,7 @@ python -m repo_context --spine D:\some\spine-repo group add-member g1 repo-x,rep
 python -m repo_context --spine D:\some\spine-repo group remove-member g1 repo-x        # 移出組（登記保留；整個移出 registry 用 registry remove）
 python -m repo_context --spine D:\some\spine-repo group rename g1 產品研究              # 改名（groups/<組>/ 的料跟著搬）
 python -m repo_context --spine D:\some\spine-repo group remove g1                       # 刪組（repo 登記與 groups/<組>/ 的料保留）
+python -m repo_context --spine D:\some\spine-repo registry tier my-repo paused --resume-when "下個月 X 上線後"  # 改 tier
 # 工作台：牌組旁的 ✎ ＝ 同一套（改成員／改名／刪除）；MCP 管理層：group_update／group_remove
 python -m repo_context --spine D:\some\spine-repo registry relate my-pm my-code --kind pm-of --note "PM 規劃 code"  # 關係：A 是 B 的 PM
 python -m repo_context --spine D:\some\spine-repo registry relations my-code    # 站在 my-code 讀：PM 是 my-pm
@@ -136,14 +137,23 @@ python -m repo_context --spine ... ui                     # 瀏覽器模式（ap
 
 ## 架構速覽
 
+加功能的路徑（2026-09-25 架構檢查後）：管理類寫入先在 `ops.py` 加一個 `@op`（MCP 管理層自動多一個工具），
+CLI 在 `cli/admin.py` 加一行子命令、工作台在 `webui/actions.py` 加一個 `_a_<名稱>` 轉接；
+agent 工作層照舊進 `agentapi.py`。前端改完跑 `npx prettier --write`（設定在 `.prettierrc`）。
+
 ```
 repo_context/
   spine.py     P10 append（validator 拒寫＋跨行程 lock＋dead-letter）＋ P11 query/stats/unread
                ＋ lint 衛生迴圈（ref 斷鏈/逾期 loop/碰撞無回程/dead-letter 積壓）
                ＋ batch_commit（git 單一提交者唯一入口）＋ open-loop 預設 due
-  registry.py  P1 registry+audit+scan（掃目錄自動登記下半身）＋ P2 組（含臨時組合）
-               ＋ 存活率視圖＋關係層（relate/unrelate/relations_of/related_ids/relation_lines；
-               詞彙 config 可擴充；audit 含關係斷鏈與反向 tier 漂移）；寫入同一把 lock
+  registry/    P1 registry＋P2 組＋關係層（呼叫端一律 `registry.xxx`，__init__ 接出公開名稱）
+    store.py     load／原子寫入／transaction()：讀–改–寫同一把 lock（寫入函式一律走它）
+    repos.py     登記／欄位／tag／移除／存活率視圖
+    groups.py    建組、update_group（加減組員／整份換／改名，單一 transaction）、刪組、範圍解析
+    relations.py 關係（詞彙 config 可擴充）＋ exports
+    audit.py     掃目錄自動登記下半身＋稽核（tier 漂移、路徑失效、關係斷鏈）
+  ops.py       操作表：管理類寫入（registry／關係／export／組）定義一次——參數＝MCP schema、
+               驗證、一行結果、留痕（body 帶〔registry〕，不算工作進度）；CLI／工作台／MCP 共用
   collect.py   P3 git 狀態（欄位抄 gitpane：dirty 天數、末 commit 天數、ahead/behind、
                worktree 數、agent 偵測）＋活動脈動（commits_7d/30d、recent_commits、
                group_pulse／recent_across／pulse_line）
@@ -172,10 +182,15 @@ repo_context/
   mcpserver.py MCP server（stdio JSON-RPC 零依賴；工作層預設、管理層 --admin）
   term.py      內嵌 terminal 的 PTY 會話管理（POSIX pty／Windows pywinpty；
                ring buffer replay，會話生命週期獨立於視窗）
-  cli.py       全部原語的人用介面
-  webui.py     S4 工作台（127.0.0.1＋啟動 token；/api/state 輕量輪詢、/api/scan 才打 git；
-               interrupt 置頂＋通知 best-effort；schedule 時殼內起 timer；
-               手寫 RFC6455 WS 供 terminal；serve_window()＝桌面視窗／serve()＝瀏覽器過渡）
+  cli/         全部原語的人用介面；每個模組 register(sub) 自己的子命令
+    common.py    spine 定位、錯誤出口（exit code 約定）、--json
+    admin.py     init／registry／group（每個 action 一個子 parser，寫入走 ops）
+    daily.py     日常原語　apps.py 會話／MCP／工作台　agent.py agentapi 入口　setup.py hook／安裝
+  webui/       S4 工作台（127.0.0.1＋啟動 token）
+    state.py     /api/state 輕量輪詢、/api/scan 才打 git、收件匣卡片、會話清冊
+    actions.py   行動按鈕 → ACTIONS 表分派（registry／組走 ops）
+    server.py    HTTP＋token；schedule 時殼內起 timer；serve_window()＝桌面視窗／serve()＝瀏覽器
+    ws.py        手寫 RFC6455 WS 供 terminal
   static/      vendor 前端資產（xterm.js 5.5.0＋addon-fit 0.10.0，MIT，離線可用）
 ```
 

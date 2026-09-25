@@ -294,6 +294,6 @@ def test_group_summary_and_goal_cli(tmp_path):
     r = run_cli("group", "summary", "g1", spine_dir=spine_dir, check=True)
     assert "把兩個 repo 的說法對齊" in r.stdout and "registry.yaml" in r.stdout
     r = run_cli("query", "--type", "decision", spine_dir=spine_dir, check=True)
-    assert "decision [manual] group:g1" in r.stdout      # 寫目標是人的出手，留痕
+    assert "decision [cli] group:g1" in r.stdout      # 寫目標是人的出手，留痕（[cli]＝自己出手，不進收件匣）
     day = next((spine_dir / "spine" / "events").glob("*.md"))
     assert "本組目標：把兩個 repo 的說法對齊（從 CLI）" in day.read_text(encoding="utf-8")

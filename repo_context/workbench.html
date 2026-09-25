@@ -1,39 +1,243 @@
 <!doctype html>
 <html lang="zh-Hant">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Repo 工作台</title>
-<link rel="stylesheet" href="/static/xterm.css">
-<link rel="stylesheet" href="/static/workbench.css">
-</head>
-<body>
-<header id="top"><a class="brand" href="#" aria-label="Repo 工作台首頁"><span class="brandmark">r<span>›</span></span> repo<span class="brandtail">工作台</span></a><span class="top-divider"></span><span class="muted">個人工作空間</span><span class="spacer"></span><span id="connection" role="status">正在連接…</span><button id="rescan" class="ghost">更新狀態</button></header>
-<aside id="side" aria-label="工作導覽">
-  <div class="sechead"><h2>牌組 <span class="muted">／ 工作範圍</span></h2><button id="adhocbtn" class="icon ghost" aria-label="建立臨時組" title="建立臨時組">＋</button></div>
-  <div id="deck" class="deck"></div>
-  <div class="sechead sessionhead"><h2>會話 <span id="sessiontotal"></span></h2><button id="newshell" class="ghost small">＋ Shell</button></div>
-  <div id="sessions" class="sessions"></div>
-  <p id="sessempty" class="emptyhint">為目前牌組開啟 Agent 會話，帶著工作脈絡開始。</p>
-  <div class="sidebottom"><details id="auditdetails"><summary>全域登記檢查 <span id="auditcount"></span></summary><div id="auditbox" class="small muted">等待首次更新</div></details><span class="small muted">本機 Repo 工作台</span></div>
-</aside>
-<main id="main">
- <div id="workspace">
-  <div class="eyebrow">WORKSPACE <span id="scopekind">所有 repo</span></div>
-  <div class="workspacehead"><div><h1 id="scopename">所有 repo</h1><p id="worksummary" class="muted">正在載入工作空間…</p></div><div class="head-actions"><button id="ideatoggle">＋ 新增想法</button><button id="newagent" class="primary">開啟組會話 <span aria-hidden="true">↗</span></button></div></div>
-  <section id="composer" hidden aria-labelledby="composertitle"><div class="sechead"><h2 id="composertitle">碰撞台 · 分析想法</h2><button id="ideaclose" class="ghost small">收起</button></div><label for="idea" class="sr-only">要分析的想法</label><textarea id="idea" rows="3" placeholder="寫下想法，讓 Agent 對照這組 repo 的脈絡分析。"></textarea><div class="composerfoot"><span id="ideascope" class="small muted"></span><span class="spacer"></span><span class="small muted">Ctrl / ⌘ + Enter 送出</span><button id="collidebtn" class="primary">分析想法</button></div><p id="ideaerror" class="error" role="alert" hidden></p></section>
-  <div id="syncerror" class="errorbanner" role="alert" hidden></div>
-  <nav id="tabs" aria-label="工作區頁面"><button data-tab="inbox" class="on" aria-current="page">待處理 <span id="inboxcount" class="tabcount">—</span></button><button data-tab="repos">Repo</button><button data-tab="activity">活動</button><button data-tab="relations">關係</button><span class="spacer"></span><span id="scantime" class="small muted">尚未更新</span></nav>
-  <div class="toolbar"><label class="searchbox"><span aria-hidden="true">⌕</span><input id="search" type="search" aria-label="搜尋目前頁面" placeholder="搜尋標題、repo 或內容"></label><select id="cardfilter" aria-label="篩選待處理類型"><option value="all">所有類型</option><option value="question">需要判斷</option><option value="collision">分析結果</option><option value="loop">待跟進</option><option value="pending">處理中</option></select><span class="spacer"></span><button id="briefbtn" class="ghost small">存成今日簡報</button><button id="ackbtn" class="ghost small" title="影響所有組的未讀事件；不會完成待跟進或處理中任務">所有組標為已讀…</button></div>
-  <section id="tab-inbox" class="tabpane on" aria-label="收件匣"><section id="summary" class="summary" aria-label="本組工作摘要"><p class="small muted">工作摘要會在採集完成後出現。</p></section><div id="cards"></div><div id="allclear" class="emptystate" hidden></div><p id="quietline" class="small muted"></p></section>
-  <section id="tab-repos" class="tabpane" aria-label="Repo 狀態"><div class="sectionintro"><div><h2>Repo 狀態</h2><p class="muted small">先看需要關注的變化，選取 repo 查看完整狀態。</p></div><label class="small muted"><input id="morecols" type="checkbox"> 顯示進階欄位</label></div><div class="tblwrap" id="deeptable"></div></section>
-  <section id="tab-activity" class="tabpane" aria-label="活動記錄"><div class="sectionintro"><div><h2>近期 commit</h2><p id="pulse" class="small muted"></p></div></div><div id="recentcommits"></div><div class="sectionintro"><div><h2>事件與處理記錄</h2><p class="small muted">最近 200 筆事件中屬於目前範圍的記錄，依事件時間排序。</p></div></div><div id="recent"></div><details id="globalactivity"><summary>全域與未分類記錄 <span id="globalactivitycount"></span></summary><div id="recentglobal"></div></details><p id="statsraw" class="small muted"></p></section>
-  <section id="tab-relations" class="tabpane" aria-label="Repo 關係"><div class="sectionintro"><div><h2>Repo 關係</h2><p class="small muted">目前範圍的 repo 如何規劃、供料與相互支援。跨組關係會保留另一端。</p></div><button id="reladd">＋ 新增關係</button></div><div id="reltable"></div></section>
- </div>
-</main>
-<section id="termpanel" aria-label="終端面板"><div id="termdrag" role="separator" tabindex="0" aria-label="調整終端高度" aria-orientation="horizontal" aria-valuemin="100" aria-valuemax="640" aria-valuenow="260"></div><div id="termbar"><span class="termlabel">終端</span><span id="termtitle" class="small muted">尚未選擇會話</span><span class="spacer"></span><button id="termreconnect" class="ghost small" hidden>重新連線</button><button id="termresult" class="ghost small" disabled>記錄結果</button><button id="termkill" class="ghost small" disabled>結束程序…</button><button id="termtoggle" class="ghost small" aria-expanded="false">展開</button></div><div id="termbody" hidden><div id="termempty" class="muted">從左側選擇會話，繼續你的工作。</div></div></section>
-<footer id="status"><span id="scanscope">範圍：所有 repo</span><span id="scanwhen"></span><span class="spacer"></span><span id="sesscount"></span><span>Ctrl + ` 終端</span></footer>
-<div id="toast" role="status" aria-live="polite"></div>
-<dialog id="pickdialog" aria-labelledby="picktitle"><form id="pickform"><div class="dialoghead"><div><p class="eyebrow">WORKING SET</p><h2 id="picktitle">選擇 repo</h2><p id="picksub" class="muted">組成臨時工作範圍，或儲存成常用牌組。</p></div><button type="button" data-close="pickdialog" class="icon ghost" aria-label="關閉選擇 repo">×</button></div><label class="searchbox"><span aria-hidden="true">⌕</span><input id="picksearch" type="search" placeholder="搜尋 repo" aria-label="搜尋 repo"></label><div id="picktags" class="chips"></div><div class="picktools"><button type="button" id="pickall" class="ghost small">選取搜尋結果</button><button type="button" id="picknone" class="ghost small">清除選取</button><button type="button" id="pickrelated" class="ghost small">＋ 相關 repo</button><span class="spacer"></span><span id="pickcount" class="small"></span></div><div id="picklist"></div><label id="picknamelabel" class="field">儲存牌組名稱 <span id="picknamehint" class="muted small">選填，留空只套用範圍</span><input id="pickname" placeholder="例如：產品研究" maxlength="100"></label><p id="pickerror" class="error" role="alert" hidden></p><div class="dialogfoot"><button type="button" id="pickdelete" class="danger" hidden>刪除牌組</button><span class="spacer"></span><button type="button" data-close="pickdialog">取消</button><button id="pickok" class="primary" type="submit">套用範圍</button></div></form></dialog>
-<dialog id="detaildialog" aria-labelledby="detailtitle"><div class="dialoghead"><div><p id="detaileyebrow" class="eyebrow">DETAILS</p><h2 id="detailtitle"></h2></div><button id="detailclose" class="icon ghost" aria-label="關閉詳情">×</button></div><div id="detailbody"></div><p id="detailerror" class="error" role="alert" hidden></p><div id="detailactions" class="dialogfoot"></div></dialog>
-<script src="/static/xterm.js"></script><script src="/static/addon-fit.js"></script><script src="/static/workbench.js"></script>
-</body></html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Repo 工作台</title>
+    <link rel="stylesheet" href="/static/xterm.css" />
+    <link rel="stylesheet" href="/static/workbench.css" />
+  </head>
+  <body>
+    <header id="top">
+      <a class="brand" href="#" aria-label="Repo 工作台首頁"
+        ><span class="brandmark">r<span>›</span></span> repo<span class="brandtail">工作台</span></a
+      ><span class="top-divider"></span><span class="muted">個人工作空間</span
+      ><span class="spacer"></span><span id="connection" role="status">正在連接…</span
+      ><button id="rescan" class="ghost">更新狀態</button>
+    </header>
+    <aside id="side" aria-label="工作導覽">
+      <div class="sechead">
+        <h2>牌組 <span class="muted">／ 工作範圍</span></h2>
+        <button id="adhocbtn" class="icon ghost" aria-label="建立臨時組" title="建立臨時組">
+          ＋
+        </button>
+      </div>
+      <div id="deck" class="deck"></div>
+      <div class="sechead sessionhead">
+        <h2>會話 <span id="sessiontotal"></span></h2>
+        <button id="newshell" class="ghost small">＋ Shell</button>
+      </div>
+      <div id="sessions" class="sessions"></div>
+      <p id="sessempty" class="emptyhint">為目前牌組開啟 Agent 會話，帶著工作脈絡開始。</p>
+      <div class="sidebottom">
+        <details id="auditdetails">
+          <summary>全域登記檢查 <span id="auditcount"></span></summary>
+          <div id="auditbox" class="small muted">等待首次更新</div>
+        </details>
+        <span class="small muted">本機 Repo 工作台</span>
+      </div>
+    </aside>
+    <main id="main">
+      <div id="workspace">
+        <div class="eyebrow">WORKSPACE <span id="scopekind">所有 repo</span></div>
+        <div class="workspacehead">
+          <div>
+            <h1 id="scopename">所有 repo</h1>
+            <p id="worksummary" class="muted">正在載入工作空間…</p>
+          </div>
+          <div class="head-actions">
+            <button id="ideatoggle">＋ 新增想法</button
+            ><button id="newagent" class="primary">
+              開啟組會話 <span aria-hidden="true">↗</span>
+            </button>
+          </div>
+        </div>
+        <section id="composer" hidden aria-labelledby="composertitle">
+          <div class="sechead">
+            <h2 id="composertitle">碰撞台 · 分析想法</h2>
+            <button id="ideaclose" class="ghost small">收起</button>
+          </div>
+          <label for="idea" class="sr-only">要分析的想法</label
+          ><textarea
+            id="idea"
+            rows="3"
+            placeholder="寫下想法，讓 Agent 對照這組 repo 的脈絡分析。"
+          ></textarea>
+          <div class="composerfoot">
+            <span id="ideascope" class="small muted"></span><span class="spacer"></span
+            ><span class="small muted">Ctrl / ⌘ + Enter 送出</span
+            ><button id="collidebtn" class="primary">分析想法</button>
+          </div>
+          <p id="ideaerror" class="error" role="alert" hidden></p>
+        </section>
+        <div id="syncerror" class="errorbanner" role="alert" hidden></div>
+        <nav id="tabs" aria-label="工作區頁面">
+          <button data-tab="inbox" class="on" aria-current="page">
+            待處理 <span id="inboxcount" class="tabcount">—</span></button
+          ><button data-tab="repos">Repo</button><button data-tab="activity">活動</button
+          ><button data-tab="relations">關係</button><span class="spacer"></span
+          ><span id="scantime" class="small muted">尚未更新</span>
+        </nav>
+        <div class="toolbar">
+          <label class="searchbox"
+            ><span aria-hidden="true">⌕</span
+            ><input
+              id="search"
+              type="search"
+              aria-label="搜尋目前頁面"
+              placeholder="搜尋標題、repo 或內容" /></label
+          ><select id="cardfilter" aria-label="篩選待處理類型">
+            <option value="all">所有類型</option>
+            <option value="question">需要判斷</option>
+            <option value="collision">分析結果</option>
+            <option value="loop">待跟進</option>
+            <option value="pending">處理中</option></select
+          ><span class="spacer"></span
+          ><button id="briefbtn" class="ghost small">存成今日簡報</button
+          ><button
+            id="ackbtn"
+            class="ghost small"
+            title="影響所有組的未讀事件；不會完成待跟進或處理中任務"
+          >
+            所有組標為已讀…
+          </button>
+        </div>
+        <section id="tab-inbox" class="tabpane on" aria-label="收件匣">
+          <section id="summary" class="summary" aria-label="本組工作摘要">
+            <p class="small muted">工作摘要會在採集完成後出現。</p>
+          </section>
+          <div id="cards"></div>
+          <div id="allclear" class="emptystate" hidden></div>
+          <p id="quietline" class="small muted"></p>
+        </section>
+        <section id="tab-repos" class="tabpane" aria-label="Repo 狀態">
+          <div class="sectionintro">
+            <div>
+              <h2>Repo 狀態</h2>
+              <p class="muted small">先看需要關注的變化，選取 repo 查看完整狀態。</p>
+            </div>
+            <label class="small muted"><input id="morecols" type="checkbox" /> 顯示進階欄位</label>
+          </div>
+          <div class="tblwrap" id="deeptable"></div>
+        </section>
+        <section id="tab-activity" class="tabpane" aria-label="活動記錄">
+          <div class="sectionintro">
+            <div>
+              <h2>近期 commit</h2>
+              <p id="pulse" class="small muted"></p>
+            </div>
+          </div>
+          <div id="recentcommits"></div>
+          <div class="sectionintro">
+            <div>
+              <h2>事件與處理記錄</h2>
+              <p class="small muted">最近 200 筆事件中屬於目前範圍的記錄，依事件時間排序。</p>
+            </div>
+          </div>
+          <div id="recent"></div>
+          <details id="globalactivity">
+            <summary>全域與未分類記錄 <span id="globalactivitycount"></span></summary>
+            <div id="recentglobal"></div>
+          </details>
+          <p id="statsraw" class="small muted"></p>
+        </section>
+        <section id="tab-relations" class="tabpane" aria-label="Repo 關係">
+          <div class="sectionintro">
+            <div>
+              <h2>Repo 關係</h2>
+              <p class="small muted">
+                目前範圍的 repo 如何規劃、供料與相互支援。跨組關係會保留另一端。
+              </p>
+            </div>
+            <button id="reladd">＋ 新增關係</button>
+          </div>
+          <div id="reltable"></div>
+        </section>
+      </div>
+    </main>
+    <section id="termpanel" aria-label="終端面板">
+      <div
+        id="termdrag"
+        role="separator"
+        tabindex="0"
+        aria-label="調整終端高度"
+        aria-orientation="horizontal"
+        aria-valuemin="100"
+        aria-valuemax="640"
+        aria-valuenow="260"
+      ></div>
+      <div id="termbar">
+        <span class="termlabel">終端</span
+        ><span id="termtitle" class="small muted">尚未選擇會話</span><span class="spacer"></span
+        ><button id="termreconnect" class="ghost small" hidden>重新連線</button
+        ><button id="termresult" class="ghost small" disabled>記錄結果</button
+        ><button id="termkill" class="ghost small" disabled>結束程序…</button
+        ><button id="termtoggle" class="ghost small" aria-expanded="false">展開</button>
+      </div>
+      <div id="termbody" hidden>
+        <div id="termempty" class="muted">從左側選擇會話，繼續你的工作。</div>
+      </div>
+    </section>
+    <footer id="status">
+      <span id="scanscope">範圍：所有 repo</span><span id="scanwhen"></span
+      ><span class="spacer"></span><span id="sesscount"></span><span>Ctrl + ` 終端</span>
+    </footer>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <dialog id="pickdialog" aria-labelledby="picktitle">
+      <form id="pickform">
+        <div class="dialoghead">
+          <div>
+            <p class="eyebrow">WORKING SET</p>
+            <h2 id="picktitle">選擇 repo</h2>
+            <p id="picksub" class="muted">組成臨時工作範圍，或儲存成常用牌組。</p>
+          </div>
+          <button
+            type="button"
+            data-close="pickdialog"
+            class="icon ghost"
+            aria-label="關閉選擇 repo"
+          >
+            ×
+          </button>
+        </div>
+        <label class="searchbox"
+          ><span aria-hidden="true">⌕</span
+          ><input id="picksearch" type="search" placeholder="搜尋 repo" aria-label="搜尋 repo"
+        /></label>
+        <div id="picktags" class="chips"></div>
+        <div class="picktools">
+          <button type="button" id="pickall" class="ghost small">選取搜尋結果</button
+          ><button type="button" id="picknone" class="ghost small">清除選取</button
+          ><button type="button" id="pickrelated" class="ghost small">＋ 相關 repo</button
+          ><span class="spacer"></span><span id="pickcount" class="small"></span>
+        </div>
+        <div id="picklist"></div>
+        <label id="picknamelabel" class="field"
+          >儲存牌組名稱 <span id="picknamehint" class="muted small">選填，留空只套用範圍</span
+          ><input id="pickname" placeholder="例如：產品研究" maxlength="100"
+        /></label>
+        <p id="pickerror" class="error" role="alert" hidden></p>
+        <div class="dialogfoot">
+          <button type="button" id="pickdelete" class="danger" hidden>刪除牌組</button
+          ><span class="spacer"></span><button type="button" data-close="pickdialog">取消</button
+          ><button id="pickok" class="primary" type="submit">套用範圍</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="detaildialog" aria-labelledby="detailtitle">
+      <div class="dialoghead">
+        <div>
+          <p id="detaileyebrow" class="eyebrow">DETAILS</p>
+          <h2 id="detailtitle"></h2>
+        </div>
+        <button id="detailclose" class="icon ghost" aria-label="關閉詳情">×</button>
+      </div>
+      <div id="detailbody"></div>
+      <p id="detailerror" class="error" role="alert" hidden></p>
+      <div id="detailactions" class="dialogfoot"></div>
+    </dialog>
+    <script src="/static/xterm.js"></script>
+    <script src="/static/addon-fit.js"></script>
+    <script src="/static/workbench.js"></script>
+  </body>
+</html>

@@ -244,7 +244,7 @@ def test_tag_api(server):
     code, r = _post(base, "/api/tag", {"id": "repo-a", "remove": ["開發"]})
     assert code == 200 and r["tags"] == ["PM"]
     code, r = _post(base, "/api/tag", {"id": "ghost", "add": ["x"]})
-    assert code == 500  # 未知 repo 錯誤浮出
+    assert code == 400 and "repo 不存在" in r["error"]  # 使用者錯誤＝400 帶訊息（走操作表後不再是 500）
 
 
 @pytest.mark.e2e

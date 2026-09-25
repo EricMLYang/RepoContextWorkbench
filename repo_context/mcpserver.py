@@ -28,6 +28,7 @@ from . import crossref as _xref
 from . import config as _config
 from . import digest as _digest
 from . import notify as _notify
+from . import ops as _ops
 from . import pack as _pack
 from . import registry as _registry
 from . import route as _route
@@ -53,13 +54,6 @@ def _t_registry_list(d, a):
     rows = [f"{r['id']}\t{r.get('type', 'mine')}\t{r.get('tier', '?')}\t{r['path']}"
             for r in _registry.load(d)["repos"]]
     return "\n".join(rows) or "（registry 空）"
-
-
-def _t_registry_add(d, a):
-    e = _registry.add_repo(d, a["id"], a["path"], type=a.get("type", "mine"),
-                           tags=a.get("tags"), tier=a.get("tier", "active"),
-                           upstream=a.get("upstream"))
-    return f"已登記：{e['id']} ({e['type']}/{e['tier']})"
 
 
 def _t_registry_audit(d, a):
@@ -95,13 +89,6 @@ def _t_pack_estimate(d, a):
     return "\n".join(lines)
 
 
-def _t_registry_relate(d, a):
-    e = _registry.relate(d, a["a"], a["b"], a["kind"], note=a.get("note"),
-                         exports=a.get("exports"))
-    k = _registry.relation_kinds(d)[a["kind"]]
-    return f"已設關係：{a['a']} {k['forward']}→ {a['b']}（{e['kind']}）"
-
-
 def _t_registry_relations(d, a):
     if a.get("id"):
         rows = _registry.relations_of(d, a["id"])
@@ -114,14 +101,6 @@ def _t_registry_relations(d, a):
                f"（{r['kind']}）" + (f"  {r['note']}" if r.get("note") else "")
                for r in _registry.relations(d)]
     return "\n".join(out) or ("（無關係）可用 kind：" + ", ".join(_registry.relation_kinds(d)))
-
-
-def _t_registry_export(d, a):
-    if a.get("remove"):
-        ok = _registry.remove_export(d, a["id"], a["name"])
-        return f"已刪 export：{a['id']}:{a['name']}" if ok else f"{a['id']} 沒有 export {a['name']}"
-    e = _registry.set_export(d, a["id"], a["name"], a["path"], desc=a.get("desc"))
-    return f"已登記 export：{e['repo']}:{e['name']} → {e['path']}"
 
 
 def _t_refs_check(d, a):
@@ -143,38 +122,6 @@ def _t_group_list(d, a):
     rows = [f"{g['name']}\t{','.join(g['members'])}"
             for g in _registry.load(d)["groups"]]
     return "\n".join(rows) or "（無組）"
-
-
-def _t_group_add(d, a):
-    _registry.add_group(d, a["name"], a["members"])
-    return f"組已建：{a['name']}"
-
-
-def _t_group_update(d, a):
-    """組的維護（管理層）：add／remove 組員、rename 改名；可同一次一起給。"""
-    name, steps = a["name"], []
-    if a.get("add"):
-        _registry.add_group_members(d, name, a["add"])
-        steps.append(f"加入 {','.join(a['add'])}")
-    if a.get("remove"):
-        _registry.remove_group_members(d, name, a["remove"])
-        steps.append(f"移出 {','.join(a['remove'])}")
-    if a.get("rename"):
-        name = _registry.rename_group(d, name, a["rename"])["group"]["name"]
-        steps.append(f"改名 {a['name']} → {name}")
-    if not steps:
-        raise ValueError("沒有要改的：給 add／remove／rename 至少一項")
-    _spine.append_event(d, "decision", "agent", [f"group:{name}"],
-                        body=f"編輯組：{'；'.join(steps)}（從 MCP）")
-    return f"{name}\t{','.join(_registry.get_group(d, name)['members'])}"
-
-
-def _t_group_remove(d, a):
-    r = _registry.remove_group(d, a["name"])
-    _spine.append_event(d, "decision", "agent", [f"group:{a['name']}"],
-                        body="刪除組（repo 登記保留）（從 MCP）")
-    return f"已刪除組：{a['name']}（repo 登記保留" + (
-        f"；料留在 {r['kept_dir']}" if r["kept_dir"] else "") + "）"
 
 
 def _t_collect(d, a):
@@ -393,38 +340,17 @@ WORK_TOOLS = {
 # ---- 管理層：維護 registry／組／採集／打包／碰撞（預設不開）----
 ADMIN_TOOLS = {
     "registry_list": ("列出所有已登記 repo（id／類型／tier／路徑）", _s(), _t_registry_list),
-    "registry_add": ("登記一個 repo", _s(id=_STR, path=_STR,
-                                        type=_d(_STR, "mine 或 external"),
-                                        tier=_d(_STR, "active／paused／dormant"),
-                                        upstream=_d(_STR, "external 的 GitHub owner/repo"),
-                                        _req=["id", "path"]), _t_registry_add),
     "registry_audit": ("稽核 registry：tier 與實際活動不符、路徑失效、目錄裡有未登記 repo",
                        _s(scan_dirs=_ARR), _t_registry_audit),
     "registry_scan": ("掃一個目錄找未登記的 git repo（apply=true 才真的登記）",
                       _s(dir=_STR, apply=_BOOL, _req=["dir"]), _t_registry_scan),
-    "registry_relate": ("設 repo 間關係 a --kind--> b（例 a pm-of b＝a 是 b 的 PM；"
-                        "kind: pm-of/feeds/derived-from/upstream-of/sibling-topic）",
-                        _s(a=_STR, b=_STR, kind=_STR, note=_STR,
-                           exports=_d(_STR, "逗號分隔：這條關係用到 a 的哪些 export"),
-                           _req=["a", "b", "kind"]),
-                        _t_registry_relate),
     "registry_relations": ("讀 repo 間關係（給 id＝站在該 repo 兩向讀；省略＝全部）",
                            _s(id=_STR), _t_registry_relations),
-    "registry_export": ("登記 repo 對外提供的東西（export）：名稱→repo 內路徑；remove=true 刪除。"
-                        "agent 之後用 `<repo>:<名稱>/子路徑` 引用",
-                        _s(id=_STR, name=_STR, path=_STR, desc=_STR, remove=_BOOL,
-                           _req=["id", "name"]), _t_registry_export),
     "refs_check": ("跨 repo 參考檢查：agent 文件裡失效的跨 repo 路徑、引用過的上游有變、建議宣告的 export",
                    _s(), _t_refs_check),
     "group_context": ("組情境卡（markdown）：成員與角色、脈動、本組未結、最近事件、角色說明",
                       _s(**_SCOPE), _t_group_context),
     "group_list": ("列出所有組與成員", _s(), _t_group_list),
-    "group_add": ("建一個組", _s(name=_STR, members=_ARR, _req=["name", "members"]), _t_group_add),
-    "group_update": ("改組：add／remove 組員（repo 登記不動）、rename 改名；可一次給多項",
-                     _s(name=_STR, add=_ARR, remove=_ARR, rename=_STR, _req=["name"]),
-                     _t_group_update),
-    "group_remove": ("刪除一個組（只刪組定義；repo 登記與 groups/<組>/ 的料保留）",
-                     _s(name=_STR, _req=["name"]), _t_group_remove),
     "collect": ("採集 git 狀態（dirty、末次 commit、ahead/behind、worktree）", _s(**_SCOPE), _t_collect),
     "pack": ("把範圍內的 md 文件打包成一份全文（含洩密過濾）", _s(**_SCOPE, budget=_INT), _t_pack),
     "pack_estimate": ("只估算範圍內 md 文件的 token 成本，不打包", _s(**_SCOPE), _t_pack_estimate),
@@ -453,6 +379,13 @@ ADMIN_TOOLS = {
               _s(id=_STR, path=_STR, from_incubator=_STR, origin=_STR,
                  _req=["id", "path"]), _t_spawn),
 }
+
+# 管理類寫入動作一律來自操作表（ops.py）：參數、留痕、錯誤訊息跟 CLI／工作台同一份
+def _op_tool(name):
+    return lambda d, a: _ops.call(d, name, a, via="mcp")[1]
+
+
+ADMIN_TOOLS.update({n: (o.summary, o.schema(), _op_tool(n)) for n, o in _ops.OPS.items()})
 
 # 舊名相容（測試與既有呼叫端）：TOOLS＝全部工具
 TOOLS = {**{k: (v[0], v[1], v[2]) for k, v in WORK_TOOLS.items()}, **ADMIN_TOOLS}

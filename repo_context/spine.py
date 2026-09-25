@@ -85,6 +85,11 @@ def _events_dir(spine_dir):
     return Path(spine_dir) / "spine" / "events"
 
 
+# 管理類留痕（registry／組／關係的設定變更，ops.py 寫的）的 body 前綴：
+# 是「改了設定」不是「做了工作」——工作摘要的「上次進度」不拿它充數。
+ADMIN_TAG = "〔registry〕"
+
+
 def append_event(spine_dir, type, source, tokens=None, body="", when=None, dead_letter=False):
     """寫入一筆事件。驗證失敗：dead_letter=True（人的入口）落 dead-letter 檔並回傳 None；
     否則 raise ValidationError（程式/MCP 入口，錯誤原樣給 agent）。回傳 Event。"""
