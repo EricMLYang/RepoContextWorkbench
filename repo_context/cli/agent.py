@@ -8,6 +8,7 @@ from pathlib import Path
 from .. import agentapi as _api
 from .. import crossref as _xref
 from .. import repocard as _repocard
+from .. import ruminate as _ruminate
 
 from .common import EXIT_FINDINGS, _emit, _fail, _spine_dir
 
@@ -170,6 +171,45 @@ def cmd_search(args):
                 exclude_paths=[args.file] if args.file else None)
 
 
+def _h_fresh(r):
+    if r.get("note"):
+        return r["note"]
+    head = f"# 反芻推薦（{r['scope']}；上次反芻 {r.get('last_run') or '從未'}）"
+    if not r["links"]:
+        return head + "\n目前沒有新推薦。" + ("" if r.get("last_run") else "先跑 `ctx fresh --run`。")
+    out = [head]
+    for l in r["links"]:
+        tag = "" if l["status"] == "new" else f"〔{ {'used': '用上了', 'dismissed': '已略過'}[l['status']] }〕"
+        out += [ln.replace(f"[{l['id']}]", f"[{l['id']}]{tag}", 1) if i == 0 else ln
+                for i, ln in enumerate(_ruminate.link_lines([l], limit=1))]
+        out.append(f"    依據：{'、'.join(l['basis'])}；分數 {l['score']}")
+    return "\n".join(out)
+
+
+def cmd_fresh(args):
+    d = _spine_dir(args)
+    if args.run:
+        res = _ruminate.run(d, window_days=args.days)
+        n = sum(len(v) for v in res["groups"].values())
+        _emit(args, res, lambda r: f"反芻完成：自 {r['since']} 起 {r['candidates']} 個新／改過的檔，"
+              f"{n} 筆新推薦" + "".join(f"\n  {g}：{len(v)}" for g, v in r["groups"].items()))
+        return
+    if args.stats:
+        _emit(args, _ruminate.stats(d), lambda s: (
+            f"推薦 {s['total']} 筆：未處理 {s['new']}、用上了 {s['used']}、略過 {s['dismissed']}；"
+            f"命中率 {s['hit_rate'] if s['hit_rate'] is not None else '—'}（上次反芻 {s['last_run'] or '從未'}）"))
+        return
+    if args.dismiss:
+        try:
+            l = _ruminate.dismiss(d, args.dismiss)
+        except ValueError as e:
+            _fail(args, "not_found", str(e))
+        _emit(args, {"ok": True, "dismissed": l}, lambda r: f"已略過 {l['id']} {l['ref']}")
+        return
+    _agent_call(args, _api.fresh_links, _h_fresh, cwd=args.cwd, group=args.group,
+                repos=args.repos, include_seen=args.all or None)
+
+
 def cmd_resolve(args):
     _agent_call(args, _api.resolve_ref, _h_resolve, ref=args.ref)
 
@@ -315,6 +355,15 @@ def register(sub):
     s.set_defaults(func=cmd_search)
 
     # ---- 跨 repo 參考（2026-09-25 跨 repo 參考輪）----
+
+    s = sub.add_parser("fresh", help="反芻推薦：別組新進的知識／判斷中，跟主場手上工作強相關的")
+    scoped(s)
+    s.add_argument("--run", action="store_true", help="現在跑一輪反芻（排程任務 ruminate 做同一件事）")
+    s.add_argument("--days", type=int, help="配 --run：回看幾天（預設＝上次反芻之後）")
+    s.add_argument("--all", action="store_true", help="連用過／略過的也列")
+    s.add_argument("--dismiss", metavar="ID", help="略過一筆推薦，例 r3")
+    s.add_argument("--stats", action="store_true", help="命中率：推薦後來有多少被讀了")
+    s.set_defaults(func=cmd_fresh)
 
     s = sub.add_parser("resolve", help="名字 → 路徑：<repo>、<repo>:<export>[/子路徑]、<repo>:<相對路徑>")
     s.add_argument("ref")

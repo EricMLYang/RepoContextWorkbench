@@ -1,6 +1,6 @@
 """P12 排程——timer 住殼內（S6）：殼（`ui`／`timer` 子命令）按時呼叫引擎，不用 OS 排程器。
 
-- config.yaml `schedule:` 每項 {task: brief|digest|upstream|commit, at: "HH:MM", group: <組名|省略>}
+- config.yaml `schedule:` 每項 {task: brief|digest|upstream|ruminate|commit, at: "HH:MM", group: <組名|省略>}
 - 補課規則（檢討④）：錯過排程（睡眠/登出/殼未開）→ 醒來後**當日內補跑一次，跨日不補**
   （實作＝到點後當天只要沒跑過就跑；狀態記 .state/timer.json 的最後執行日）
 - 任務失敗必須浮出：落 system-unsure 事件（准打斷類），不准沉默。
@@ -13,6 +13,7 @@ from pathlib import Path
 from . import digest as _digest
 from . import upstream as _upstream
 from . import brief as _brief
+from . import ruminate as _ruminate
 from . import spine
 
 
@@ -51,10 +52,12 @@ def run_task(spine_dir, entry):
         _digest.run(spine_dir, group)
     elif task == "upstream":
         _upstream.check(spine_dir, group)
+    elif task == "ruminate":
+        _ruminate.run(spine_dir)
     elif task == "commit":
         spine.batch_commit(spine_dir, "spine: scheduled batch commit")
     else:
-        raise ValueError(f"未知排程任務: {task}（brief|digest|upstream|commit）")
+        raise ValueError(f"未知排程任務: {task}（brief|digest|upstream|ruminate|commit）")
 
 
 def tick(spine_dir, now=None, schedule=None):

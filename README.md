@@ -43,6 +43,13 @@
   正在跑的 dev server 與它啟動後改過的檔（要不要重開）、最後交接、失效的跨 repo 路徑；
   ⑤ `refs check`／`registry audit` 掃各 repo agent 文件裡指向其他 repo 卻已失效的路徑。
   記錄：`docs/20260925_跨repo參考輪.md`。
+- **反芻輪（2026-09-25 同日第三輪）**：從「拉」補上「推」——`search_knowledge` 要 agent 先想到去搜，
+  但 card_notes 每週新進的文章、別組剛留下的判斷，跟另一組手上的事強相關時沒人會想到去搜。
+  `ruminate.py` 在會話之間（排程任務 `ruminate`，或開場發現超過 20 小時沒跑就背景補跑）拿每組的
+  **手上工作**（目標＋未結＋最近判斷／交接）比對**上次反芻後別組新增或改過的 md 與新判斷**，
+  只收共同少見詞 ≥3 的、每組最多 3 筆，附共同詞與行號片段；結果進開場注入與 `context_for.fresh`，
+  不進收件匣。agent 之後 `read_from` 讀了＝用上了 → `ctx fresh --stats` 命中率就是調門檻的依據。
+  零 LLM、零成本；真資料 1,585 檔一輪 2 秒。記錄：`docs/20260925_反芻輪.md`。
 - **未做（VDI Day 0 smoke test 過了才蓋）**：真殼的常駐件——tray、全域 hotkey、OS toast、開機自啟；Windows terminal 需 pywinpty（未實測）。視窗內 badge＋瀏覽器通知是常駐件的等效替身。
 - 對 v2 的小偏差：kv token 多一個 `id:`（collision 回連需要，v2 的 kv 清單為例示性）；pack 用內建文件層選料（正式版換 Repomix）。
 
@@ -118,6 +125,12 @@ ctx ask notes "快取失效怎麼處理？"            # 對方 repo 開唯讀 a
 ctx repo [<id>] [--since 7d] [--peek]        # 狀態卡（人看會記已讀；--peek 不記）
 ctx refs check                    # 失效的跨 repo 路徑＋上游變動＋建議 export
 ctx refs cite notes:書摘/ch01.md --note "複製進講義"   # 手動複製時記下版本
+
+# 反芻（別組新進的知識／判斷 → 對上本組手上工作；開場會自動注入）
+ctx fresh                         # 本組目前的推薦（每筆附共同詞與片段）
+ctx fresh --run [--days 30]       # 現在跑一輪（排程 task: ruminate 做同一件事）
+ctx fresh --dismiss r3            # 不相關，略過
+ctx fresh --stats                 # 命中率：推薦後來有多少被 read_from 讀了
 python scripts/screenshot.py <spine> --demo             # 改 UI 後先截圖自看（headless Edge；--demo 灌示範事件）
 python -m repo_context --spine ... ui                     # 瀏覽器模式（app 的過渡替代）
 ```
@@ -176,6 +189,7 @@ repo_context/
   knowledge.py 知識 ↔ repo 相關度（BM25、中文 bigram、標題另建索引加權、boosts＋why、洩密檔不索引、mtime 快取）
   crossref.py  跨 repo 參考（resolve／read＋引用紀錄／drift／建議 export／鄰居地圖／程式碼 git grep／
                ask_repo 唯讀委派／agent 文件失效路徑 lint）
+  ruminate.py  反芻（各組手上工作 × 別組新進的 md／判斷 → 推薦；共同少見詞門檻；read_from 回填命中率）
   repocard.py  repo 狀態卡（已讀水位線、目錄彙總、dirty 天數、正在跑的程序與啟動後改過的檔、交接、drift）
   hooks.py     Claude Code SessionStart／SessionEnd（注入脈絡、記下沒交接的會話）
   agentsetup.py ctx setup（使用者設定、claude mcp add、hooks 合併、skill 安裝）

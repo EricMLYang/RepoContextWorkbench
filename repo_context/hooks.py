@@ -19,6 +19,7 @@ from pathlib import Path
 
 from . import agentapi as _api
 from . import crossref as _xref
+from . import ruminate as _ruminate
 from . import spine as _spine
 
 TOOLS_LINE = ("context_for／next_work／log_decision／add_todo／close_todo／"
@@ -73,6 +74,12 @@ def render_start(ctx):
     if ctx.get("drift"):
         out.append("你之前引用過的上游檔之後又改了（本地的副本或結論可能過期）：")
         out += _xref.drift_lines(ctx["drift"], limit=3)
+    fr = ctx.get("fresh") or []
+    if fr:
+        out.append("")
+        out.append("## 自上次以來跟你手上工作相關的新料（反芻；別組新進的知識或判斷）")
+        out += _ruminate.link_lines(fr, limit=3)
+        out.append("用得上就 read_from 那個 ref；不相關可略過（使用者可 `ctx fresh --dismiss <id>`）。")
     out += [
         "",
         "## 工作約定（repo-context）",
@@ -95,6 +102,11 @@ def session_start(spine_dir, payload, now=None):
         if not where["registered"]:
             return ""
         ctx = _api.context_for(spine_dir, cwd=cwd, card=False)
+        if _ruminate.is_stale(spine_dir, now):
+            try:
+                _ruminate.spawn_detached(spine_dir)  # 背景補跑；這次開場用上一輪的結果
+            except OSError:
+                pass
         now = now or _dt.datetime.now()
         d = _marker_dir(spine_dir)
         d.mkdir(parents=True, exist_ok=True)

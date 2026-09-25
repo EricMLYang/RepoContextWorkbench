@@ -45,6 +45,12 @@ def make_git_repo(base, name, days_old=0, dirty_files=0, notes=True):
     return p
 
 
+@pytest.fixture(autouse=True)
+def _no_background(monkeypatch):
+    """測試裡不讓 hook 背景 spawn 反芻進程（會在 tmp spine 留下非同步寫入）。"""
+    monkeypatch.setenv("REPOCTX_NO_BACKGROUND", "1")
+
+
 @pytest.fixture
 def spine(tmp_path):
     """已 init 的 spine repo 路徑。"""

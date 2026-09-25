@@ -29,6 +29,7 @@ from . import config as _config
 from . import context as _context
 from . import crossref as _xref
 from . import repocard as _repocard
+from . import ruminate as _ruminate
 from . import knowledge as _knowledge
 from . import registry, spine
 from . import summary as _summary
@@ -256,6 +257,7 @@ def context_for(spine_dir, cwd=None, group=None, repos=None, card=True):
     rid = (where.get("repo") or {}).get("id")
     out["neighbors"] = _xref.neighbors(spine_dir, rid) if rid else []
     out["drift"] = _xref.drift(spine_dir, consumer=rid) if rid else []
+    out["fresh"] = _ruminate.fresh(spine_dir, scope["group"])[:5] if scope["group"] else []
     if card:
         out["card"] = _context.build_context(
             spine_dir, scope["group"],
@@ -319,6 +321,19 @@ def _search_boosts(spine_dir, where):
             paths.append((n["peer"], "" if prefix == "." else prefix + "/", 1.2,
                           f"在 {n['peer']}:{name} 內"))
     return {"repos": repos, "paths": paths}
+
+
+def fresh_links(spine_dir, cwd=None, group=None, repos=None, include_seen=False):
+    """反芻推薦：上次反芻後別組新進的知識／判斷，跟主場手上工作（目標、未結、交接、判斷）強相關的。
+    每筆帶共同詞（為什麼推）與 ref（直接給 read_from）。"""
+    where = where_am_i(spine_dir, cwd)
+    scope = _scope_of(spine_dir, where, group, repos)
+    if not scope["group"]:
+        return {"ok": True, "scope": scope["label"], "links": [],
+                "note": "反芻以組為單位；所在 repo 不屬於任何組（或是臨時範圍）。"}
+    return {"ok": True, "scope": scope["label"],
+            "links": _ruminate.fresh(spine_dir, scope["group"], include_seen=include_seen),
+            "last_run": _ruminate.load_state(spine_dir).get("last_run")}
 
 
 def search_knowledge(spine_dir, query, cwd=None, group=None, repos=None,

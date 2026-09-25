@@ -23,6 +23,7 @@ pack:
   token_budget: 60000
 # schedule:                  # P12：timer（`ui`/`timer` 子命令）按時呼叫；當日補課、跨日不補
 #   - {task: brief, at: "07:30", group: g1}
+#   - {task: ruminate, at: "06:30"}   # 反芻：別組新進的知識／判斷對上各組手上工作（ctx fresh 看）
 #   - {task: upstream, at: "07:25"}
 #   - {task: commit, at: "21:00"}
 # agents:                     # P16 會話 agent 註冊表——claude 內建（見預設值），其他家照這個形狀加：

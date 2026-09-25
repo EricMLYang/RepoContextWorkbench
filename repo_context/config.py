@@ -26,8 +26,11 @@ DEFAULTS = {
     "pack": {"token_budget": 60000},
     # tag 詞彙建議（顯示在 tag 編輯器裡供一鍵點選；registry 既有 tag 會自動併入）
     "tags": {"suggestions": []},
-    # P12：排程住殼內（S6）。每項 {task: brief|digest|upstream|commit, at: "HH:MM", group: <組名|null>}
+    # P12：排程住殼內（S6）。每項 {task: brief|digest|upstream|ruminate|commit, at: "HH:MM", group: <組名|null>}
     "schedule": [],
+    # 反芻（ctx fresh）：window_days＝第一次回看幾天；min_shared＝至少幾個共同少見詞才推；
+    # max_per_group＝每組每輪最多推幾筆。命中率（ctx fresh --stats）低就把 min_shared 調高。
+    "ruminate": {"window_days": 14, "min_shared": 3, "max_per_group": 3},
 }
 
 
