@@ -50,6 +50,12 @@
   只收共同少見詞 ≥3 的、每組最多 3 筆，附共同詞與行號片段；結果進開場注入與 `context_for.fresh`，
   不進收件匣。agent 之後 `read_from` 讀了＝用上了 → `ctx fresh --stats` 命中率就是調門檻的依據。
   零 LLM、零成本；真資料 1,585 檔一輪 2 秒。記錄：`docs/20260925_反芻輪.md`。
+- **回填輪（2026-09-26）**：新 spine 是空的——沒判斷、沒未結、沒交接，agent 開場接不上、反芻沒有手上工作可比。
+  `backfill.py` 從 `~/.claude/projects/*.jsonl` 過去的會話撈回來：cwd 對到已登記 repo（Drive 舊路徑依資料夾名）→
+  壓成原話＋agent 文字＋工具一行（470MB → 79 萬字）→ 每段一次 `claude -p` 抽判斷／待辦／完成／下一步 →
+  每個 repo 依時間再彙整一次（剔掉後來推翻的判斷、做完的待辦）。**候選不自動進 spine**：`ctx backfill review` 看、
+  `accept` 才寫（source `backfill`、內文註明回填自哪場會話）；目標只列線索不代寫。可中斷續跑、單場失敗不擋整批。
+  記錄：`docs/20260926_回填輪.md`。
 - **未做（VDI Day 0 smoke test 過了才蓋）**：真殼的常駐件——tray、全域 hotkey、OS toast、開機自啟；Windows terminal 需 pywinpty（未實測）。視窗內 badge＋瀏覽器通知是常駐件的等效替身。
 - 對 v2 的小偏差：kv token 多一個 `id:`（collision 回連需要，v2 的 kv 清單為例示性）；pack 用內建文件層選料（正式版換 Repomix）。
 
@@ -131,6 +137,12 @@ ctx fresh                         # 本組目前的推薦（每筆附共同詞�
 ctx fresh --run [--days 30]       # 現在跑一輪（排程 task: ruminate 做同一件事）
 ctx fresh --dismiss r3            # 不相關，略過
 ctx fresh --stats                 # 命中率：推薦後來有多少被 read_from 讀了
+
+# 回填（新 spine 冷啟動：從過去的 Claude Code 會話撈判斷／待辦／交接）
+ctx backfill scan                 # 會話對到哪些 repo、哪些對不到
+ctx backfill run [--repo X] [--limit N]   # 抽取＋彙整（claude -p，可續跑）
+ctx backfill review               # 候選清單（d=判斷 t=待辦 h=交接）
+ctx backfill accept X d1 d3 t2 h  # 勾選的才寫進 spine（或 all）
 python scripts/screenshot.py <spine> --demo             # 改 UI 後先截圖自看（headless Edge；--demo 灌示範事件）
 python -m repo_context --spine ... ui                     # 瀏覽器模式（app 的過渡替代）
 ```
@@ -189,6 +201,7 @@ repo_context/
   knowledge.py 知識 ↔ repo 相關度（BM25、中文 bigram、標題另建索引加權、boosts＋why、洩密檔不索引、mtime 快取）
   crossref.py  跨 repo 參考（resolve／read＋引用紀錄／drift／建議 export／鄰居地圖／程式碼 git grep／
                ask_repo 唯讀委派／agent 文件失效路徑 lint）
+  backfill.py  回填（過去會話 → 候選判斷／待辦／交接；scan／extract／consolidate／accept，可續跑）
   ruminate.py  反芻（各組手上工作 × 別組新進的 md／判斷 → 推薦；共同少見詞門檻；read_from 回填命中率）
   repocard.py  repo 狀態卡（已讀水位線、目錄彙總、dirty 天數、正在跑的程序與啟動後改過的檔、交接、drift）
   hooks.py     Claude Code SessionStart／SessionEnd（注入脈絡、記下沒交接的會話）

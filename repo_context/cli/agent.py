@@ -1,5 +1,6 @@
 """Agent 介面（2026-09-25 Agent 友善輪）：agentapi 的 CLI 入口，--json 回結構化結果。"""
 import datetime as _dt
+from collections import Counter
 import json
 import subprocess
 import sys
@@ -210,6 +211,42 @@ def cmd_fresh(args):
                 repos=args.repos, include_seen=args.all or None)
 
 
+def cmd_backfill(args):
+    from .. import backfill as _bf
+    d = _spine_dir(args)
+    if args.action == "scan":
+        recs = _bf.scan(d)
+        c = Counter(r["status"] for r in recs)
+        per = Counter(r["repo"] for r in recs if r["status"] in ("pending", "done"))
+        _emit(args, {"sessions": recs, "counts": dict(c)}, lambda _: "\n".join(
+            [f"會話 {len(recs)} 場：" + "、".join(f"{k} {v}" for k, v in c.most_common())]
+            + [f"  {rid}：{n} 場" for rid, n in per.most_common()]
+            + [f"對不到 repo 的 cwd：{cwd}" for cwd in sorted({r['cwd'] or '?' for r in recs
+                                                            if r['status'] == 'unmapped'})]))
+    elif args.action == "run":
+        res = _bf.run(d, call=_bf.claude_caller(d, model=args.model), limit=args.limit,
+                      repo=args.repo, jobs=args.jobs, log=(lambda *_: None) if args.json else
+                      (lambda m: print(m, flush=True)))
+        _emit(args, res, lambda r: f"抽取 {r['extracted']} 場、彙整 {len(r['consolidated'])} 個 repo、"
+              f"失敗 {len(r['failed'])}；看結果：ctx backfill review")
+        if res["failed"]:
+            sys.exit(EXIT_FINDINGS)
+    elif args.action == "review":
+        _emit(args, _bf.candidates(d, args.repo), lambda _: _bf.review_text(d, args.repo))
+    elif args.action == "accept":
+        repo, ids = args.repo, list(args.ids)
+        if not repo and ids:  # ctx backfill accept <repo> d1 t2 h（--repo 寫在最後也可以）
+            repo, ids = ids[0], ids[1:]
+        if not repo or not ids:
+            _fail(args, "bad_request", "用法：ctx backfill accept <repo> <d1 t2 h …|all>")
+        try:
+            refs = _bf.accept(d, repo, ids)
+        except (ValueError, _api.AgentError) as e:
+            _fail(args, "bad_request", str(e))
+        _emit(args, {"ok": True, "written": refs},
+              lambda r: f"寫進 spine {len(refs)} 筆：{' '.join(refs)}" if refs else "都收過了")
+
+
 def cmd_resolve(args):
     _agent_call(args, _api.resolve_ref, _h_resolve, ref=args.ref)
 
@@ -364,6 +401,15 @@ def register(sub):
     s.add_argument("--dismiss", metavar="ID", help="略過一筆推薦，例 r3")
     s.add_argument("--stats", action="store_true", help="命中率：推薦後來有多少被讀了")
     s.set_defaults(func=cmd_fresh)
+
+    s = sub.add_parser("backfill", help="回填：從過去的 Claude Code 會話撈判斷／待辦／交接（scan／run／review／accept）")
+    s.add_argument("action", choices=["scan", "run", "review", "accept"])
+    s.add_argument("ids", nargs="*", help="accept：<repo> 後接候選編號（d1 t2 h）或 all")
+    s.add_argument("--repo", help="只處理這個 repo")
+    s.add_argument("--limit", type=int, help="run：這次最多抽幾場")
+    s.add_argument("--model", default="sonnet", help="run：claude 模型（預設 sonnet）")
+    s.add_argument("--jobs", type=int, default=4, help="run：同時跑幾個模型呼叫（預設 4）")
+    s.set_defaults(func=cmd_backfill)
 
     s = sub.add_parser("resolve", help="名字 → 路徑：<repo>、<repo>:<export>[/子路徑]、<repo>:<相對路徑>")
     s.add_argument("ref")
