@@ -63,10 +63,46 @@ pub fn make_git_repo(
 }
 
 /// 對應 conftest `spine` fixture：temp 目錄裡 init 好的 spine repo。回傳 (TempDir 守衛, spine 路徑)。
+/// TempDir 的路徑＝conftest 的 `tmp_path`（其他假 repo 建在這底下）。
 pub fn spine() -> (tempfile::TempDir, PathBuf) {
     std::env::set_var("REPOCTX_NO_BACKGROUND", "1");
     let tmp = tempfile::tempdir().unwrap();
     let d = tmp.path().join("spine-repo");
     crate::init::init_spine(&d).unwrap();
     (tmp, d)
+}
+
+/// 對應 conftest `spine_with_repos`：spine ＋ 兩個 mine repo（repo-a 1 天前乾淨、repo-b 6 天前
+/// 且 2 個 dirty 檔、dirty 檔 mtime 設成 5 天前）＋ 組 g1。
+pub fn spine_with_repos() -> (tempfile::TempDir, PathBuf) {
+    let (tmp, d) = spine();
+    let ra = make_git_repo(tmp.path(), "repo-a", 1, 0, true);
+    let rb = make_git_repo(tmp.path(), "repo-b", 6, 2, true);
+    // 讓 dirty 檔看起來已放了 5 天
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(5 * 86400);
+    for i in 0..2 {
+        let f = std::fs::File::options()
+            .write(true)
+            .open(rb.join(format!("wip{i}.md")))
+            .unwrap();
+        f.set_times(
+            std::fs::FileTimes::new()
+                .set_accessed(old)
+                .set_modified(old),
+        )
+        .unwrap();
+    }
+    use crate::registry::{add_group, add_repo, AddRepo};
+    add_repo(&d, "repo-a", &ra, AddRepo::default()).unwrap();
+    add_repo(&d, "repo-b", &rb, AddRepo::default()).unwrap();
+    add_group(&d, "g1", &["repo-a", "repo-b"]).unwrap();
+    (tmp, d)
+}
+
+/// 測試用時間：今天 h:m（對應 test_spine 的 `_t`）。
+pub fn today_at(h: u32, m: u32) -> chrono::NaiveDateTime {
+    chrono::Local::now()
+        .date_naive()
+        .and_hms_opt(h, m, 0)
+        .unwrap()
 }

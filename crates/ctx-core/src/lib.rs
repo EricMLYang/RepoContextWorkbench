@@ -6,11 +6,21 @@
 pub mod agentmark;
 pub mod agents;
 pub mod collect;
+pub mod config;
 pub mod error;
 pub mod fsutil;
 pub mod init;
 pub mod knowledge;
+pub mod locking;
+pub mod notify;
+pub mod ops;
 pub mod pack;
+pub mod pystr;
+pub mod registry;
+pub mod route;
+pub mod spawn;
+pub mod spine;
+pub mod yamlout;
 
 #[cfg(feature = "testkit")]
 pub mod testkit;
