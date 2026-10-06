@@ -90,10 +90,9 @@ fn test_doc_files_keep_non_ascii_names() {
     assert!(names.iter().any(|n| n == "決策平台.md"));
 }
 
-// 未搬（route／collide 模組不在這波）：test_route_to_repo_inbox、test_route_to_incubator_and_group、
-// test_collide_two_stage_mock、test_collide_inner_validation_retry、test_collide_system_unsure_surfaces、
-// test_collision_id_sequence、test_agent_raw_log_written、test_mock_verdict_follows_idea_not_template、
-// test_collide_adhoc_repos_token_roundtrip——等 collide／route（與 spine/registry）搬完再搬。
+// route 相關在 tests/route.rs；collide 相關（test_collide_two_stage_mock、test_collide_inner_validation_retry、
+// test_collide_system_unsure_surfaces、test_collision_id_sequence、test_agent_raw_log_written、
+// test_mock_verdict_follows_idea_not_template、test_collide_adhoc_repos_token_roundtrip）在 tests/collide.rs。
 // 其中 agents 層的行為（mock 重試、AgentUnsure、raw log、只看【想法】段）先在 tests/agents.rs 直接測。
 
 // ---- 以下為 Rust 版補測（非 Python 一對一）----

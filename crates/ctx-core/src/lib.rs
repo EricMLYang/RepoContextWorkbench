@@ -5,8 +5,12 @@
 
 pub mod agentmark;
 pub mod agents;
+pub mod agentsetup;
+pub mod brief;
 pub mod collect;
+pub mod collide;
 pub mod config;
+pub mod digest;
 pub mod error;
 pub mod fsutil;
 pub mod init;
@@ -20,6 +24,8 @@ pub mod registry;
 pub mod route;
 pub mod spawn;
 pub mod spine;
+pub mod summary;
+pub mod upstream;
 pub mod yamlout;
 
 #[cfg(feature = "testkit")]

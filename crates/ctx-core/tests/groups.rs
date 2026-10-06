@@ -246,8 +246,41 @@ fn test_ops_table_is_the_single_source() {
     assert!(e.contains("缺參數"), "{e}");
 }
 
-// 未搬：test_admin_edits_are_not_progress——等 summary 模組（summary.build_summary）。
-// ADMIN_TAG 前綴在這裡先驗：
+/// 改設定（建組、改組、改目標）不是工作進度：摘要的「上次進度」不拿它充數。
+#[test]
+fn test_admin_edits_are_not_progress() {
+    let (_t, d) = three();
+    ops::call(
+        &d,
+        "group_update",
+        json!({"name": "g1", "add": ["repo-c"]}),
+        Via::Ui,
+    )
+    .unwrap();
+    ops::call(
+        &d,
+        "group_goal",
+        json!({"name": "g1", "text": "做完 X"}),
+        Via::Cli,
+    )
+    .unwrap();
+    let s = ctx_core::summary::build_summary(&d, Some("g1"), None, None, None, None).unwrap();
+    assert!(s.progress.is_none());
+    assert!(s.progress_gap.unwrap().contains("沒有本組的進度紀錄"));
+    spine::append_event(
+        &d,
+        "decision",
+        "monitor",
+        &["group:g1"],
+        "會話結果：做完第一步",
+        None,
+    )
+    .unwrap();
+    let s = ctx_core::summary::build_summary(&d, Some("g1"), None, None, None, None).unwrap();
+    assert!(s.progress.unwrap().text.contains("會話結果"));
+}
+
+// ADMIN_TAG 前綴（Python 沒有獨立測試）：
 #[test]
 fn admin_edits_carry_admin_tag() {
     let (_t, d) = three();
