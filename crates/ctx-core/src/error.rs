@@ -10,7 +10,11 @@ pub enum Error {
     Invalid(String),
     /// 寫到主場以外被拒——對應 agentapi 的 cross_scope。
     #[error("{message}")]
-    Rejected { code: String, message: String, hint: Option<String> },
+    Rejected {
+        code: String,
+        message: String,
+        hint: Option<String>,
+    },
     #[error("lock timeout: {0}")]
     LockTimeout(String),
     /// 外部指令（git／gh／claude）失敗或沒把握——對應 Python `AgentUnsure` 等。
@@ -29,7 +33,11 @@ impl Error {
         Error::Invalid(msg.into())
     }
     pub fn rejected(code: impl Into<String>, msg: impl Into<String>, hint: Option<String>) -> Self {
-        Error::Rejected { code: code.into(), message: msg.into(), hint }
+        Error::Rejected {
+            code: code.into(),
+            message: msg.into(),
+            hint,
+        }
     }
 }
 

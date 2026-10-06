@@ -27,7 +27,10 @@ pub fn init_spine(dir: &Path) -> Result<()> {
         }
     }
     if !dir.join(".git").exists() {
-        let st = Command::new("git").args(["init", "-q"]).current_dir(dir).status()?;
+        let st = Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(dir)
+            .status()?;
         if !st.success() {
             return Err(Error::External(format!("git init 失敗：{}", dir.display())));
         }
