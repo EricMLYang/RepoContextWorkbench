@@ -122,7 +122,7 @@ fn save_cache(spine_dir: &Path, cache: &Map<String, Value>) {
 }
 
 /// 有序計數（插入順序＝首次出現順序，同 Python `Counter`）。
-fn count(toks: Vec<String>) -> Vec<(String, u64)> {
+pub(crate) fn count(toks: Vec<String>) -> Vec<(String, u64)> {
     let mut idx: HashMap<String, usize> = HashMap::new();
     let mut out: Vec<(String, u64)> = Vec::new();
     for t in toks {
@@ -230,14 +230,14 @@ pub fn build_docs(entries: &[RepoRef], spine_dir: Option<&Path>) -> Vec<Doc> {
 }
 
 /// 命中片段（行號 1 起算）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
 pub struct Snippet {
     pub line: usize,
     pub text: String,
 }
 
 /// 對應 `knowledge._snippets`：命中最多查詢詞的幾行（附行號）——給 agent 引用的依據。
-fn snippets(path: &str, qtoks: &[String], limit: usize) -> Vec<Snippet> {
+pub(crate) fn snippets(path: &str, qtoks: &[String], limit: usize) -> Vec<Snippet> {
     let Ok(text) = read_text_lossy(Path::new(path)) else {
         return Vec::new();
     };
@@ -264,7 +264,7 @@ fn snippets(path: &str, qtoks: &[String], limit: usize) -> Vec<Snippet> {
 }
 
 /// 對應 `knowledge._bm25`：每份 doc 的 BM25 分數（同一份 docs 順序）。`head` 選標題索引。
-fn bm25(qcount: &[(String, u64)], docs: &[Doc], head: bool) -> Vec<f64> {
+pub(crate) fn bm25(qcount: &[(String, u64)], docs: &[Doc], head: bool) -> Vec<f64> {
     fn tf_of(d: &Doc, head: bool) -> &HashMap<String, f64> {
         if head {
             &d.htf
@@ -374,7 +374,7 @@ pub struct SearchResult {
 }
 
 /// Python `round(x, 2)`：以精確十進位展開四捨五入到兩位（Rust 格式化同為正確捨入）。
-fn round2(x: f64) -> f64 {
+pub(crate) fn round2(x: f64) -> f64 {
     format!("{x:.2}").parse().unwrap_or(x)
 }
 
