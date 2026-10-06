@@ -1,7 +1,8 @@
 //! 跨 repo 參考輪（2026-09-25）：agent 在 A repo 工作，又快又準地拿到 B repo 的東西。對應 tests/test_crossref.py。
 //!
 //! Python 經 `agentapi.read_from(cwd=…)` 的地方，這裡直接呼叫 `crossref::read` 並給出 cwd 會推出的
-//! 引用方（consumer）——where_am_i 屬 agentapi（第三波）。repo 狀態卡的測試在 tests/repocard.rs。
+//! 引用方（consumer）——cwd→引用方的推導（agentapi.where_am_i）另在 tests/agentapi.rs、tests/hooks.rs 經
+//! agentapi 測過。repo 狀態卡的測試在 tests/repocard.rs。
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -259,7 +260,7 @@ fn test_lint_doc_refs_reports_only_confident_breaks() {
     assert!(found[0].fix.contains("`notes:books`"));
 }
 
-// 未搬：test_audit_cli_includes_doc_refs——等第三波 agentapi/ctx-cli（跑 `ctx registry audit`）。
+// 未搬：test_audit_cli_includes_doc_refs——等 ctx-cli（跑 `ctx registry audit`）。
 
 // ---- ⑤ 搜尋 ----
 
@@ -393,9 +394,9 @@ fn test_ask_repo_mock_provider() {
 
 // ---- ⑦ repo 狀態卡：見 tests/repocard.rs ----
 
-// 未搬：test_session_start_injects_neighbor_map_and_drift——等第三波 agentapi/hooks（hooks.session_start）。
-// 未搬：test_mcp_work_tools_include_crossref——等第三波 agentapi/ctx-cli（mcpserver.handle_message）。
-// 未搬：test_cli_crossref_flow——等第三波 agentapi/ctx-cli（CLI e2e）。
+// test_session_start_injects_neighbor_map_and_drift：搬在 tests/hooks.rs。
+// 未搬：test_mcp_work_tools_include_crossref——等 ctx-cli（MCP 協定 mcpserver.handle_message）。
+// 未搬：test_cli_crossref_flow——等 ctx-cli（CLI e2e）。
 
 // ---- Rust 版補測（非 Python 一對一）----
 

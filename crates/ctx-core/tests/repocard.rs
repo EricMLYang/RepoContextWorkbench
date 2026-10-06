@@ -1,16 +1,15 @@
 //! repo 狀態卡：水位線、目錄彙總、dirty、正在跑的程序、agent 交接。
 //! 對應 tests/test_crossref.py 的「⑦ repo 狀態卡」三個測試（Python 沒有獨立的 test_repocard.py）。
 //!
-//! Python 的 `api.handoff(...)`／`api.repo_status(...)` 屬 agentapi（第三波）：這裡照 handoff 落的
-//! 事件形狀直接寫一筆 decision，repo_status 則照它的呼叫（since="recent"、mark=False）直接呼叫 build。
+//! Python 的 `api.handoff(...)`／`api.repo_status(...)` 照樣經 `ctx_core::agentapi` 呼叫。
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
+use ctx_core::agentapi::{self as api, Target};
 use ctx_core::registry::{self, AddRepo};
 use ctx_core::repocard::{self, ProcProbe, PsRow, WindowKind};
-use ctx_core::spine;
 use ctx_core::testkit::{git, make_git_repo, spine};
 
 fn commit(repo: &Path, msg: &str) {
@@ -132,14 +131,14 @@ fn test_repo_card_dirty_running_and_agent() {
         },
     ];
     std::fs::write(w.course.join("README.md"), "# 改過\n").unwrap(); // 啟動後改
-                                                                     // api.handoff(sp, "做完大綱", "下次寫第二週", cwd=course) 落的 decision
-    spine::append_event(
+    api::handoff::<&str>(
         &w.sp,
-        "decision",
+        "做完大綱",
+        "下次寫第二週",
+        &[],
+        &Target::at(&w.course),
+        false,
         "agent",
-        &["id:2026-01-01-d1", "group:課程", "repo:course"],
-        "交接：做完大綱\n完成：做完大綱\n剩下：無\n下次從這裡接：下次寫第二週",
-        None,
     )
     .unwrap();
     let card = repocard::build(
@@ -174,10 +173,9 @@ fn test_repo_card_dirty_running_and_agent() {
 #[test]
 fn test_repo_status_agent_does_not_move_watermark() {
     let w = world();
-    let r = repocard::build(&w.sp, "course", Some("recent"), false, None, no_procs()).unwrap();
-    assert_eq!(r.repo, "course");
-    let v = serde_json::to_value(&r).unwrap();
-    assert!(v.get("marked_seen").is_none());
+    let r = api::repo_status(&w.sp, None, Some(&w.course), None).unwrap();
+    assert_eq!(r["repo"], "course");
+    assert!(r.get("marked_seen").is_none());
     assert!(repocard::get_seen(&w.sp, "course").is_none());
 }
 

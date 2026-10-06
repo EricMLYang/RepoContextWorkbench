@@ -2,8 +2,8 @@
 //! `test_tokenize_mixes_cjk_bigrams_and_words`；`test_search_knowledge_ranks_repos`、
 //! `test_search_skips_secret_files_and_caches` 經 agentapi.search_knowledge——這裡在引擎層照它的呼叫搬
 //! （全部 repo＝registry 全部登記；主場範圍＝所在 repo 的組）。`test_crossref.test_search_neighbor_boost_and_why`
-//! 搬在 tests/crossref.rs（boosts＝`crossref::search_boosts`）。agentapi 層的 scope 標籤與空查詢的 AgentError
-//! 等第三波 agentapi。
+//! 搬在 tests/crossref.rs（boosts＝`crossref::search_boosts`）。agentapi 層（scope 標籤、ref、空查詢的
+//! AgentError）的同名測試在 tests/agentapi.rs。
 
 mod common;
 
@@ -84,7 +84,7 @@ fn test_search_knowledge_ranks_repos() {
     let here = knowledge::search(&home, "特徵倉庫", 8, Some(&sp), &[], &boosts);
     let repos: HashSet<&str> = here.repos.iter().map(|x| x.repo.as_str()).collect();
     assert_eq!(repos, HashSet::from(["plan"]));
-    // 空查詢的 AgentError 屬 agentapi（第三波）
+    // 空查詢的 AgentError：見 tests/agentapi.rs 同名測試
 }
 
 #[test]
