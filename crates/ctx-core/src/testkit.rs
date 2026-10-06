@@ -15,18 +15,37 @@ pub fn git(cwd: &Path, args: &[&str], extra_env: &[(&str, &str)]) {
         c.env(k, v);
     }
     let out = c.output().expect("git 執行失敗");
-    assert!(out.status.success(), "git {:?} 失敗：{}", args, String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "git {:?} 失敗：{}",
+        args,
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 /// 對應 conftest.make_git_repo：README＋筆記，最後 commit 在 `days_old` 天前，`dirty_files` 個未提交檔。
-pub fn make_git_repo(base: &Path, name: &str, days_old: i64, dirty_files: usize, notes: bool) -> PathBuf {
+pub fn make_git_repo(
+    base: &Path,
+    name: &str,
+    days_old: i64,
+    dirty_files: usize,
+    notes: bool,
+) -> PathBuf {
     let p = base.join(name);
     std::fs::create_dir_all(&p).unwrap();
     git(&p, &["init", "-q"], &[]);
-    std::fs::write(p.join("README.md"), format!("# {name}\n這個 repo 談 widget 快取設計。\n")).unwrap();
+    std::fs::write(
+        p.join("README.md"),
+        format!("# {name}\n這個 repo 談 widget 快取設計。\n"),
+    )
+    .unwrap();
     if notes {
         std::fs::create_dir_all(p.join("notes")).unwrap();
-        std::fs::write(p.join("notes").join("plan.md"), "## 計劃\n已知結論：快取要用 LRU。\n").unwrap();
+        std::fs::write(
+            p.join("notes").join("plan.md"),
+            "## 計劃\n已知結論：快取要用 LRU。\n",
+        )
+        .unwrap();
     }
     let when = (chrono::Local::now() - chrono::Duration::days(days_old))
         .format("%Y-%m-%dT%H:%M:%S")
