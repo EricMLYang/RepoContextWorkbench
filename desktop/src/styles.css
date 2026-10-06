@@ -1372,3 +1372,25 @@ dialog::backdrop {
   overflow: auto;
   margin: 4px 0 8px;
 }
+
+/* 首次設定（桌面殼找不到 spine）：佔滿 body grid */
+.spinesetup {
+  grid-area: 1 / 1 / -1 / -1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.spinesetup .emptystate {
+  max-width: 560px;
+  width: 100%;
+}
+.spinesetup form {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.spinesetup input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 10px;
+}

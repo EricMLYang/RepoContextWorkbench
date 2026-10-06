@@ -1,0 +1,29 @@
+[package]
+name = "repo-context-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Repo Context 工作台：Tauri v2 殼（視窗、IPC、PTY 轉接、選單列、通知），引擎在 ctx-core"
+publish = false
+
+[lib]
+name = "repo_context_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+ctx-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-notification = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+# spine/events 與 registry.yaml 有變就通知前端重抓——用 OS 檔案事件（FSEvents／inotify／ReadDirectoryChangesW），
+# 閒置不輪詢（AGENTS.md「閒置不吃 CPU」）
+notify = "8"
+
+[dev-dependencies]
+tempfile.workspace = true

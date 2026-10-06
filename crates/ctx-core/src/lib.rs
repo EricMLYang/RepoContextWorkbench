@@ -20,6 +20,7 @@ pub mod registry;
 pub mod route;
 pub mod spawn;
 pub mod spine;
+pub mod term;
 pub mod yamlout;
 
 #[cfg(feature = "testkit")]

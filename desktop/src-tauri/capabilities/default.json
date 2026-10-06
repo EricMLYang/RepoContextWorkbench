@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "主視窗只開前端實際用到的：監聽 workbench://changed。state／PTY 走自訂命令；通知、自啟由 Rust 端呼叫，不開給前端。",
+  "windows": ["main"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

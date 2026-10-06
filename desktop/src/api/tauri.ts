@@ -5,7 +5,8 @@ import { MSG_FAILED, MSG_UNREACHABLE, type Backend, type TermStream } from "./ba
 /**
  * Tauri v2 殼（Rust 引擎）的 IPC。合約全文見 desktop/IPC.md——改這裡要同步改那份。
  *
- * 命令：get_state／get_scan／run_action／term_open／term_write／term_resize／term_close。
+ * 命令：get_state／get_scan／run_action／term_open／term_write／term_resize／term_close；
+ * spine 定位：get_spine／set_spine（createSpineApi）。
  * 事件：`workbench://changed`（引擎寫入脊椎／registry 後通知前端重抓 state，取代高頻輪詢）。
  */
 
@@ -58,6 +59,30 @@ export function decodeTermMessage(
     if (msg.t === "closed") return { kind: "closed" };
   }
   return null;
+}
+
+/** `get_spine`／`set_spine` 的回傳：目前的 spine 路徑（未設定＝null）。 */
+export interface SpineInfo {
+  spine: string | null;
+}
+
+/**
+ * spine 定位（只有桌面殼有；HTTP 版的 server 啟動時就綁好 spine）。
+ * 找不到 spine（`--spine`／`REPOENGINE_SPINE`／使用者設定檔都沒有）→ 前端先顯示首次設定。
+ */
+export function createSpineApi(deps: { invoke?: InvokeFn } = {}) {
+  const call = deps.invoke ?? (invoke as InvokeFn);
+  const run = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
+    try {
+      return (await call(cmd, args)) as T;
+    } catch (e) {
+      throw toError(e);
+    }
+  };
+  return {
+    getSpine: () => run<SpineInfo>("get_spine"),
+    setSpine: (path: string) => run<SpineInfo>("set_spine", { path }),
+  };
 }
 
 export function createTauriBackend(
