@@ -30,6 +30,7 @@ pub mod session;
 pub mod spawn;
 pub mod spine;
 pub mod summary;
+pub mod term;
 pub mod upstream;
 pub mod yamlout;
 

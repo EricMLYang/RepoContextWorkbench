@@ -26,6 +26,19 @@
 | `term_write` | `{ sid: string, data: string }` | `null` | WS 訊息 `{"t":"i","d":…}` |
 | `term_resize` | `{ sid: string, cols: number, rows: number }` | `null` | WS 訊息 `{"t":"r","c":…,"r":…}` |
 | `term_close` | `{ sid: string, attachId: string }` | `null` | 關掉 WebSocket |
+| `get_spine` | — | `{ spine: string \| null }` | （無；HTTP 版 server 啟動時就綁好 spine） |
+| `set_spine` | `{ path: string }` | `{ spine: string }`（解析後的絕對路徑） | （無） |
+
+### spine 定位（桌面殼才有）
+
+- 啟動時殼用 `ctx_core::config::find_spine`：`--spine <path>` ＞ `REPOENGINE_SPINE` ＞ 使用者設定檔
+  `~/.config/repo-context/config.json` 的 `spine`。
+- 前端（`src/main.tsx`）先呼叫 `get_spine`：`spine` 是 null → 顯示首次設定（`SpineSetup`），
+  使用者填路徑 → `set_spine`。殼驗證是 spine（有 `config.yaml` 或 `registry.yaml`）後寫回使用者設定檔
+  （保留其他鍵）、啟用會話清冊與檔案監看。
+- `set_spine` 錯誤：`"不是 spine 目錄（找不到 config.yaml 或 registry.yaml）：<path>"`；
+  已有活著的會話時切換到別的 spine：`"還有會話在跑；先關掉所有會話再切換 spine"`。
+- spine 未設定時 `get_state`／`get_scan`／`run_action` 回 `"尚未設定 spine：請先選擇 spine 目錄"`。
 
 Rust 端簽名建議：
 
@@ -72,7 +85,12 @@ Rust 端簽名建議：
 | `term_kill` | `{sid}` | — |
 | `session_result` | `{sid, text}` | `date`, `time` |
 
-未知 name → `Err("未知 action: <name>")`。`register_repos` 部分成功時 Python 回 `{error, added}`；IPC 只回 `Err(error)`（前端不用 `added`）。
+未知 name → `Err("未知 action: <name>")`。
+
+**Rust 殼目前進度**（`src-tauri/src/workbench.rs`）：只接上 `term_create`（`kind: "shell"`）與 `term_kill`；
+`get_state`／`get_scan` 回 `Err("尚未實作")`，其餘 action 回 `Err("尚未實作：<name>")`，
+`term_create` 的 `kind: "agent"` 回 `Err("尚未實作：agent 會話（等 session 模組搬到 Rust）")`。
+第三波 `ctx_core::workbench::{state,actions}` 搬完後補上。`register_repos` 部分成功時 Python 回 `{error, added}`；IPC 只回 `Err(error)`（前端不用 `added`）。
 
 ## 終端串流（`term_open` 的 Channel）
 
@@ -98,6 +116,10 @@ Rust 端簽名建議：
 | 事件名 | payload | 何時發 |
 |---|---|---|
 | `workbench://changed` | `{ reason?: string }`（前端不讀內容） | 引擎寫入脊椎事件、registry、組、會話清冊有變（含 agent 從 MCP 寫入、會話程序結束）時。前端收到就呼叫 `get_state`（不會觸發 `get_scan`）。 |
+
+殼的實作（`src-tauri/src/watch.rs`）：用 `notify` crate 監看 `<spine>/registry.yaml`、`<spine>/config.yaml`、
+`<spine>/spine/events/*.md`（OS 檔案事件，不輪詢），250ms 內的一波寫入合併成一次；誰寫的都算（工作台、CLI、MCP）。
+另外 `run_action` 成功（`reason` = action 名）、`set_spine`（`spine`）、會話程序結束（`term-exit`）也會發。
 
 ## 型別摘要（細節見 `src/api/types.ts`）
 

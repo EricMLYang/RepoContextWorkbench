@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MSG_BAD_RESPONSE, MSG_UNREACHABLE } from "../api/backend";
 import { createHttpBackend, scanQuery } from "../api/http";
-import { createTauriBackend, decodeTermMessage, toError } from "../api/tauri";
+import { createSpineApi, createTauriBackend, decodeTermMessage, toError } from "../api/tauri";
 
 function res(status: number, body: string) {
   return new Response(body, { status, headers: { "Content-Type": "application/json" } });
@@ -54,6 +54,19 @@ describe("tauriBackend", () => {
       ["get_scan", { group: "g", repos: null }],
       ["run_action", { name: "ack", payload: {} }],
     ]);
+  });
+
+  it("spine 定位：get_spine／set_spine 照 IPC.md", async () => {
+    const invoke = vi.fn(async (cmd: string) => (cmd === "get_spine" ? { spine: null } : { spine: "/s" }));
+    const api = createSpineApi({ invoke });
+    expect(await api.getSpine()).toEqual({ spine: null });
+    expect(await api.setSpine("~/s")).toEqual({ spine: "/s" });
+    expect(invoke.mock.calls).toEqual([
+      ["get_spine", undefined],
+      ["set_spine", { path: "~/s" }],
+    ]);
+    const bad = createSpineApi({ invoke: vi.fn(async () => Promise.reject("不是 spine 目錄")) });
+    await expect(bad.setSpine("/x")).rejects.toThrow("不是 spine 目錄");
   });
 
   it("Rust 的 Err(String) → Error(同一句話)", async () => {
