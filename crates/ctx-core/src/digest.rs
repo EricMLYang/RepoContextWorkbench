@@ -42,7 +42,7 @@ pub fn watermark(spine_dir: impl AsRef<Path>, rid: &str) -> Result<Option<String
         .find(|ev| {
             ev.etype == EventType::Suggestion && ev.source == "digest" && ev.kv("repo") == Some(rid)
         })
-        .map(|ev| format!("{} {}", ev.date, ev.time)))
+        .map(|ev| ev.stamp()))
 }
 
 fn git_log_since(repo_path: &Path, since: Option<&str>) -> String {

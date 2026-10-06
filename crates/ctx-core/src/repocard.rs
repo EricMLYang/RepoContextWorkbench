@@ -25,8 +25,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::collect::{self, RepoSpec};
 use crate::crossref::{self, git, BrokenRef, Drift, GIT_TIMEOUT};
-use crate::fsutil::{mtime_secs, now_secs, take_chars};
-use crate::pystr::{expanduser, resolve as py_resolve};
+use crate::fsutil::{expanduser, mtime_secs, now_secs, resolve as py_resolve};
+use crate::pystr::take_chars;
 use crate::{registry, spine, Error, Result};
 
 const DEV_NAMES: &[&str] = &[
@@ -83,7 +83,7 @@ pub fn mark_seen(
         std::fs::create_dir_all(parent)?;
     }
     let v = serde_json::json!({"head": head, "at": now.format("%Y-%m-%d %H:%M").to_string()});
-    std::fs::write(&p, crate::agentmark::py_dumps(&v))?;
+    std::fs::write(&p, crate::pyjson::dumps(&v))?;
     Ok(())
 }
 
@@ -442,7 +442,7 @@ fn last_agent(spine_dir: &Path, repo_id: &str) -> Result<(Option<Handoff>, Optio
             continue;
         }
         let first = ev.first_line().to_string();
-        let at = format!("{} {}", ev.date, ev.time);
+        let at = ev.stamp();
         if ev.etype == spine::EventType::Decision && first.starts_with("交接") {
             handoff = Some(Handoff {
                 at,

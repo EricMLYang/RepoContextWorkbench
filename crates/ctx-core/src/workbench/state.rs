@@ -65,10 +65,6 @@ fn first_or_tokens(ev: &Event) -> String {
     }
 }
 
-fn stamp(ev: &Event) -> String {
-    format!("{} {}", ev.date, ev.time)
-}
-
 /// `group:臨時(a,b)` → `Some(["a","b"])`；不是臨時組合回 `None`。
 fn adhoc_members(group: &str) -> Option<Vec<String>> {
     group
@@ -607,7 +603,7 @@ pub fn session_report(term: &Value, events: &[Event], data: &RegistryData) -> Op
     let (group, ids) = session_scope(term, data);
     let mut best: Option<&Event> = None;
     for ev in events {
-        if REPORT_SKIP_TYPES.contains(&ev.etype) || stamp(ev).as_str() < started {
+        if REPORT_SKIP_TYPES.contains(&ev.etype) || ev.stamp().as_str() < started {
             continue;
         }
         if !in_scope(ev, group.as_deref(), ids.as_deref()) {
@@ -620,7 +616,7 @@ pub fn session_report(term: &Value, events: &[Event], data: &RegistryData) -> Op
     let best = best?;
     Some(
         json!({"text": first_or_tokens(best), "type": best.etype.as_str(),
-                "source": best.source, "at": stamp(best)}),
+                "source": best.source, "at": best.stamp()}),
     )
 }
 
@@ -694,7 +690,7 @@ pub fn session_draft(spine_dir: impl AsRef<Path>, term: &Value) -> Result<Value>
         .iter()
         .filter(|ev| {
             !REPORT_SKIP_TYPES.contains(&ev.etype)
-                && started.is_none_or(|s| stamp(ev).as_str() >= s)
+                && started.is_none_or(|s| ev.stamp().as_str() >= s)
                 && in_scope(ev, group.as_deref(), ids.as_deref())
         })
         .collect();
@@ -974,17 +970,7 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
     }))
 }
 
-/// Python 的真值判斷（JSON 值）。
-pub(crate) fn truthy(v: &Value) -> bool {
-    match v {
-        Value::Null => false,
-        Value::Bool(b) => *b,
-        Value::String(s) => !s.is_empty(),
-        Value::Array(a) => !a.is_empty(),
-        Value::Object(o) => !o.is_empty(),
-        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
-    }
-}
+pub(crate) use crate::pystr::truthy;
 
 /// 對應 `GET /api/state`（`server.py`）：[`build_state`] ＋ `terms`（會話清冊＋回報）＋ `agents`（config `agents` 的鍵）。
 pub fn api_state(

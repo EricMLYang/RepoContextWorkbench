@@ -9,7 +9,8 @@ use serde_yaml::Value;
 
 use super::repos::{add_repo, AddRepo};
 use super::store::load;
-use crate::pystr::{expanduser, py_str_yaml, resolve};
+use crate::fsutil::{expanduser, resolve};
+use crate::pystr::py_str_yaml;
 use crate::{Error, Result};
 
 fn git(repo_path: &Path, args: &[&str]) -> (bool, String) {

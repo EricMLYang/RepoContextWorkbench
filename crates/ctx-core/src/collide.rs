@@ -8,13 +8,12 @@
 
 use std::ffi::OsString;
 use std::path::Path;
-use std::process::{Command, Stdio};
 
 use chrono::{Local, NaiveDateTime};
 
 use crate::agents::{self, AgentProvider, Judgement};
 use crate::pack::{self, RepoRef};
-use crate::registry::{self, Repo};
+use crate::registry;
 use crate::spine::{self, EventType};
 use crate::{config, Error, Result};
 
@@ -93,13 +92,6 @@ pub fn submit(
     Ok(cid)
 }
 
-fn repo_refs(entries: &[Repo]) -> Vec<RepoRef> {
-    entries
-        .iter()
-        .map(|r| RepoRef::new(r.id(), std::path::PathBuf::from(r.path_str())))
-        .collect()
-}
-
 /// 對應 `collide.run_judgement`（段二）：判定並落脊椎。回傳判定；provider 沒把握（system-unsure）＝`Ok(None)`
 /// （已落事件浮出）。`provider` 缺＝config `provider.default`。找不到 opened 事件＝`Error::Invalid`。
 pub fn run_judgement(
@@ -173,7 +165,10 @@ pub fn run_judgement_with(
     }
     let (_, entries) = registry::resolve_group(spine_dir, group.as_deref(), repos.as_deref())?;
     let budget = usize::try_from(cfg.pack_token_budget()).unwrap_or(0);
-    let packed = pack::pack_group(&repo_refs(&entries), budget);
+    let packed = pack::pack_group(
+        &entries.iter().map(RepoRef::from).collect::<Vec<_>>(),
+        budget,
+    );
     let tokens = [format!("id:{cid}"), format!("ref:collision:{cid}")];
     let j = match agents::judge_with(
         provider,
@@ -230,8 +225,8 @@ pub fn detached_args(
     args
 }
 
-/// 對應 `collide.spawn_detached`：段二丟獨立進程（Unix：新 session｜Windows：DETACHED_PROCESS＋新進程組），
-/// 執行檔＝`std::env::current_exe()`（Rust 的 ctx；Python 是 `sys.executable -m repo_context`）。
+/// 對應 `collide.spawn_detached`：段二丟獨立進程（見 [`crate::exe::spawn_detached`]），
+/// 執行檔＝[`crate::exe::ctx_exe`]（Rust 的 ctx；Python 是 `sys.executable -m repo_context`）。
 /// 設了 `REPOCTX_NO_BACKGROUND` 就不起進程、回 `Ok(false)`（Python 版 collide 沒檢查這個；
 /// Rust 版刻意尊重，跟 ruminate 的背景進程同一條規則）。起了回 `Ok(true)`。
 pub fn spawn_detached(
@@ -240,14 +235,13 @@ pub fn spawn_detached(
     group: Option<&str>,
     provider: Option<&str>,
 ) -> Result<bool> {
-    if std::env::var_os("REPOCTX_NO_BACKGROUND").is_some_and(|v| !v.is_empty()) {
+    if crate::exe::background_disabled() {
         return Ok(false);
     }
-    spawn_detached_with(&std::env::current_exe()?, spine_dir, cid, group, provider)
+    spawn_detached_with(&crate::exe::ctx_exe()?, spine_dir, cid, group, provider)
 }
 
-/// 同 [`spawn_detached`]，執行檔由呼叫端給（桌面 App 用同目錄的 `ctx`，見 `session::ctx_exe`）。
-/// 不檢查 `REPOCTX_NO_BACKGROUND`（呼叫端自己決定）。
+/// 同 [`spawn_detached`]，執行檔由呼叫端給。不檢查 `REPOCTX_NO_BACKGROUND`（呼叫端自己決定）。
 pub fn spawn_detached_with(
     exe: &Path,
     spine_dir: impl AsRef<Path>,
@@ -255,37 +249,6 @@ pub fn spawn_detached_with(
     group: Option<&str>,
     provider: Option<&str>,
 ) -> Result<bool> {
-    let mut cmd = Command::new(exe);
-    cmd.args(detached_args(spine_dir, cid, group, provider))
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    detach(&mut cmd);
-    cmd.spawn()?;
+    crate::exe::spawn_detached(exe, detached_args(spine_dir, cid, group, provider))?;
     Ok(true)
 }
-
-#[cfg(unix)]
-fn detach(cmd: &mut Command) {
-    use std::os::unix::process::CommandExt;
-    // SAFETY: setsid 是 async-signal-safe，fork 後、exec 前只呼叫它（同 Python start_new_session=True）。
-    unsafe {
-        cmd.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-}
-
-#[cfg(windows)]
-fn detach(cmd: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    const DETACHED_PROCESS: u32 = 0x0000_0008;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
-}
-
-#[cfg(not(any(unix, windows)))]
-fn detach(_cmd: &mut Command) {}

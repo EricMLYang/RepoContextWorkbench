@@ -12,7 +12,7 @@
 //! 沒有 `claude` 指令時，MCP 那步改印出手動指令，不失敗；真的註冊失敗則 [`StepResult::ok`]＝false，
 //! 入口據此回非 0（c231287：呼叫的人或 agent 會以為掛好了）。
 //!
-//! **與 Python 刻意的差異**：MCP／hooks 的指令指向 Rust 的 ctx 執行檔（`std::env::current_exe()`，
+//! **與 Python 刻意的差異**：MCP／hooks 的指令指向 Rust 的 ctx 執行檔（`exe::ctx_exe`，
 //! 由呼叫端傳入 `exe`），不是 `<python> -m repo_context`；也就不再帶 `-e PYTHONUTF8=1`。
 //! 已存在的 hooks 認兩種形式（Python 的 `repo_context hook`、Rust 的 `ctx hook`），兩版不會重複掛。
 
@@ -124,11 +124,6 @@ fn win_quote(s: &str) -> String {
     out
 }
 
-/// 目前執行中的 ctx 執行檔（MCP／hooks 指令要指向它）。
-pub fn ctx_exe() -> Result<PathBuf> {
-    Ok(std::env::current_exe()?)
-}
-
 /// 對應 `agentsetup.hook_command`：`<ctx> hook <event>`（Python：`<python> -m repo_context hook <event>`）。
 pub fn hook_command(exe: &Path, event: &str) -> String {
     cmdline(&[exe.to_string_lossy().as_ref(), "hook", event])
@@ -160,7 +155,7 @@ pub fn claude_home() -> PathBuf {
     std::env::var_os("CLAUDE_CONFIG_DIR")
         .filter(|s| !s.is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|| crate::pystr::expanduser("~/.claude"))
+        .unwrap_or_else(|| crate::fsutil::expanduser("~/.claude"))
 }
 
 /// 對應 `agentsetup.skill_text`：`frontmatter=false` 去掉開頭 `---…---`（`ctx instructions` 用）。
@@ -191,7 +186,7 @@ pub fn save_spine_to(user_config: &Path, spine_dir: impl AsRef<Path>) -> Result<
     if !data.is_object() {
         data = json!({});
     }
-    let resolved = crate::pystr::resolve(spine_dir.as_ref());
+    let resolved = crate::fsutil::resolve(spine_dir.as_ref());
     if let Some(m) = data.as_object_mut() {
         m.insert(
             "spine".into(),
@@ -308,35 +303,7 @@ fn run_cmd(argv: &[String]) -> std::io::Result<CmdOutput> {
     })
 }
 
-/// 對應 `shutil.which`：PATH 上找得到這個可執行檔嗎。
-pub fn which(name: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    let exts: &[&str] = if cfg!(windows) {
-        &["", ".exe", ".cmd", ".bat"]
-    } else {
-        &[""]
-    };
-    for dir in std::env::split_paths(&path) {
-        for ext in exts {
-            let cand = dir.join(format!("{name}{ext}"));
-            if is_executable(&cand) {
-                return Some(cand);
-            }
-        }
-    }
-    None
-}
-
-#[cfg(unix)]
-fn is_executable(p: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-}
-
-#[cfg(not(unix))]
-fn is_executable(p: &Path) -> bool {
-    p.is_file()
-}
+pub use crate::exe::which;
 
 /// 對應 `agentsetup.install_mcp`：`claude mcp get` 已有就略過，否則 `claude mcp add`。
 pub fn install_mcp(exe: &Path) -> StepResult {
@@ -372,12 +339,12 @@ pub fn install_mcp_with(
             };
             StepResult::failed(format!(
                 "註冊失敗：{}",
-                crate::fsutil::take_chars(msg.trim(), 200)
+                crate::pystr::take_chars(msg.trim(), 200)
             ))
         }
         Err(e) => StepResult::failed(format!(
             "註冊失敗：{}",
-            crate::fsutil::take_chars(e.to_string().trim(), 200)
+            crate::pystr::take_chars(e.to_string().trim(), 200)
         )),
     }
 }
@@ -392,11 +359,11 @@ pub struct SetupEnv {
 }
 
 impl SetupEnv {
-    /// 從行程環境推（`current_exe`、`CLAUDE_CONFIG_DIR`、`XDG_CONFIG_HOME`）。
+    /// 從行程環境推（`exe::ctx_exe`、`CLAUDE_CONFIG_DIR`、`XDG_CONFIG_HOME`）。
     pub fn detect(spine_dir: impl AsRef<Path>) -> Result<Self> {
         Ok(SetupEnv {
             spine_dir: spine_dir.as_ref().to_path_buf(),
-            exe: ctx_exe()?,
+            exe: crate::exe::ctx_exe()?,
             claude_home: claude_home(),
             user_config: config::user_config_path(),
         })
@@ -421,7 +388,7 @@ impl Step {
         match self {
             Step::SaveSpine => format!(
                 "記住 spine 位置：{}",
-                crate::pystr::resolve(&env.spine_dir).display()
+                crate::fsutil::resolve(&env.spine_dir).display()
             ),
             Step::Mcp => format!("註冊 MCP server：{}", cmdline(&mcp_add_command(&env.exe))),
             Step::Hooks => format!(

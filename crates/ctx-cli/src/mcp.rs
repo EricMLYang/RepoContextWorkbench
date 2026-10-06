@@ -198,13 +198,6 @@ fn t_pack_estimate(d: &Path, a: &Args) -> Result<String> {
     Ok(lines.join("\n"))
 }
 
-fn note_tail(note: &Option<String>) -> String {
-    match note {
-        Some(n) if !n.is_empty() => format!("  {n}"),
-        _ => String::new(),
-    }
-}
-
 fn t_registry_relations(d: &Path, a: &Args) -> Result<String> {
     let out: Vec<String> = match arg_s(a, "id").filter(|s| !s.is_empty()) {
         Some(id) => registry::relations_of(d, &id)?
@@ -215,7 +208,7 @@ fn t_registry_relations(d: &Path, a: &Args) -> Result<String> {
                 } else {
                     format!("{id} 的{} {}", r.label, r.peer)
                 };
-                format!("{head}（{}）{}", r.kind, note_tail(&r.note))
+                format!("{head}（{}）{}", r.kind, crate::note_tail(&r.note))
             })
             .collect(),
         None => {
@@ -232,7 +225,7 @@ fn t_registry_relations(d: &Path, a: &Args) -> Result<String> {
                         r.from,
                         r.to,
                         r.kind,
-                        note_tail(&r.note)
+                        crate::note_tail(&r.note)
                     )
                 })
                 .collect()

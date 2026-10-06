@@ -30,12 +30,12 @@ use regex::Regex;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
 
-use crate::agentmark::py_dumps;
 use crate::agents;
-use crate::fsutil::{read_text_lossy, splitlines, take_chars};
+use crate::fsutil::{expanduser, read_text_lossy, resolve as py_resolve};
 use crate::knowledge::{Boosts, PathBoost, Snippet};
 use crate::locking::FileLock;
-use crate::pystr::{expanduser, repr, resolve as py_resolve};
+use crate::pyjson::dumps as py_dumps;
+use crate::pystr::{repr, splitlines, take_chars};
 use crate::registry::{self, Direction, Export, Repo};
 use crate::spine::LOCK_NAME;
 use crate::{config, pack, Error, Result};
@@ -910,17 +910,6 @@ pub struct AskParsed {
     pub note: Option<String>,
 }
 
-fn py_truthy(v: &Value) -> bool {
-    match v {
-        Value::Null => false,
-        Value::Bool(b) => *b,
-        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
-        Value::String(s) => !s.is_empty(),
-        Value::Array(a) => !a.is_empty(),
-        Value::Object(o) => !o.is_empty(),
-    }
-}
-
 /// 對應 `crossref._parse_ask`：取第一個 `{` 到最後一個 `}` 解析；不是預期的 JSON 就原文照回。
 pub fn parse_ask(text: &str) -> AskParsed {
     if let (Some(a), Some(b)) = (text.find('{'), text.rfind('}')) {
@@ -931,8 +920,9 @@ pub fn parse_ask(text: &str) -> AskParsed {
                         Some(Value::Array(xs)) => xs
                             .iter()
                             .filter(|c| {
-                                c.as_object()
-                                    .is_some_and(|o| o.get("file").is_some_and(py_truthy))
+                                c.as_object().is_some_and(|o| {
+                                    o.get("file").is_some_and(crate::pystr::truthy)
+                                })
                             })
                             .cloned()
                             .collect(),
@@ -941,7 +931,7 @@ pub fn parse_ask(text: &str) -> AskParsed {
                     return AskParsed {
                         answer: crate::pystr::py_str(ans),
                         citations,
-                        not_found: obj.get("not_found").is_some_and(py_truthy),
+                        not_found: obj.get("not_found").is_some_and(crate::pystr::truthy),
                         note: None,
                     };
                 }

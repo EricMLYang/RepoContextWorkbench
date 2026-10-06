@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use ctx_core::{config, pystr, Error};
+use ctx_core::{config, fsutil, Error};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -75,7 +75,7 @@ impl Ctx {
     /// 對應 `_spine_dir`：--spine ＞ $REPOENGINE_SPINE ＞ 使用者設定檔（ctx setup 寫的）＞ cwd。
     pub fn spine_dir(&self) -> Result<PathBuf, Exit> {
         if let Some(explicit) = self.spine.as_deref() {
-            if !explicit.is_empty() && !config::is_spine(pystr::expanduser(explicit)) {
+            if !explicit.is_empty() && !config::is_spine(fsutil::expanduser(explicit)) {
                 return Err(fail(
                     "no_spine",
                     format!("{explicit} 不是 spine repo（找不到 config.yaml；先跑 init）"),

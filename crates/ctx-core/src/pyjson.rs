@@ -2,7 +2,8 @@
 //! - 不帶 indent：分隔符是 `", "` 與 `": "`（Python 預設），不是 serde 的 `,`／`:`。
 //! - `indent=1`：跟 serde 的 PrettyFormatter(" ") 一樣（Python 有 indent 時項目分隔是 `","`）。
 //!
-//! CLI 的 `--json`、`_fail`、MCP 的每一行回應都走這裡，輸出跟 Python 版逐字一致（對拍用）。
+//! CLI 的 `--json`、`_fail`、MCP 的每一行回應，以及引擎寫的 `.state/` 單行 JSON（agent marker、
+//! agent_status、repocard 快取、hook 輸出、crossref 記錄）都走這裡，輸出跟 Python 版一致（對拍用）。
 
 use std::io;
 

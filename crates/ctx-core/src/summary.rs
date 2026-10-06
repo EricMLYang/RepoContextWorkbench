@@ -59,10 +59,6 @@ pub struct Summary {
     pub resume_task: String,
 }
 
-fn stamp(ev: &Event) -> String {
-    format!("{} {}", ev.date, ev.time)
-}
-
 fn first_line(ev: &Event) -> String {
     if ev.body.is_empty() {
         ev.tokens.join(" ")
@@ -146,7 +142,7 @@ fn progress(
             Some(fact(
                 first_line(b),
                 format!("脊椎 {} [{}]", b.etype, b.source),
-                Some(stamp(b)),
+                Some(b.stamp()),
             )),
             None,
         ),
@@ -164,7 +160,7 @@ fn changes(
     limit: usize,
 ) -> Vec<Fact> {
     let mut out = Vec::new();
-    let since_date = crate::fsutil::take_chars(since.unwrap_or(""), 10);
+    let since_date = crate::pystr::take_chars(since.unwrap_or(""), 10);
     for c in collect::recent_across(states, 30) {
         if !since_date.is_empty() && c.date.as_str() < since_date {
             continue;
@@ -207,14 +203,14 @@ fn changes(
         if !scoped_in(ev, scoped, gkey, ids) {
             continue;
         }
-        if since.is_some_and(|s| stamp(ev).as_str() <= s) {
+        if since.is_some_and(|s| ev.stamp().as_str() <= s) {
             continue;
         }
         let num = ev.num().unwrap_or("#?");
         out.push(fact(
             format!("新的未結 {num}「{}」", first_line(ev)),
             format!("脊椎 open-loop [{}]", ev.source),
-            Some(stamp(ev)),
+            Some(ev.stamp()),
         ));
     }
     out
@@ -240,7 +236,7 @@ fn handoff_next(events: &[Event], gkey: &str, ids: &[String], scoped: bool) -> O
     Some(fact(
         text,
         format!("脊椎 交接 decision [{}]", best.source),
-        Some(stamp(best)),
+        Some(best.stamp()),
     ))
 }
 
@@ -287,7 +283,7 @@ fn next_step(
             Some(fact(
                 format!("接續 {num}「{}」（{when}）", first_line(ev)),
                 format!("脊椎 open-loop due:{due}"),
-                Some(stamp(ev)),
+                Some(ev.stamp()),
             )),
             None,
         );

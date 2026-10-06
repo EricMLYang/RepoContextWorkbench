@@ -111,14 +111,14 @@ pub fn spine_json(spine: Option<&Path>) -> Value {
 /// 對應 `set_spine`：驗證是 spine、寫進使用者設定檔（`~/.config/repo-context/config.json` 的 `spine`，
 /// 保留其他鍵），回傳解析後的絕對路徑。
 pub fn persist_spine(path: &str) -> Result<PathBuf, String> {
-    let p = ctx_core::pystr::expanduser(path.trim());
+    let p = ctx_core::fsutil::expanduser(path.trim());
     if path.trim().is_empty() || !ctx_core::config::is_spine(&p) {
         return Err(format!(
             "不是 spine 目錄（找不到 config.yaml 或 registry.yaml）：{}",
             path.trim()
         ));
     }
-    let p = ctx_core::pystr::resolve(&p);
+    let p = ctx_core::fsutil::resolve(&p);
     let mut cfg = ctx_core::config::load_user_config();
     if !cfg.is_object() {
         cfg = json!({});

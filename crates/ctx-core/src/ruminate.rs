@@ -15,7 +15,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 
 use chrono::{Duration, Local, NaiveDateTime, TimeZone};
 use serde::{Deserialize, Serialize};
@@ -269,7 +268,7 @@ struct Cand {
 fn event_docs<'a>(events: &'a [Event], since: &str) -> Vec<(Cand, &'a Event)> {
     let mut out = Vec::new();
     for ev in events {
-        if !is_work(ev) || format!("{} {}", ev.date, ev.time).as_str() < since {
+        if !is_work(ev) || ev.stamp().as_str() < since {
             continue;
         }
         let counted = knowledge::count(knowledge::tokenize(&ev.body));
@@ -278,7 +277,7 @@ fn event_docs<'a>(events: &'a [Event], since: &str) -> Vec<(Cand, &'a Event)> {
         let repo = nonempty(ev.kv("repo"))
             .or_else(|| nonempty(ev.kv("group")))
             .unwrap_or_else(|| "全域".into());
-        let at = format!("{} {}", ev.date, ev.time);
+        let at = ev.stamp();
         let id = nonempty(ev.kv("id")).unwrap_or_else(|| ev.time.clone());
         out.push((
             Cand {
@@ -294,7 +293,7 @@ fn event_docs<'a>(events: &'a [Event], since: &str) -> Vec<(Cand, &'a Event)> {
                 },
                 kind: LinkKind::Decision,
                 reference: format!("{}:{id}", ev.etype),
-                title: crate::fsutil::take_chars(ev.first_line(), 80).to_string(),
+                title: crate::pystr::take_chars(ev.first_line(), 80).to_string(),
                 stamp: Value::String(at),
             },
             ev,
@@ -467,7 +466,7 @@ pub fn run(
         let mut links: Vec<Link> = state
             .links
             .drain(..)
-            .filter(|l| crate::fsutil::take_chars(&l.found, 10) >= cutoff.as_str())
+            .filter(|l| crate::pystr::take_chars(&l.found, 10) >= cutoff.as_str())
             .collect();
         for (_, picks) in &mut found {
             for link in picks.iter_mut() {
@@ -602,38 +601,22 @@ pub fn is_stale(spine_dir: &Path, now: Option<NaiveDateTime>) -> bool {
 /// 對應 `ruminate.spawn_detached`：開場發現太久沒反芻 → 背景跑，不拖慢開 agent（下一次開場就看得到）。
 ///
 /// 與 Python 的差異：Python 跑 `python -m repo_context --spine <spine> fresh --run`；
-/// Rust 版跑「自己」（`std::env::current_exe()`，即 `ctx`）加同樣的參數。
+/// Rust 版跑 [`crate::exe::ctx_exe`] 加同樣的參數。
 /// 環境變數 `REPOCTX_NO_BACKGROUND` 有值就不跑（測試用）。
 pub fn spawn_detached(spine_dir: &Path) -> Result<()> {
-    if std::env::var_os("REPOCTX_NO_BACKGROUND").is_some_and(|v| !v.is_empty()) {
+    if crate::exe::background_disabled() {
         return Ok(());
     }
-    let exe = std::env::current_exe()?;
-    let mut cmd = Command::new(exe);
-    cmd.arg("--spine")
-        .arg(spine_dir)
-        .args(["fresh", "--run"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        // 同 start_new_session=True：脫離呼叫端的 session，hook 結束也不會被一起收掉
-        unsafe {
-            cmd.pre_exec(|| {
-                libc::setsid();
-                Ok(())
-            });
-        }
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0000_0008 | 0x0000_0200); // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    }
-    cmd.spawn()?;
-    Ok(())
+    let spine = spine_dir.as_os_str();
+    crate::exe::spawn_detached(
+        &crate::exe::ctx_exe()?,
+        [
+            "--spine".as_ref(),
+            spine,
+            "fresh".as_ref(),
+            "--run".as_ref(),
+        ],
+    )
 }
 
 /// 對應 `ruminate.link_lines`：開場注入／CLI 共用的一行一筆。Python 預設 `limit=3`。
@@ -662,7 +645,7 @@ pub fn link_lines(links: &[Link], limit: usize) -> Vec<String> {
             out.push(format!(
                 "    L{}: {}",
                 sn.line,
-                crate::fsutil::take_chars(&sn.text, 100)
+                crate::pystr::take_chars(&sn.text, 100)
             ));
         }
     }

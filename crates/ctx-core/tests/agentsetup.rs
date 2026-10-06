@@ -82,7 +82,7 @@ fn test_setup_remembers_spine_and_installs_claude_bits() {
     let cfg = read_json(&env.user_config);
     assert_eq!(
         cfg["spine"].as_str().unwrap(),
-        ctx_core::pystr::resolve(&sp).to_string_lossy()
+        ctx_core::fsutil::resolve(&sp).to_string_lossy()
     );
 }
 

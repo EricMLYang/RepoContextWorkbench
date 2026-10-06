@@ -145,7 +145,7 @@ pub fn gh_fetch(upstream: &str, kind: &str, prerelease: bool) -> Result<Option<L
                 .unwrap_or_default();
             Ok(Some(Latest {
                 kind: "commit".into(),
-                id: crate::fsutil::take_chars(&sha, 7).to_string(),
+                id: crate::pystr::take_chars(&sha, 7).to_string(),
                 title: crate::pystr::splitlines(&msg)
                     .first()
                     .copied()

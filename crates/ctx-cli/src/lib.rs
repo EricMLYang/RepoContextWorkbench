@@ -4,19 +4,15 @@
 
 pub mod cli;
 pub mod mcp;
-pub mod pyjson;
+pub use ctx_core::pyjson;
 
-use serde_json::Value;
+pub use ctx_core::pystr::truthy;
 
-/// Python 真值判斷（`if x:`）。
-pub fn truthy(v: &Value) -> bool {
-    match v {
-        Value::Null => false,
-        Value::Bool(b) => *b,
-        Value::Number(n) => n.as_f64() != Some(0.0),
-        Value::String(s) => !s.is_empty(),
-        Value::Array(a) => !a.is_empty(),
-        Value::Object(o) => !o.is_empty(),
+/// 關係備註接在行尾：有備註就 `"  <note>"`，沒有就空字串。
+pub fn note_tail(note: &Option<String>) -> String {
+    match note {
+        Some(n) if !n.is_empty() => format!("  {n}"),
+        _ => String::new(),
     }
 }
 

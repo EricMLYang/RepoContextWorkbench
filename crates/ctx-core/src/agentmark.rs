@@ -40,27 +40,8 @@ pub fn mark(spine_dir: &Path, sid: &str, cwd: &Path, agent: &str, pid: i64) -> R
         "sid": sid, "cwd": cwd.to_string_lossy(), "agent": agent, "pid": pid,
     });
     // Python json.dumps 預設分隔 ", " ": "——照樣寫，兩邊產出的檔一致
-    std::fs::write(d.join(format!("{sid}.json")), py_dumps(&m))?;
+    std::fs::write(d.join(format!("{sid}.json")), crate::pyjson::dumps(&m))?;
     Ok(())
-}
-
-/// `json.dumps(obj, ensure_ascii=False)` 的單行格式（`, ` 與 `: ` 分隔）。
-pub(crate) fn py_dumps(v: &serde_json::Value) -> String {
-    use serde_json::Value;
-    match v {
-        Value::Object(m) => {
-            let parts: Vec<String> = m
-                .iter()
-                .map(|(k, v)| format!("{}: {}", Value::String(k.clone()), py_dumps(v)))
-                .collect();
-            format!("{{{}}}", parts.join(", "))
-        }
-        Value::Array(a) => format!(
-            "[{}]",
-            a.iter().map(py_dumps).collect::<Vec<_>>().join(", ")
-        ),
-        other => other.to_string(),
-    }
 }
 
 /// 對應 `agentmark.unmark`：刪 marker，不存在不報錯。

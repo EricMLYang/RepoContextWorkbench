@@ -1,16 +1,18 @@
 //! 檔案／路徑小工具：把 Python `pathlib` 的幾個慣用語義搬成 Rust，讓各模組行為對得上。
 //!
-//! - `expand_user` ＝ `Path.expanduser()`
-//! - `resolve_lenient` ＝ `Path.resolve()`（非 strict：路徑不存在也不報錯）
+//! 字串層面的 Python 語義（`str.splitlines`、`repr`、切片）在 `pystr`；這裡只放路徑與檔案。
+//!
+//! - `expanduser` ＝ `Path.expanduser()`
+//! - `resolve` ＝ `Path.resolve()`（非 strict：路徑不存在也不報錯）
 //! - `read_text_lossy` ＝ `read_text(encoding="utf-8", errors="replace")`（含 universal newline）
-//! - `splitlines` ＝ `str.splitlines()`
 //! - `mtime_secs` ＝ `stat().st_mtime`（與 CPython 同算法，Python 寫的 mtime 快取才比得上）
 
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-/// 對應 `Path.expanduser()`：開頭的 `~` 換成家目錄（unix 讀 HOME，Windows 讀 USERPROFILE）。
-pub fn expand_user(p: impl AsRef<Path>) -> PathBuf {
+/// 對應 `Path.expanduser()`：開頭的 `~`（`~`、`~/…`、`~\\…`）換成家目錄
+/// （unix 讀 HOME，Windows 退而讀 USERPROFILE）；`~user` 不展開。
+pub fn expanduser(p: impl AsRef<Path>) -> PathBuf {
     let p = p.as_ref();
     let s = p.to_string_lossy();
     if s == "~" || s.starts_with("~/") || s.starts_with("~\\") {
@@ -28,13 +30,36 @@ pub fn expand_user(p: impl AsRef<Path>) -> PathBuf {
     p.to_path_buf()
 }
 
-/// 對應 `Path.resolve()`（非 strict）：能 canonicalize 就 canonicalize；
-/// 不存在時退成「絕對路徑」——與 Python 一樣不報錯。
-pub fn resolve_lenient(p: &Path) -> PathBuf {
-    match std::fs::canonicalize(p) {
-        Ok(c) => c,
-        Err(_) => std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf()),
+/// 對應 `Path.resolve()`（非 strict）：存在就 canonicalize；不存在就把最長存在的前綴
+/// canonicalize（符號連結照解，例：macOS 的 /var → /private/var）後接上其餘部分，`..` 照字面消去。
+/// 與 Python 一樣不報錯。
+pub fn resolve(p: &Path) -> PathBuf {
+    if let Ok(c) = p.canonicalize() {
+        return c;
     }
+    let abs = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map(|d| d.join(p))
+            .unwrap_or_else(|_| p.to_path_buf())
+    };
+    let mut out = PathBuf::new();
+    for comp in abs.components() {
+        match comp {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            c => {
+                out.push(c.as_os_str());
+                if let Ok(canon) = out.canonicalize() {
+                    out = canon;
+                }
+            }
+        }
+    }
+    out
 }
 
 /// 對應 `read_text(encoding="utf-8", errors="replace")`：壞位元組換 U+FFFD，
@@ -47,43 +72,6 @@ pub fn read_text_lossy(p: &Path) -> std::io::Result<String> {
     } else {
         Ok(s.into_owned())
     }
-}
-
-/// 對應 `str.splitlines()`：Python 認得的所有行界都切，結尾行界不產生空行。
-pub fn splitlines(s: &str) -> Vec<&str> {
-    let mut out = Vec::new();
-    let mut start = 0;
-    let mut it = s.char_indices().peekable();
-    while let Some((i, c)) = it.next() {
-        let is_break = matches!(
-            c,
-            '\n' | '\r'
-                | '\x0b'
-                | '\x0c'
-                | '\x1c'
-                | '\x1d'
-                | '\x1e'
-                | '\u{85}'
-                | '\u{2028}'
-                | '\u{2029}'
-        );
-        if !is_break {
-            continue;
-        }
-        out.push(&s[start..i]);
-        let mut end = i + c.len_utf8();
-        if c == '\r' {
-            if let Some(&(j, '\n')) = it.peek() {
-                it.next();
-                end = j + 1;
-            }
-        }
-        start = end;
-    }
-    if start < s.len() {
-        out.push(&s[start..]);
-    }
-    out
 }
 
 /// 對應 `os.stat(p).st_mtime`：CPython 以 `sec + nsec * 1e-9` 算浮點，這裡同算法，
@@ -104,29 +92,23 @@ pub fn now_secs() -> f64 {
         .unwrap_or(0.0)
 }
 
-/// Python 字串切片 `s[:n]`（以字元計，不是位元組）。
-pub fn take_chars(s: &str, n: usize) -> &str {
-    match s.char_indices().nth(n) {
-        Some((i, _)) => &s[..i],
-        None => s,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn splitlines_matches_python() {
-        assert_eq!(splitlines("a\nb\r\nc\rd\n"), vec!["a", "b", "c", "d"]);
-        assert_eq!(splitlines(""), Vec::<&str>::new());
-        assert_eq!(splitlines("\n\n"), vec!["", ""]);
-        assert_eq!(splitlines("x"), vec!["x"]);
+    fn expanduser_like_python() {
+        let home = PathBuf::from(std::env::var_os("HOME").expect("測試環境有 HOME"));
+        assert_eq!(expanduser("~"), home);
+        assert_eq!(expanduser("~/a/b"), home.join("a/b"));
+        assert_eq!(expanduser("~x/a"), PathBuf::from("~x/a"));
+        assert_eq!(expanduser("/abs"), PathBuf::from("/abs"));
     }
 
     #[test]
-    fn take_chars_counts_chars() {
-        assert_eq!(take_chars("中文字", 2), "中文");
-        assert_eq!(take_chars("ab", 5), "ab");
+    fn resolve_nonexistent_tail() {
+        let d = std::env::temp_dir();
+        let canon = d.canonicalize().expect("temp dir 存在");
+        assert_eq!(resolve(&d.join("nope/../x")), canon.join("x"));
     }
 }

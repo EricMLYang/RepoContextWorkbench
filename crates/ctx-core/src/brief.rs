@@ -299,16 +299,9 @@ fn loop_lines(loops: &[Event], today: &str) -> Vec<String> {
     lines
 }
 
-/// registry 登記項 → 採集輸入（type／tier 缺＝mine／active，同 Python `entry.get(..., 預設)`）。
+/// registry 登記項 → 採集輸入（見 `impl From<&Repo> for RepoSpec`）。
 pub(crate) fn repo_specs(entries: &[Repo]) -> Vec<RepoSpec> {
-    entries
-        .iter()
-        .map(|r| {
-            RepoSpec::new(r.id(), PathBuf::from(r.path_str()))
-                .with_type(r.kind().unwrap_or_else(|| "mine".into()))
-                .with_tier(r.tier_str().unwrap_or_else(|| "active".into()))
-        })
-        .collect()
+    entries.iter().map(RepoSpec::from).collect()
 }
 
 /// 對應 `brief.build_brief`：三段結構的簡報 markdown。`group`＝存起來的組名（None＝臨時／全部）。

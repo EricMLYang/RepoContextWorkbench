@@ -119,14 +119,7 @@ impl Args {
     }
     /// Python 真值（`if remove:`）。
     pub fn flag(&self, k: &str) -> bool {
-        match self.0.get(k) {
-            None | Some(Value::Null) => false,
-            Some(Value::Bool(b)) => *b,
-            Some(Value::String(s)) => !s.is_empty(),
-            Some(Value::Number(n)) => n.as_f64() != Some(0.0),
-            Some(Value::Array(a)) => !a.is_empty(),
-            Some(Value::Object(o)) => !o.is_empty(),
-        }
+        self.0.get(k).is_some_and(crate::pystr::truthy)
     }
 }
 

@@ -59,7 +59,7 @@ pub fn spawn(
 ) -> Result<PathBuf> {
     let spine_dir = spine_dir.as_ref();
     let now = when.unwrap_or_else(|| Local::now().naive_local());
-    let target = crate::pystr::expanduser(target_path.as_ref());
+    let target = crate::fsutil::expanduser(target_path.as_ref());
     if target.exists() && std::fs::read_dir(&target)?.next().is_some() {
         return Err(Error::invalid(format!(
             "目標已存在且非空: {}",

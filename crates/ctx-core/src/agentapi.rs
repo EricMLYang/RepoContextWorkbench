@@ -26,9 +26,10 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 
 use crate::crossref::{self, Drift, Neighbor, RunText, MAX_READ_CHARS};
+use crate::fsutil::{expanduser, resolve as py_resolve};
 use crate::knowledge;
 use crate::pack::RepoRef;
-use crate::pystr::{expanduser, repr, resolve as py_resolve, splitlines};
+use crate::pystr::{repr, splitlines};
 use crate::registry::{self, Repo};
 use crate::repocard::{self, ProcProbe};
 use crate::ruminate::{self, Link};
@@ -398,7 +399,7 @@ pub fn loop_dict(ev: &Event, today_s: Option<&str>) -> Value {
     json!({
         "id": ev.num(), "text": first(ev), "due": due,
         "overdue": due.is_some_and(|d| d < t.as_str()), "group": kv_opt(ev, "group"),
-        "repo": kv_opt(ev, "repo"), "opened": format!("{} {}", ev.date, ev.time),
+        "repo": kv_opt(ev, "repo"), "opened": ev.stamp(),
         "source": ev.source,
     })
 }

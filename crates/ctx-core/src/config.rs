@@ -339,7 +339,7 @@ pub fn user_config_path() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .filter(|s| !s.is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|| crate::pystr::expanduser("~/.config"));
+        .unwrap_or_else(|| crate::fsutil::expanduser("~/.config"));
     user_config_path_in(&base)
 }
 
@@ -406,9 +406,9 @@ pub fn find_spine_with(
         if cand.is_empty() {
             continue;
         }
-        let p = crate::pystr::expanduser(cand);
+        let p = crate::fsutil::expanduser(cand);
         if is_spine(&p) {
-            return Some(crate::pystr::resolve(&p));
+            return Some(crate::fsutil::resolve(&p));
         }
     }
     None

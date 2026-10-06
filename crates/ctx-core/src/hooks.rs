@@ -20,8 +20,9 @@ use regex::Regex;
 use serde_json::{json, Value};
 
 use crate::agentapi::{self, ContextFor, Target};
-use crate::agentmark::py_dumps;
-use crate::pystr::{expanduser, py_str};
+use crate::fsutil::expanduser;
+use crate::pyjson::dumps as py_dumps;
+use crate::pystr::py_str;
 use crate::spine::{self, EventType};
 use crate::{crossref, ruminate, Result};
 
@@ -280,10 +281,7 @@ fn session_end_inner(
         .to_string();
     let (mut traces, mut handed_off) = (0usize, false);
     for ev in spine::iter_events(spine_dir)? {
-        if format!("{} {}", ev.date, ev.time) < started
-            || ev.source == "hook"
-            || ev.source == "monitor"
-        {
+        if ev.stamp() < started || ev.source == "hook" || ev.source == "monitor" {
             continue;
         }
         if !agentapi::in_scope_of(&ev, group.as_deref(), repos.as_deref()) {

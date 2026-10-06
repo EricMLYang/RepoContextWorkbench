@@ -106,7 +106,7 @@ pub fn save_status(spine_dir: impl AsRef<Path>, rec: &StatusRecord) -> Result<Pa
         status_key(rec.group.as_deref(), rec.repos.as_deref())
     ));
     let v = serde_json::to_value(rec)?;
-    std::fs::write(&p, crate::agentmark::py_dumps(&v))?;
+    std::fs::write(&p, crate::pyjson::dumps(&v))?;
     Ok(p)
 }
 

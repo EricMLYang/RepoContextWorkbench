@@ -5,7 +5,7 @@
 //! 開視窗是 best-effort（Windows start／macOS Terminal／其他印指令）；指令組裝是純函數可測。
 //!
 //! **與 Python 版刻意的差異**：`.mcp.json` 的 MCP server 指令指向 Rust 的 `ctx` 執行檔
-//! （[`ctx_exe`]：`std::env::current_exe()`，或與它同目錄的 `ctx`）＋`--spine <spine> mcp`，
+//! （[`ctx_exe`]，找法見 `exe.rs`）＋`--spine <spine> mcp`，
 //! 不再是 `python -m repo_context ... mcp`，也不帶 `PYTHONUTF8`。
 //! 已存在且含 `repo_context` 的 `.mcp.json` 照舊不動（搬遷期間不搶 Python 版寫好的設定）。
 
@@ -16,6 +16,7 @@ use chrono::Local;
 use serde_json::json;
 
 use crate::context;
+use crate::exe::ctx_exe;
 use crate::pack::{self, RepoRef};
 use crate::registry;
 use crate::{config, spine, Error, Result};
@@ -23,17 +24,6 @@ use crate::{config, spine, Error, Result};
 /// 對應 `session.DEFAULT_TASK`。
 pub const DEFAULT_TASK: &str =
     "先讀情境卡，用 3 行說明：你拿到哪些脈絡、這次預計產出什麼、哪些動作需要我先確認，再問我要做什麼";
-
-/// MCP server 要跑的 `ctx` 執行檔：自己就是 `ctx` 就用自己；否則（例：桌面 App）找同目錄的 `ctx`；
-/// 都沒有就退回自己。
-pub fn ctx_exe() -> Result<PathBuf> {
-    let me = std::env::current_exe()?;
-    if me.file_stem().is_some_and(|s| s == "ctx") {
-        return Ok(me);
-    }
-    let sibling = me.with_file_name(format!("ctx{}", std::env::consts::EXE_SUFFIX));
-    Ok(if sibling.is_file() { sibling } else { me })
-}
 
 /// 對應 `session.ensure_mcp_json`：寫 spine repo 的 `.mcp.json`（已存在且含 repo_context 就不動）。回傳路徑。
 pub fn ensure_mcp_json(spine_dir: &Path) -> Result<PathBuf> {
@@ -53,7 +43,7 @@ pub fn ensure_mcp_json_with(spine_dir: &Path, ctx: &Path) -> Result<PathBuf> {
             }
         }
     }
-    let spine_abs = crate::pystr::resolve(spine_dir);
+    let spine_abs = crate::fsutil::resolve(spine_dir);
     let data = json!({"mcpServers": {"repo_context": {
         "command": ctx.to_string_lossy(),
         "args": ["--spine", spine_abs.to_string_lossy(), "mcp"],
@@ -143,7 +133,7 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
     let task_note = task
         .map(|t| {
             let first = crate::pystr::splitlines(t).first().copied().unwrap_or("");
-            format!("；任務：{}", crate::fsutil::take_chars(first, 60))
+            format!("；任務：{}", crate::pystr::take_chars(first, 60))
         })
         .unwrap_or_default();
     spine::append_event(

@@ -15,7 +15,8 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
 
-use crate::fsutil::{expand_user, read_text_lossy, splitlines};
+use crate::fsutil::{expanduser, read_text_lossy};
+use crate::pystr::splitlines;
 
 /// 對應 `pack.EXCLUDE_DIRS`（非 git fallback 時略過的目錄名）。
 pub const EXCLUDE_DIRS: &[&str] = &[".git", "node_modules", "__pycache__", ".venv", "venv"];
@@ -78,7 +79,7 @@ pub fn secret_hits(text: &str) -> Vec<&'static str> {
 /// `-z`：不然 git 會把非 ASCII 路徑加引號跳脫（core.quotePath），中文檔名的 md 全部「不存在」
 /// 而被默默略過（2026-09-25 搜尋測試抓到）。非 git 目錄 fallback 遞迴，略過 EXCLUDE_DIRS 與 `.` 開頭目錄。
 pub fn doc_files(repo_path: &Path) -> Vec<PathBuf> {
-    let root = expand_user(repo_path);
+    let root = expanduser(repo_path);
     let r = Command::new("git")
         .arg("-C")
         .arg(&root)
@@ -144,7 +145,7 @@ pub fn est_tokens(text: &str) -> usize {
 pub fn pack_index(entries: &[RepoRef], max_files_per_repo: usize) -> String {
     let mut out = vec!["# 會話料（文件地圖——先挑相關檔案自己細讀，不要整包吞）".to_string()];
     for e in entries {
-        let root = expand_user(&e.path);
+        let root = expanduser(&e.path);
         if !root.is_dir() {
             continue;
         }
@@ -203,7 +204,7 @@ pub fn estimate(entries: &[RepoRef]) -> Vec<Estimate> {
     entries
         .iter()
         .map(|e| {
-            let root = expand_user(&e.path);
+            let root = expanduser(&e.path);
             let (mut files, mut tokens) = (0, 0);
             if root.is_dir() {
                 for f in doc_files(&root) {
@@ -237,7 +238,7 @@ pub fn pack_group(entries: &[RepoRef], token_budget: usize) -> Packed {
     let mut files: Vec<(String, String, String)> = Vec::new();
     let mut flagged = Vec::new();
     for e in entries {
-        let root = expand_user(&e.path);
+        let root = expanduser(&e.path);
         if !root.is_dir() {
             continue;
         }

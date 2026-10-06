@@ -91,7 +91,7 @@ Rust 端簽名建議：
 （`api_state`／`build_scan`／`handle_action`，會話清冊以 `Terms` trait 傳入 `TermManager`）。
 `term_create` 的 agent 分支：`session::build` 組好 cwd＋指令 → `TermManager::create_agent`；
 `session_draft`／`session_result` 從 `terms.get(sid).info()` 拿會話資料。
-`collide`／`collide_rerun` 的背景判定：同目錄有 `ctx` 執行檔就起 detached 進程（同 Python，關 App 也跑得完），
+`collide`／`collide_rerun` 的背景判定：找得到 `ctx`（`ctx_core::exe::ctx_exe`：自己→同目錄→PATH）就起 detached 進程（同 Python，關 App 也跑得完），
 沒有就在 App 行程裡開執行緒跑（App 結束前沒跑完 → lint 會報「碰撞無回程」，可按〔重跑判定〕）。
 `register_repos` 部分成功時 Python 回 `{error, added}`；IPC 只回 `Err(error)`（前端不用 `added`）。
 寫入型 action 成功後發 `workbench://changed`（`reason`＝action 名）；唯讀的 `session_draft`／`scan_dir` 不發。

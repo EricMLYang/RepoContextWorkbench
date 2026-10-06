@@ -202,9 +202,9 @@ impl AgentProvider for MockProvider {
             spine_dir,
             &json!({"provider": "mock", "mode": "text",
                     "cwd": cwd.map(|c| c.to_string_lossy().into_owned()).unwrap_or_default(),
-                    "prompt": crate::fsutil::take_chars(prompt, 2000)}),
+                    "prompt": crate::pystr::take_chars(prompt, 2000)}),
         )?;
-        let lines = crate::fsutil::splitlines(prompt).len();
+        let lines = crate::pystr::splitlines(prompt).len();
         Ok(format!("mock 摘要：輸入 {lines} 行——重點請看 diff。"))
     }
 
@@ -212,7 +212,7 @@ impl AgentProvider for MockProvider {
         let call = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
         raw_log(
             spine_dir,
-            &json!({"provider": "mock", "prompt": crate::fsutil::take_chars(prompt, 2000), "call": call}),
+            &json!({"provider": "mock", "prompt": crate::pystr::take_chars(prompt, 2000), "call": call}),
         )?;
         if call <= self.fail_n {
             return Err(Error::invalid("mock 故意回傳壞輸出（測重試）"));
@@ -304,7 +304,7 @@ impl ClaudeProvider {
         if rc != 0 {
             return Err(Error::External(format!(
                 "claude CLI 失敗 rc={rc}: {}",
-                crate::fsutil::take_chars(&stderr, 300)
+                crate::pystr::take_chars(&stderr, 300)
             )));
         }
         let v: Value = serde_json::from_str(&stdout)?;

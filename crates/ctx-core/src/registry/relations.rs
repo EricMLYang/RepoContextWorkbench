@@ -244,10 +244,10 @@ pub fn set_export(
         let r = data
             .repo_mut(id)
             .ok_or_else(|| Error::invalid(format!("repo 不存在: {id}")))?;
-        let root = crate::pystr::resolve(&r.path());
+        let root = crate::fsutil::resolve(&r.path());
         let rel = path.trim().trim_matches('/');
         let rel = if rel.is_empty() { "." } else { rel };
-        let target = crate::pystr::resolve(&root.join(rel));
+        let target = crate::fsutil::resolve(&root.join(rel));
         if target != root && !target.starts_with(&root) {
             return Err(Error::invalid(format!("export 路徑跳出 repo：{path}")));
         }

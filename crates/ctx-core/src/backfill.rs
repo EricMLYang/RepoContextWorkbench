@@ -31,8 +31,8 @@ use serde_json::{json, Map, Value};
 
 use crate::agentapi::{self, Target};
 use crate::agents::{AgentProvider, ClaudeProvider};
-use crate::fsutil::{mtime_secs, now_secs};
-use crate::pystr::{expanduser, py_str, resolve as py_resolve};
+use crate::fsutil::{expanduser, mtime_secs, now_secs, resolve as py_resolve};
+use crate::pystr::py_str;
 use crate::{registry, Error, Result};
 
 /// 對應 `CHUNK_CHARS`。
@@ -83,14 +83,7 @@ fn load(p: &Path) -> Option<Value> {
 }
 
 fn truthy(v: Option<&Value>) -> bool {
-    match v {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(b)) => *b,
-        Some(Value::String(s)) => !s.is_empty(),
-        Some(Value::Array(a)) => !a.is_empty(),
-        Some(Value::Object(o)) => !o.is_empty(),
-        Some(Value::Number(n)) => n.as_f64() != Some(0.0),
-    }
+    v.is_some_and(crate::pystr::truthy)
 }
 
 fn save(p: &Path, obj: &Value) -> Result<()> {

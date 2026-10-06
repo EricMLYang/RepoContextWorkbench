@@ -202,14 +202,14 @@ fn scope_tokens(tokens: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// 判定丟背景跑：自己（或同目錄）就是 `ctx` 時起 detached 進程（關掉 App 也跑得完，同 Python）；
+/// 判定丟背景跑：找得到 `ctx`（自己、同目錄或 PATH，見 `exe::ctx_exe`）時起 detached 進程（關掉 App 也跑得完，同 Python）；
 /// 否則（桌面 App 沒附 ctx）在本進程開執行緒跑。`REPOCTX_NO_BACKGROUND` 設了就不跑（測試用）。
 fn judge_in_background(spine_dir: &Path, cid: &str) -> Result<()> {
-    if std::env::var_os("REPOCTX_NO_BACKGROUND").is_some_and(|v| !v.is_empty()) {
+    if crate::exe::background_disabled() {
         return Ok(());
     }
-    let exe = session::ctx_exe()?;
-    if exe.file_stem().is_some_and(|s| s == "ctx") {
+    let exe = crate::exe::ctx_exe()?;
+    if crate::exe::is_ctx(&exe) {
         collide::spawn_detached_with(&exe, spine_dir, cid, None, None)?;
         return Ok(());
     }

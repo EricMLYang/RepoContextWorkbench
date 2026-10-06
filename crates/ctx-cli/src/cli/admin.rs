@@ -6,7 +6,7 @@
 
 use clap::{Args, Subcommand};
 use ctx_core::ops::{self, Via};
-use ctx_core::{context, crossref, pystr, registry, summary};
+use ctx_core::{context, crossref, fsutil, pystr, registry, summary};
 use serde_json::{json, Map, Value};
 
 use super::common::{fail, split_opt, CmdResult, Ctx, Exit, EXIT_FINDINGS, EXIT_REJECTED};
@@ -18,7 +18,7 @@ pub struct InitArgs {
 
 /// 對應 `cmd_init`。
 pub fn cmd_init(a: &InitArgs) -> CmdResult {
-    let d = pystr::expanduser(&a.path);
+    let d = fsutil::expanduser(&a.path);
     ctx_core::init::init_spine(&d)?;
     println!("spine repo 就緒：{}", d.display());
     Ok(())
@@ -295,13 +295,6 @@ fn registry_audit(ctx: &Ctx, scan: &[String]) -> CmdResult {
     Ok(())
 }
 
-fn note_tail(note: &Option<String>) -> String {
-    match note {
-        Some(n) if !n.is_empty() => format!("  {n}"),
-        _ => String::new(),
-    }
-}
-
 fn registry_relations(ctx: &Ctx, id: Option<&str>) -> CmdResult {
     let d = ctx.spine_dir()?;
     let n = if let Some(id) = id.filter(|s| !s.is_empty()) {
@@ -312,7 +305,7 @@ fn registry_relations(ctx: &Ctx, id: Option<&str>) -> CmdResult {
             } else {
                 format!("{id} 的{} {}", r.label, r.peer)
             };
-            println!("{arrow}（{}）{}", r.kind, note_tail(&r.note));
+            println!("{arrow}（{}）{}", r.kind, crate::note_tail(&r.note));
         }
         rows.len()
     } else {
@@ -328,7 +321,7 @@ fn registry_relations(ctx: &Ctx, id: Option<&str>) -> CmdResult {
                 r.from,
                 r.to,
                 r.kind,
-                note_tail(&r.note)
+                crate::note_tail(&r.note)
             );
         }
         rows.len()

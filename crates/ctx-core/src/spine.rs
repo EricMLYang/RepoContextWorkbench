@@ -161,6 +161,11 @@ impl Event {
         format!("## {} {} [{}]{}", self.time, self.etype, self.source, tail)
     }
 
+    /// `"YYYY-MM-DD HH:MM"`：事件時間，可直接字串比大小。
+    pub fn stamp(&self) -> String {
+        format!("{} {}", self.date, self.time)
+    }
+
     /// body 第一行（沒有＝空字串）。
     pub fn first_line(&self) -> &str {
         splitlines(&self.body).first().copied().unwrap_or("")

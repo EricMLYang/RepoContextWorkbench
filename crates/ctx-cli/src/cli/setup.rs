@@ -4,7 +4,7 @@ use std::io::Read;
 
 use clap::{Args, ValueEnum};
 use ctx_core::agentsetup::{self, SetupEnv};
-use ctx_core::{config, hooks, pystr};
+use ctx_core::{config, fsutil, hooks};
 
 use super::common::{fail, CmdResult, Ctx, Exit, EXIT_FINDINGS, EXIT_NO_SPINE};
 
@@ -65,7 +65,7 @@ pub fn cmd_setup(ctx: &Ctx, a: &SetupArgs) -> CmdResult {
         .or(ctx.spine.as_deref().filter(|s| !s.is_empty()));
     let d = match spine_arg {
         Some(s) => {
-            let d = pystr::resolve(&pystr::expanduser(s));
+            let d = fsutil::resolve(&fsutil::expanduser(s));
             if !config::is_spine(&d) {
                 return Err(fail(
                     "no_spine",

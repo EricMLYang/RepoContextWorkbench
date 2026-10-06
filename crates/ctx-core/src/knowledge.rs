@@ -22,10 +22,9 @@ use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
-use crate::fsutil::{
-    expand_user, mtime_secs, now_secs, read_text_lossy, resolve_lenient, splitlines, take_chars,
-};
+use crate::fsutil::{expanduser, mtime_secs, now_secs, read_text_lossy, resolve};
 use crate::pack::{self, RepoRef};
+use crate::pystr::{splitlines, take_chars};
 
 static WORD_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[a-z0-9][a-z0-9_\-\.]*[a-z0-9]|[a-z0-9]").expect("寫死的 regex"));
@@ -171,7 +170,7 @@ pub fn build_docs(entries: &[RepoRef], spine_dir: Option<&Path>) -> Vec<Doc> {
     let mut fresh: Vec<(String, Value)> = Vec::new();
     let mut docs = Vec::new();
     for e in entries {
-        let root = expand_user(&e.path);
+        let root = expanduser(&e.path);
         if !root.is_dir() {
             continue;
         }
@@ -403,11 +402,11 @@ pub fn search(
     }
     let excluded: HashSet<PathBuf> = exclude_paths
         .iter()
-        .map(|p| resolve_lenient(&expand_user(p)))
+        .map(|p| resolve(&expanduser(p)))
         .collect();
     let docs: Vec<Doc> = build_docs(entries, spine_dir)
         .into_iter()
-        .filter(|d| !excluded.contains(&resolve_lenient(Path::new(&d.path))))
+        .filter(|d| !excluded.contains(&resolve(Path::new(&d.path))))
         .collect();
     if docs.is_empty() {
         return empty("範圍內沒有可索引的 md 檔");

@@ -15,7 +15,8 @@ use std::process::Command;
 use serde::{Serialize, Serializer};
 
 use crate::agentmark;
-use crate::fsutil::{expand_user, mtime_secs, now_secs, resolve_lenient, take_chars};
+use crate::fsutil::{expanduser, mtime_secs, now_secs, resolve};
+use crate::pystr::take_chars;
 
 /// 採集輸入：registry repo entry 的必要欄位（呼叫端從 registry 取）。
 /// `repo_type`／`tier` 用 registry.yaml 的原字串（Python 預設 "mine"／"active"）。
@@ -111,7 +112,7 @@ fn git_raw(repo: &Path, args: &[&str]) -> (bool, String) {
 
 /// 對應 `collect.collect_repo`：entry → 狀態。
 pub fn collect_repo(entry: &RepoSpec) -> RepoState {
-    let p = expand_user(&entry.path);
+    let p = expanduser(&entry.path);
     let mut st = RepoState {
         id: entry.id.clone(),
         repo_type: entry.repo_type.clone(),
@@ -248,9 +249,9 @@ fn annotate_agents(states: &mut [RepoState], spine_dir: &Path) {
         return;
     }
     for s in states.iter_mut() {
-        let rp = resolve_lenient(Path::new(&s.path));
+        let rp = resolve(Path::new(&s.path));
         for m in &sessions {
-            let cwd = resolve_lenient(Path::new(&m.cwd));
+            let cwd = resolve(Path::new(&m.cwd));
             if cwd.starts_with(&rp) {
                 let name = m
                     .agent

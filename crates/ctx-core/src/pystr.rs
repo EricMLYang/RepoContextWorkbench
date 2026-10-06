@@ -1,7 +1,6 @@
-//! 照 Python 行為的小工具：`str.splitlines`、`repr(str)`、`str(x)`、`Path.expanduser`。
+//! 照 Python 行為的字串小工具：`str.splitlines`、`repr(str)`、`str(x)`、`s[:n]`。
+//! 路徑（`expanduser`／`resolve`）在 `fsutil`。
 //! 給人看的訊息要逐字照抄 Python，有些地方（例：`{line!r}`）就得模仿 Python 的字串表示。
-
-use std::path::{Path, PathBuf};
 
 /// 對應 Python `str.splitlines()`：認 `\n`、`\r\n`、`\r`、`\v`、`\f`、`\x1c-\x1e`、`\x85`、` `、` `。
 pub fn splitlines(s: &str) -> Vec<&str> {
@@ -92,46 +91,39 @@ pub fn py_str_yaml(v: &serde_yaml::Value) -> String {
     }
 }
 
-/// 對應 Python `Path(p).expanduser()`：開頭的 `~` 換成 `$HOME`。
-pub fn expanduser(p: impl AsRef<Path>) -> PathBuf {
-    let p = p.as_ref();
-    if let Ok(rest) = p.strip_prefix("~") {
-        if let Some(home) = std::env::var_os("HOME") {
-            return PathBuf::from(home).join(rest);
-        }
+/// Python 真值判斷 `bool(x)`／`if x:`（JSON 值）：null、false、0、空字串、空陣列、空物件為假。
+pub fn truthy(v: &serde_json::Value) -> bool {
+    use serde_json::Value;
+    match v {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
+        Value::String(s) => !s.is_empty(),
+        Value::Array(a) => !a.is_empty(),
+        Value::Object(o) => !o.is_empty(),
     }
-    p.to_path_buf()
 }
 
-/// 對應 Python `Path.resolve()`（非 strict）：存在就 canonicalize；不存在就把最長存在的前綴
-/// canonicalize 後接上其餘部分（`..` 照字面消去）。
-pub fn resolve(p: &Path) -> PathBuf {
-    if let Ok(c) = p.canonicalize() {
-        return c;
+/// 同 [`truthy`]（YAML 值；有 tag 的值一律為真）。
+pub fn truthy_yaml(v: &serde_yaml::Value) -> bool {
+    use serde_yaml::Value;
+    match v {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
+        Value::String(s) => !s.is_empty(),
+        Value::Sequence(s) => !s.is_empty(),
+        Value::Mapping(m) => !m.is_empty(),
+        Value::Tagged(_) => true,
     }
-    let abs = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|d| d.join(p))
-            .unwrap_or_else(|_| p.to_path_buf())
-    };
-    let mut out = PathBuf::new();
-    for comp in abs.components() {
-        match comp {
-            std::path::Component::ParentDir => {
-                out.pop();
-            }
-            std::path::Component::CurDir => {}
-            c => {
-                out.push(c.as_os_str());
-                if let Ok(canon) = out.canonicalize() {
-                    out = canon;
-                }
-            }
-        }
+}
+
+/// Python 字串切片 `s[:n]`（以字元計，不是位元組）。
+pub fn take_chars(s: &str, n: usize) -> &str {
+    match s.char_indices().nth(n) {
+        Some((i, _)) => &s[..i],
+        None => s,
     }
-    out
 }
 
 #[cfg(test)]
@@ -152,5 +144,11 @@ mod tests {
         assert_eq!(repr("a'b"), "\"a'b\"");
         assert_eq!(repr("a'b\""), "'a\\'b\"'");
         assert_eq!(repr("中\n"), "'中\\n'");
+    }
+
+    #[test]
+    fn take_chars_counts_chars() {
+        assert_eq!(take_chars("中文字", 2), "中文");
+        assert_eq!(take_chars("ab", 5), "ab");
     }
 }

@@ -458,13 +458,6 @@ pub fn agent_title(agent: &str, scope: &str, task: Option<&str>, limit: usize) -
     format!("{agent} · {scope}")
 }
 
-fn which(name: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|d| d.join(name))
-        .find(|p| p.is_file())
-}
-
 /// 對應 `term.default_shell`。
 pub fn default_shell() -> Vec<String> {
     if cfg!(windows) {
@@ -473,7 +466,7 @@ pub fn default_shell() -> Vec<String> {
     let sh = std::env::var("SHELL")
         .ok()
         .filter(|s| !s.is_empty())
-        .or_else(|| which("zsh").map(|p| p.to_string_lossy().into_owned()))
+        .or_else(|| crate::exe::which("zsh").map(|p| p.to_string_lossy().into_owned()))
         .unwrap_or_else(|| "/bin/sh".into());
     vec![sh]
 }

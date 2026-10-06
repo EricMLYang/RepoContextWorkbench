@@ -34,17 +34,9 @@ fn seq_strings(v: Option<&Value>) -> Vec<String> {
     }
 }
 
-/// Python 的真值判斷（`if r.get(k):`）。
+/// Python 的真值判斷（`if r.get(k):`；沒有這個鍵＝假）。
 pub(crate) fn truthy(v: Option<&Value>) -> bool {
-    match v {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(b)) => *b,
-        Some(Value::String(s)) => !s.is_empty(),
-        Some(Value::Sequence(s)) => !s.is_empty(),
-        Some(Value::Mapping(m)) => !m.is_empty(),
-        Some(Value::Number(n)) => n.as_f64().is_some_and(|f| f != 0.0),
-        Some(Value::Tagged(_)) => true,
-    }
+    v.is_some_and(crate::pystr::truthy_yaml)
 }
 
 macro_rules! mapping_wrapper {
@@ -138,7 +130,7 @@ impl Repo {
     }
     /// 對應 `Path(r["path"]).expanduser()`。
     pub fn path(&self) -> PathBuf {
-        crate::pystr::expanduser(self.path_str())
+        crate::fsutil::expanduser(self.path_str())
     }
     /// `type` 欄（mine｜external）。
     pub fn kind(&self) -> Option<String> {
