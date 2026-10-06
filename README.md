@@ -1,12 +1,82 @@
 # Repo Context Workbench — repo-context 工作台
 
 > **這是什麼**：把一群 repo 分成組，每組組成一份 context——餵給 agent，也餵給自己。
-> 三層＝**引擎**（P1–P16 原語，套件 `repo_context`）＋**工作台**（桌面殼，`ctx app`）＋**脊椎**（留痕資料，住 spine repo）。
-> **來歷**：2026-09-01 起在 `AgentCodingPM/repo_engine_prototype` 以 build-to-delete 原型開發，2026-09-11 獨立成本 repo（原型 15 個 commit 的歷史一併搬來）。
-> 規格＝`docs/20260901_工具開發規格_v2.md`（§9 開放題 1「工具命名」已於本次搬家裁定：工具 repo-context／殼 工作台／指令 `ctx`）。
-> **驗證設計先於程式碼**：見 `VERIFICATION.md`（四層驗證＋七條不變式＋回饋迴路）。
+> 人和 agent 走同一個介面：CLI、MCP server、桌面工作台三個入口，背後是同一個引擎、同一份 spine。
+>
+> **現況（2026-10-06，`rust-desktop` 分支）**：整個工具已從 Python 搬成 **Rust 引擎＋Tauri 殼＋React 前端**。
+> Python 版（`repo_context/`、`tests/`）在合併回 main 前**仍保留**——它是對拍的規格，也是目前全域 `ctx` 的實作；
+> 合併、切換完成後刪除。重構記錄：`docs/20261006_Rust桌面重構.md`；搬遷規約與刻意差異：`docs/RUST_PORTING.md`。
 
-## 範圍（2026-09-01 拆機落地輪後：P1–P16 全數落地＋外部工具設計課補完）
+## 架構
+
+```
+crates/ctx-core/   引擎 lib：registry／spine／採集／脈絡／知識／碰撞／會話 PTY／工作台 state 與 actions
+                   （不依賴 Tauri、不依賴 CLI 框架；對應 repo_context/*.py，一模組對一檔）
+crates/ctx-cli/    bin `ctx`：CLI（clap）＋MCP server（stdio）＋Claude Code hooks 入口
+desktop/           桌面工作台：src-tauri/（Tauri v2 殼：視窗、IPC、PTY 轉接、選單列、通知）
+                   ＋ src/（React＋Vite＋TS 前端，只管畫面；IPC 合約見 desktop/IPC.md）
+```
+
+資料格式就是合約：spine（`spine/events/*.md`）、`registry.yaml`、`config.yaml`、`.state/`、CLI 旗標與 `--json` 欄位、
+MCP 工具介面都與 Python 版相同，兩版可以讀寫同一個 spine（`scripts/parity.sh` 逐指令對拍）。
+
+## 建置
+
+```bash
+# 需要 Rust（stable）與 Node 20+
+cargo build --release -p ctx-cli                 # → target/release/ctx（CLI＋MCP＋hooks，單一執行檔）
+cd desktop && npm install && npx tauri build     # → target/release/bundle/macos/Repo Context.app（及 .dmg）
+                                                 #   只要 .app：npx tauri build --bundles app
+
+# 驗證（改完必跑）
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all --check
+cargo build -p ctx-cli && bash scripts/parity.sh          # 與 Python 版逐指令對拍
+python3 scripts/parity_state.py                           # 工作台 state／scan JSON 對拍
+cd desktop && npm run build && npm test && npm run lint
+```
+
+## 安裝
+
+```bash
+cargo install --path crates/ctx-cli      # ctx 裝到 ~/.cargo/bin/ctx
+# 桌面 App：把 target/release/bundle/macos/Repo Context.app 拖到 /Applications
+ctx app                                  # 找 Repo Context.app（ctx 同目錄、/Applications、~/Applications、target/）並帶 --spine 開啟
+```
+
+桌面 App 目前只做了 macOS（Windows／VDI 未做、未測）。關視窗＝隱藏，會話照跑；選單列「結束」或 ⌘Q 才收掉會話。
+
+## 從 Python 版切換
+
+切換前的檢查清單：
+
+1. `which -a ctx`：確認 `~/.cargo/bin/ctx`（Rust）排在 Python 的 `ctx` 前面，或把 Python 版 `pip uninstall repo-context-workbench`。
+   注意：引擎找 `ctx`（MCP 指令、hooks、背景判定）的順序是「自己 → 同目錄 → PATH」，PATH 上先遇到 Python 版就會用到它。
+2. 先停掉正在跑的 `ctx timer`／`ctx app`（Python 版）與開著的 agent 會話，避免兩版同時寫同一個 spine 的排程。
+3. spine 先 `git commit`（或備份），切換後有問題可回退。
+4. **移除舊的 MCP 註冊**：`claude mcp remove repo-context -s user`——`ctx setup` 看到已註冊會略過，不會自動換成 Rust 版。
+5. **移除舊的 hooks**：`~/.claude/settings.json` 裡 `SessionStart`／`SessionEnd` 中指令含 `repo_context hook` 的兩筆刪掉——
+   `ctx setup` 把 Python 版的 hook 也認成「已掛」，不刪就不會換成 `ctx hook …`。
+6. spine 裡已有的 `.mcp.json`（`mcpServers.repo_context` 指向 `python -m repo_context`）刪掉，讓 `ctx session` 重寫——
+   只要已有 `repo_context` 這個 server，Rust 版就不改寫。
+
+然後：
+
+```bash
+ctx setup --spine <spine> --claude --dry-run   # 先看會做什麼
+ctx setup --spine <spine> --claude             # 用 Rust ctx 掛 MCP（user scope）＋hooks＋skill，記住 spine
+claude mcp get repo-context                    # 確認指令是 <…>/ctx mcp
+```
+
+`ctx ui`（瀏覽器模式）在 Rust 版停用，改用 `ctx app`。其他刻意差異見 `docs/RUST_PORTING.md`「刻意差異」。
+
+## 沿革（Python 版，合併回 main 前仍保留）
+
+> 以下是 Python 版 `repo_context` 的歷次記錄與用法，保留作為規格與歷史；指令中的 `python -m repo_context` 在 Rust 版換成 `ctx`。
+> **來歷**：2026-09-01 起在 `AgentCodingPM/repo_engine_prototype` 以 build-to-delete 原型開發，2026-09-11 獨立成本 repo。
+> 規格＝`docs/20260901_工具開發規格_v2.md`；驗證設計見 `VERIFICATION.md`。
+
+### 範圍（2026-09-01 拆機落地輪後：P1–P16 全數落地＋外部工具設計課補完）
 
 > 拆機落地輪＝把 `docs/20260901_外部工具比對_逐一介紹.md` 點名「可抄的設計決策」
 > 而原型尚缺的五項補上：gitpane 欄位（worktree＋agent 偵測）、mani 掃描混合模式、
@@ -59,7 +129,7 @@
 - **未做（VDI Day 0 smoke test 過了才蓋）**：真殼的常駐件——tray、全域 hotkey、OS toast、開機自啟；Windows terminal 需 pywinpty（未實測）。視窗內 badge＋瀏覽器通知是常駐件的等效替身。
 - 對 v2 的小偏差：kv token 多一個 `id:`（collision 回連需要，v2 的 kv 清單為例示性）；pack 用內建文件層選料（正式版換 Repomix）。
 
-## 快速開始
+### 快速開始
 
 ```powershell
 cd RepoContextWorkbench
@@ -151,7 +221,7 @@ python -m repo_context --spine ... ui                     # 瀏覽器模式（ap
 
 `--spine` 可用環境變數 `REPOENGINE_SPINE` 取代。
 
-## 驗證分層（詳見 VERIFICATION.md）
+### 驗證分層（詳見 VERIFICATION.md）
 
 | 指令 | 層 | 誰跑 |
 |---|---|---|
@@ -160,7 +230,7 @@ python -m repo_context --spine ... ui                     # 瀏覽器模式（ap
 | `REPOENGINE_RUN_AGENT_TESTS=1` ＋ `python -m pytest tests -q -m agent` | L3 真 claude 冒煙 | 人觸發 |
 | VERIFICATION.md「L4 驗收腳本」 | L4 真實資料驗收 | 人 |
 
-## 架構速覽
+### 架構速覽
 
 加功能的路徑（2026-09-25 架構檢查後）：管理類寫入先在 `ops.py` 加一個 `@op`（MCP 管理層自動多一個工具），
 CLI 在 `cli/admin.py` 加一行子命令、工作台在 `webui/actions.py` 加一個 `_a_<名稱>` 轉接；

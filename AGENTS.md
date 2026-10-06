@@ -5,15 +5,14 @@
 判斷取捨時以這三點為準：**更快拿到對的脈絡、判斷有留痕、人和 agent 走同一個介面**。
 
 ## 架構方向（2026-10-06 定）
-- 最終形態：**Rust 引擎＋Tauri 殼＋React 前端**，產出單一執行檔（CLI／MCP／桌面 App 同一支）。
-- 過渡期：Python 引擎當 sidecar，依模組穩定度逐塊搬到 Rust，**穩定的先搬，常改的後搬**。
-- **資料格式就是合約**：spine（JSONL）、registry（YAML）、MCP 工具介面不隨語言變；搬遷期間兩邊讀寫同一份資料。
-- 每搬一個模組，把對應測試一起搬過去，兩邊都跑過同樣的資料再切換。
+- 已全面搬到 **Rust 引擎（`crates/ctx-core`）＋CLI／MCP（`crates/ctx-cli`，單一執行檔 `ctx`）＋Tauri 殼＋React 前端（`desktop/`）**，在 `rust-desktop` 分支。
+- Python 版（`repo_context/`、`tests/`）只當對拍規格（`scripts/parity.sh`），合併回 main 後刪除；合併前不刪、不改它的行為。
+- **資料格式就是合約**：spine（事件 md）、registry（YAML）、`.state/`、CLI、MCP 工具介面不隨語言變。規約與刻意差異見 `docs/RUST_PORTING.md`。
 
 ## Rust
 - 錯誤用 `Result` 往上傳；只有程式裡寫死的不變式才用 `unwrap`／`expect`。
 - 型別表達狀態，不用字串或布林旗標拼湊。
-- 引擎 crate 不依賴 Tauri；殼只做視窗、IPC、選單列、通知、PTY、管理 sidecar。
+- 引擎 crate 不依賴 Tauri；殼只做視窗、IPC、選單列、通知、PTY 轉接。
 - 依賴從嚴：標準庫或主流 crate（serde、clap、portable-pty）能做的就不加新的。
 
 ## React
