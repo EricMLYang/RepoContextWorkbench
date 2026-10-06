@@ -1,15 +1,12 @@
 /**
- * 畫面用的純函式：只做「怎麼顯示」——範圍篩選、分段、按鈕文案、主次動作、狀態文字。
- * 業務判斷（卡片有哪些動作、範圍歸屬、摘要內容）全由後端給；這裡不新增任何判斷。
- *
- * 搬遷註記：relationTask／taskEntries 的任務文案目前在前端（照 Python 版 workbench.js），
- * Rust 版應移到引擎（workbench::state 回傳），屆時刪掉這兩個函式。
+ * 畫面用的純函式：只做「怎麼顯示」——照 lane 分段、搜尋、按鈕文案、主次動作、狀態文字。
+ * 業務判斷（卡片有哪些動作、範圍歸屬與 lane、摘要內容、任務文案）全由後端給；這裡不新增任何判斷。
+ * 2026-10-06：範圍篩選（卡片／事件／關係）、relationTask、taskEntries 已移進引擎（workbench::state）。
  */
 import type {
   CardAction,
   CardKind,
   InboxCard,
-  Provenance,
   Relation,
   RelationKind,
   RepoState,
@@ -71,42 +68,16 @@ export function scopeKindLabel(scope: Scope): string {
   return scope.group ? "常用牌組" : Array.isArray(scope.repos) ? "臨時範圍" : "跨組總覽";
 }
 
-export function isUnscoped(item: Partial<Provenance>): boolean {
-  return item.scope_kind === "global" || item.scope_kind === "unclassified";
-}
-
-export function matchesScope(
-  item: Partial<Provenance>,
-  scope: Scope,
-  members: string[],
-): boolean {
-  if (!scope.group && !Array.isArray(scope.repos)) return true;
-  return (item.scope_repos || []).some((r) => members.includes(r));
-}
-
 export function matchesSearch(item: unknown, query: string): boolean {
   return !query || JSON.stringify(item).toLocaleLowerCase().includes(query);
 }
 
-/** 範圍內的卡：掃描的問句卡（以 repo 補歸屬）＋ state 卡中屬於範圍且非全域的。 */
+/** 範圍內的卡：掃描的問句卡（本來就是這個範圍採集的）＋ state 卡中引擎標 lane＝scope 的。 */
 export function scopedCards(
-  state: WorkbenchState,
+  state: Pick<WorkbenchState, "cards">,
   scan: Pick<ScanResult, "question_cards">,
-  scope: Scope,
 ): InboxCard[] {
-  const members = scopeRepos(scope, state);
-  const set = new Set(members);
-  const questions: InboxCard[] = scan.question_cards
-    .filter((c) => set.has(c.repo))
-    .map((c) => ({
-      ...c,
-      scope_label: c.repo,
-      scope_repos: [c.repo],
-      scope_kind: "repo" as const,
-    }));
-  return questions.concat(
-    state.cards.filter((c) => matchesScope(c, scope, members) && !isUnscoped(c)),
-  );
+  return (scan.question_cards as InboxCard[]).concat(state.cards.filter((c) => c.lane === "scope"));
 }
 
 export interface CardSection {
@@ -117,19 +88,15 @@ export interface CardSection {
   collapsed?: boolean;
 }
 
-/** 收件匣分段：全域警示 → 各類型 → 全域與未分類（收合）。 */
+/** 收件匣分段：全域警示 → 各類型 → 全域與未分類（收合）。歸屬照引擎給的 lane。 */
 export function cardSections(
-  state: WorkbenchState,
+  state: Pick<WorkbenchState, "cards">,
   scan: Pick<ScanResult, "question_cards">,
-  scope: Scope,
   query: string,
   filter: string,
 ): CardSection[] {
-  const members = scopeRepos(scope, state);
-  const local = scopedCards(state, scan, scope);
-  const extras = state.cards.filter(
-    (c) => isUnscoped(c) || (c.kind === "interrupt" && !matchesScope(c, scope, members)),
-  );
+  const local = scopedCards(state, scan);
+  const extras = state.cards.filter((c) => c.lane === "global");
   const accept = (c: InboxCard) => matchesSearch(c, query) && (filter === "all" || c.kind === filter);
   const sections: CardSection[] = [];
   const globalWarnings = extras.filter((c) => c.kind === "interrupt" && accept(c));
@@ -329,52 +296,10 @@ export function repoCell(s: RepoState, key: keyof RepoState): string {
   return String(v);
 }
 
-// ── 關係與會話起手任務（見檔頭搬遷註記）──────────────────────────────
-
-const RELTASK: Record<string, (a: string, b: string) => string> = {
-  "pm-of": (a, b) =>
-    `檢查規劃與實作是否一致：${a} 是 ${b} 的 PM。請比對 ${a} 的規劃／需求文件與 ${b} 的實作與驗收條件，列出不一致、缺漏與已過期的部分，每條標明來自哪個 repo 的哪份檔，再跟我確認要改哪一邊。`,
-  feeds: (a, b) =>
-    `檢查供料是否還新：${a} 供料給 ${b}。請確認 ${b} 目前用的內容是不是 ${a} 的最新版本，列出落差與需要重新供料的部分，標明來源檔案。`,
-  "derived-from": (a, b) =>
-    `檢查衍生落差：${a} 衍生自 ${b}。請比對兩邊自分家後的差異，說明哪些該回流、哪些是刻意分開，標明來源檔案。`,
-  "upstream-of": (a, b) =>
-    `檢查上游影響：${a} 是 ${b} 的上游。請看 ${a} 近期變更有沒有影響 ${b}，列出需要跟進的項目與依據。`,
-  "sibling-topic": (a, b) =>
-    `比對同主題內容：${a} 與 ${b} 講同一件事。請找出重複、矛盾與只有一邊有的內容，標明來源檔案，再建議怎麼收斂。`,
-};
-
-export function relationTask(r: Relation): string {
-  return (
-    RELTASK[r.kind] ||
-    ((a: string, b: string) =>
-      `釐清 ${a} 與 ${b} 的關係現在是否還成立：比對兩邊近期內容，說明依據，再建議要不要調整這條關係。`)
-  )(r.from, r.to);
-}
+// ── 關係 ────────────────────────────────────────────────────────────
 
 export function relationLabel(r: Relation, kinds: Record<string, RelationKind>): string {
   return kinds[r.kind]?.forward || r.kind;
-}
-
-export const STATUS_PROMPT =
-  "先讀情境卡，用 3 行說明：你拿到哪些脈絡、這次預計產出什麼、哪些動作需要我先確認，再問我要做什麼。";
-
-export function taskEntries(
-  state: WorkbenchState,
-  scan: Pick<ScanResult, "summary">,
-  members: string[],
-): [string, string][] {
-  const out: [string, string][] = [];
-  if (scan.summary) out.push(["接續上次工作", scan.summary.resume_task]);
-  out.push(["整理本組現況", STATUS_PROMPT]);
-  const set = new Set(members);
-  const rel = state.relations.find((r) => set.has(r.from) && set.has(r.to));
-  if (rel)
-    out.push([
-      relationLabel(rel, state.rel_kinds) + "：" + rel.from + " → " + rel.to,
-      relationTask(rel),
-    ]);
-  return out;
 }
 
 // ── 會話 ────────────────────────────────────────────────────────────

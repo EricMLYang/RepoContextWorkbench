@@ -353,8 +353,51 @@ def session_draft(spine_dir, term, events=None, data=None):
             "note": "草稿由脊椎留痕組成，尚未儲存；存檔會落一筆 decision，不代表成果已被採納。"}
 
 
-def build_state(spine_dir):
-    """輕量狀態（純檔案讀，供 5 秒輪詢）。interrupt 先於 normal（打斷要掙得，其餘累積）。"""
+STATUS_PROMPT = ("先讀情境卡，用 3 行說明：你拿到哪些脈絡、這次預計產出什麼、"
+                 "哪些動作需要我先確認，再問我要做什麼。")
+
+_RELTASK = {
+    "pm-of": "檢查規劃與實作是否一致：{a} 是 {b} 的 PM。請比對 {a} 的規劃／需求文件與 {b} 的實作與驗收條件，"
+             "列出不一致、缺漏與已過期的部分，每條標明來自哪個 repo 的哪份檔，再跟我確認要改哪一邊。",
+    "feeds": "檢查供料是否還新：{a} 供料給 {b}。請確認 {b} 目前用的內容是不是 {a} 的最新版本，"
+             "列出落差與需要重新供料的部分，標明來源檔案。",
+    "derived-from": "檢查衍生落差：{a} 衍生自 {b}。請比對兩邊自分家後的差異，說明哪些該回流、哪些是刻意分開，標明來源檔案。",
+    "upstream-of": "檢查上游影響：{a} 是 {b} 的上游。請看 {a} 近期變更有沒有影響 {b}，列出需要跟進的項目與依據。",
+    "sibling-topic": "比對同主題內容：{a} 與 {b} 講同一件事。請找出重複、矛盾與只有一邊有的內容，標明來源檔案，再建議怎麼收斂。",
+}
+_RELTASK_DEFAULT = "釐清 {a} 與 {b} 的關係現在是否還成立：比對兩邊近期內容，說明依據，再建議要不要調整這條關係。"
+
+
+def relation_task(kind, a, b):
+    """關係 → 「用這條關係開工作」的任務文案（2026-10-06 從前端 relationTask() 移進引擎）。"""
+    return _RELTASK.get(kind, _RELTASK_DEFAULT).format(a=a, b=b)
+
+
+def _scope_members(data, group, repos):
+    """畫面範圍 → 範圍內 repo id（臨時組合只留登記過的；不存在的組＝空）。"""
+    ids = [r["id"] for r in data["repos"]]
+    if repos is not None:
+        return [r for r in repos if r in ids]
+    if group:
+        return next((list(g["members"]) for g in data["groups"] if g["name"] == group), [])
+    return ids
+
+
+def _lane(prov, scoped, members, interrupt=False):
+    """卡片／事件屬於畫面哪一欄：scope＝目前範圍內、global＝全域與未分類（或範圍外的打斷）、other＝不顯示。"""
+    matches = not scoped or any(r in members for r in prov.get("scope_repos") or [])
+    if prov.get("scope_kind") in ("global", "unclassified") or (interrupt and not matches):
+        return "global"
+    return "scope" if matches else "other"
+
+
+def build_state(spine_dir, group=None, repos=None):
+    """輕量狀態（純檔案讀，供 5 秒輪詢）。interrupt 先於 normal（打斷要掙得，其餘累積）。
+
+    group／repos＝畫面目前的範圍（同 build_scan；都沒給＝全部）：卡片、事件多帶 lane，
+    關係多帶 in_scope／task，頂層多帶 scope——範圍篩選在引擎算，前端只照欄位分欄（2026-10-06）。"""
+    group = group or None
+    scoped = group is not None or repos is not None
     data = _registry.load(spine_dir)
     p = _notify.pending(spine_dir)
     events = list(_spine.iter_events(spine_dir))
@@ -365,7 +408,15 @@ def build_state(spine_dir):
         if t not in vocab:
             vocab.append(t)
     ordered = sorted(enumerate(events), key=lambda item: (item[1].date, item[1].time, item[0]), reverse=True)
-    recent = [dict(_ev_dict(e), **scopes[id(e)]) for _, e in ordered[:200]]
+    members = _scope_members(data, group, repos)
+    recent = [dict(_ev_dict(e), **scopes[id(e)],
+                   lane=_lane(scopes[id(e)], scoped, members)) for _, e in ordered[:200]]
+    cards = build_cards(spine_dir, events, p, loops, scopes)
+    for c in cards:
+        c["lane"] = _lane(c, scoped, members, c["kind"] == "interrupt")
+    relations = [dict(r, in_scope=r["from"] in members or r["to"] in members,
+                      task=relation_task(r["kind"], r["from"], r["to"]))
+                 for r in _registry.relations(spine_dir)]
     return {
         "groups": [{"name": g["name"], "members": g["members"],
                     "goal": g.get("goal") or "", "goal_at": g.get("goal_at") or ""}
@@ -375,14 +426,15 @@ def build_state(spine_dir):
         "tags": {r["id"]: (r.get("tags") or []) for r in data["repos"]},
         "tag_vocab": vocab,
         # 關係層（2026-09-08）：前端算鄰居、畫 ⇄、深看關係段都從這兩個欄位來
-        "relations": _registry.relations(spine_dir),
+        "relations": relations,
         "rel_kinds": _registry.relation_kinds(spine_dir),
         "unread": [dict(_ev_dict(e), interrupt=True) for e in p["interrupt"]]
                   + [_ev_dict(e) for e in p["normal"]],
         "loops": [_ev_dict(e) for e in loops],
-        "cards": build_cards(spine_dir, events, p, loops, scopes),
+        "cards": cards,
         "recent": recent,
         "stats": {**_spine.stats(spine_dir), **_registry.survival(spine_dir)},
+        "scope": {"group": group, "repos": repos, "members": members},
     }
 
 
@@ -408,18 +460,32 @@ def build_scan(spine_dir, group=None, repos=None):
     cards = [c for c in _brief.build_question_cards(states, cfg["thresholds"])
              if (c["repo"], c["qkind"]) not in snoozed]
     quiet = len(states) - len({c["repo"] for c in cards})
+    summary = _summary.build_summary(spine_dir, group=group, repos=repos,
+                                     states=states, cards=cards)
+    # 開會話的起手任務（2026-10-06 從前端 taskEntries() 移進引擎）
+    ids = [s["id"] for s in states]
+    session_tasks = [{"label": "接續上次工作", "text": summary["resume_task"]},
+                     {"label": "整理本組現況", "text": STATUS_PROMPT}]
+    rel = next((r for r in _registry.relations(spine_dir)
+                if r["from"] in ids and r["to"] in ids), None)
+    if rel:
+        fwd = _registry.relation_kinds(spine_dir).get(rel["kind"], {}).get("forward") or rel["kind"]
+        session_tasks.append({"label": f"{fwd}：{rel['from']} → {rel['to']}",
+                              "text": relation_task(rel["kind"], rel["from"], rel["to"])})
     return {
         "group": gname,
         "states": states,
         # 本組工作摘要（§3）：目標／上次進度／變化／可接續的一步，每格帶來源
-        "summary": _summary.build_summary(spine_dir, group=group, repos=repos,
-                                          states=states, cards=cards),
+        "summary": summary,
         # 活動脈動（2026-09-08）：組的監控焦點＝活動頻繁度＋近期 commit 內容
         "pulse": _collect.group_pulse(states),
         "recent_commits": _collect.recent_across(states, limit=30),
-        "question_cards": cards,
+        # 問句卡帶 provenance（以 repo 為範圍），前端不用自己補
+        "question_cards": [dict(c, scope_kind="repo", scope_label=c["repo"],
+                                scope_repos=[c["repo"]]) for c in cards],
         "questions": [_brief.card_text(c) for c in cards],
         "quiet": max(quiet, 0),
+        "session_tasks": session_tasks,
         # registry 稽核＋脊椎衛生迴圈併同一個紅字面（second-brain lint 課）
         "audit": _registry.audit(spine_dir) + _spine.lint(spine_dir),
     }

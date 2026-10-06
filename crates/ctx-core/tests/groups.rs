@@ -152,8 +152,53 @@ fn test_schedule_refs_reported() {
 
 // ── 工作台 action ──────────────────────────────────────────────────────
 
-// 未搬：test_webui_update_and_remove_group、test_webui_update_group_same_name_only_members、
-// test_webui_update_group_no_half_apply——等 workbench/actions（webui._handle_action 尚未搬）。
+fn ui(d: &Path, name: &str, payload: serde_json::Value) -> ctx_core::Result<serde_json::Value> {
+    ctx_core::workbench::handle_action(d, name, &payload, None)
+}
+
+#[test]
+fn test_webui_update_and_remove_group() {
+    let (_t, d) = three();
+    let r = ui(
+        &d,
+        "update_group",
+        json!({"name": "g1", "repos": ["repo-c"], "new_name": "g1b"}),
+    )
+    .unwrap();
+    assert_eq!(r["ok"], true);
+    assert_eq!(r["name"], "g1b");
+    assert_eq!(members(&d, "g1b"), vec!["repo-c"]);
+    assert!(ui(&d, "update_group", json!({"name": "g1b", "repos": []})).is_err());
+    assert!(ui(
+        &d,
+        "update_group",
+        json!({"name": "nope", "repos": ["repo-a"]})
+    )
+    .is_err());
+    let r = ui(&d, "remove_group", json!({"name": "g1b"})).unwrap();
+    assert_eq!(r["ok"], true);
+    assert!(registry::load(&d).unwrap().groups.is_empty());
+    assert_eq!(
+        decisions(&d)
+            .iter()
+            .filter(|e| e.body.contains("（從工作台）"))
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn test_webui_update_group_same_name_only_members() {
+    let (_t, d) = three();
+    let r = ui(
+        &d,
+        "update_group",
+        json!({"name": "g1", "repos": ["repo-a", "repo-c"], "new_name": "g1"}),
+    )
+    .unwrap();
+    assert_eq!(r["ok"], true);
+    assert_eq!(members(&d, "g1"), vec!["repo-a", "repo-c"]);
+}
 
 // ── MCP（管理層）───────────────────────────────────────────────────────
 
@@ -198,7 +243,73 @@ fn test_mcp_group_update_and_remove() {
     assert!(decisions(&d).iter().all(|e| e.source == "agent"));
 }
 
-// 未搬：test_own_edits_stay_out_of_inbox_agent_edits_surface——等 workbench/state（webui.build_state）。
+/// 改名失敗（撞名）→ 組員也不能被改掉。
+#[test]
+fn test_webui_update_group_no_half_apply() {
+    let (_t, d) = three();
+    registry::add_group(&d, "g2", &["repo-c"]).unwrap();
+    let e = ui(
+        &d,
+        "update_group",
+        json!({"name": "g1", "repos": ["repo-c"], "new_name": "g2"}),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(e.contains("組已存在"), "{e}");
+    assert_eq!(members(&d, "g1"), vec!["repo-a", "repo-b"]);
+}
+
+/// 自己（CLI／工作台）改組只留痕不進收件匣；agent 經 MCP 改的要讓使用者看得到。
+#[test]
+fn test_own_edits_stay_out_of_inbox_agent_edits_surface() {
+    use ctx_core::workbench::{build_state, StateScope};
+    let (_t, d) = three();
+    ops::call(
+        &d,
+        "group_update",
+        json!({"name": "g1", "add": ["repo-c"]}),
+        Via::Cli,
+    )
+    .unwrap();
+    ops::call(
+        &d,
+        "group_update",
+        json!({"name": "g1", "remove": ["repo-c"]}),
+        Via::Ui,
+    )
+    .unwrap();
+    let st = build_state(&d, &StateScope::default()).unwrap();
+    let text = |c: &serde_json::Value| {
+        let mut parts: Vec<String> = c["lines"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        parts.push(c["title"].as_str().unwrap_or("").to_string());
+        parts.join(" ")
+    };
+    assert!(!st["cards"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| text(c).contains("編輯組")));
+    ops::call(
+        &d,
+        "group_update",
+        json!({"name": "g1", "rename": "g9"}),
+        Via::Mcp,
+    )
+    .unwrap();
+    let st = build_state(&d, &StateScope::default()).unwrap();
+    assert!(st["cards"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c.to_string().contains("改名 g1 → g9")));
+}
 
 /// MCP 管理層的寫入工具＝操作表的全部操作（schema 同源）。tool_table 在 ctx-cli 的 MCP server，
 /// 這裡先驗 schema 形狀與錯誤訊息；「tools[name] == o.schema()」等 MCP server 搬過來再補。

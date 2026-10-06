@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { InboxCard } from "../api/types";
+import type { InboxCard, QuestionCard } from "../api/types";
 import {
   actionLabel,
   actionToast,
   cardSections,
   emptyState,
   primaryAction,
+  scopedCards,
   sessionPayload,
 } from "../lib/view";
 import { interruptCard, loopCard, makeScan, makeState } from "./fixtures";
@@ -37,26 +38,44 @@ describe("按鈕文案與主次", () => {
   });
 });
 
-describe("收件匣分段", () => {
-  it("別組的打斷進「全域警示」，未分類收合", () => {
+describe("收件匣分段（照引擎給的 lane，前端不判斷範圍）", () => {
+  it("global 的打斷進「全域警示」、global 的其他收合、other 不顯示", () => {
     const state = makeState({
-      repos: ["a", "b", "c"],
-      groups: [
-        { name: "g1", members: ["a"], goal: "", goal_at: "" },
-        { name: "g2", members: ["c"], goal: "", goal_at: "" },
-      ],
       cards: [
-        { ...interruptCard, scope_repos: ["c"], scope_label: "g2" },
-        { ...loopCard, key: "loop:#9", scope_kind: "unclassified", scope_repos: [], scope_label: "未分類" },
+        { ...interruptCard, lane: "global", scope_repos: ["c"], scope_label: "g2" },
+        { ...loopCard, key: "loop:#9", lane: "global", scope_kind: "unclassified", scope_repos: [], scope_label: "未分類" },
+        { ...loopCard, key: "loop:#10", lane: "other" },
         loopCard,
       ],
     });
-    const s = cardSections(state, makeScan(), { group: "g1", repos: null }, "", "all");
+    const q: QuestionCard = {
+      key: "question:a:dirty",
+      kind: "question",
+      qkind: "dirty",
+      repo: "a",
+      title: "a 有未提交檔放太久",
+      actions: [],
+      scope_kind: "repo",
+      scope_label: "a",
+      scope_repos: ["a"],
+    };
+    const s = cardSections(state, makeScan({ question_cards: [q] }), "", "all");
     expect(s.map((x) => [x.key, x.cards.length, !!x.collapsed])).toEqual([
       ["global", 1, false],
+      ["question", 1, false],
       ["loop", 1, false],
       ["unclassified", 1, true],
     ]);
+    expect(scopedCards(state, makeScan({ question_cards: [q] })).map((c) => c.key)).toEqual([
+      "question:a:dirty",
+      "loop:#3",
+    ]);
+  });
+
+  it("搜尋與類型篩選只作用在顯示", () => {
+    const state = makeState();
+    expect(cardSections(state, makeScan(), "vdi", "all").map((x) => x.key)).toEqual(["loop"]);
+    expect(cardSections(state, makeScan(), "", "interrupt").map((x) => x.key)).toEqual(["interrupt"]);
   });
 });
 

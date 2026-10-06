@@ -136,6 +136,8 @@ describe("範圍", () => {
     const { backend } = await mount();
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "選擇牌組：產品開發" })));
     expect(backend.getScan).toHaveBeenLastCalledWith({ group: "產品開發" });
+    // state 也以新範圍重抓（卡片／事件／關係的 lane 由引擎照範圍算）
+    expect(backend.getState).toHaveBeenLastCalledWith({ group: "產品開發" });
     expect(document.getElementById("scopename")!.textContent).toBe("產品開發");
     expect(JSON.parse(localStorage.getItem("workbench:scope")!)).toEqual({
       group: "產品開發",

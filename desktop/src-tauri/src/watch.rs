@@ -1,6 +1,8 @@
 //! 引擎寫入 → `workbench://changed`。
 //!
-//! 監看 spine 目錄（非遞迴：`registry.yaml`、`config.yaml`）與 `spine/events/`（每日事件檔），
+//! 監看 spine 目錄（非遞迴：`registry.yaml`、`config.yaml`）、`spine/events/`（每日事件檔），
+//! 以及 `.state/` 裡前端會顯示的兩樣：`last_seen.txt`（未讀；CLI `ack` 也會改）與
+//! `agent_status/*.json`（agent 經 MCP `report_status` 回報的階段，會話清冊顯示）。
 //! 用 OS 檔案事件不輪詢；一波寫入（append＋鎖檔＋rename）合併成一次通知（[`DEBOUNCE`]）。
 //! 不論誰寫的——工作台自己、CLI、MCP 裡的 agent——前端都會收到。
 
@@ -13,7 +15,7 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 /// 合併窗口：收到第一個相關事件後再等這麼久，把同一波寫入併成一次。
 pub const DEBOUNCE: Duration = Duration::from_millis(250);
 
-/// 這個路徑的變動要不要通知前端（只看合約上的資料檔，忽略鎖檔、`.state/`、git 內部檔）。
+/// 這個路徑的變動要不要通知前端（只看合約上的資料檔與上述 `.state/` 兩樣；忽略鎖檔、其他快取、版控內部檔）。
 pub fn is_relevant(spine: &Path, p: &Path) -> bool {
     let Ok(rel) = p.strip_prefix(spine) else {
         return false;
@@ -27,6 +29,8 @@ pub fn is_relevant(spine: &Path, p: &Path) -> bool {
     ) {
         (Some("registry.yaml" | "config.yaml"), None, _, _) => true,
         (Some("spine"), Some("events"), Some(name), None) => name.ends_with(".md"),
+        (Some(".state"), Some("last_seen.txt"), None, _) => true,
+        (Some(".state"), Some("agent_status"), Some(name), None) => name.ends_with(".json"),
         _ => false,
     }
 }
@@ -61,6 +65,14 @@ impl SpineWatcher {
         if events.is_dir() {
             watcher.watch(&events, RecursiveMode::NonRecursive)?;
         }
+        // agent_status/ 可能還沒有人寫過——先建好才看得到第一次回報（.state 本來就是引擎的狀態目錄）
+        let status = spine.join(".state").join("agent_status");
+        let _ = std::fs::create_dir_all(&status);
+        for d in [spine.join(".state"), status] {
+            if d.is_dir() {
+                watcher.watch(&d, RecursiveMode::NonRecursive)?;
+            }
+        }
         // 合併執行緒：阻塞在 recv（閒置不吃 CPU）；watcher drop 後 tx 斷線 → 執行緒結束
         std::thread::Builder::new()
             .name("spine-watch".into())
@@ -90,6 +102,20 @@ mod tests {
         assert!(!is_relevant(s, Path::new("/sp/events/2026-10-06.md")));
         assert!(!is_relevant(s, Path::new("/sp/.engine.lock")));
         assert!(!is_relevant(s, Path::new("/sp/.state/x.json")));
+        assert!(!is_relevant(
+            s,
+            Path::new("/sp/.state/knowledge_index.json")
+        ));
+        assert!(is_relevant(s, Path::new("/sp/.state/last_seen.txt")));
+        assert!(is_relevant(s, Path::new("/sp/.state/agent_status/g1.json")));
+        assert!(!is_relevant(
+            s,
+            Path::new("/sp/.state/agent_status/sub/g1.json")
+        ));
+        assert!(!is_relevant(
+            s,
+            Path::new("/sp/.state/agent_sessions/t1.json")
+        ));
         assert!(!is_relevant(s, Path::new("/sp/spine/events/sub/x.md")));
         assert!(!is_relevant(s, Path::new("/other/registry.yaml")));
     }
@@ -112,5 +138,26 @@ mod tests {
             std::thread::sleep(Duration::from_millis(50));
         }
         assert!(!hits.lock().unwrap().is_empty(), "應收到變動通知");
+    }
+
+    /// agent 經 MCP 回報階段（寫 `.state/agent_status/<key>.json`）→ 前端要收到通知（會話清冊顯示）。
+    #[test]
+    fn agent_status_write_fires() {
+        let tmp = tempfile::tempdir().unwrap();
+        let spine = tmp.path().canonicalize().unwrap();
+        let hits = Arc::new(Mutex::new(Vec::<String>::new()));
+        let h2 = hits.clone();
+        let _w =
+            SpineWatcher::start(&spine, move |r| h2.lock().unwrap().push(r.to_string())).unwrap();
+        std::thread::sleep(Duration::from_millis(200));
+        std::fs::write(spine.join(".state/agent_status/g1.json"), "{}").unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while hits.lock().unwrap().is_empty() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert_eq!(
+            hits.lock().unwrap().first().map(String::as_str),
+            Some("g1.json")
+        );
     }
 }

@@ -6,6 +6,7 @@ import { EMPTY_SCAN, EMPTY_STATE } from "../store/store";
 export const interruptCard: StateCard = {
   key: "collision:09:10",
   kind: "interrupt",
+  lane: "scope",
   scope_kind: "group",
   scope_label: "產品開發",
   scope_repos: ["a", "b"],
@@ -28,6 +29,7 @@ export const interruptCard: StateCard = {
 export const loopCard: StateCard = {
   key: "loop:#3",
   kind: "loop",
+  lane: "scope",
   num: "#3",
   due: "2026-10-06",
   scope_kind: "repo",

@@ -44,7 +44,7 @@ export function Workspace(props: {
   }
   const q = query.trim().toLocaleLowerCase();
   const repos = store.scopeRepos;
-  const local = scopedCards(state, scan, scope);
+  const local = scopedCards(state, scan);
   const todo = local.filter((c) => c.kind !== "pending").length;
   const pending = local.filter((c) => c.kind === "pending").length;
   const err = stateError || scanError;

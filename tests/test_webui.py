@@ -411,7 +411,11 @@ def test_relations_api_and_pulse(server):
     code, r = _post(base, "/api/relate", {"a": "repo-a", "b": "repo-b", "kind": "boss"})
     assert code == 400
     st = json.loads(_get(base, "/api/state")[1])
-    assert st["relations"] == [{"from": "repo-a", "to": "repo-b", "kind": "pm-of", "note": "n"}]
+    rel = st["relations"]
+    assert [{k: r[k] for k in ("from", "to", "kind", "note")} for r in rel] == \
+        [{"from": "repo-a", "to": "repo-b", "kind": "pm-of", "note": "n"}]
+    # 2026-10-06：任務文案與範圍歸屬由引擎給（前端不再自己組）
+    assert rel[0]["in_scope"] is True and "repo-a 是 repo-b 的 PM" in rel[0]["task"]
     assert "pm-of" in st["rel_kinds"] and st["rel_kinds"]["pm-of"]["forward"] == "規劃（PM）"
     sc = json.loads(_get(base, "/api/scan?group=g1")[1])
     assert sc["pulse"]["commits_7d"] == 2 and sc["pulse"]["most_active"]

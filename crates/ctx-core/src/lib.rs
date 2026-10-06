@@ -37,6 +37,7 @@ pub mod summary;
 pub mod term;
 pub mod timer;
 pub mod upstream;
+pub mod workbench;
 pub mod yamlout;
 
 #[cfg(feature = "testkit")]

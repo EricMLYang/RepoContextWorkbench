@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { TermInfo } from "../../api/types";
 import { DetailLayout, useAutoFocus, useDetail } from "../../dialogs/Modal";
 import { load, save } from "../../lib/storage";
-import { reportLine, scopeRepos, sessionTarget, taskEntries } from "../../lib/view";
+import { reportLine, sessionTarget } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
 
@@ -11,7 +11,7 @@ export function SessionForm({ payload, task: initialTask }: { payload: Record<st
   const store = useStore();
   const ui = useUi();
   const { close } = useDetail();
-  const { state, scan, scope } = useSnapshot();
+  const { state, scan } = useSnapshot();
   const agents = state.agents || [];
   const [agent, setAgent] = useState(() => {
     const remembered = load<string>("agent", agents[0] || "claude");
@@ -74,7 +74,7 @@ export function SessionForm({ payload, task: initialTask }: { payload: Record<st
       </label>
       <div className="taskhints">
         <span className="small muted">有情境的起手：</span>
-        {taskEntries(state, scan, scopeRepos(scope, state)).map(([label, text]) => (
+        {(scan.session_tasks || []).map(({ label, text }) => (
           <button
             key={label}
             type="button"

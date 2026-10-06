@@ -19,7 +19,7 @@
 
 | 命令 | 參數（JS） | 回傳 | 對應 Python |
 |---|---|---|---|
-| `get_state` | — | `WorkbenchState` | `GET /api/state`：`build_state()` ＋ `terms`（`annotate_terms(TermManager.list())`）＋ `agents`（config `agents`） |
+| `get_state` | `{ group: string \| null, repos: string[] \| null }`（畫面目前的範圍；同 `get_scan`，但空陣列不拒絕＝空範圍） | `WorkbenchState` | `GET /api/state?group=…\|repos=a,b`：`build_state(group, repos)` ＋ `terms`（`annotate_terms(TermManager.list())`）＋ `agents`（config `agents`） |
 | `get_scan` | `{ group: string \| null, repos: string[] \| null }` | `ScanResult` | `GET /api/scan?group=…\|repos=a,b`：`build_scan()`。`repos` 優先於 `group`；兩者皆 null＝全部 |
 | `run_action` | `{ name: ActionName, payload: object }` | 該 action 的結果物件 | `POST /api/<name>`：`handle_action()` |
 | `term_open` | `{ sid: string, onEvent: Channel<TermChannelMessage> }` | `{ attach_id: string }` | `GET /ws/term/<sid>`（WebSocket 升級） |
@@ -43,7 +43,7 @@
 Rust 端簽名建議：
 
 ```rust
-#[tauri::command] async fn get_state(app: State<'_, Workbench>) -> Result<serde_json::Value, String>;
+#[tauri::command] async fn get_state(app: State<'_, Workbench>, group: Option<String>, repos: Option<Vec<String>>) -> Result<serde_json::Value, String>;
 #[tauri::command] async fn get_scan(app: State<'_, Workbench>, group: Option<String>, repos: Option<Vec<String>>) -> Result<serde_json::Value, String>;
 #[tauri::command] async fn run_action(app: State<'_, Workbench>, name: String, payload: serde_json::Value) -> Result<serde_json::Value, String>;
 #[tauri::command] fn term_open(app: State<'_, Workbench>, sid: String, on_event: tauri::ipc::Channel<tauri::ipc::InvokeResponseBody>) -> Result<TermOpenResult, String>; // TermOpenResult { attach_id: String }
@@ -87,10 +87,14 @@ Rust 端簽名建議：
 
 未知 name → `Err("未知 action: <name>")`。
 
-**Rust 殼目前進度**（`src-tauri/src/workbench.rs`）：只接上 `term_create`（`kind: "shell"`）與 `term_kill`；
-`get_state`／`get_scan` 回 `Err("尚未實作")`，其餘 action 回 `Err("尚未實作：<name>")`，
-`term_create` 的 `kind: "agent"` 回 `Err("尚未實作：agent 會話（等 session 模組搬到 Rust）")`。
-第三波 `ctx_core::workbench::{state,actions}` 搬完後補上。`register_repos` 部分成功時 Python 回 `{error, added}`；IPC 只回 `Err(error)`（前端不用 `added`）。
+**Rust 殼**（`src-tauri/src/workbench.rs`）：`get_state`／`get_scan`／`run_action` 全部接到 `ctx_core::workbench`
+（`api_state`／`build_scan`／`handle_action`，會話清冊以 `Terms` trait 傳入 `TermManager`）。
+`term_create` 的 agent 分支：`session::build` 組好 cwd＋指令 → `TermManager::create_agent`；
+`session_draft`／`session_result` 從 `terms.get(sid).info()` 拿會話資料。
+`collide`／`collide_rerun` 的背景判定：同目錄有 `ctx` 執行檔就起 detached 進程（同 Python，關 App 也跑得完），
+沒有就在 App 行程裡開執行緒跑（App 結束前沒跑完 → lint 會報「碰撞無回程」，可按〔重跑判定〕）。
+`register_repos` 部分成功時 Python 回 `{error, added}`；IPC 只回 `Err(error)`（前端不用 `added`）。
+寫入型 action 成功後發 `workbench://changed`（`reason`＝action 名）；唯讀的 `session_draft`／`scan_dir` 不發。
 
 ## 終端串流（`term_open` 的 Channel）
 
@@ -118,18 +122,34 @@ Rust 端簽名建議：
 | `workbench://changed` | `{ reason?: string }`（前端不讀內容） | 引擎寫入脊椎事件、registry、組、會話清冊有變（含 agent 從 MCP 寫入、會話程序結束）時。前端收到就呼叫 `get_state`（不會觸發 `get_scan`）。 |
 
 殼的實作（`src-tauri/src/watch.rs`）：用 `notify` crate 監看 `<spine>/registry.yaml`、`<spine>/config.yaml`、
-`<spine>/spine/events/*.md`（OS 檔案事件，不輪詢），250ms 內的一波寫入合併成一次；誰寫的都算（工作台、CLI、MCP）。
+`<spine>/spine/events/*.md`、`<spine>/.state/last_seen.txt`（未讀；CLI `ack` 也會改）、
+`<spine>/.state/agent_status/*.json`（agent 經 MCP 回報的階段，會話清冊顯示）——OS 檔案事件，不輪詢，
+250ms 內的一波寫入合併成一次；誰寫的都算（工作台、CLI、MCP）。每次發事件時殼也重算選單列的未讀數
+（`notify.pending` 的 count；`get_state` 回來時也以 `unread.length` 更新），視窗藏起來時選單列照樣是新的。
 另外 `run_action` 成功（`reason` = action 名）、`set_spine`（`spine`）、會話程序結束（`term-exit`）也會發。
 
 ## 型別摘要（細節見 `src/api/types.ts`）
 
-- `WorkbenchState`：`groups[{name, members, goal, goal_at}]`、`repos[]`、`tiers{}`、`tags{}`、`tag_vocab[]`、`relations[{from,to,kind,note?,exports?}]`、`rel_kinds{kind:{forward,inverse,symmetric}}`、`unread[]`、`loops[]`、`cards[]`、`recent[]`（事件＋`scope_kind/scope_label/scope_repos`，依事件時間新→舊，最多 200）、`stats{collisions, collisions_with_outcome, hit_rate, spawned, alive, survival_rate}`、`terms[]`、`agents[]`。
-- 卡片 `cards[]`：共同欄位 `key, kind, title, lines, actions[{label, action, payload}], date, time, scope_kind, scope_label, scope_repos`；`collision` 多 `cid, verdict, judgement{}`；`interrupt/event` 多 `etype, source`；`pending` 多 `cid`；`loop` 多 `num, due`。
+- `WorkbenchState`：`groups[{name, members, goal, goal_at}]`、`repos[]`、`tiers{}`、`tags{}`、`tag_vocab[]`、`relations[{from,to,kind,note?,exports?,in_scope,task}]`、`rel_kinds{kind:{forward,inverse,symmetric?}}`、`unread[]`、`loops[]`、`cards[]`、`recent[]`（事件＋`scope_kind/scope_label/scope_repos`＋`lane`，依事件時間新→舊，最多 200）、`stats{collisions, collisions_with_outcome, hit_rate, spawned, alive, survival_rate}`、`scope{group, repos, members}`（這份 state 是照哪個範圍算的）、`terms[]`、`agents[]`。
+- 卡片 `cards[]`：共同欄位 `key, kind, title, lines, actions[{label, action, payload}], date, time, scope_kind, scope_label, scope_repos, lane`；`collision` 多 `cid, verdict, judgement{}`；`interrupt/event` 多 `etype, source`；`pending` 多 `cid`；`loop` 多 `num, due`。
+- `lane`（卡片與 `recent[]` 事件）：`scope`＝屬於目前範圍、`global`＝全域與未分類（卡片另含：範圍外的打斷）、`other`＝不顯示。前端照它分欄，不自己判斷範圍。
 - `terms[]`：`sid, title, alive, kind, origin, scope, scope_repos, started, task, report{text,type,source,at}|null, report_basis`，agent 會話另有 `agent_status{status,text,at,…}|null`。
-- `ScanResult`：`group, states[RepoState], summary(WorkSummary), pulse, recent_commits[{repo,date,hash,subject}], question_cards[], questions[], quiet, audit[]`。
+- `ScanResult`：`group, states[RepoState], summary(WorkSummary), pulse, recent_commits[{repo,date,hash,subject}], question_cards[]（含 provenance：scope_kind="repo"）, questions[], quiet, session_tasks[{label,text}], audit[]`。
 - `RepoState`（`collect.collect_repo`）：`id, type, tier, path, exists, dirty, dirty_days, last_commit_days, ahead, behind, branch, last_subject, worktrees, commits_7d, commits_30d, recent_commits[], agents[], note`。
 - `WorkSummary`（`summary.build_summary`）：`group, saved_group, repos, at, goal, goal_gap, progress, progress_gap, since, changes[], changes_window, next, next_gap, changes_gap, gaps[], resume_task`；每個 fact 是 `{text, source, at}`。
 
-## 搬遷時要一起移進引擎的前端文案
+## 已移進引擎的前端業務邏輯（2026-10-06）
 
-目前前端（照舊版 `workbench.js`）還自己組兩段任務文字：`src/lib/view.ts` 的 `relationTask()`（「用這條關係開工作」）與 `taskEntries()` 的「整理本組現況」。Rust 版建議由 `get_state` 的 `relations[]` 帶 `task` 欄位、`get_scan` 的 `summary` 帶 `status_task`，前端改讀欄位後刪掉這兩個函式。
+AGENTS.md「前端不放業務邏輯」：下列原本在 `src/lib/view.ts` 的判斷改由引擎（`ctx_core::workbench::state`，
+Python `webui/state.py` 同步加了同樣欄位，兩邊 JSON 仍一致，`scripts/parity_state.py` 對拍）給，前端只讀欄位：
+
+| 原本前端 | 現在 |
+|---|---|
+| `relationTask()`（用這條關係開工作的任務文案） | `get_state` 的 `relations[].task` |
+| `taskEntries()`（接續上次工作／整理本組現況／組內第一條關係） | `get_scan` 的 `session_tasks[]`（沒照 IPC 舊建議放 `summary.status_task`：`summary` 是 `ctx group summary --json` 的合約，不動） |
+| `matchesScope`／`isUnscoped`：卡片、事件依範圍篩選 | `get_state({group, repos})` 的 `cards[].lane`、`recent[].lane` |
+| 關係依範圍篩選（from 或 to 在範圍內） | `relations[].in_scope` |
+| 問句卡以 repo 補 provenance | `question_cards[]` 直接帶 `scope_kind/scope_label/scope_repos` |
+
+前端仍保留的只有顯示層：搜尋（`matchesSearch`）、類型篩選、分段標題、範圍名稱（`scopeLabel`）、
+組成 action payload 時查組員（`scopeRepos`）。

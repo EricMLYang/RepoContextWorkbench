@@ -17,6 +17,12 @@ export interface Provenance {
   scope_repos: string[];
 }
 
+/**
+ * 卡片／事件在目前範圍（get_state 的 group/repos）下屬於哪一欄——引擎算好（state.build_state），前端只照著分欄：
+ * scope＝範圍內、global＝全域與未分類（或範圍外的打斷）、other＝不顯示。
+ */
+export type Lane = "scope" | "global" | "other";
+
 /** 脊椎事件（state._ev_dict）。 */
 export interface SpineEvent {
   date: string; // YYYY-MM-DD
@@ -54,6 +60,7 @@ interface CardBase {
 /** 碰撞判定回程。 */
 export interface CollisionCard extends CardBase, Provenance {
   kind: "collision";
+  lane: Lane;
   cid: string;
   verdict: string;
   judgement: Record<string, string>;
@@ -62,6 +69,7 @@ export interface CollisionCard extends CardBase, Provenance {
 /** 打斷／其他未讀。 */
 export interface EventCard extends CardBase, Provenance {
   kind: "interrupt" | "event";
+  lane: Lane;
   etype: string;
   source: string;
 }
@@ -69,18 +77,20 @@ export interface EventCard extends CardBase, Provenance {
 /** 處理中的碰撞（opened 未回程）。actions 恆為 []。 */
 export interface PendingCard extends CardBase, Provenance {
   kind: "pending";
+  lane: Lane;
   cid: string;
 }
 
 /** 待跟進（open loop）。 */
 export interface LoopCard extends CardBase, Provenance {
   kind: "loop";
+  lane: Lane;
   num: string;
   due: string | null;
 }
 
-/** 閾值問句卡（/api/scan 的 question_cards；沒有 provenance，前端以 repo 補）。 */
-export interface QuestionCard extends CardBase, Partial<Provenance> {
+/** 閾值問句卡（/api/scan 的 question_cards；provenance 以 repo 為範圍，由引擎補）。 */
+export interface QuestionCard extends CardBase, Provenance {
   kind: "question";
   qkind: "dirty" | "inactive" | "broken" | (string & {});
   repo: string;
@@ -141,12 +151,17 @@ export interface Relation {
   kind: string;
   note?: string;
   exports?: string[];
+  /** 碰到目前範圍（from 或 to 在範圍內）。 */
+  in_scope: boolean;
+  /** 「用這條關係開工作」的任務文案。 */
+  task: string;
 }
 
 export interface RelationKind {
   forward: string;
   inverse: string;
-  symmetric: boolean;
+  /** Python 內建詞彙只有對稱的才帶這個鍵（config 擴充的一律帶）。 */
+  symmetric?: boolean;
 }
 
 export interface Stats {
@@ -158,7 +173,14 @@ export interface Stats {
   survival_rate: number | null;
 }
 
-export type RecentEvent = SpineEvent & Provenance;
+export type RecentEvent = SpineEvent & Provenance & { lane: Lane };
+
+/** get_state 收到的範圍（原樣回傳）＋範圍內的 repo。 */
+export interface StateScope {
+  group: string | null;
+  repos: string[] | null;
+  members: string[];
+}
 
 export interface WorkbenchState {
   groups: GroupInfo[];
@@ -173,6 +195,8 @@ export interface WorkbenchState {
   cards: StateCard[];
   recent: RecentEvent[];
   stats: Stats;
+  /** 這份 state 是照哪個範圍算 lane／in_scope 的。 */
+  scope: StateScope;
   /** server 補的：會話清冊。 */
   terms: TermInfo[];
   /** server 補的：config.yaml 的 agents 鍵。 */
@@ -256,7 +280,14 @@ export interface ScanResult {
   question_cards: QuestionCard[];
   questions?: string[];
   quiet: number;
+  /** 開會話的起手任務（接續上次工作／整理本組現況／組內第一條關係）。 */
+  session_tasks: SessionTask[];
   audit: string[];
+}
+
+export interface SessionTask {
+  label: string;
+  text: string;
 }
 
 /** /api/scan 的參數：repos 優先於 group；兩者都沒有＝全部。repos 不可為空陣列。 */

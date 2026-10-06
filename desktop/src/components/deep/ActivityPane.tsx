@@ -1,6 +1,6 @@
 import type { RecentEvent } from "../../api/types";
 import { fullTextSpec } from "../../dialogs/FullText";
-import { isUnscoped, matchesScope, matchesSearch, scopeRepos } from "../../lib/view";
+import { matchesSearch } from "../../lib/view";
 import { useSnapshot, useUi } from "../../store/context";
 
 function RecordRow(props: { title: string; meta: string; time: string; onClick: () => void }) {
@@ -42,15 +42,13 @@ function EventList({ list }: { list: RecentEvent[] }) {
 
 /** 活動分頁：近期 commit＋脈動、範圍內事件（依事件時間）、全域與未分類（收合）、累計統計。 */
 export function ActivityPane({ query, active }: { query: string; active: boolean }) {
-  const { scan, state, scope } = useSnapshot();
+  const { scan, state } = useSnapshot();
   const ui = useUi();
   const commits = (scan.recent_commits || []).filter((c) => matchesSearch(c, query));
   const p = scan.pulse;
-  const members = scopeRepos(scope, state);
-  const local = state.recent.filter(
-    (e) => matchesScope(e, scope, members) && !isUnscoped(e) && matchesSearch(e, query),
-  );
-  const global = state.recent.filter((e) => isUnscoped(e) && matchesSearch(e, query));
+  // 範圍歸屬由引擎標好（lane），這裡只做搜尋
+  const local = state.recent.filter((e) => e.lane === "scope" && matchesSearch(e, query));
+  const global = state.recent.filter((e) => e.lane === "global" && matchesSearch(e, query));
   const s = state.stats;
   return (
     <section id="tab-activity" className={"tabpane" + (active ? " on" : "")} aria-label="活動記錄">

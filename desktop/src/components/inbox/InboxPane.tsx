@@ -58,8 +58,8 @@ export function InboxPane({ query, filter, active }: { query: string; filter: st
   const snap = useSnapshot();
   const ui = useUi();
   const run = useRunAction();
-  const { state, scan, scope, stateReady, stateError, scanReady, scanError, busy, cardErrors } = snap;
-  const sections = cardSections(state, scan, scope, query, filter);
+  const { state, scan, stateReady, stateError, scanReady, scanError, busy, cardErrors } = snap;
+  const sections = cardSections(state, scan, query, filter);
   const empty = emptyState({
     stateReady,
     stateError,
