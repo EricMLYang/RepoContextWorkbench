@@ -29,6 +29,7 @@ pub mod ruminate;
 pub mod session;
 pub mod spawn;
 pub mod spine;
+pub mod status;
 pub mod summary;
 pub mod upstream;
 pub mod yamlout;
