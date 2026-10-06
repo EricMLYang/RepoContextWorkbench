@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = ["crates/ctx-core", "crates/ctx-cli"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+ctx-core = { path = "crates/ctx-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml = "0.9"
+thiserror = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+regex = "1"
+once_cell = "1"
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+strip = true
