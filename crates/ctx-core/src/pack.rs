@@ -56,6 +56,13 @@ impl RepoRef {
     }
 }
 
+/// registry 登記項 → 選料 entry（`id`＋原樣的 `path`，`~` 由選料端展開）。
+impl From<&crate::registry::Repo> for RepoRef {
+    fn from(r: &crate::registry::Repo) -> Self {
+        RepoRef::new(r.id(), r.path_str())
+    }
+}
+
 /// 對應 `pack.secret_hits`：回傳命中的樣式名清單（空＝乾淨）。
 pub fn secret_hits(text: &str) -> Vec<&'static str> {
     SECRET_PATTERNS

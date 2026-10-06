@@ -45,7 +45,7 @@ pub fn mark(spine_dir: &Path, sid: &str, cwd: &Path, agent: &str, pid: i64) -> R
 }
 
 /// `json.dumps(obj, ensure_ascii=False)` 的單行格式（`, ` 與 `: ` 分隔）。
-fn py_dumps(v: &serde_json::Value) -> String {
+pub(crate) fn py_dumps(v: &serde_json::Value) -> String {
     use serde_json::Value;
     match v {
         Value::Object(m) => {

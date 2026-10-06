@@ -47,6 +47,20 @@ impl RepoSpec {
     }
 }
 
+/// registry 登記項 → 採集 entry（Python `entry.get("type", "mine")`、`entry.get("tier", "active")`）。
+impl From<&crate::registry::Repo> for RepoSpec {
+    fn from(r: &crate::registry::Repo) -> Self {
+        let mut s = RepoSpec::new(r.id(), r.path_str());
+        if let Some(t) = r.kind() {
+            s.repo_type = t;
+        }
+        if let Some(t) = r.tier_str() {
+            s.tier = t;
+        }
+        s
+    }
+}
+
 /// 最近 commit 一則（`git log --format=%ad%x09%h%x09%s --date=short`）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CommitInfo {
