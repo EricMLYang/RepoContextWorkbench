@@ -4,7 +4,7 @@
 //! ② 只看上次反芻之後的新料，同一份不重推；③ 寧缺勿濫（共同少見詞不夠多不推）；
 //! ④ 別組新判斷也會對上；⑤ 被 read_from 讀了＝用上了（命中率）、可略過。
 //!
-//! Python 經 `api.add_todo`／`api.log_decision`／`api.read_from(cwd=…)` 的地方屬 agentapi（第三波）：
+//! Python 經 `api.add_todo`／`api.log_decision`／`api.read_from(cwd=…)` 的地方（寫在 agentapi 搬來之前）：
 //! 這裡照它們落的事件形狀直接寫 spine（tokens＝`#n`／`id:` ＋ `group:<主場組>` ＋ `repo:<主場 repo>`），
 //! read_from 則直接呼叫 `crossref::read` 並給出 cwd 會推出的引用方。
 
@@ -206,7 +206,7 @@ fn test_used_via_read_from_and_dismiss() {
     assert!(ruminate::dismiss(&w.sp, "r999").is_err());
 }
 
-// 未搬：test_session_start_shows_fresh——等第三波 agentapi/hooks（hooks.session_start、api.context_for）。
+// test_session_start_shows_fresh：搬在 tests/hooks.rs。
 
 #[test]
 fn test_stale_detection() {
@@ -218,8 +218,8 @@ fn test_stale_detection() {
     assert!(ruminate::is_stale(&w.sp, Some(later)));
 }
 
-// 未搬：test_timer_task——timer 模組不在這波（timer.tick 排程任務）。
-// 未搬：test_cli_fresh——等第三波 agentapi/ctx-cli（`ctx fresh` e2e）。
+// test_timer_task：搬在 tests/timer.rs。
+// 未搬：test_cli_fresh——等 ctx-cli（`ctx fresh` e2e）。
 
 // ---- 真資料校準（2026-09-25）留下的三條 ----
 
