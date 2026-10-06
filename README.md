@@ -25,8 +25,8 @@ MCP 工具介面都與 Python 版相同，兩版可以讀寫同一個 spine（`s
 ```bash
 # 需要 Rust（stable）與 Node 20+
 cargo build --release -p ctx-cli                 # → target/release/ctx（CLI＋MCP＋hooks，單一執行檔）
-cd desktop && npm install && npx tauri build     # → target/release/bundle/macos/Repo Context.app（及 .dmg）
-                                                 #   只要 .app：npx tauri build --bundles app
+cd desktop && npm install && npm run bundle      # → target/release/bundle/macos/Repo Context.app（及 .dmg），內含 ctx
+                                                 #   只要 .app：npm run bundle -- --bundles app
 
 # 驗證（改完必跑）
 cargo test --workspace
@@ -41,6 +41,9 @@ cd desktop && npm run build && npm test && npm run lint
 ```bash
 cargo install --path crates/ctx-cli      # ctx 裝到 ~/.cargo/bin/ctx
 # 桌面 App：把 target/release/bundle/macos/Repo Context.app 拖到 /Applications
+#   .app 自帶 ctx（Contents/MacOS/ctx）；App 的背景判定與會話 .mcp.json 用的是這一支，不看 PATH。
+#   不想另外 cargo install，也可以直接連過去：
+#   ln -s "/Applications/Repo Context.app/Contents/MacOS/ctx" ~/.local/bin/ctx
 ctx app                                  # 找 Repo Context.app（ctx 同目錄、/Applications、~/Applications、target/）並帶 --spine 開啟
 ```
 
@@ -51,7 +54,8 @@ ctx app                                  # 找 Repo Context.app（ctx 同目錄�
 切換前的檢查清單：
 
 1. `which -a ctx`：確認 `~/.cargo/bin/ctx`（Rust）排在 Python 的 `ctx` 前面，或把 Python 版 `pip uninstall repo-context-workbench`。
-   注意：引擎找 `ctx`（MCP 指令、hooks、背景判定）的順序是「自己 → 同目錄 → PATH」，PATH 上先遇到 Python 版就會用到它。
+   注意：引擎找 `ctx` 的順序是「自己 → 同目錄 → PATH」。桌面 App 自帶 ctx，所以 App 不受影響；但你在終端機打的
+   `ctx`、以及 `ctx setup --claude` 註冊給 Claude Code 的 MCP／hooks 路徑，取決於你跑的是哪一支——用 Rust 版跑 setup。
 2. 先停掉正在跑的 `ctx timer`／`ctx app`（Python 版）與開著的 agent 會話，避免兩版同時寫同一個 spine 的排程。
 3. spine 先 `git commit`（或備份），切換後有問題可回退。
 4. **移除舊的 MCP 註冊**：`claude mcp remove repo-context -s user`——`ctx setup` 看到已註冊會略過，不會自動換成 Rust 版。

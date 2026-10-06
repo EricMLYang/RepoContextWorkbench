@@ -127,7 +127,7 @@ pub fn cmd_app(ctx: &Ctx, _a: &AppArgs) -> CmdResult {
         return Err(Exit::Msg(format!(
             "錯誤：找不到桌面 App（{APP_NAME}）。\n\
              找過：ctx 同目錄、/Applications、~/Applications、target/{{release,debug}}/bundle/macos/\n\
-             提示：在 repo 根目錄跑 `cd desktop && npm install && npx tauri build`，\
+             提示：在 repo 根目錄跑 `cd desktop && npm install && npm run bundle`，\
              產物在 target/release/bundle/macos/{APP_NAME}（拖進 /Applications 即可）"
         )));
     };

@@ -101,7 +101,7 @@ CLI／MCP（ctx-cli）：
 - **`ctx app` 改成啟動 Tauri 桌面 App**：依序找 `Repo Context.app`——ctx 同目錄（或 ctx 所在的 .app 包）、
   `/Applications`、`~/Applications`、`target/{release,debug}/bundle/macos/`；找到就 `open <app> --args --spine <d>`
   （spine 找不到就不帶，讓 App 自己問；明確給了錯的 `--spine` 照樣報錯）。找不到 App 時說明怎麼 build
-  （`cd desktop && npm install && npx tauri build`），exit 1。`--port` 收但忽略。目前只支援 macOS（Windows 未做、未測）。
+  （`cd desktop && npm install && npm run bundle`），exit 1。`--port` 收但忽略。目前只支援 macOS（Windows 未做、未測）。
 - **`ctx timer`**：前景跑 `timer::run_loop`，Ctrl+C 結束（印「timer 已停」、exit 0）。用 `ctrlc` crate：
   跨平台（macOS＋Windows VDI 都要）、只需要「收到中斷 → 送停止訊號給 run_loop」一件事，
   比 signal-hook 少寫平台分支。`--interval` 為相容保留但不再使用（見上面 run_loop），啟動訊息改成
