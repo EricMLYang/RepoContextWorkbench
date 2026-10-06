@@ -260,7 +260,7 @@ fn test_lint_doc_refs_reports_only_confident_breaks() {
     assert!(found[0].fix.contains("`notes:books`"));
 }
 
-// 未搬：test_audit_cli_includes_doc_refs——等 ctx-cli（跑 `ctx registry audit`）。
+// test_audit_cli_includes_doc_refs：已搬到 crates/ctx-cli/tests/crossref.rs。
 
 // ---- ⑤ 搜尋 ----
 
@@ -395,8 +395,7 @@ fn test_ask_repo_mock_provider() {
 // ---- ⑦ repo 狀態卡：見 tests/repocard.rs ----
 
 // test_session_start_injects_neighbor_map_and_drift：搬在 tests/hooks.rs。
-// 未搬：test_mcp_work_tools_include_crossref——等 ctx-cli（MCP 協定 mcpserver.handle_message）。
-// 未搬：test_cli_crossref_flow——等 ctx-cli（CLI e2e）。
+// test_mcp_work_tools_include_crossref、test_cli_crossref_flow：已搬到 crates/ctx-cli/tests/crossref.rs。
 
 // ---- Rust 版補測（非 Python 一對一）----
 

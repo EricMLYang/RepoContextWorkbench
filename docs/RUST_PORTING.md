@@ -47,10 +47,71 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   測試名稱照 Python 函式名，一個 Python 測試對一個 Rust 測試；搬不了的寫明原因（`// 未搬：…`）。
 - 共用 fixture 在 `ctx_core::testkit`（feature `testkit`）：temp spine、假 git repo（照 `tests/conftest.py`）。
 - 測試裡設 `REPOCTX_NO_BACKGROUND=1`，不碰使用者真的 `~/.config`（測試用 temp `XDG_CONFIG_HOME`）。
-- 完成條件：`cargo test --workspace`、`cargo clippy --workspace -- -D warnings`、`cargo fmt --check` 全過。
+- 完成條件：`cargo test --workspace`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo fmt --all --check` 全過。
+- CLI e2e（`crates/ctx-cli/tests/`）用 `env!("CARGO_BIN_EXE_ctx")` 跑真 binary；temp `XDG_CONFIG_HOME`、
+  `REPOCTX_NO_BACKGROUND=1` 只設在子進程上，不改測試進程的全域環境。MCP 的單元測試在行程內呼叫
+  `ctx_cli::mcp::handle_message`（ctx-cli 同時是 lib＋bin）。
 
 ## 對拍
 
-`scripts/parity.sh`：同一份 fixture spine 複製兩份，各跑 Python `python -m repo_context` 與
-`target/debug/ctx` 的同一組指令，比較 `--json` 輸出（解析後比，不比位元組）與寫出的檔。
+`scripts/parity.sh`（bash 包一層，比較邏輯在 `scripts/parity.py`）：用 Python CLI 建一份 fixture
+（init、3 個假 git repo、兩組、關係、export、決策／todo／handoff／碰撞、回填候選、一場 Claude Code 會話），
+複製兩份，各跑 Python `python3 -m repo_context` 與 `target/debug/ctx` 的同一組指令，比較：
+
+- exit code；
+- stdout：`--json` 解析後比（浮點數容許小誤差——天數是現算的），人話逐字比；路徑換成 `<R>`、時間戳記
+  （`YYYY-MM-DD HH:MM`、`HH:MM`、打包／dead-letter 檔名裡的時間）換成佔位符；
+- 每個指令跑完後整個 spine 目錄（`.git` 除外）：事件檔、dead-letter、`registry.yaml`（解析成 YAML 物件比）、
+  `.state/` 底下的 JSON（解析後比）、其他檔逐字比；
+- MCP：同一串 JSON-RPC（initialize、notifications、tools/list、ping、未知 method／tool、工作層與管理層的
+  tools/call，含錯誤）餵兩邊 stdin，逐則比回應（tool 回的 text 是 JSON 就解析後比）。
+
+涵蓋所有不打外部網路／不呼叫真 claude 的子命令（provider 一律 mock；`upstream` 只測沒有 upstream 欄位的情形；
+`ask`／`collide`／`digest` 走 mock）。沒涵蓋：`session`（不帶 `--print` 會開終端機）、`app`、`timer`（常駐）、
+`backfill run`（呼叫 claude）、`ui`（已停用，Rust 測試另驗）。跨午夜跑可能因日期不同而失敗，重跑即可。
+
+允許差異（表上列出、比較前只拿掉那一欄或那一檔，不是整個指令跳過）見下節。
+2026-10-06 第一次跑：153 項（CLI 151＋MCP 工作層／管理層各一串）全過；用到的允許差異只有
+`.agent_logs/`（provider 除錯 log）與 `.mcp.json`（MCP 指令改指 Rust ctx）。全過時自動刪 fixture，
+要留著看設 `PARITY_KEEP=1`。
 全部指令對拍通過才合併回 main、才把 hooks／MCP 改指向 Rust 版。
+
+## 刻意差異（Rust 版與 Python 版行為不同之處）
+
+引擎（ctx-core，各 agent 搬遷時回報）：
+
+- **collect dirty_days 修正**：Python 版算 dirty 檔放了幾天時只看前幾個檔，會漏掉較舊的檔；Rust 看全部
+  dirty 檔。對拍時 `collect --json` 的 `dirty_days` 列為允許差異（人話表格的「dirty N 天」也正規化後比）。
+- **MockProvider 呼叫計數改成實例層**：Python 是類別屬性（整個行程共用，`REPOENGINE_MOCK_FAIL` 的計數跨呼叫累積）；
+  Rust 每個 provider 實例自己算。`.agent_logs/` 底下的 provider 原始紀錄（除錯 log）不對拍。
+- **agentsetup／session 掛的 MCP 與 hooks 指令改指 Rust ctx**：`ctx setup --claude` 註冊
+  `claude mcp add … -- <ctx> mcp`、hooks 是 `<ctx> hook session-start|session-end`；`ctx session` 寫的
+  `.mcp.json` 是 `<ctx> mcp`。已經有 `repo_context` 的 `.mcp.json` 不動（使用者可能還在用 Python 版）。
+  `is_our_hook` 兩種都認，重跑 setup 不會重複掛。
+- **collide.spawn_detached 尊重 `REPOCTX_NO_BACKGROUND`**：Python 版只有反芻的背景進程看這個變數；
+  Rust 版碰撞判定的 detached 進程也不開（測試／對拍不會留下非同步寫入）。
+- **timer.run_loop 睡到下一個排程點**（最多 300 秒重看一次 config），不是固定每 30 秒 tick，閒置不吃 CPU；
+  可由 channel 停止。
+- **term kill 先送 SIGHUP＋SIGTERM**（給 shell／agent 收尾的機會），逾時才 SIGKILL。
+
+CLI／MCP（ctx-cli）：
+
+- **`ctx ui` 不搬**：瀏覽器模式（本機 HTTP＋WebSocket）在 Rust 版沒有對應物；`ctx ui` 印一行
+  「已停用：請改用 `ctx app`」到 stderr，exit 2。`--port`／`--no-browser` 仍收（不報用法錯）。
+- **`ctx app` 改成啟動 Tauri 桌面 App**：依序找 `Repo Context.app`——ctx 同目錄（或 ctx 所在的 .app 包）、
+  `/Applications`、`~/Applications`、`target/{release,debug}/bundle/macos/`；找到就 `open <app> --args --spine <d>`
+  （spine 找不到就不帶，讓 App 自己問；明確給了錯的 `--spine` 照樣報錯）。找不到 App 時說明怎麼 build
+  （`cd desktop && npm install && npx tauri build`），exit 1。`--port` 收但忽略。目前只支援 macOS（Windows 未做、未測）。
+- **`ctx timer`**：前景跑 `timer::run_loop`，Ctrl+C 結束（印「timer 已停」、exit 0）。用 `ctrlc` crate：
+  跨平台（macOS＋Windows VDI 都要）、只需要「收到中斷 → 送停止訊號給 run_loop」一件事，
+  比 signal-hook 少寫平台分支。`--interval` 為相容保留但不再使用（見上面 run_loop），啟動訊息改成
+  「睡到下一個排程點，最多 300s 重看一次」。
+- **`--help` 的排版是 clap 的**（子命令順序、說明文字照 Python；argparse 與 clap 的版面不同，不對拍）。
+  長旗標可縮寫（`infer_long_args`，同 argparse 的 prefix matching）。用法錯誤一律 exit 2（同 argparse）。
+- **沒接住的錯誤**：Python 會印 traceback、exit 1；Rust 印一行「錯誤：<訊息>」到 stderr、exit 1（exit code 相同）。
+  例：`collide run <不存在的 cid>`、`append` 不帶 `--dead-letter` 卻被 validator 拒。
+- **`ctx search` 不給查詢文字**：Python 因參數被濾掉而 TypeError（traceback、exit 1）；Rust 走 agentapi 的
+  `bad_request`「query 不能是空的」（exit 2，`--json` 時是 `{ok:false,...}`）。
+- **`collide submit` 不給想法文字**：Python 炸 traceback；Rust 印「錯誤：collide submit 需要想法文字」、exit 1。
+- **MCP 工作層缺必填參數**：Python 是 `TypeError` 經 `except Exception` 變 `{ok:false,error:"failed",message:"<fn>() missing 1 required positional argument: 'text'"}`；
+  Rust 照抄同一句訊息（不是依賴語言行為），形狀相同。

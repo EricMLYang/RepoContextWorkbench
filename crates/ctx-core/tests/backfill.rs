@@ -332,4 +332,4 @@ fn test_interrupted_remap_heals_on_next_run() {
     assert!(!bf::candidates(&w.sp, Some("sub")).unwrap().is_empty());
 }
 
-// 未搬：test_cli_accept_positional_repo——等 ctx-cli（真 CLI 的位置參數解析與輸出「寫進 spine 2 筆」／「都收過了」）。
+// test_cli_accept_positional_repo：已搬到 crates/ctx-cli/tests/backfill.rs（真 CLI）。

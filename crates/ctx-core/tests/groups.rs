@@ -147,8 +147,7 @@ fn test_schedule_refs_reported() {
 
 // ── CLI ─────────────────────────────────────────────────────────────────
 
-// 未搬：test_cli_group_maintenance——等 ctx-cli（subprocess 跑 `ctx group add-member/...`，
-// 驗 stdout／exit code；引擎部分已由上面 registry 測試與下面 ops 測試涵蓋）。
+// test_cli_group_maintenance：已搬到 crates/ctx-cli/tests/groups.rs（跑真 `ctx group …`）。
 
 // ── 工作台 action ──────────────────────────────────────────────────────
 
@@ -157,8 +156,8 @@ fn test_schedule_refs_reported() {
 
 // ── MCP（管理層）───────────────────────────────────────────────────────
 
-/// 原測試經 mcpserver.handle_message 呼叫；MCP server 在 ctx-cli，這裡直接打它背後的 ops.call(via=mcp)。
-/// 「tools/list 非管理層看不到 group_update」那段等 ctx-cli 的 MCP server 再補。
+/// 原測試經 mcpserver.handle_message 呼叫；這裡直接打它背後的 ops.call(via=mcp)。
+/// 經真 MCP 分派＋「tools/list 非管理層看不到 group_update」：crates/ctx-cli/tests/groups.rs。
 #[test]
 fn test_mcp_group_update_and_remove() {
     let (_t, d) = three();
@@ -200,8 +199,8 @@ fn test_mcp_group_update_and_remove() {
 
 // 未搬：test_own_edits_stay_out_of_inbox_agent_edits_surface——等 workbench/state（webui.build_state）。
 
-/// MCP 管理層的寫入工具＝操作表的全部操作（schema 同源）。tool_table 在 ctx-cli 的 MCP server，
-/// 這裡先驗 schema 形狀與錯誤訊息；「tools[name] == o.schema()」等 MCP server 搬過來再補。
+/// MCP 管理層的寫入工具＝操作表的全部操作（schema 同源）。這裡驗 schema 形狀與錯誤訊息；
+/// 「tools[name] == o.schema()」在 crates/ctx-cli/tests/groups.rs。
 #[test]
 fn test_ops_table_is_the_single_source() {
     let (_t, d) = three();

@@ -2,9 +2,9 @@
 //! Python 是起真 CLI 行程（HOME／XDG／CLAUDE_CONFIG_DIR 指到 tmp）；Rust 在引擎層用顯式路徑
 //! （[`SetupEnv`]）跑同樣的步驟，不改行程環境變數。
 //!
-//! 未搬：等第三波 ctx-cli——`--dry-run` 不寫檔、exit code（註冊失敗回 1）、setup 後不帶 --spine 的
-//! `ctx where`；test_json_flag_after_subcommand_and_exit_codes、test_hook_commands_via_stdin
-//! （CLI／hook 入口，非 agentsetup）。
+//! CLI 層（`--dry-run` 不寫檔、exit code（註冊失敗回 1）、setup 後不帶 --spine 的 `ctx where`、
+//! test_json_flag_after_subcommand_and_exit_codes、test_hook_commands_via_stdin）：
+//! 已搬到 crates/ctx-cli/tests/agent_cli_e2e.rs（跑真 binary）。
 
 use std::path::{Path, PathBuf};
 
