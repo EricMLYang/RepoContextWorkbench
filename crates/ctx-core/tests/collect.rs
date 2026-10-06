@@ -139,9 +139,9 @@ fn test_collect_activity_and_pulse() {
     assert_eq!(recent.len(), 3);
 }
 
-// 未搬（brief 模組不在這波，且需 spine/registry）：test_brief_shape、test_brief_quiet_when_all_clean、
-// test_brief_over_three_questions_warns、test_question_cards_structured、test_defer_label_matches_behaviour、
-// test_brief_loops_stay_inside_the_named_group、test_brief_has_pulse_line。
+// brief 相關（test_brief_shape、test_brief_quiet_when_all_clean、test_brief_over_three_questions_warns、
+// test_question_cards_structured、test_defer_label_matches_behaviour、
+// test_brief_loops_stay_inside_the_named_group、test_brief_has_pulse_line）在 tests/brief.rs。
 
 // ---- 以下為 Rust 版補測（非 Python 一對一）----
 
