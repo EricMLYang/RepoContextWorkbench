@@ -437,10 +437,9 @@ fn test_session_end_quiet_after_handoff_or_nothing_happened() {
 }
 
 // ---- MCP 分層 ----
-// 未搬：test_mcp_default_exposes_only_work_tools——等 ctx-cli（MCP 協定 handle_message／tools/list）。
-// 未搬：test_mcp_admin_via_config——等 ctx-cli（MCP 協定 handle_message）。
-// 未搬：test_mcp_work_tools_return_json_and_structured_errors——等 ctx-cli（MCP 協定；錯誤形狀見下方補測）。
-// 未搬：test_mcp_admin_open_loops_is_scoped——等 ctx-cli（MCP admin 工具 open_loops）。
+// test_mcp_default_exposes_only_work_tools、test_mcp_admin_via_config、
+// test_mcp_work_tools_return_json_and_structured_errors、test_mcp_admin_open_loops_is_scoped：
+// 已搬到 crates/ctx-cli/tests/agentapi.rs（MCP 協定 handle_message）。
 // 未搬：test_workbench_session_shows_agent_status——等 workbench::state（annotate_terms，另一個 agent 在搬）。
 
 // ---- Rust 版補測（非 Python 一對一）----

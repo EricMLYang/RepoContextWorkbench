@@ -3,7 +3,7 @@
 //! - tests/test_crossref.py::test_session_start_injects_neighbor_map_and_drift（這裡）
 //! - tests/test_ruminate.py::test_session_start_shows_fresh（這裡）
 //! - tests/test_agent_cli_e2e.py::test_hook_commands_via_stdin（引擎部分在這裡：stdin 解析＋輸出；
-//!   真行程的 exit code 等 ctx-cli）
+//!   真行程的 exit code 在 crates/ctx-cli/tests/agent_cli_e2e.rs）
 
 use std::path::{Path, PathBuf};
 
@@ -160,7 +160,7 @@ fn test_session_start_shows_fresh() {
 }
 
 /// test_agent_cli_e2e.py::test_hook_commands_via_stdin 的引擎部分：stdin JSON → 輸出字串；
-/// session-end 不印東西；壞輸入不炸、回空字串。（真行程、exit code 0、找不到 spine：等 ctx-cli）
+/// session-end 不印東西；壞輸入不炸、回空字串。（真行程、exit code 0、找不到 spine：crates/ctx-cli/tests/agent_cli_e2e.rs）
 #[test]
 fn test_hook_commands_via_stdin() {
     let (_t, sp, impl_, _) = rum_world();

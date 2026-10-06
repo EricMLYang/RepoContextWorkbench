@@ -219,7 +219,7 @@ fn test_stale_detection() {
 }
 
 // test_timer_task：搬在 tests/timer.rs。
-// 未搬：test_cli_fresh——等 ctx-cli（`ctx fresh` e2e）。
+// test_cli_fresh：已搬到 crates/ctx-cli/tests/ruminate.rs。
 
 // ---- 真資料校準（2026-09-25）留下的三條 ----
 
