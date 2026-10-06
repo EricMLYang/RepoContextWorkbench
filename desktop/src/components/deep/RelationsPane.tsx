@@ -1,18 +1,16 @@
 import { useState } from "react";
 import type { Relation } from "../../api/types";
 import { DetailLayout, useDetail } from "../../dialogs/Modal";
-import { matchesSearch, relationLabel, relationTask, scopeRepos } from "../../lib/view";
+import { matchesSearch, relationLabel, scopeRepos } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
 
 /** 關係分頁：碰到目前範圍的關係（跨組保留另一端）、用關係開工作、管理、新增。 */
 export function RelationsPane({ query, active }: { query: string; active: boolean }) {
-  const { state, scope } = useSnapshot();
+  const { state } = useSnapshot();
   const ui = useUi();
-  const members = new Set(scopeRepos(scope, state));
-  const list = state.relations.filter(
-    (r) => (members.has(r.from) || members.has(r.to)) && matchesSearch(r, query),
-  );
+  // in_scope／task 由引擎給（碰到目前範圍的關係、用這條關係開工作的任務）
+  const list = state.relations.filter((r) => r.in_scope && matchesSearch(r, query));
   return (
     <section id="tab-relations" className={"tabpane" + (active ? " on" : "")} aria-label="Repo 關係">
       <div className="sectionintro">
@@ -49,7 +47,7 @@ export function RelationsPane({ query, active }: { query: string; active: boolea
                   onClick={() =>
                     ui.openSession({
                       repos: [r.from, r.to],
-                      task: relationTask(r),
+                      task: r.task,
                       origin: "relation:" + r.from + ">" + r.to,
                     })
                   }

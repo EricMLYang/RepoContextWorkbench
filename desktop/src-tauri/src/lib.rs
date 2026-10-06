@@ -36,6 +36,8 @@ impl Notifier for TauriNotifier {
         let _ = self
             .app
             .emit(EVENT_CHANGED, serde_json::json!({ "reason": reason }));
+        // 視窗藏起來時前端不輪詢——選單列的未讀數由殼自己更新
+        refresh_unread(&self.app);
     }
 
     fn session_exited(&self, _sid: &str, title: &str) {
@@ -71,10 +73,13 @@ fn show_main(app: &AppHandle) {
     }
 }
 
+/// 選單列「未讀：N」那一行（set_unread 更新它的文字）。
+struct UnreadItem(MenuItem<tauri::Wry>);
+
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "開啟工作台", true, None::<&str>)?;
-    // TODO(第三波)：get_state 接上後，以 unread.len() 更新這一行（set_unread）與 tray 標題
     let unread = MenuItem::with_id(app, "unread", "未讀：—", false, None::<&str>)?;
+    app.manage(UnreadItem(unread.clone()));
     let quit = MenuItem::with_id(app, "quit", "結束", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
@@ -99,11 +104,30 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// 選單列的未讀數（placeholder：第三波接 `get_state` 後呼叫）。
+/// 選單列的未讀數：tray 標題（0＝不顯示）＋選單「未讀：N」。`None`＝不知道（spine 未設定）。
 pub fn set_unread(app: &AppHandle, n: Option<usize>) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let _ = tray.set_title(n.filter(|n| *n > 0).map(|n| n.to_string()));
     }
+    if let Some(item) = app.try_state::<UnreadItem>() {
+        let _ = item.0.set_text(match n {
+            Some(n) => format!("未讀：{n}"),
+            None => "未讀：—".into(),
+        });
+    }
+}
+
+/// 重算未讀數（`notify.pending` 的 count——跟 `get_state` 的 `unread` 同一份）並更新選單列。背景執行緒跑。
+fn refresh_unread(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let n = app
+            .try_state::<AppState>()
+            .and_then(|s| s.spine())
+            .and_then(|sp| ctx_core::notify::pending(&sp).ok())
+            .map(|p| p.count);
+        set_unread(&app, n);
+    });
 }
 
 // ── IPC 命令（desktop/IPC.md）──
@@ -131,8 +155,15 @@ async fn blocking<T: Send + 'static>(
 }
 
 #[tauri::command]
-async fn get_state(app: AppHandle) -> Result<Value, String> {
-    blocking(app, workbench::get_state).await
+async fn get_state(
+    app: AppHandle,
+    group: Option<String>,
+    repos: Option<Vec<String>>,
+) -> Result<Value, String> {
+    let handle = app.clone();
+    let st = blocking(app, move |st| workbench::get_state(st, group, repos)).await?;
+    set_unread(&handle, Some(workbench::unread_count(&st)));
+    Ok(st)
 }
 
 #[tauri::command]
@@ -175,6 +206,7 @@ pub fn run() {
             }
             app.manage(state);
             build_tray(&handle)?;
+            refresh_unread(&handle);
             Ok(())
         })
         .on_window_event(|window, ev| {

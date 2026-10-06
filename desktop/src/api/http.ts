@@ -71,7 +71,7 @@ export function createHttpBackend(opts: HttpBackendOptions = {}): Backend {
 
   return {
     kind: "http",
-    getState: () => api("/api/state"),
+    getState: (p = {}) => api("/api/state" + scanQuery(p)),
     getScan: (p) => api("/api/scan" + scanQuery(p)),
     action: (name, payload) => api("/api/" + name, payload ?? {}),
     openTerminal(sid): TermStream {

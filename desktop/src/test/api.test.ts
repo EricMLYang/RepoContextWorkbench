@@ -35,6 +35,13 @@ describe("httpBackend", () => {
     await expect(broken.getState()).rejects.toThrow(MSG_BAD_RESPONSE);
   });
 
+  it("state 帶目前範圍（同 scan 的參數）", async () => {
+    const fetch = vi.fn(async () => res(200, JSON.stringify({ groups: [] })));
+    const b = createHttpBackend({ token: "", base: "", fetch });
+    await b.getState({ group: "g1" });
+    expect((fetch.mock.calls[0] as unknown as [string])[0]).toBe("/api/state?group=g1");
+  });
+
   it("scan 參數：repos 優先、逗號串接", () => {
     expect(scanQuery({})).toBe("");
     expect(scanQuery({ group: "產品 開發" })).toBe("?group=" + encodeURIComponent("產品 開發"));
@@ -47,10 +54,12 @@ describe("tauriBackend", () => {
     const invoke = vi.fn(async () => ({ ok: true }));
     const b = createTauriBackend({ invoke });
     await b.getState();
+    await b.getState({ repos: ["a"] });
     await b.getScan({ group: "g" });
     await b.action("ack", {});
     expect(invoke.mock.calls).toEqual([
-      ["get_state", undefined],
+      ["get_state", { group: null, repos: null }],
+      ["get_state", { group: null, repos: ["a"] }],
       ["get_scan", { group: "g", repos: null }],
       ["run_action", { name: "ack", payload: {} }],
     ]);

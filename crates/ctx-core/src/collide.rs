@@ -243,7 +243,18 @@ pub fn spawn_detached(
     if std::env::var_os("REPOCTX_NO_BACKGROUND").is_some_and(|v| !v.is_empty()) {
         return Ok(false);
     }
-    let exe = std::env::current_exe()?;
+    spawn_detached_with(&std::env::current_exe()?, spine_dir, cid, group, provider)
+}
+
+/// 同 [`spawn_detached`]，執行檔由呼叫端給（桌面 App 用同目錄的 `ctx`，見 `session::ctx_exe`）。
+/// 不檢查 `REPOCTX_NO_BACKGROUND`（呼叫端自己決定）。
+pub fn spawn_detached_with(
+    exe: &Path,
+    spine_dir: impl AsRef<Path>,
+    cid: &str,
+    group: Option<&str>,
+    provider: Option<&str>,
+) -> Result<bool> {
     let mut cmd = Command::new(exe);
     cmd.args(detached_args(spine_dir, cid, group, provider))
         .stdin(Stdio::null())

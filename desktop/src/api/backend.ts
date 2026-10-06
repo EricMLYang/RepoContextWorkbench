@@ -28,8 +28,8 @@ export interface TermStream {
 /** 前端唯一看得到的後端。HTTP（Python 版、對拍）與 Tauri（Rust 版）各一個實作。 */
 export interface Backend {
   readonly kind: "http" | "tauri";
-  /** 輕量狀態（純檔案讀，供 5 秒輪詢）。 */
-  getState(): Promise<WorkbenchState>;
+  /** 輕量狀態（純檔案讀，供 5 秒輪詢）。範圍＝畫面目前選的（引擎據此算卡片／事件／關係的 lane）。 */
+  getState(scope?: ScanParams): Promise<WorkbenchState>;
   /** 跑採集（會打 git）。只在開頁／切範圍／手動更新／每 2 分鐘時呼叫。 */
   getScan(params: ScanParams): Promise<ScanResult>;
   /** 卡片按鈕與各表單的寫入動作。失敗一律 reject Error（message 是給人看的中文）。 */

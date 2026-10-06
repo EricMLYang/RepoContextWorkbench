@@ -36,6 +36,7 @@ export const EMPTY_STATE: WorkbenchState = {
     alive: 0,
     survival_rate: null,
   },
+  scope: { group: null, repos: null, members: [] },
   terms: [],
   agents: [],
 };
@@ -48,6 +49,7 @@ export const EMPTY_SCAN: ScanResult = {
   audit: [],
   recent_commits: [],
   summary: null,
+  session_tasks: [],
 };
 
 export interface Snapshot {
@@ -125,6 +127,14 @@ export class WorkbenchStore {
   private scopeKey() {
     return JSON.stringify(this.scopePayload);
   }
+  /** 給 get_state 的範圍：原樣送（引擎自己濾掉沒登記的 repo），不用還沒載入的 state 先過濾。 */
+  private stateScope(scope: Scope = this.snap.scope) {
+    return Array.isArray(scope.repos)
+      ? { repos: scope.repos }
+      : scope.group
+        ? { group: scope.group }
+        : {};
+  }
 
   toast(text: string) {
     this.set({ toast: { text, seq: this.snap.toast.seq + 1 } });
@@ -146,12 +156,15 @@ export class WorkbenchStore {
 
   // ── 資料 ────────────────────────────────────────────────────────
 
-  /** 同時只跑一個；失敗保留上次資料、把錯誤放 stateError。 */
+  /** 同時只跑一個；失敗保留上次資料、把錯誤放 stateError。範圍在途中換了就再抓一次（lane 是照範圍算的）。 */
   refreshState = (): Promise<boolean> => {
     if (this.stateFlight) return this.stateFlight;
     this.stateFlight = (async () => {
       try {
-        const next = await this.backend.getState();
+        const asked = JSON.stringify(this.stateScope());
+        const next = await this.backend.getState(this.stateScope());
+        if (asked !== JSON.stringify(this.stateScope()))
+          queueMicrotask(() => void this.refreshState());
         const { scope } = this.snap;
         const gone =
           (scope.group && !next.groups.some((g) => g.name === scope.group)) ||
@@ -161,7 +174,10 @@ export class WorkbenchStore {
           save("scope", ALL_SCOPE);
           this.scanVersion++;
           this.set({ scope: ALL_SCOPE, scanReady: false });
-          queueMicrotask(() => void this.rescan());
+          queueMicrotask(() => {
+            void this.refreshState();
+            void this.rescan();
+          });
           this.toast("原工作範圍已不存在，已返回所有 repo");
         }
         return true;
@@ -215,6 +231,7 @@ export class WorkbenchStore {
     save("scope", next);
     this.scanVersion++;
     this.set({ scope: next, scanReady: false, scanError: "", scan: EMPTY_SCAN });
+    void this.refreshState();
     void this.rescan();
   };
 

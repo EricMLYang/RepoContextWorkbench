@@ -55,7 +55,10 @@ def _make_handler(spine_dir):
                 if u.path == "/":
                     self._bytes(PAGE.encode("utf-8"), "text/html; charset=utf-8")
                 elif u.path == "/api/state":
-                    st = build_state(spine_dir)
+                    q = parse_qs(u.query, keep_blank_values=True)
+                    rq = (q.get("repos") or [None])[0]
+                    st = build_state(spine_dir, group=(q.get("group") or [None])[0],
+                                     repos=None if rq is None else [r for r in rq.split(",") if r])
                     st["terms"] = annotate_terms(spine_dir,
                                                  self.server.terms.list())
                     st["agents"] = list(_config.load(spine_dir)["agents"])

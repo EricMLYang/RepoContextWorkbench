@@ -100,7 +100,7 @@ export function createTauriBackend(
 
   return {
     kind: "tauri",
-    getState: () => run("get_state"),
+    getState: (p = {}) => run("get_state", { group: p.group ?? null, repos: p.repos ?? null }),
     getScan: (p) => run("get_scan", { group: p.group ?? null, repos: p.repos ?? null }),
     action: (name, payload) => run("run_action", { name, payload: payload ?? {} }),
     onChanged(cb) {
