@@ -52,6 +52,9 @@
 | ADK Stale Issue Auditor（google/adk-python PR #3546） | 任務記憶清理 | 每天排程審 issue 時間軸 | 標 stale → 通知 → 二次門檻才關；依時間軸判斷是否還活著 | GitHub issue 限定 → F-21 | 參考 | 🔗 | 2026-10-10 | R03 查詢 1 | [PR](https://github.com/google/adk-python/pull/3546) |
 | Next.js〈How we closed 1500 GitHub issues〉 | 任務記憶清理 | 大量積壓的整理實務 | 關閉要附理由、可重開 | 文章 → F-21 | 參考 | 🔗 | 2026-10-10 | R03 查詢 1 | [blog](https://nextjs.org/blog/how-we-closed-1500-github-issues) |
 | 〈The ADR your agent never read〉（tianpan） | 判斷留痕（論述） | ADR 實務 | 不改舊紀錄、寫新的取代它，並在**舊紀錄自己身上**標已被取代；可取回「目前有效」與整條沿革 | — → F-07 | 參考 | 🔗 | 2026-10-10 | R03 查詢 2 | [blog](https://tianpan.co/blog/2026/07/02/the-adr-your-agent-never-read) |
+| **shadowgraph（LiLara-AI）** | 判斷留痕（**直接同類**） | `.shadowgraph/data.json`（或 SQLite）的決策圖 | 選了／放棄了什麼與理由、**reopenWhen**（何時重看）＋`review()` 對事實比對、outcome 回饋信心、來源分級（agent 自稱／人確認／正式環境驗證）；MCP＋CLI＋本機 HTTP | 單一專案、Node、3 星；不是 md／git 可讀 → F-07、F-23 | 標竿 | ✅ | 2026-10-10 | R04 查詢（decision log MCP） | [GitHub](https://github.com/LiLara-AI/shadowgraph) |
+| linklore-mcp | 判斷留痕 | 專案記憶 MCP | 記決策、踩坑、規格，下次開場帶回 | — | 觀察 | 🔗 | 2026-10-10 | R04 查詢 | [enterprisedna](https://enterprisedna.co/directories/mcp/linklore-linklore-mcp) |
+| Claude Code auto memory | 平台 | `~/.claude/projects/<路徑>/memory/*.md` | 本機 md 記憶；匯出／匯入功能請求被關成不做 | 單一路徑、不跨 repo → F-44 可對接 | 觀察 | 🔗 | 2026-10-10 | R04 查詢 | [docs](https://code.claude.com/docs/en/memory)、[issue #67369](https://github.com/anthropics/claude-code/issues/67369) |
 
 ## 待查對標（下一輪處理）
 
@@ -90,11 +93,12 @@
 - R03：`AI agent stale issues cleanup propose close with evidence from commits 2026`
 - R03：`AgDR agent decision records supersede search across repositories`
 - R03：`Claude Code Projects threads shared memory multi-repo September 2026`（extended）＋讀官方頁
+- R04：`decisionlog.ai MCP server decision log for AI agents`（→ shadowgraph ✅）
+- R04：`Claude Code Projects local execution memory export October 2026`（extended）
 
 ### 下一輪查詢
-1. `Claude Code Projects local execution memory export`（官方說本機版「很快」，盯平台會不會變成可讀寫的記憶）
-2. `decisionlog.ai MCP decision log`（直接同類？）
-3. `multi-repo-agent mra alternatives polyrepo AI agent orchestration`（R02 留下）
-4. `personal knowledge management agent decision journal outcome review`（R02 留下，F-23）
-5. `todo staleness detection evidence git activity personal task manager`（F-21 做完後找更好的判準）
-6. `MCP server latency caching long-running index Rust`（R02 留下）
+1. `shadowgraph alternatives decision memory agents reopen conditions`（延伸：shadowgraph）
+2. `multi-repo-agent mra alternatives polyrepo AI agent orchestration`（R02 留下）
+3. `personal knowledge management agent decision journal outcome review`（F-23）
+4. `MCP server latency caching long-running index Rust`（N-17）
+5. `Claude Code Projects local threads release`（盯平台本機版）
