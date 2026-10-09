@@ -26,8 +26,8 @@ run() {
   if [ "$DRY" = 1 ]; then say "  （dry-run）$*"; else "$@"; fi
 }
 
-if pgrep -f "repo-context-desktop" >/dev/null 2>&1; then
-  say "Repo Context App 正在執行（$(pgrep -f repo-context-desktop | head -1)）。"
+if pgrep -f "MacOS/repo-[c]ontext-desktop" >/dev/null 2>&1; then
+  say "Repo Context App 正在執行（$(pgrep -f "MacOS/repo-[c]ontext-desktop" | head -1)）。"
   say "請先從選單列「結束」或按 ⌘Q 關掉它，再重跑這個腳本。（關掉會結束 App 裡正在跑的會話。）"
   [ "$DRY" = 1 ] || exit 1
 fi
