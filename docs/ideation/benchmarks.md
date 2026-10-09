@@ -62,6 +62,7 @@
 | Microsoft HAX Toolkit（G7／G11／G13） | 入口（AI 建議 UX 準則） | — | 建議要能輕鬆略過、說得出為什麼、記住使用者的選擇並說明會怎麼影響之後 | — → F-47 | 參考 | 🔗 | 2026-10-10 | R07 查詢 | [HAX](https://www.microsoft.com/en-us/haxtoolkit/application-type/prediction/page/5) |
 | Google Discover SDF（Supersession-Decay Filtering） | 推薦過期處理 | — | 被取代（新內容／新規則取代舊的）與自然衰減兩道濾網；上線後過期回報 -54.9% | 學習式模型不抄，抄「兩種過期分開處理」 → N-20 | 參考 | 🔗 | 2026-10-10 | R08 查詢 2 | [alphaxiv](https://alphaxiv.org/abs/2608.15780v1) |
 | supermemory〈How to Preserve Decisions an AI Agent Should Not Reopen〉 | 判斷留痕（論述） | — | 記選擇＋理由＋放棄的選項＋什麼情況值得重看；逐字稿不是決策紀錄 | — → F-07 驗證方向對 | 參考 | 🔗 | 2026-10-10 | R08 查詢 1 | [blog](https://supermemory.ai/blog/agent-decision-records/) |
+| Tiago Forte：Progressive Summarization／just-in-time | 知識庫（方法論） | 筆記 | 不一次加工到底；專案需要時才加工到最後一層「混進自己的產出」 | — → F-26 | 參考 | 🔗 | 2026-10-10 | R10 查詢 | [fortelabs](https://fortelabs.com/blog/progressive-summarization-vi-core-principles-of-knowledge-capture/) |
 | Claude Code auto memory | 平台 | `~/.claude/projects/<路徑>/memory/*.md` | 本機 md 記憶；匯出／匯入功能請求被關成不做 | 單一路徑、不跨 repo → F-44 可對接 | 觀察 | 🔗 | 2026-10-10 | R04 查詢 | [docs](https://code.claude.com/docs/en/memory)、[issue #67369](https://github.com/anthropics/claude-code/issues/67369) |
 
 ## 待查對標（下一輪處理）
@@ -112,6 +113,8 @@
 
 - R08：`supermemory agent decision records blog`
 - R08：`recommendation staleness versioning re-score old suggestions after algorithm change best practice`
+
+- R10：`PKM convert reading highlight into action task progressive summarization just-in-time`
 
 ### 下一輪查詢
 1. `multi-repo-agent mra alternatives polyrepo AI agent orchestration`（R02 留下）
