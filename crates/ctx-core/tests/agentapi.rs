@@ -967,3 +967,45 @@ fn retro_candidates_and_outcome_closes_the_loop() {
     );
     assert_eq!(code_of(bad.unwrap_err()).0, "bad_request");
 }
+
+// Rust 才有（N-22）：提醒集中一段，MCP context_for 的 hints 是同一份
+#[test]
+fn hints_shared_between_hook_and_context_for() {
+    let w = two_groups();
+    let yesterday = (Local::now() - chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    log_ext(&w, "先不做 Windows", None, Some(&yesterday)).unwrap();
+    api::add_todo(
+        &w.sp,
+        "補 VDI 測試（回填自 2026-09-12 會話 abc）",
+        Some(&yesterday),
+        &at(&w.impl_),
+        false,
+        "agent",
+    )
+    .unwrap();
+    let ctx = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
+    let kinds: Vec<&str> = ctx["hints"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|h| h["kind"].as_str())
+        .collect();
+    assert_eq!(kinds, vec!["review", "reopen"]);
+    let out = hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "hn", "cwd": w.impl_.to_string_lossy()}),
+        None,
+    );
+    let v: Value = serde_json::from_str(&out).unwrap();
+    let text = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    let block = text.split("## 提醒").nth(1).expect("要有提醒段");
+    for h in ctx["hints"].as_array().unwrap() {
+        assert!(block.contains(h["text"].as_str().unwrap()));
+    }
+    assert!(!text.contains("回填自")); // 回填尾巴開場不印
+    assert!(text.contains("log_decision 帶 supersedes"));
+}

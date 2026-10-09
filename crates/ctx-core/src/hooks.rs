@@ -35,6 +35,9 @@ fn marker_dir(spine_dir: &Path) -> PathBuf {
     spine_dir.join(".state").join("hook_sessions")
 }
 
+static BACKFILL_TAIL: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\s*[（(]回填自[^）)]*[）)]").expect("固定 regex"));
+
 static SAFE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^\w\-]").expect("固定 regex"));
 
 /// 對應 `hooks._safe`：session_id → 檔名（非字元換 `_`，最多 80 字）。空／缺＝`unknown`。
@@ -109,7 +112,7 @@ pub fn render_start(c: &ContextFor) -> String {
     if ctx["next"].is_object() {
         out.push(format!(
             "建議下一步：{}（依據：{}）",
-            s(&ctx["next"], "text"),
+            BACKFILL_TAIL.replace_all(s(&ctx["next"], "text"), ""),
             s(&ctx["next"], "source")
         ));
     }
@@ -126,7 +129,9 @@ pub fn render_start(c: &ContextFor) -> String {
                 Some(d) => format!("（due {d}{flag}）"),
                 None => String::new(),
             };
-            out.push(format!("- {} {}{due}", py_str(&lp["id"]), s(lp, "text")));
+            // Rust 才有（N-22）：回填來源的尾巴（「（回填自 … 會話 …）」）對 agent 沒用，開場不印（資料不動）
+            let text = BACKFILL_TAIL.replace_all(s(lp, "text"), "");
+            out.push(format!("- {} {}{due}", py_str(&lp["id"]), text.trim_end()));
         }
         if loops.len() > 6 {
             out.push(format!(
@@ -134,25 +139,14 @@ pub fn render_start(c: &ContextFor) -> String {
                 loops.len() - 6
             ));
         }
-        if let Some(h) = &c.review_hint {
-            out.push(h.clone());
-        }
     }
-    // Rust 才有（F-07）：帶重看條件的有效判斷（到期的先列）
-    let mut reopen: Vec<&Value> = ctx["reopen"].as_array().into_iter().flatten().collect();
-    reopen.sort_by_key(|r| r["due"] != true);
-    for r in reopen.iter().take(3) {
-        let tag = if r["due"] == true {
-            "該重看"
-        } else {
-            "有條件的判斷"
-        };
-        out.push(format!(
-            "{tag}：{}（何時重看：{}）[{}]",
-            s(r, "text"),
-            s(r, "when"),
-            s(r, "ref")
-        ));
+    // Rust 才有（N-22）：要處理的提醒集中一段（跟 MCP context_for 的 hints 同一份）
+    let hints: Vec<&Value> = ctx["hints"].as_array().into_iter().flatten().collect();
+    if !hints.is_empty() {
+        out.push(String::new());
+        out.push("## 提醒（要處理的；先問使用者再動手）".into());
+        out.extend(hints.iter().map(|h| format!("- {}", s(h, "text"))));
+        out.push(String::new());
     }
     for a in ctx["attention"].as_array().into_iter().flatten().take(3) {
         out.push(format!("注意：{}", s(a, "text")));
@@ -165,12 +159,6 @@ pub fn render_start(c: &ContextFor) -> String {
             py_str(&st["at"]),
             st.get("text").map(py_str).unwrap_or_default()
         ));
-    }
-    if let Some(h) = &c.relation_hint {
-        out.push(h.clone());
-    }
-    if let Some(h) = &c.retro_hint {
-        out.push(h.clone());
     }
     if !c.neighbors.is_empty() {
         out.push(String::new());
@@ -201,6 +189,7 @@ pub fn render_start(c: &ContextFor) -> String {
             "- 工具（MCP repo-context）：{TOOLS_LINE}。沒掛 MCP 就用 `ctx <where|context|next|log|todo|status|handoff|search> --json`。"
         ),
         "- 做了判斷→log_decision；發現待辦→add_todo；等使用者或卡住→report_status。".into(),
+        "- 改掉舊判斷→log_decision 帶 supersedes；判斷後來怎樣→log_decision 帶 outcome_of；把一項待辦交給新會話→`ctx todo brief #N`。".into(),
         "- 要別的 repo 的資料：search_knowledge 找 → read_from 讀（會記引用）；要對方整理歸納才用 ask_repo（慢、花錢）。"
             .into(),
         "- 收尾一定呼叫 handoff（完成了什麼、剩什麼、下次從哪接）；沒交接的會話會被記成未交接。".into(),
@@ -244,10 +233,7 @@ fn session_start_inner(
     let Some(repo) = w.repo.clone() else {
         return Ok(String::new());
     };
-    let mut ctx = agentapi::context_for_full(spine_dir, &Target::at(&cwd_p), false)?;
-    ctx.review_hint = agentapi::review_hint(spine_dir, &Target::at(&cwd_p));
-    ctx.relation_hint = relation_hint(spine_dir, &ctx);
-    ctx.retro_hint = agentapi::retro_hint(spine_dir, &Target::at(&cwd_p));
+    let ctx = agentapi::context_for_full(spine_dir, &Target::at(&cwd_p), false)?;
     if ruminate::is_stale(spine_dir, now) {
         // 背景補跑；這次開場用上一輪的結果
         let _ = ruminate::spawn_detached(spine_dir);
@@ -442,23 +428,4 @@ pub fn run_hook(spine_dir: &Path, event: &str, stdin: &str) -> String {
 pub fn parse_payload(stdin: &str) -> Value {
     let text = if stdin.is_empty() { "{}" } else { stdin };
     serde_json::from_str(text).unwrap_or_else(|_| json!({}))
-}
-
-/// Rust 才有（F-33）：開場只讀上次算好的關係建議（`.state/relation_suggest.json`），
-/// 跟主場範圍有關的第一筆提一行。
-fn relation_hint(spine_dir: &Path, c: &ContextFor) -> Option<String> {
-    let repos: Vec<&str> = c.value["scope"]["repos"]
-        .as_array()?
-        .iter()
-        .filter_map(Value::as_str)
-        .collect();
-    let s = crate::relsuggest::load(spine_dir)
-        .into_iter()
-        .find(|s| repos.contains(&s.a.as_str()) || repos.contains(&s.b.as_str()))?;
-    Some(format!(
-        "關係建議：{} ↔ {} 還沒設關係（{}）——問使用者要不要設，`ctx registry suggest` 看全部",
-        s.a,
-        s.b,
-        s.reason()
-    ))
 }

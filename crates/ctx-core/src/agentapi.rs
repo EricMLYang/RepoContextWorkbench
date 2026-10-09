@@ -453,12 +453,6 @@ pub struct ContextFor {
     pub neighbors: Vec<Neighbor>,
     pub drift: Vec<Drift>,
     pub fresh: Vec<Link>,
-    /// Rust 才有（F-21）：未結體檢摘要一行（hooks 開場時填；沒有可清的＝None）。
-    pub review_hint: Option<String>,
-    /// Rust 才有（F-33）：相關 repo 建議一行（hooks 開場時填）。
-    pub relation_hint: Option<String>,
-    /// Rust 才有（F-23）：判斷回顧一行（hooks 開場時填）。
-    pub retro_hint: Option<String>,
 }
 
 /// 對應 `agentapi.context_for`：開場一次拿齊——我在哪、範圍、目標、上次交接、下一步、未結、
@@ -563,6 +557,11 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
     if !reopen.is_empty() {
         out["reopen"] = Value::Array(reopen);
     }
+    // Rust 才有（N-22）：要處理的提醒集中成一份——hook 開場與 MCP context_for 共用（同介面）；沒有就不給這個鍵
+    let hints = collect_hints(spine_dir, t, &out);
+    if !hints.is_empty() {
+        out["hints"] = Value::Array(hints);
+    }
     if card {
         let text = context::build_context(
             spine_dir,
@@ -582,9 +581,6 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         neighbors,
         drift,
         fresh,
-        review_hint: None,
-        relation_hint: None,
-        retro_hint: None,
     })
 }
 
@@ -2155,5 +2151,65 @@ pub fn retro_hint(spine_dir: &Path, t: &Target) -> Option<String> {
         first["days"],
         crate::pystr::take_chars(first["text"].as_str().unwrap_or(""), 50),
         first["ref"].as_str().unwrap_or("")
+    ))
+}
+
+// ---------------------------------------------------------------- 提醒（Rust 才有，N-22）
+
+/// 要處理的提醒（依序）：未結體檢、該重看、判斷回顧、關係建議、有條件的判斷。每筆 `{kind, text}`。
+/// hook 開場渲染成「## 提醒」一段；MCP `context_for` 回 `hints`——同一份。
+fn collect_hints(spine_dir: &Path, t: &Target, ctx: &Value) -> Vec<Value> {
+    let mut out: Vec<Value> = Vec::new();
+    let mut push = |kind: &str, text: String| out.push(json!({"kind": kind, "text": text}));
+    if let Some(h) = review_hint(spine_dir, t) {
+        push("review", h);
+    }
+    let reopen: Vec<&Value> = ctx["reopen"].as_array().into_iter().flatten().collect();
+    for r in reopen.iter().filter(|r| r["due"] == true).take(2) {
+        push(
+            "reopen",
+            format!(
+                "該重看：{}（何時重看：{}）[{}]——要改就 log_decision 帶 supersedes",
+                r["text"].as_str().unwrap_or(""),
+                r["when"].as_str().unwrap_or(""),
+                r["ref"].as_str().unwrap_or("")
+            ),
+        );
+    }
+    if let Some(h) = retro_hint(spine_dir, t) {
+        push("retro", h);
+    }
+    if let Some(h) = relation_hint(spine_dir, ctx) {
+        push("relation", h);
+    }
+    for r in reopen.iter().filter(|r| r["due"] != true).take(1) {
+        push(
+            "reopen_cond",
+            format!(
+                "有條件的判斷：{}（何時重看：{}）[{}]",
+                r["text"].as_str().unwrap_or(""),
+                r["when"].as_str().unwrap_or(""),
+                r["ref"].as_str().unwrap_or("")
+            ),
+        );
+    }
+    out
+}
+
+/// 上次算好的關係建議裡，跟主場範圍有關的第一筆（`.state/relation_suggest.json`）。
+fn relation_hint(spine_dir: &Path, ctx: &Value) -> Option<String> {
+    let repos: Vec<&str> = ctx["scope"]["repos"]
+        .as_array()?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let s = crate::relsuggest::load(spine_dir)
+        .into_iter()
+        .find(|s| repos.contains(&s.a.as_str()) || repos.contains(&s.b.as_str()))?;
+    Some(format!(
+        "關係建議：{} ↔ {} 還沒設關係（{}）——問使用者要不要設，`ctx registry suggest` 看全部",
+        s.a,
+        s.b,
+        s.reason()
     ))
 }

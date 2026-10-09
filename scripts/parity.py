@@ -312,8 +312,8 @@ def snapshot(side):
 
 FILE_ALLOWED_USED = set()
 
-RULES_WHY = ("Rust 才有的鍵，比對前拿掉：反芻推薦的 rules（N-20 規則版本）、"
-             "search 結果的 decisions（F-22 判斷可搜尋）")
+RULES_WHY = ("Rust 才有的內容，比對前拿掉：反芻推薦的 rules（N-20）、search 的 decisions（F-22）、"
+             "context_for 的 hints 與開場的提醒段／新能力那一行（N-22）")
 
 
 def strip_rust_only(v):
@@ -326,6 +326,16 @@ def strip_rust_only(v):
         if "query" in v and "files" in v and "decisions" in v:  # search_knowledge 的判斷段（F-22）
             del v["decisions"]
             hit = True
+        if "open_loops" in v and "scope" in v and "hints" in v:  # context_for 的提醒（N-22）
+            del v["hints"]
+            hit = True
+        ac = v.get("additionalContext")
+        if isinstance(ac, str):  # 開場注入：提醒段與新能力那一行（N-22）
+            new = re.sub(r"\n## 提醒（[^\n]*\n(?:- [^\n]*\n)*\n?", "\n", ac)
+            new = re.sub(r"\n- 改掉舊判斷→[^\n]*", "", new)
+            if new != ac:
+                v["additionalContext"] = new
+                hit = True
         for x in v.values():
             hit = strip_rust_only(x) or hit
     elif isinstance(v, list):

@@ -152,6 +152,10 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   寫成 outcome 事件、`ref:` 指回那筆判斷（要存在）；判斷搜尋會帶出它。滿 14 天、人／agent／回填寫的（有 id、不是
   〔工具紀錄〕、不是交接）、沒被取代、還沒有結果、沒延後的判斷＝待回顧：開場提最舊的一筆，App 收件匣 `retro` 卡
   （開會話回顧／延 30 天，延後跟「該重看」共用 `.state/reopen_snooze.json`）。
+- **提醒集中＋MCP 同一份**（2026-10-10，ideation N-22）：`context_for` 多 `hints`（有才給；依序：未結體檢、該重看、
+  判斷回顧、關係建議、有條件的判斷），開場渲染成「## 提醒」一段（取代先前散在各處的單行）；工作約定多一行新能力
+  （supersedes／outcome_of／`ctx todo brief`）；開場的未結與建議下一步不印「（回填自…）」尾巴（資料不動）。
+  對拍時比對前拿掉 `hints`、提醒段與新能力那一行。
 
 CLI／MCP（ctx-cli）：
 
