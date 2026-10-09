@@ -89,4 +89,5 @@
 | F-50 | 同介面 | App「活動」分頁最上方顯示健康指標（交接率、推薦命中率、判斷結果記錄率、未結開／關／逾期）——跟 `ctx health` 同一份；**迭代 23 完成**| 同介面、留痕 | — | P1 | 完成 | R24 | R24 |
 | N-25 | 前端體驗／效能 | 收件匣每段先畫 50 張，其餘「再顯示 N 則」展開（純畫面處理，不放業務邏輯）；**迭代 24 完成**：jsdom 5,000 張卡首次渲染 1,990→105ms| R25：迭代 13 的 1 萬筆規模下 build_state 給 5,389 張卡，App 全部畫進 DOM 可能卡死 WebView | 同介面 | P1 | 完成 | R25 | R25 |
 | N-26 | agent 端 token 效能 | agent 拿到的資料設上限：`context_for` 的未結超過 30 項只給最該處理的 30（逾期→到期近→其餘），另給 `open_loops_more`；`todo review --json` 進行中又沒證據的只給編號（`--all` 才全給）；**迭代 25 完成**：context 51→33KB、review 157→34KB（真資料副本 8→2.1KB）| R26：1 萬筆規模 context_for 51KB（104 項未結全列）、todo review 157KB | 脈絡 | P1 | 完成 | R26 | R26 |
-| N-27 | 可維護 | CLI 輸出被 `；R27：收尾前最後一個小項——agent 與人都常用 `；**迭代 26 完成**：main 一開始 SIGPIPE→SIG_DFL；截斷時 exit 141、stderr 空| head` 看輸出| head` 截斷時 panic「failed printing to stdout: Broken pipe」——應安靜結束（SIGPIPE） | R26 量測時發現（既有行為，非這次迭代造成） | — | P2 | 完成 | R26 | R27 |
+| N-27 | 可維護 | CLI 輸出被 `head` 等管線截斷時 panic「failed printing to stdout: Broken pipe」——應安靜結束（SIGPIPE）；R27：收尾前最後一個小項，agent 與人都常截斷看輸出；**迭代 26 完成**：main 一開始 SIGPIPE→SIG_DFL；截斷時 exit 141、stderr 空 | R26 量測時發現（既有行為，非這次迭代造成） | — | P2 | 完成 | R26 | R27 |
+| N-28 | agent 端 token 效能 | 開場注入回到 ≤ 3,000 字元：提醒段（體檢／重看／回顧／關係建議）跟新料、未結搶同一個預算，該排優先序或摺疊成「另 N 項，用 todo review 看」 | R28：新版副本注入 4,316 字元（R08 為 2,549） | 脈絡 | P1 | 候選（等真用後看哪段是雜訊） | R28 | R28 |

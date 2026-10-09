@@ -6,6 +6,7 @@
 > **現況（2026-10-06，`rust-desktop` 分支）**：整個工具已從 Python 搬成 **Rust 引擎＋Tauri 殼＋React 前端**。
 > Python 版（`repo_context/`、`tests/`）在合併回 main 前**仍保留**——它是對拍的規格，也是目前全域 `ctx` 的實作；
 > 合併、切換完成後刪除。重構記錄：`docs/20261006_Rust桌面重構.md`；搬遷規約與刻意差異：`docs/RUST_PORTING.md`。
+> 2026-10-10 自動迭代（27 項，只在 spine 副本驗證）：裝上與驗收看 `docs/20261010_自動迭代驗收清單.md`，總回顧 `docs/ideation/rounds/20261010_R28_總回顧.md`。
 
 ## 架構
 
