@@ -109,6 +109,10 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   2026-10-10 第二步：共同詞不收「幾乎每個 repo 都有」的一般用語（repo 數 ≥6 時，出現在超過三分之二的 repo；
   `CharStats::generic`——真資料「尚未」「交付」「等待」在 15 個 repo 裡出現在 14–15 個）；寫入前持鎖重看一次狀態、
   背景反芻先佔 `.state/ruminate.running`（並行開場曾寫出兩份一模一樣的推薦）；`fresh` 同一份料只列最新一筆。
+  2026-10-10 第三步（N-20）：推薦多 `rules`（規則版本，目前 3；一般用語門檻收緊到「超過一半的 repo」，
+  repo 分布只用 repo 裡的檔算）。開場（`context_for.fresh`）只推目前規則、`PUSH_DAYS`（7）天內找到的
+  （`ruminate::push_links`）；舊規則的推薦視為被取代——不推、不擋新規則重推、資料保留（`ctx fresh --all` 看得到）。
+  對拍時比對前拿掉推薦的 `rules` 鍵，記為允許差異。
 
 - **未結事項體檢 `ctx todo review`**（2026-10-10，ideation F-21；Python 沒有）：每項看 opened 之後範圍內的 commit 與
   判斷／交接的「完成：」行，算證據蓋住事項文字的比例（中文用連續命中的片段，不數零散 bigram）；≥45%＝可能已處理，

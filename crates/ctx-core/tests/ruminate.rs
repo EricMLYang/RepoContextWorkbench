@@ -417,3 +417,57 @@ fn concurrent_runs_do_not_duplicate_links() {
     }
     assert_eq!(ruminate::fresh(&w.sp, "產品", false).unwrap().len(), 1);
 }
+
+// ---- Rust 才有（N-20）：推薦規則版本＋衰減 ----
+
+/// 把狀態檔裡的推薦改成「舊規則」（拿掉 rules）或改 found 時間。
+fn rewrite_links(sp: &Path, f: impl Fn(&mut serde_json::Value)) {
+    let p = sp.join(".state/ruminate.json");
+    let mut v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+    for l in v["links"].as_array_mut().unwrap() {
+        f(l);
+    }
+    std::fs::write(&p, serde_json::to_string(&v).unwrap()).unwrap();
+}
+
+#[test]
+fn old_rule_links_are_not_pushed_but_kept() {
+    let w = world();
+    std::fs::write(w.cards.join("索引重建.md"), CARD).unwrap();
+    ruminate::run(&w.sp, None, None).unwrap();
+    assert_eq!(ruminate::push_links(&w.sp, "產品", None).unwrap().len(), 1);
+    rewrite_links(&w.sp, |l| {
+        l.as_object_mut().unwrap().remove("rules");
+    });
+    assert!(ruminate::push_links(&w.sp, "產品", None)
+        .unwrap()
+        .is_empty()); // 被取代：不推
+    assert_eq!(ruminate::fresh(&w.sp, "產品", false).unwrap().len(), 1); // 資料還在
+}
+
+#[test]
+fn stale_links_decay_out_of_push() {
+    let w = world();
+    std::fs::write(w.cards.join("索引重建.md"), CARD).unwrap();
+    ruminate::run(&w.sp, None, None).unwrap();
+    let later = Local::now().naive_local() + chrono::Duration::days(ruminate::PUSH_DAYS + 1);
+    assert!(ruminate::push_links(&w.sp, "產品", Some(later))
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn old_rule_pending_link_does_not_block_new_rules() {
+    let w = world();
+    std::fs::write(w.cards.join("索引重建.md"), CARD).unwrap();
+    ruminate::run(&w.sp, None, None).unwrap();
+    rewrite_links(&w.sp, |l| {
+        l.as_object_mut().unwrap().remove("rules");
+    });
+    // 新規則重新判斷：舊規則那筆不算「已推過」，同一份料可以用新規則再推一次
+    let later = Local::now().naive_local() + chrono::Duration::minutes(1);
+    let again = ruminate::run(&w.sp, Some(later), Some(1)).unwrap();
+    assert_eq!(refs_of(&again, "產品"), vec!["cards:索引重建.md"]);
+    assert_eq!(ruminate::push_links(&w.sp, "產品", None).unwrap().len(), 1);
+}

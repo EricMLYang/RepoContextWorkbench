@@ -530,8 +530,9 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         Some(r) => crossref::drift(spine_dir, Some(r), None)?,
         None => Vec::new(),
     };
+    // Rust 才有（N-20）：開場只給目前規則、近幾天的推薦（舊規則雜訊不再每次被推）
     let fresh: Vec<Link> = match &s.group {
-        Some(g) => ruminate::fresh(spine_dir, g, false)?
+        Some(g) => ruminate::push_links(spine_dir, g, None)?
             .into_iter()
             .take(5)
             .collect(),

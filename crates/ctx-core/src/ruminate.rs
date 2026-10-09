@@ -27,6 +27,14 @@ use crate::pack::RepoRef;
 use crate::spine::{self, Event, EventType, LOCK_NAME};
 use crate::{config, registry, Error, Result};
 
+/// Rust 才有（N-20）：推薦規則版本。改了比對規則就加一——舊規則算出來的推薦視為「被取代」，
+/// 不再推進開場（資料保留，`ctx fresh --all` 看得到）。
+/// 2＝2026-10-10：去數字日期、跨詞邊界假詞、一般用語（迭代 1）。
+/// 3＝2026-10-10：一般用語門檻 2/3 → 1/2（迭代 7）。
+pub const RULES_VERSION: u32 = 3;
+/// Rust 才有（N-20）：開場只推這麼多天內找到的推薦（自然衰減；更舊的在 `ctx fresh` 看）。
+pub const PUSH_DAYS: i64 = 7;
+
 /// 對應 `MAX_PER_GROUP`。
 pub const MAX_PER_GROUP: usize = 3;
 /// 推薦保留天數（之後自然淡出，不堆積）。
@@ -81,6 +89,9 @@ pub struct Link {
     /// 只在讀出時算（`_mark_used`），不寫回檔。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub used_at: Option<String>,
+    /// Rust 才有（N-20）：產生這筆推薦時的規則版本（[`RULES_VERSION`]）。沒有＝舊規則（Python 版或 2026-10-10 前）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rules: Option<u32>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -302,13 +313,33 @@ impl CharStats {
         st
     }
 
-    /// 一般用語：出現在超過三分之二的 repo（repo 數 ≥ [`MIN_REPOS_FOR_SPREAD`] 才判斷）。
+    /// 只用這些文件重算 repo 分布（bigram／單字統計不動）。
+    pub fn with_spread_from<'a>(mut self, docs: impl Iterator<Item = &'a Doc>) -> Self {
+        let mut seen: HashMap<&str, HashSet<&str>> = HashMap::new();
+        let mut repos: HashSet<&str> = HashSet::new();
+        for d in docs {
+            repos.insert(&d.repo);
+            for t in d.tf.keys() {
+                seen.entry(t).or_default().insert(&d.repo);
+            }
+        }
+        self.spread = seen
+            .into_iter()
+            .map(|(t, rs)| (t.to_string(), rs.len()))
+            .collect();
+        self.repos = repos.len();
+        self
+    }
+
+    /// 一般用語：出現在超過一半的 repo（repo 數 ≥ [`MIN_REPOS_FOR_SPREAD`] 才判斷）。
     /// 「尚未」「交付」「等待」這種詞在每個 repo 都有，idf 卻不低（大語料裡只佔 4–9% 的檔），
     /// 會把不相干的檔湊過門檻；主題詞（「試播」「反芻」「鄰居」）集中在少數 repo
     /// （2026-10-10 真語料 15 個 repo 實測：一般用語 14–15 個 repo、主題詞 2–6 個）。
+    /// 門檻從 2/3 收緊到 1/2（規則版本 3）：在 10–11 個 repo 出現的 local／search／wiki／mcp／檢討
+    /// 在這個生態裡也是一般用語（工具會在每個 repo 放 AGENTS.md），留著會讓 bin／local 這種詞湊出推薦。
     pub fn generic(&self, t: &str) -> bool {
         self.repos >= MIN_REPOS_FOR_SPREAD
-            && self.spread.get(t).copied().unwrap_or(0) * 3 > self.repos * 2
+            && self.spread.get(t).copied().unwrap_or(0) * 2 > self.repos
     }
 
     /// 中文 bigram 的「黏度」＝含這個 bigram 的文件數 ÷ 含其中較少見那個字的文件數。
@@ -474,11 +505,18 @@ pub fn run(
     let ev_docs = event_docs(&events, &since);
     let (idf, n_docs) = idf_of(all_docs.iter().chain(ev_docs.iter().map(|(c, _)| &c.doc)));
     let floor = rare_floor(n_docs);
-    let stats = CharStats::from_docs(all_docs.iter().chain(ev_docs.iter().map(|(c, _)| &c.doc)));
+    // bigram／單字統計用全部（判斷事件裡的詞也要認得），repo 分布只用 repo 裡的檔
+    // （判斷事件的 doc.repo 是組名或「全域」，算進來會把 repo 數灌大，一般用語門檻就鬆了）
+    let stats = CharStats::from_docs(all_docs.iter().chain(ev_docs.iter().map(|(c, _)| &c.doc)))
+        .with_spread_from(all_docs.iter());
     let loops = spine::open_loops_of(&events);
+    // 舊規則（N-20）產生、沒被打掉的推薦不算數：它們已視為被取代，不該擋住新規則重新判斷
+    let counts =
+        |l: &Link| l.status == LinkStatus::Dismissed || l.rules.unwrap_or(1) >= RULES_VERSION;
     let known: HashSet<(String, String, String)> = state
         .links
         .iter()
+        .filter(|l| counts(l))
         .map(|l| (l.group.clone(), l.reference.clone(), stamp_key(&l.stamp)))
         .collect();
     // 與 Python 的差異（N-03）：同一組同一份料，還有一筆沒處理的（new）或被打掉過（dismissed），
@@ -486,7 +524,7 @@ pub fn run(
     let settled: HashSet<(String, String)> = state
         .links
         .iter()
-        .filter(|l| l.status != LinkStatus::Used)
+        .filter(|l| l.status != LinkStatus::Used && counts(l))
         .map(|l| (l.group.clone(), l.reference.clone()))
         .collect();
 
@@ -565,6 +603,7 @@ pub fn run(
                 snippets: (c.kind == LinkKind::File)
                     .then(|| knowledge::snippets(&c.doc.path, &shared, 2)),
                 used_at: None,
+                rules: Some(RULES_VERSION),
                 extra: Map::new(),
             });
         }
@@ -595,7 +634,10 @@ pub fn run(
         // 不重看就會各寫一份一模一樣的推薦（2026-10-09 真資料 r29–r36／r37–r44）。
         let pending: HashSet<(String, String)> = links
             .iter()
-            .filter(|l| l.status != LinkStatus::Used)
+            .filter(|l| {
+                l.status != LinkStatus::Used
+                    && (l.status == LinkStatus::Dismissed || l.rules.unwrap_or(1) >= RULES_VERSION)
+            })
             .map(|l| (l.group.clone(), l.reference.clone()))
             .collect();
         for (_, picks) in &mut found {
@@ -669,6 +711,19 @@ pub fn fresh(spine_dir: &Path, group: &str, include_seen: bool) -> Result<Vec<Li
     let mut seen: HashSet<String> = HashSet::new();
     out.retain(|l| seen.insert(l.reference.clone()));
     Ok(out)
+}
+
+/// Rust 才有（N-20）：開場要推的推薦——[`fresh`] 再去掉舊規則產生的（被取代）與太舊的（衰減）。
+/// 參考 Google Discover 的 SDF：過期分「被取代」與「自然衰減」兩道濾網。
+pub fn push_links(spine_dir: &Path, group: &str, now: Option<NaiveDateTime>) -> Result<Vec<Link>> {
+    let now = now.unwrap_or_else(|| Local::now().naive_local());
+    let cutoff = (now - Duration::days(PUSH_DAYS))
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    Ok(fresh(spine_dir, group, false)?
+        .into_iter()
+        .filter(|l| l.rules.unwrap_or(1) >= RULES_VERSION && l.found >= cutoff)
+        .collect())
 }
 
 /// 對應 `ruminate.dismiss`：打掉一筆推薦。找不到＝`Error::Invalid`。

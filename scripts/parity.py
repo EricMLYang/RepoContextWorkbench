@@ -311,6 +311,23 @@ def snapshot(side):
 
 FILE_ALLOWED_USED = set()
 
+RULES_WHY = "反芻推薦多了 rules（N-20 規則版本，Rust 才有）——比對前拿掉"
+
+
+def strip_rust_only(v):
+    """Rust 才有的鍵（就地拿掉）：反芻推薦（有 terms＋found 的 dict）的 rules。回傳有沒有拿掉東西。"""
+    hit = False
+    if isinstance(v, dict):
+        if "terms" in v and "found" in v and "rules" in v:
+            del v["rules"]
+            hit = True
+        for x in v.values():
+            hit = strip_rust_only(x) or hit
+    elif isinstance(v, list):
+        for x in v:
+            hit = strip_rust_only(x) or hit
+    return hit
+
 
 def file_allowed(rel):
     return next((why for rx, why in ALLOW_FILES if re.search(rx, rel)), None)
@@ -328,6 +345,8 @@ def diff_snapshots(a, b, allowed_used):
         if rel not in b:
             return f"只有 py 寫了 {rel}"
         (ka, va), (kb, vb) = a[rel], b[rel]
+        if ka == "json" and kb == ka and strip_rust_only(vb):
+            FILE_ALLOWED_USED.add(RULES_WHY)
         if ka in ("json", "yaml") and kb == ka:
             d = deep_eq(va, vb, rel)
         else:
@@ -381,6 +400,8 @@ def compare(name, sides, args, *, cwd=None, stdin=None, spine=True, json_out=Non
         if ja is None or jb is None:
             d = text_diff(a, b)
         else:
+            if strip_rust_only(jb):
+                allowed.add(RULES_WHY)
             d = deep_eq(ja, jb)
             if d and name in ALLOW:
                 why, fix = ALLOW[name]
@@ -413,6 +434,11 @@ def mcp_compare(name, sides, msgs, admin, results, cwd="repos/impl"):
     allowed = set()
     for y in lb:
         drop_mcp_extras(y, allowed)
+        for c in (y.get("result") or {}).get("content") or []:
+            j = parse_maybe_json(c.get("text", ""))
+            if j is not None and strip_rust_only(j):
+                c["text"] = json.dumps(j, ensure_ascii=False)
+                allowed.add(RULES_WHY)
     for x, y in zip(la, lb):
         # tool 回的 text 若是 JSON 就解析後比（工作層），否則逐字比
         for r in (x, y):
