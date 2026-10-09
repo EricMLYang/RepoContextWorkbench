@@ -257,17 +257,34 @@ fn is_cjk(c: char) -> bool {
 }
 
 /// 語料裡每個中文 bigram／單字出現在幾份文件——判斷 bigram 是詞還是跨詞邊界切出來的假詞。
+///
+/// 也記每個詞散布在幾個 repo（[`CharStats::generic`]）。
 #[derive(Debug, Default)]
 pub struct CharStats {
     bigram_df: HashMap<String, usize>,
     char_df: HashMap<char, usize>,
+    /// 詞 → 出現在幾個 repo
+    spread: HashMap<String, usize>,
+    repos: usize,
 }
+
+/// Rust 才有：repo 數至少這麼多，「幾乎每個 repo 都有」才有統計意義（[`CharStats::generic`]）。
+pub const MIN_REPOS_FOR_SPREAD: usize = 6;
 
 impl CharStats {
     /// 從文件的 tf（詞 → 次數）統計。
     pub fn from_docs<'a>(docs: impl Iterator<Item = &'a Doc>) -> Self {
         let mut st = CharStats::default();
+        let mut seen: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut repos: HashSet<String> = HashSet::new();
         for d in docs {
+            repos.insert(d.repo.clone());
+            for t in d.tf.keys() {
+                let rs = seen.entry(t.clone()).or_default();
+                if !rs.contains(&d.repo) {
+                    rs.insert(d.repo.clone());
+                }
+            }
             let mut chars: HashSet<char> = HashSet::new();
             for t in d.tf.keys().filter(|t| is_cjk_bigram(t)) {
                 *st.bigram_df.entry(t.clone()).or_default() += 1;
@@ -277,7 +294,18 @@ impl CharStats {
                 *st.char_df.entry(c).or_default() += 1;
             }
         }
+        st.spread = seen.into_iter().map(|(t, rs)| (t, rs.len())).collect();
+        st.repos = repos.len();
         st
+    }
+
+    /// 一般用語：出現在超過三分之二的 repo（repo 數 ≥ [`MIN_REPOS_FOR_SPREAD`] 才判斷）。
+    /// 「尚未」「交付」「等待」這種詞在每個 repo 都有，idf 卻不低（大語料裡只佔 4–9% 的檔），
+    /// 會把不相干的檔湊過門檻；主題詞（「試播」「反芻」「鄰居」）集中在少數 repo
+    /// （2026-10-10 真語料 15 個 repo 實測：一般用語 14–15 個 repo、主題詞 2–6 個）。
+    pub fn generic(&self, t: &str) -> bool {
+        self.repos >= MIN_REPOS_FOR_SPREAD
+            && self.spread.get(t).copied().unwrap_or(0) * 3 > self.repos * 2
     }
 
     /// 中文 bigram 的「黏度」＝含這個 bigram 的文件數 ÷ 含其中較少見那個字的文件數。
@@ -306,7 +334,8 @@ impl CharStats {
 
 /// 對應 `_shared_terms`：共同的少見詞（idf 高於 floor、不含虛字），依 idf 排序——推薦的「為什麼」。
 ///
-/// 與 Python 的差異（N-03）：中文 bigram 還要「像一個詞」（[`CharStats::word_like`]）才算。
+/// 與 Python 的差異（N-03）：中文 bigram 還要「像一個詞」（[`CharStats::word_like`]），
+/// 也不能是幾乎每個 repo 都有的一般用語（[`CharStats::generic`]）。
 fn shared_terms(
     qcount: &[(String, u64)],
     doc: &Doc,
@@ -319,7 +348,11 @@ fn shared_terms(
         .iter()
         .map(|(t, _)| t)
         .filter(|t| {
-            doc.tf.contains_key(*t) && idf_of(t) >= floor && meaningful(t) && stats.word_like(t)
+            doc.tf.contains_key(*t)
+                && idf_of(t) >= floor
+                && meaningful(t)
+                && stats.word_like(t)
+                && !stats.generic(t)
         })
         .collect();
     terms.sort_by(|a, b| idf_of(b).total_cmp(&idf_of(a)));
@@ -550,6 +583,17 @@ pub fn run(
             .drain(..)
             .filter(|l| crate::pystr::take_chars(&l.found, 10) >= cutoff.as_str())
             .collect();
+        // 與 Python 的差異：持鎖後重看一次——兩個開場同時在背景補跑反芻時，雙方都用舊狀態算，
+        // 不重看就會各寫一份一模一樣的推薦（2026-10-09 真資料 r29–r36／r37–r44）。
+        let pending: HashSet<(String, String)> = links
+            .iter()
+            .filter(|l| l.status != LinkStatus::Used)
+            .map(|l| (l.group.clone(), l.reference.clone()))
+            .collect();
+        for (_, picks) in &mut found {
+            picks.retain(|l| !pending.contains(&(l.group.clone(), l.reference.clone())));
+        }
+        found.retain(|(_, picks)| !picks.is_empty());
         for (_, picks) in &mut found {
             for link in picks.iter_mut() {
                 n += 1;
@@ -561,6 +605,7 @@ pub fn run(
         state.links = links;
         save_state(spine_dir, &state)?;
     }
+    let _ = std::fs::remove_file(running_path(spine_dir));
     Ok(RunResult {
         since,
         candidates: fresh_files.len(),
@@ -598,6 +643,9 @@ fn mark_used(spine_dir: &Path, mut links: Vec<Link>) -> Result<Vec<Link>> {
 }
 
 /// 對應 `ruminate.fresh`：某組目前的推薦（新的在前）。include_seen＝連用過／打掉的也列。
+///
+/// 與 Python 的差異：同一份料只列一次（留最新的）——舊版並行反芻曾寫出重複的推薦，
+/// 常改的檔（AGENTS.md）也曾每輪換個 id 重推。
 pub fn fresh(spine_dir: &Path, group: &str, include_seen: bool) -> Result<Vec<Link>> {
     let mut out: Vec<Link> = mark_used(spine_dir, load_state(spine_dir).links)?
         .into_iter()
@@ -608,6 +656,8 @@ pub fn fresh(spine_dir: &Path, group: &str, include_seen: bool) -> Result<Vec<Li
             .cmp(&a.found)
             .then_with(|| b.score.total_cmp(&a.score))
     });
+    let mut seen: HashSet<String> = HashSet::new();
+    out.retain(|l| seen.insert(l.reference.clone()));
     Ok(out)
 }
 
@@ -680,13 +730,44 @@ pub fn is_stale(spine_dir: &Path, now: Option<NaiveDateTime>) -> bool {
     now - last > Duration::hours(STALE_HOURS)
 }
 
+/// 背景反芻進行中的標記；超過這麼久還在＝上一個背景進程死掉了，可以重佔。
+const RUNNING_STALE_SECS: u64 = 600;
+
+fn running_path(spine_dir: &Path) -> PathBuf {
+    spine_dir.join(".state").join("ruminate.running")
+}
+
+/// 佔住「背景反芻進行中」：佔到＝true；別人正在跑（標記還新）＝false。[`run`] 結束時清掉。
+pub fn claim_background(spine_dir: &Path) -> bool {
+    let p = running_path(spine_dir);
+    if let Some(parent) = p.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let fresh = std::fs::metadata(&p)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.elapsed().ok())
+        .is_some_and(|age| age.as_secs() < RUNNING_STALE_SECS);
+    if fresh {
+        return false;
+    }
+    let _ = std::fs::remove_file(&p);
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&p)
+        .is_ok()
+}
+
 /// 對應 `ruminate.spawn_detached`：開場發現太久沒反芻 → 背景跑，不拖慢開 agent（下一次開場就看得到）。
 ///
 /// 與 Python 的差異：Python 跑 `python -m repo_context --spine <spine> fresh --run`；
 /// Rust 版跑 [`crate::exe::ctx_exe`] 加同樣的參數。
 /// 環境變數 `REPOCTX_NO_BACKGROUND` 有值就不跑（測試用）。
+///
+/// 與 Python 的差異：先佔 `.state/ruminate.running`（[`claim_background`]）——幾個會話同時開場時只起一個。
 pub fn spawn_detached(spine_dir: &Path) -> Result<()> {
-    if crate::exe::background_disabled() {
+    if crate::exe::background_disabled() || !claim_background(spine_dir) {
         return Ok(());
     }
     let spine = spine_dir.as_os_str();

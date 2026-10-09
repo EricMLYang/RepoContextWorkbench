@@ -347,3 +347,73 @@ fn changed_file_is_not_pushed_again_while_pending() {
     assert!(second.group("產品").is_none());
     assert_eq!(ruminate::fresh(&w.sp, "產品", false).unwrap().len(), 1);
 }
+
+fn doc_in(repo: &str, i: usize, text: &str) -> ctx_core::knowledge::Doc {
+    let tf = ctx_core::knowledge::tokenize(text).into_iter().fold(
+        std::collections::HashMap::new(),
+        |mut m, t| {
+            *m.entry(t).or_insert(0.0) += 1.0;
+            m
+        },
+    );
+    ctx_core::knowledge::Doc {
+        repo: repo.into(),
+        path: format!("/{repo}/{i}.md"),
+        rel: format!("{i}.md"),
+        tf,
+        len: 1.0,
+        htf: Default::default(),
+        hlen: 0.0,
+        mtime: 0.0,
+    }
+}
+
+#[test]
+fn words_in_almost_every_repo_are_generic() {
+    let mut docs = Vec::new();
+    for r in 0..9 {
+        docs.push(doc_in(&format!("r{r}"), 0, "這件事尚未交付，等待確認"));
+    }
+    docs.push(doc_in("r0", 1, "試播店型的觀看率"));
+    docs.push(doc_in("r1", 1, "試播排程"));
+    let st = ruminate::CharStats::from_docs(docs.iter());
+    assert!(st.generic("尚未") && st.generic("交付"));
+    assert!(!st.generic("試播"));
+    // repo 太少不判斷（測試世界只有兩三個 repo）
+    let few: Vec<_> = docs
+        .iter()
+        .filter(|d| d.repo == "r0" || d.repo == "r1")
+        .cloned()
+        .collect();
+    assert!(!ruminate::CharStats::from_docs(few.iter()).generic("尚未"));
+}
+
+#[test]
+fn background_claim_is_exclusive_until_run_finishes() {
+    let w = world();
+    assert!(ruminate::claim_background(&w.sp));
+    assert!(!ruminate::claim_background(&w.sp)); // 另一個開場：別人正在跑
+    ruminate::run(&w.sp, None, None).unwrap();
+    assert!(ruminate::claim_background(&w.sp)); // 跑完清掉標記
+}
+
+#[test]
+fn concurrent_runs_do_not_duplicate_links() {
+    let w = world();
+    std::fs::write(w.cards.join("索引重建.md"), CARD).unwrap();
+    // 兩個背景反芻同時從同一份舊狀態算：第二個寫入時要看到第一個已經寫了
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let hs: Vec<_> = (0..2)
+        .map(|_| {
+            let (sp, b) = (w.sp.clone(), barrier.clone());
+            std::thread::spawn(move || {
+                b.wait();
+                ruminate::run(&sp, None, None).unwrap();
+            })
+        })
+        .collect();
+    for h in hs {
+        h.join().unwrap();
+    }
+    assert_eq!(ruminate::fresh(&w.sp, "產品", false).unwrap().len(), 1);
+}
