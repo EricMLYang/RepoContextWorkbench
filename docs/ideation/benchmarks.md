@@ -64,6 +64,9 @@
 | supermemory〈How to Preserve Decisions an AI Agent Should Not Reopen〉 | 判斷留痕（論述） | — | 記選擇＋理由＋放棄的選項＋什麼情況值得重看；逐字稿不是決策紀錄 | — → F-07 驗證方向對 | 參考 | 🔗 | 2026-10-10 | R08 查詢 1 | [blog](https://supermemory.ai/blog/agent-decision-records/) |
 | Tiago Forte：Progressive Summarization／just-in-time | 知識庫（方法論） | 筆記 | 不一次加工到底；專案需要時才加工到最後一層「混進自己的產出」 | — → F-26 | 參考 | 🔗 | 2026-10-10 | R10 查詢 | [fortelabs](https://fortelabs.com/blog/progressive-summarization-vi-core-principles-of-knowledge-capture/) |
 | 子 agent 任務包模板（MetaClaw／Brief-and-Drill／compact-handoff） | 流程（交辦） | — | Goal／Context（最少必要）／Constraints（不要做什麼、何時停）／Inputs／Done when；「為接收者寫，不是為發送者」 | 都是手寫模板 → F-42 由引擎自動組 | 參考 | 🔗 | 2026-10-10 | R11 查詢 | [MetaClaw](https://openskillindex.com/skills/aiming-lab-metaclaw-agent-task-handoff)、[brief-and-drill](https://claudskills.com/skills/brief-and-drill/SKILL.md) |
+| Nx Polygraph（synthetic monorepo） | 跨 repo 脈絡 | 多 repo 接成一張相依圖 | 不搬 code 就有 monorepo 的讀／寫／記憶；跨 repo 協調 PR | 程式碼相依為主 → 驗證方向 | 參考 | 🔗 | 2026-10-10 | R14 查詢 1（mra 延伸） | [monorepo.tools](https://monorepo.tools/synthetic-monorepos) |
+| Emdash | 平行執行台 | 多 agent 協調 | — | **agent 之間不共享脈絡**（跟一個 agent 說的限制，其他不知道）＝本工具補的那塊 | 觀察 | 🔗 | 2026-10-10 | R14 查詢 1 | [augmentcode](https://www.augmentcode.com/tools/best-warp-alternatives) |
+| Claude Code Plugins（官方） | 技能包 | skills＋hooks＋agents＋MCP 的發佈單位 | 官方把「tribal knowledge」交給 plugin；marketplace 數百個 | ctx setup 已有同等安裝 → F-16 延後 | 觀察 | 🔗 | 2026-10-10 | R14 查詢 2 | [指南](https://hidekazu-konishi.com/entry/claude_code_plugins_complete_guide.html) |
 | Claude Code auto memory | 平台 | `~/.claude/projects/<路徑>/memory/*.md` | 本機 md 記憶；匯出／匯入功能請求被關成不做 | 單一路徑、不跨 repo → F-44 可對接 | 觀察 | 🔗 | 2026-10-10 | R04 查詢 | [docs](https://code.claude.com/docs/en/memory)、[issue #67369](https://github.com/anthropics/claude-code/issues/67369) |
 
 ## 待查對標（下一輪處理）
@@ -118,10 +121,13 @@
 - R10：`PKM convert reading highlight into action task progressive summarization just-in-time`
 
 - R11：`task brief template for coding agent fresh context subagent handoff context package 2026`
+- R14：`multi-repo-agent alternatives polyrepo AI agent orchestration cross-repository context 2026`（extended）
+- R14：`Claude Code plugin bundle skills MCP hooks distribute team knowledge repository 2026`
+- R14：`"ask the expert" agent per repository answer questions with citations local codebase knowledge MCP 2026`
 
 ### 下一輪查詢
-1. `multi-repo-agent mra alternatives polyrepo AI agent orchestration`（R02 留下）
-2. `supermemory agent decision records`
-3. `MCP server latency caching long-running index Rust`（N-17）
-4. `Claude Code Projects local threads release`（盯平台本機版）
-5. `Adamic-Adar link prediction small graph explainable suggestions`（F-33 做完後要不要加共同鄰居）
+1. `Nx Polygraph synthetic monorepo agent memory`（延伸：看它的「記憶」怎麼跨 repo）
+2. `Claude Code Projects local threads release`（盯平台本機版）
+3. `Adamic-Adar link prediction small graph explainable suggestions`（F-33 加共同鄰居？）
+4. `desktop app performance budget file watcher recompute state large dataset`（N-12 之後）
+5. `AgDR export format tooling adoption`（F-40）

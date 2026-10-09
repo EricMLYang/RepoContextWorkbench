@@ -8,7 +8,7 @@
 
 | ID | 類別 | 構想 | 準則 | 對標／依據 | P | 狀態 | 首次 | 最後更新 |
 |---|---|---|---|---|---|---|---|---|
-| F-01 | 專家 | Repo 名片：宣告我是誰、懂什麼、怎麼問、不懂什麼；`ask_repo` 依名片自動選要問誰 | 脈絡、同介面 | DeepWiki 研究 agent | P1 | 候選 | R01 | R01 |
+| F-01 | 專家 | Repo 名片：宣告我是誰、懂什麼、怎麼問、不懂什麼；`ask_repo` 依名片自動選要問誰；R14：R14：search_knowledge 的 repo 排名已能當分派依據；名片的邊際價值低 | 脈絡、同介面 | DeepWiki 研究 agent | P1 | 延後 | R01 | R14 |
 | F-02 | 專家 | 常駐專家：每位專家有自己的記憶檔，記下被問過什麼、怎麼答的 | 脈絡、留痕 | Letta 記憶區塊 | P1 | 候選 | R01 | R01 |
 | F-03 | 專家 | 專家會議：一題丟給多個 repo 專家，附引用，人裁決後落成判例 | 留痕 | BMAD 多角色 | P2 | 構想 | R01 | R01 |
 | F-04 | 專家 | 專家可信度：用引用紀錄加結果統計誰常被採用、常被推翻 | 脈絡 | — | P2 | 構想 | R01 | R01 |
@@ -23,7 +23,7 @@
 | F-13 | 流程 | 交接把關：依流程定義檢查（沒測、沒更新 README 就提醒）；R02：可參考 Anthropic Outcomes 的評分 rubric | 留痕 | — | P2 | 構想 | R01 | R02 |
 | F-14 | 流程 | 規格驅動模板：spec→plan→tasks 落成 spine 事件 | 留痕 | spec-kit、BMAD | P2 | 構想 | R01 | R01 |
 | F-15 | 流程 | 從重複操作序列建議出 playbook | 脈絡 | — | P2 | 構想 | R01 | R01 |
-| F-16 | 技能包 | 把組的 export 自動打包成 Claude Code plugin（skills＋MCP＋hooks） | 同介面 | plugin marketplace | P1 | 候選 | R01 | R01 |
+| F-16 | 技能包 | 把組的 export 自動打包成 Claude Code plugin（skills＋MCP＋hooks）；R14：R14：Anthropic 已把 tribal knowledge 交給 plugin；但 ctx setup 已一次裝好 MCP＋hooks＋skill，單一使用者邊際價值低 | 同介面 | plugin marketplace | P1 | 延後 | R01 | R14 |
 | F-17 | 技能包 | 跨 repo 技能目錄：偵測重複與過時 | 脈絡 | — | P2 | 構想 | R01 | R01 |
 | F-18 | 技能包 | 同類 decision 累積到 N 筆 → 建議寫成 skill（把品味固化） | 留痕 | — | P2 | 構想 | R01 | R01 |
 | F-19 | 任務圖 | todo 加相依關係（blocks／related／parent），可跨 repo，next_work 照相依排；R02：Tasks 管執行、Beads 管捕捉；ctx 的 todo 屬於捕捉層。抄「只浮出沒被擋的工作」；Beads 改用 Dolt 後出現穩定性問題，所以維持 md 格式；R13：R13：每組未結約 10 項、相依很少，延後 | 脈絡 | Beads | P1 | 候選 | R01 | R13 |
@@ -68,7 +68,7 @@
 | N-09 | 前端體驗 | ⌘K 指令面板、慢動作顯示秒數並可取消、無障礙稽核（#12） | — | 同介面 | P1 | 構想 | R01 | R01 |
 | N-10 | 可攜 | Windows／VDI：ConPTY、補 PATH、路徑大小寫、多使用者 token 隔離 | AGENTS.md 要求註明 Windows 有沒有測，目前全空白（#12） | 同介面 | P2 | 構想 | R01 | R01 |
 | N-11 | 隱私安全 | ask_repo 唯讀沙盒確認；spine 推送前先過洩密哨兵；R02：dev.to 提出用 symlink＋chmod 做「核心層強制」的唯讀，見 N-15 | — | — | P2 | 構想 | R01 | R02 |
-| N-12 | 規模 | 合成 100 repo／1 萬筆事件，測 context 與 search 的上限 | 目前 spine 事件 8 份、.state 71MB | 脈絡 | P2 | 構想 | R01 | R01 |
+| N-12 | 規模 | 合成 100 repo／1 萬筆事件，測 context 與 search 的上限；R14：12 個迭代在 build_state（App 每次檔案變動都重算）與開場 hook 加了取代／重看／新料／體檢；用合成 1 萬筆事件、多組多 repo 的 spine 量，定預算並修熱點 | 目前 spine 事件 8 份、.state 71MB | 脈絡 | P2 | 排入（迭代 13） | R01 | R14 |
 | N-13 | 可維護 | 合併後刪 Python 版與 `pyjson.rs`／`pystr.rs` 相容層；資料格式加 `schema_version`；MCP 輸出 JSON Schema＋合約測試 | — | 同介面 | P2 | 構想 | R01 | R01 |
 | N-14 | 資料安全 | hook 收到沒有 session_id 的輸入時要拒絕或提供 `--dry-run`；不然量測或誤觸會在 spine 留下假會話（被記成未交接）；**開發 2026-10-09**：沒 session_id 照樣注入、不記 marker；量測不再留下假會話 | R02 量測時 `ctx hook session-start </dev/null` 產生 `hook_sessions/unknown.json` | 留痕 | P1 | 完成 | R02 | R02 |
 | N-15 | 隱私安全 | 寫入範圍改由檔案系統強制：ask_repo 或跨組讀取走唯讀 view 目錄（symlink＋chmod），不靠 prompt 也不只靠工具層 | `cross_scope` 只擋 MCP／CLI，agent 用 shell 還是寫得進去 | 同介面 | P2 | 構想 | R02 | R02 |
