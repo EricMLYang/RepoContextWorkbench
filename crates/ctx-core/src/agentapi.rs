@@ -1004,16 +1004,16 @@ pub fn reopen_snoozes(spine_dir: &Path) -> Map<String, Value> {
 
 /// 把一筆「該重看」延後 `days` 天（人看過、決定先維持）。回傳延到哪天。
 pub fn snooze_reopen(spine_dir: &Path, reference: &str, days: i64) -> Result<String> {
-    let mut m = reopen_snoozes(spine_dir);
     let until = (Local::now() + chrono::Duration::days(days.max(1)))
         .format("%Y-%m-%d")
         .to_string();
-    m.insert(reference.to_string(), json!(until));
-    let p = reopen_snooze_path(spine_dir);
-    if let Some(parent) = p.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(&p, serde_json::to_string(&m)?)?;
+    crate::locking::update_json_locked(
+        spine_dir,
+        &reopen_snooze_path(spine_dir),
+        |m: &mut Map<String, Value>| {
+            m.insert(reference.to_string(), json!(until));
+        },
+    )?;
     Ok(until)
 }
 
@@ -1734,25 +1734,25 @@ fn review_cache_path(spine_dir: &Path) -> PathBuf {
 /// 把這次體檢的結果併進 `.state/review.json`（`{"items": {"#N": {verdict, why, evidence, at}}}`）。
 /// 範圍外的項目保留上次的結果（別的組開場時會更新）。
 fn save_review_cache(spine_dir: &Path, items: &[Value], now: &chrono::NaiveDateTime) -> Result<()> {
-    let p = review_cache_path(spine_dir);
-    let mut cache = load_review_cache(spine_dir);
     let at = now.format("%Y-%m-%d %H:%M").to_string();
-    for it in items {
-        if let Some(id) = it["id"].as_str().filter(|x| !x.is_empty()) {
-            cache.insert(
-                id.to_string(),
-                json!({"verdict": it["verdict"], "why": it["why"],
-                       "evidence": it["evidence"], "at": at}),
-            );
+    crate::locking::update_json_locked(spine_dir, &review_cache_path(spine_dir), |v: &mut Value| {
+        if !v.is_object() {
+            *v = json!({"items": {}});
         }
-    }
-    if let Some(parent) = p.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let tmp = p.with_extension(format!("json.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, crate::pyjson::dumps(&json!({"items": cache})))?;
-    std::fs::rename(&tmp, &p)?;
-    Ok(())
+        if !v["items"].is_object() {
+            v["items"] = json!({});
+        }
+        let cache = v["items"].as_object_mut().expect("上面確保是物件");
+        for it in items {
+            if let Some(id) = it["id"].as_str().filter(|x| !x.is_empty()) {
+                cache.insert(
+                    id.to_string(),
+                    json!({"verdict": it["verdict"], "why": it["why"],
+                               "evidence": it["evidence"], "at": at}),
+                );
+            }
+        }
+    })
 }
 
 /// `.state/review.json` 的 items（讀不到或壞掉＝空）。

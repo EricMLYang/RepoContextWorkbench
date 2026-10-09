@@ -108,6 +108,33 @@ pub fn with_spine_lock<T>(spine_dir: &Path, f: impl FnOnce() -> Result<T>) -> Re
     f()
 }
 
+/// Rust 才有（N-05）：`.state` 底下 JSON 檔的讀→改→寫，持 `<spine>/.engine.lock`，寫入用暫存檔改名。
+/// 好幾支 `ctx mcp`、桌面 App、timer、hook 會同時寫同一個 spine：沒鎖的讀改寫會互相蓋掉（丟掉人按下的選擇），
+/// 直接寫檔被讀到一半會壞。檔不存在或壞掉＝從 `T::default()` 開始。鎖不可重入：呼叫端不能已經持鎖。
+pub fn update_json_locked<T, R>(
+    spine_dir: &Path,
+    path: &Path,
+    f: impl FnOnce(&mut T) -> R,
+) -> Result<R>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + Default,
+{
+    with_spine_lock(spine_dir, || {
+        let mut v: T = std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        let r = f(&mut v);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let tmp = path.with_extension(format!("tmp{}", std::process::id()));
+        std::fs::write(&tmp, serde_json::to_string(&v)?)?;
+        std::fs::rename(&tmp, path)?;
+        Ok(r)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

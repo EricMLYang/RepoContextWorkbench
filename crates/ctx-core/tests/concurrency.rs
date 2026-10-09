@@ -140,3 +140,24 @@ fn test_registry_transaction_rolls_back_on_error() {
     assert!(r.is_err());
     assert_eq!(registry::load(&d).unwrap().repos.len(), 2);
 }
+
+// Rust 才有（N-05）：人按下的「延後」「不相關」在多個行程同時寫時一筆都不能丟
+#[test]
+fn concurrent_snooze_and_dismiss_keep_every_choice() {
+    let (_t, d) = ctx_core::testkit::spine();
+    let hs: Vec<_> = (0..20)
+        .map(|i| {
+            let d = d.clone();
+            std::thread::spawn(move || {
+                ctx_core::agentapi::snooze_reopen(&d, &format!("decision:2026-01-01-d{i}"), 14)
+                    .unwrap();
+                ctx_core::relsuggest::dismiss(&d, &format!("a{i}"), "b").unwrap();
+            })
+        })
+        .collect();
+    for h in hs {
+        h.join().unwrap();
+    }
+    assert_eq!(ctx_core::agentapi::reopen_snoozes(&d).len(), 20);
+    assert_eq!(ctx_core::relsuggest::dismissed(&d).len(), 20);
+}

@@ -99,17 +99,17 @@ pub fn dismissed(spine_dir: &Path) -> HashSet<(String, String)> {
 
 /// 打掉一筆建議：記住，之後算建議時不再出現（ctx 與 App 共用）。
 pub fn dismiss(spine_dir: &Path, x: &str, y: &str) -> Result<()> {
-    let mut all: Vec<(String, String)> = dismissed(spine_dir).into_iter().collect();
     let p = pair(x, y);
-    if !all.contains(&p) {
-        all.push(p);
-    }
-    all.sort();
-    if let Some(parent) = dismissed_path(spine_dir).parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(dismissed_path(spine_dir), serde_json::to_string(&all)?)?;
-    Ok(())
+    crate::locking::update_json_locked(
+        spine_dir,
+        &dismissed_path(spine_dir),
+        |all: &mut Vec<(String, String)>| {
+            if !all.contains(&p) {
+                all.push(p);
+            }
+            all.sort();
+        },
+    )
 }
 
 /// 讀上次算好的建議（沒有或壞掉＝空），去掉之後被打掉的。已經設了關係的由呼叫端濾（它手上有 registry）。

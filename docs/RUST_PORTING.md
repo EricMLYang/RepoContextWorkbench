@@ -93,6 +93,9 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
 - **timer.run_loop 睡到下一個排程點**（最多 300 秒重看一次 config），不是固定每 30 秒 tick，閒置不吃 CPU；
   可由 channel 停止。
 - **term kill 先送 SIGHUP＋SIGTERM**（給 shell／agent 收尾的機會），逾時才 SIGKILL。
+- **`.state` JSON 讀改寫持鎖**（2026-10-10，ideation N-05）：`locking::update_json_locked`（持 `.engine.lock`、
+  暫存檔改名）。用在 `reopen_snooze.json`、`relation_suggest_dismissed.json`、`review.json`——舊寫法 20 條執行緒
+  同時延後只留下 1 筆。
 - **SessionEnd hook 補一次 spine 批次 commit**（2026-10-09，ideation N-01）：timer 住在桌面 App 裡，App 沒開時
   21:00 的排程 commit 不會跑。`spine::autocommit`：spine 已有 git 歷史、有變更、上次 commit 超過
   `thresholds.spine_autocommit_hours`（預設 6；0＝關）才 commit；分支有 upstream 就背景 `git push`。
