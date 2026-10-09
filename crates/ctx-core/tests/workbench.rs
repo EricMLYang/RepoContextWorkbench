@@ -1373,3 +1373,53 @@ fn retro_cards_and_defer() {
     .unwrap();
     assert!(cards_of(&st(&d), "retro").is_empty());
 }
+
+// Rust 才有（F-45）：延期間隔遞增 7 → 14 → 30，延 3 次以上提醒
+#[test]
+fn loop_defer_escalates() {
+    let (_t, d) = spine_with_repos();
+    ev(
+        &d,
+        "open-loop",
+        "agent",
+        &["#1", "group:g1"],
+        "opened → 補測試",
+        ago(60),
+    );
+    let defer_of = |s: &Value| {
+        let c = cards_of(s, "loop")
+            .into_iter()
+            .find(|c| c["num"] == "#1")
+            .unwrap()
+            .clone();
+        let a = c["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["action"] == "loop_defer")
+            .unwrap()
+            .clone();
+        (
+            a["label"].as_str().unwrap().to_string(),
+            a["payload"]["days"].as_i64().unwrap(),
+            c,
+        )
+    };
+    assert_eq!(defer_of(&st(&d)).0, "延 7 天"); // 第一次同 Python
+    for (label, days) in [
+        ("之後再說（14 天）", 14),
+        ("之後再說（30 天）", 30),
+        ("之後再說（30 天）", 30),
+    ] {
+        let (_, cur, _) = defer_of(&st(&d));
+        act(&d, "loop_defer", json!({"num": "#1", "days": cur})).unwrap();
+        let (l, n, _) = defer_of(&st(&d));
+        assert_eq!((l.as_str(), n), (label, days));
+    }
+    let (_, _, card) = defer_of(&st(&d));
+    assert!(card["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|l| l.as_str().unwrap().contains("已延 3 次")));
+}

@@ -849,6 +849,46 @@ fn rel_kinds_json(kinds: &registry::RelationKinds) -> Value {
     Value::Object(m)
 }
 
+/// Rust 才有（F-45）：延期間隔依已延次數遞增（7 → 14 → 30 天；第一次同 Python 的 7 天）。
+/// 次數＝spine 裡這一項「延期 N 天」的事件數，不另存狀態。延 3 次以上卡上提醒「還要做嗎」。
+/// 參考 Matuschak：「之後再說」取代刪除，間隔遞增再出現，清收件匣就沒壓力。
+pub const DEFER_STEPS: [i64; 3] = [7, 14, 30];
+
+fn escalate_defer(cards: &mut [Value], events: &[Event]) {
+    let mut times: HashMap<&str, usize> = HashMap::new();
+    for ev in events.iter().filter(|e| e.etype == EventType::OpenLoop) {
+        if ev.body.contains("\n延期 ") {
+            if let Some(n) = ev.num() {
+                *times.entry(n).or_default() += 1;
+            }
+        }
+    }
+    for c in cards.iter_mut().filter(|c| c["kind"] == "loop") {
+        let n = c["num"]
+            .as_str()
+            .and_then(|x| times.get(x))
+            .copied()
+            .unwrap_or(0);
+        if n == 0 {
+            continue;
+        }
+        let days = DEFER_STEPS[n.min(DEFER_STEPS.len() - 1)];
+        if let Some(acts) = c["actions"].as_array_mut() {
+            for a in acts.iter_mut().filter(|a| a["action"] == "loop_defer") {
+                a["label"] = json!(format!("之後再說（{days} 天）"));
+                a["payload"]["days"] = json!(days);
+            }
+        }
+        if n >= DEFER_STEPS.len() {
+            if let Some(lines) = c["lines"].as_array_mut() {
+                lines.push(json!(format!(
+                    "已延 {n} 次——還要做嗎？不做就關掉，要做就排進下一步"
+                )));
+            }
+        }
+    }
+}
+
 /// Rust 才有（F-42）：未結卡多一個「用任務包開會話」（前端先叫 `todo_brief` 拿 markdown，再開會話）。
 fn add_brief_action(cards: &mut [Value]) {
     for c in cards.iter_mut().filter(|c| c["kind"] == "loop") {
@@ -1116,6 +1156,7 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
     let mut cards = build_cards(&events, &p, &loops, &scopes);
     attach_review(&mut cards, &crate::agentapi::load_review_cache(spine_dir));
     add_brief_action(&mut cards);
+    escalate_defer(&mut cards, &events);
     cards.extend(reopen_cards(spine_dir, &events, &scopes));
     cards.extend(retro_cards(spine_dir, &events, &scopes));
     cards.extend(fresh_cards(spine_dir, &data)?);

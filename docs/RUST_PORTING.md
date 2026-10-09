@@ -162,6 +162,8 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
 - **健康指標 `ctx health [--days 14]`**（2026-10-10，ideation F-36／N-07；Python 沒有，新模組 `health`）：交接率、
   推薦命中率、判斷結果記錄率、未結開／關／逾期、工具用量。MCP 每次工具呼叫記一行到 `.state/metrics.jsonl`
   （工具、毫秒、成功與否；寫不進去不影響工具）。對拍時這個檔列為允許差異。
+- **遞增延後**（2026-10-10，ideation F-45）：App 未結卡的延期依已延次數 7 → 14 → 30 天（次數＝spine 裡「延期 N 天」
+  事件數；第一次同 Python 的「延 7 天」，之後標成「之後再說（N 天）」），延 3 次以上卡上提醒「還要做嗎」。
 
 CLI／MCP（ctx-cli）：
 
