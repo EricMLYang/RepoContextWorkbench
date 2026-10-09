@@ -26,3 +26,4 @@
 | 量測時留下的假會話檔 | 0 | — | **2**（已手動刪除，見 N-14） | 0 ✅ | 0 | — | 0 |
 | 沒結束的會話 marker（hook_sessions） | 0 | — | — | **6**（最舊 10-05；會話沒走 SessionEnd 就留下） | 6 | — | 6 |
 | `ctx todo review`／`registry suggest` | < 500ms／背景 | — | — | — | — | — | 50ms／2.4s（suggest 在反芻背景跑） |
+| 規模（合成 1 萬筆事件，`scripts/perf_spine.py`）：開場 hook／build_state／todo review | < 500／300／300ms | — | — | — | — | — | 迭代 13：0.60s→0.33s／145ms／0.41s→0.13s |

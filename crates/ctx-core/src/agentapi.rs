@@ -1366,45 +1366,68 @@ struct Cand {
 /// 「開場注入」四個字三個 bigram 都在證據裡＝一個片段「開場注入」；英數字詞各算一個。
 /// 比例＝蓋住的中文字數＋命中的英數字詞數，除以未結事項的中文字數＋英數字詞數。
 fn coverage(text: &str, terms: &HashSet<String>) -> (Vec<String>, f64) {
-    let low = text.to_lowercase();
-    let mut pieces: Vec<String> = Vec::new();
-    let (mut hit, mut total) = (0usize, 0usize);
-    for w in knowledge::tokenize(&CJK_RUN.replace_all(&low, " ")) {
-        if !ruminate::meaningful(&w) || w.chars().count() < 2 {
-            continue;
-        }
-        total += 1;
-        if terms.contains(&w) {
-            hit += 1;
-            pieces.push(w);
-        }
+    CoverText::new(text).cover(terms)
+}
+
+/// 未結事項文字斷好的樣子（英數字詞＋各中文段的 bigram），同一項對很多證據比時只斷一次（N-12）。
+struct CoverText {
+    words: Vec<String>,
+    /// 每個中文段：(字, 各位置的 bigram)
+    segs: Vec<(Vec<char>, Vec<String>)>,
+}
+
+impl CoverText {
+    fn new(text: &str) -> Self {
+        let low = text.to_lowercase();
+        let words = knowledge::tokenize(&CJK_RUN.replace_all(&low, " "))
+            .into_iter()
+            .filter(|w| ruminate::meaningful(w) && w.chars().count() >= 2)
+            .collect();
+        let segs = CJK_RUN
+            .find_iter(&low)
+            .map(|seg| {
+                let cs: Vec<char> = seg.as_str().chars().collect();
+                let bigrams = cs.windows(2).map(|w| w.iter().collect()).collect();
+                (cs, bigrams)
+            })
+            .collect();
+        CoverText { words, segs }
     }
-    for seg in CJK_RUN.find_iter(&low) {
-        let cs: Vec<char> = seg.as_str().chars().collect();
-        total += cs.len();
-        let mut i = 0;
-        while i + 1 < cs.len() {
-            let bigram = |k: usize| cs[k..k + 2].iter().collect::<String>();
-            if !terms.contains(&bigram(i)) {
-                i += 1;
-                continue;
+
+    fn cover(&self, terms: &HashSet<String>) -> (Vec<String>, f64) {
+        let mut pieces: Vec<String> = Vec::new();
+        let (mut hit, mut total) = (0usize, self.words.len());
+        for w in &self.words {
+            if terms.contains(w) {
+                hit += 1;
+                pieces.push(w.clone());
             }
-            let start = i;
-            while i + 1 < cs.len() && terms.contains(&bigram(i)) {
-                i += 1;
-            }
-            // cs[start..=i] 都被蓋住（i 停在第一個沒命中的 bigram 起點）
-            let piece: String = cs[start..=i].iter().collect();
-            hit += piece.chars().count();
-            pieces.push(piece);
         }
+        for (cs, bigrams) in &self.segs {
+            total += cs.len();
+            let mut i = 0;
+            while i < bigrams.len() {
+                if !terms.contains(&bigrams[i]) {
+                    i += 1;
+                    continue;
+                }
+                let start = i;
+                while i < bigrams.len() && terms.contains(&bigrams[i]) {
+                    i += 1;
+                }
+                // bigram start..i 都命中＝字 start..=i 被蓋住
+                let piece: String = cs[start..=i].iter().collect();
+                hit += piece.chars().count();
+                pieces.push(piece);
+            }
+        }
+        let ratio = if total == 0 {
+            0.0
+        } else {
+            hit as f64 / total as f64
+        };
+        (pieces, ratio)
     }
-    let ratio = if total == 0 {
-        0.0
-    } else {
-        hit as f64 / total as f64
-    };
-    (pieces, ratio)
 }
 
 /// 有沒有提到 `#N`（後面不能再接數字：`#1` 不算提到 `#12`）。
@@ -1492,6 +1515,28 @@ pub fn review_todos_at(
             }
         }
     }
+    // N-12：判斷／結果事件先斷詞一次（舊版每一項未結都把之後的事件重斷一次＝未結數 × 事件數）
+    let ev_pre: Vec<(&Event, Cand)> = events
+        .iter()
+        .filter(|ev| matches!(ev.etype, EventType::Decision | EventType::Outcome))
+        .map(|ev| {
+            let body = evidence_text(ev);
+            let c = Cand {
+                kind: if is_handoff(ev) { "handoff" } else { "event" },
+                reference: format!(
+                    "{}:{}",
+                    ev.etype.as_str(),
+                    ev.kv("id")
+                        .map(str::to_string)
+                        .unwrap_or_else(|| ev.stamp())
+                ),
+                at: ev.stamp(),
+                text: crate::pystr::take_chars(&body, 160).to_string(),
+                terms: knowledge::tokenize(&body).into_iter().collect(),
+            };
+            (ev, c)
+        })
+        .collect();
     let mut items: Vec<Value> = Vec::new();
     let (mut n_done, mut n_stale) = (0usize, 0usize);
     for lp in &loops {
@@ -1512,33 +1557,17 @@ pub fn review_todos_at(
             .filter(|ev| ev.stamp() > opened && mentioned(ev))
             .map(|ev| ev.stamp())
             .max();
-        let ev_cands: Vec<Cand> = later
+        let ev_cands = ev_pre
             .iter()
-            .filter(|ev| matches!(ev.etype, EventType::Decision | EventType::Outcome))
-            .filter(|ev| !mentioned(ev))
-            .map(|ev| {
-                let body = evidence_text(ev);
-                Cand {
-                    kind: if is_handoff(ev) { "handoff" } else { "event" },
-                    reference: format!(
-                        "{}:{}",
-                        ev.etype.as_str(),
-                        ev.kv("id")
-                            .map(str::to_string)
-                            .unwrap_or_else(|| ev.stamp())
-                    ),
-                    at: ev.stamp(),
-                    text: crate::pystr::take_chars(&body, 160).to_string(),
-                    terms: knowledge::tokenize(&body).into_iter().collect(),
-                }
-            })
-            .collect();
+            .filter(|(ev, c)| c.at >= opened && ev.num() != Some(num.as_str()) && !mentioned(ev))
+            .map(|(_, c)| c);
+        let cover_text = CoverText::new(&text);
         let mut scored: Vec<(f64, &Cand, Vec<String>)> = commits
             .iter()
             .filter(|c| c.at >= opened && !mentions(&c.text, &num))
-            .chain(ev_cands.iter())
+            .chain(ev_cands)
             .map(|c| {
-                let (pieces, ratio) = coverage(&text, &c.terms);
+                let (pieces, ratio) = cover_text.cover(&c.terms);
                 (ratio, c, pieces)
             })
             .filter(|(r, _, _)| *r >= REVIEW_EVIDENCE_COVER)
