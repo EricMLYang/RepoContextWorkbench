@@ -55,7 +55,7 @@
 | **shadowgraph（LiLara-AI）** | 判斷留痕（**直接同類**） | `.shadowgraph/data.json`（或 SQLite）的決策圖 | 選了／放棄了什麼與理由、**reopenWhen**（何時重看）＋`review()` 對事實比對、outcome 回饋信心、來源分級（agent 自稱／人確認／正式環境驗證）；MCP＋CLI＋本機 HTTP | 單一專案、Node、3 星；不是 md／git 可讀 → F-07、F-23 | 標竿 | ✅ | 2026-10-10 | R04 查詢（decision log MCP） | [GitHub](https://github.com/LiLara-AI/shadowgraph) |
 | linklore-mcp | 判斷留痕 | 專案記憶 MCP | 記決策、踩坑、規格，下次開場帶回 | — | 觀察 | 🔗 | 2026-10-10 | R04 查詢 | [enterprisedna](https://enterprisedna.co/directories/mcp/linklore-linklore-mcp) |
 | DEG（Decision-Evidence Graph，`degraph`） | 判斷留痕 | 跨會話的決策記憶 | 為什麼、放棄了什麼、何時重看＋完整出處 | Python 套件 → F-07 | 觀察 | 🔗 | 2026-10-10 | R05 延伸（shadowgraph alternatives） | [PyPI](https://pypi.org/project/degraph/) |
-| Andy Matuschak〈Spaced repetition … inbox-maintenance〉 | 入口（UX 論述） | 收件匣整理 | 把「刪掉」改成「之後再說」，間隔遞增再出現，降低清理的壓力 | — → F-45 | 參考 | 🔗 | 2026-10-10 | R05 查詢 2 | [notes](https://notes.andymatuschak.org/zJ5Yzvba2729XKXivBBZ91J) |
+| Andy Matuschak〈Spaced repetition … inbox-maintenance〉 | 入口（UX 論述） | 收件匣整理 | 把「刪掉」改成「之後再說」，間隔遞增再出現（一天→幾天→幾週），夠久就淡出；可復原所以不焦慮 | — → F-45 | 參考 | ✅ | 2026-10-10（R19 讀原文） | R05 查詢 2 | [notes](https://notes.andymatuschak.org/zJ5Yzvba2729XKXivBBZ91J) |
 | Qodo cross-repo review | 跨 repo 連動 | 自動發現 repo 間關係＋跨 repo 審 PR | 從技術訊號自動推關係，也可手動定義 | 商業、程式碼為主 → F-33 | 參考 | 🔗 | 2026-10-10 | R06 查詢 1 | [docs](https://docs.qodo.ai/governance/cross-repo-code-review) |
 | co-change mining（Kagdi 等） | 跨 repo 連動（研究） | 版本歷史 | 一起被 commit 的檔／repo＝隱性關係，靜態分析看不到 | — → F-33 | 參考 | 🔗 | 2026-10-10 | R06 查詢 1 | [Kagdi07](https://www.cs.kent.edu/~jmaletic/cs63902/Papers/Kagdi07.pdf) |
 | Obsidian 未連結提及／Atomic Insights（Adamic-Adar） | 知識庫連結建議 | 筆記庫 | 「提到了卻沒連」一鍵建連結；共同鄰居（Adamic-Adar）推薦 | 單一 vault → F-33 | 參考 | 🔗 | 2026-10-10 | R06 查詢 2 | [Atomic Insights](https://community.obsidian.md/plugins/atomic-insights) |
@@ -124,6 +124,8 @@
 - R14：`multi-repo-agent alternatives polyrepo AI agent orchestration cross-repository context 2026`（extended）
 - R14：`Claude Code plugin bundle skills MCP hooks distribute team knowledge repository 2026`
 - R14：`"ask the expert" agent per repository answer questions with citations local codebase knowledge MCP 2026`
+
+- R19：讀 Matuschak 原文（WebFetch）
 
 ### 下一輪查詢
 1. `Nx Polygraph synthetic monorepo agent memory`（延伸：看它的「記憶」怎麼跨 repo）
