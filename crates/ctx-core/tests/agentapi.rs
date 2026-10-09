@@ -1009,3 +1009,55 @@ fn hints_shared_between_hook_and_context_for() {
     assert!(!text.contains("回填自")); // 回填尾巴開場不印
     assert!(text.contains("log_decision 帶 supersedes"));
 }
+
+// Rust 才有（F-40）：判斷匯出成 AgDR md
+#[test]
+fn export_agdr_marks_superseded_and_outcomes_idempotently() {
+    let w = two_groups();
+    let old = log_ext(&w, "快取用 LRU", None, Some("熱點分散時")).unwrap()["ref"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let new = log_ext(&w, "快取改用 LFU", Some(&old), None).unwrap()["ref"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    api::log_decision_ext(
+        &w.sp,
+        "上線後命中率 92%",
+        &at(&w.impl_),
+        None,
+        &api::DecisionExtra {
+            outcome_of: Some(new.clone()),
+            ..Default::default()
+        },
+        false,
+        "agent",
+    )
+    .unwrap();
+    api::handoff::<&str>(
+        &w.sp,
+        "做完快取",
+        "壓測",
+        &[],
+        &at(&w.impl_),
+        false,
+        "agent",
+    )
+    .unwrap();
+    let out = w._t.path().join("agdr");
+    let r = api::export_agdr(&w.sp, &at(&w.impl_), &out).unwrap();
+    assert_eq!(r["written"].as_array().unwrap().len(), 2); // 交接不匯出
+    let id_of = |x: &str| x.trim_start_matches("decision:").to_string();
+    let old_md = std::fs::read_to_string(out.join(format!("AgDR-{}.md", id_of(&old)))).unwrap();
+    assert!(
+        old_md.contains("status: superseded") && old_md.contains(&format!("superseded_by: {new}"))
+    );
+    assert!(old_md.contains("## 何時重看\n熱點分散時"));
+    let new_md = std::fs::read_to_string(out.join(format!("AgDR-{}.md", id_of(&new)))).unwrap();
+    assert!(
+        new_md.contains(&format!("supersedes: [{old}]")) && new_md.contains("上線後命中率 92%")
+    );
+    let again = api::export_agdr(&w.sp, &at(&w.impl_), &out).unwrap();
+    assert!(again["written"].as_array().unwrap().is_empty() && again["unchanged"] == 2);
+}

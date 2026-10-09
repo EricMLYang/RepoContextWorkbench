@@ -167,6 +167,9 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
 - **agent 看的 skill 多一段**（2026-10-10，ideation N-23）：`assets/SKILL.md` 加「判斷的沿革、回顧與交辦（Rust 版）」
   ——提醒段、supersedes／reopen_when／outcome_of、判斷搜尋、todo review／brief、registry suggest、fresh --try。
   對拍 `ctx instructions` 時拿掉這段再比。`ctx todo` 說明補 review／brief。
+- **判斷匯出成 AgDR `ctx decisions export <dir>`**（2026-10-10，ideation F-40；Python 沒有）：範圍內人／agent／回填寫的、
+  有 id、不是交接的判斷寫成 `<dir>/AgDR-<id>.md`（frontmatter：id、timestamp、agent、status executed／superseded、
+  supersedes、superseded_by、group／repo；內文：判斷、何時重看、結果）。沒變的檔不重寫；只寫指定目錄。
 
 CLI／MCP（ctx-cli）：
 

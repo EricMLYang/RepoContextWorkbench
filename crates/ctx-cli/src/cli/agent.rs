@@ -1313,3 +1313,37 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
     });
     Ok(())
 }
+
+#[derive(clap::Subcommand, Debug)]
+pub enum DecisionsCmd {
+    /// 寫成 AgDR md：<dir>/AgDR-<id>.md（被取代的標 superseded；帶何時重看與結果；沒變的不重寫）
+    Export {
+        /// 輸出目錄（例：docs/agdr）
+        dir: String,
+        #[command(flatten)]
+        scope: Scoped,
+    },
+}
+
+/// 判斷匯出（Rust 才有，F-40）。
+pub fn cmd_decisions(ctx: &Ctx, cmd: &DecisionsCmd) -> CmdResult {
+    match cmd {
+        DecisionsCmd::Export { dir, scope } => {
+            let t = scope.target();
+            let dir = PathBuf::from(dir);
+            agent_call(
+                ctx,
+                |d| agentapi::export_agdr(d, &t, &dir),
+                |r| {
+                    format!(
+                        "匯出到 {}：寫了 {} 份、沒變 {} 份（範圍 {}）",
+                        s(r, "dir"),
+                        arr(r, "written").len(),
+                        s(r, "unchanged"),
+                        s(&r["scope"], "label")
+                    )
+                },
+            )
+        }
+    }
+}

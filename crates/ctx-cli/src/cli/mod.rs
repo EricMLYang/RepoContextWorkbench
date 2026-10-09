@@ -132,6 +132,11 @@ pub enum Cmd {
     Search(agent::SearchArgs),
     /// 反芻推薦：別組新進的知識／判斷中，跟主場手上工作強相關的
     Fresh(agent::FreshArgs),
+    /// 判斷匯出：寫成 AgDR 格式的 md 到指定目錄（不掛 MCP 的 agent 也讀得到；Rust 才有）
+    Decisions {
+        #[command(subcommand)]
+        cmd: agent::DecisionsCmd,
+    },
     /// 健康指標：交接率、推薦命中率、判斷結果記錄率、未結、工具用量（Rust 才有）
     Health {
         /// 看近幾天
@@ -200,6 +205,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Search(a) => agent::cmd_search(ctx, a),
         Fresh(a) => agent::cmd_fresh(ctx, a),
         Health { days } => agent::cmd_health(ctx, *days),
+        Decisions { cmd } => agent::cmd_decisions(ctx, cmd),
         Backfill(a) => agent::cmd_backfill(ctx, a),
         Resolve { reference } => agent::cmd_resolve(ctx, reference),
         Read(a) => agent::cmd_read(ctx, a),

@@ -47,7 +47,7 @@
 | F-37 | 入口 | 選單列隨手捕捉一句想法或判斷，直接寫進 spine | 留痕、同介面 | — | P2 | 構想 | R01 | R01 |
 | F-38 | 入口 | 外部收件匣：ClickUp／Gmail connector 拉進或推出；R02：Paseo 做了跨裝置控制層，可參考 | 同介面 | — | P2 | 構想 | R01 | R02 |
 | F-39 | 入口 | Windows／VDI 入口 | 同介面 | — | P2 | 併入 N-10 | R01 | R01 |
-| F-40 | 判斷品味 | decision 可匯出成 AgDR 相容格式（Y 句型、考慮過的選項、agent／model 中繼資料），讓別的工具也讀得到；R22：Claude Code Projects 9/23 起可在本機跑 thread；不掛 ctx MCP 的 agent 也一定讀得到 repo 檔——`ctx decisions export --agdr <dir>` 把判斷（含取代、重看、結果）寫成 AgDR md，是最通用的介面 | 留痕、同介面 | AgDR | P2 | 排入（迭代 21） | R02 | R22 |
+| F-40 | 判斷品味 | decision 可匯出成 AgDR 相容格式（Y 句型、考慮過的選項、agent／model 中繼資料），讓別的工具也讀得到；R22：Claude Code Projects 9/23 起可在本機跑 thread；不掛 ctx MCP 的 agent 也一定讀得到 repo 檔——`ctx decisions export --agdr <dir>` 把判斷（含取代、重看、結果）寫成 AgDR md，是最通用的介面；**迭代 21 完成**：`ctx decisions export <dir>`；真資料副本工作台 12 份| 留痕、同介面 | AgDR | P2 | 完成 | R02 | R22 |
 | F-41 | 跨 repo | 跨 repo 分支：同一功能在多個 repo 開同名分支，依相依順序開 PR、等 CI 再合併 | 脈絡 | mra | P2 | 構想 | R02 | R02 |
 | F-42 | 流程 | 任務包：替每個 todo 產生一張乾淨的脈絡卡，交給全新 context 的 subagent（state 放在磁碟、不放在模型裡）；R11：`ctx todo brief #N`：目標／背景（組目標、相關判斷＋取代與重看、上次交接）／輸入（相關檔 ref）／限制（範圍、不能改的）／完成條件——全由引擎現有資料組；App 未結卡「用任務包開會話」；R12：迭代 10（125c227）：`ctx todo brief`＋App「用任務包開會話」；判斷蓋住 ≥20% 才放 | 脈絡 | GSD、Ralph loop | P1 | 完成 | R02 | R12 |
 | F-43 | 入口 | 手機或遠端檢視收件匣與會話狀態 | 同介面 | Paseo、Superset 遠端工作區 | P2 | 構想 | R02 | R02 |
