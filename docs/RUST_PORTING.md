@@ -110,6 +110,11 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   `CharStats::generic`——真資料「尚未」「交付」「等待」在 15 個 repo 裡出現在 14–15 個）；寫入前持鎖重看一次狀態、
   背景反芻先佔 `.state/ruminate.running`（並行開場曾寫出兩份一模一樣的推薦）；`fresh` 同一份料只列最新一筆。
 
+- **未結事項體檢 `ctx todo review`**（2026-10-10，ideation F-21；Python 沒有）：每項看 opened 之後範圍內的 commit 與
+  判斷／交接的「完成：」行，算證據蓋住事項文字的比例（中文用連續命中的片段，不數零散 bigram）；≥45%＝可能已處理，
+  逾期或開了 14 天以上、期間沒人提到 `#N` 也沒相關動靜＝擱置。提到 `#N` 的只算「有人提到」不算證據，開出這項的交接
+  （同一分鐘）也不算。只提議不自動關。SessionStart 注入在「未結」段尾多一行「體檢：…」（有可清的才出現）。
+
 CLI／MCP（ctx-cli）：
 
 - **`ctx ui` 不搬**：瀏覽器模式（本機 HTTP＋WebSocket）在 Rust 版沒有對應物；`ctx ui` 印一行

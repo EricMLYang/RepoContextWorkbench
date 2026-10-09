@@ -550,3 +550,109 @@ fn repo_status_defaults_to_cwd() {
     let e = api::repo_status(&w.sp, None, Some(w._t.path()), None).unwrap_err();
     assert_eq!(code_of(e).0, "bad_request");
 }
+
+// ---- Rust 才有（F-21）：未結事項體檢 ----
+
+fn review_item<'a>(v: &'a Value, id: &str) -> &'a Value {
+    v["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|it| it["id"] == id)
+        .unwrap()
+}
+
+#[test]
+fn review_finds_commit_that_covers_the_todo() {
+    let w = two_groups();
+    let id = todo(&w, "加上快取失效機制", &w.impl_)["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    std::fs::write(w.impl_.join("cache.rs"), "// 失效\n").unwrap();
+    git(&w.impl_, &["add", "-A"], &[]);
+    git(
+        &w.impl_,
+        &["commit", "-q", "-m", "加上快取失效機制：寫入時清掉舊值"],
+        &[],
+    );
+    let v = api::review_todos(&w.sp, &at(&w.impl_)).unwrap();
+    let it = review_item(&v, &id);
+    assert_eq!(it["verdict"], "maybe_done");
+    assert_eq!(it["evidence"][0]["kind"], "commit");
+    assert_eq!(v["counts"]["maybe_done"], 1);
+}
+
+#[test]
+fn review_does_not_count_the_handoff_that_opened_the_todo() {
+    let w = two_groups();
+    let r = api::handoff::<&str>(
+        &w.sp,
+        "整理 roadmap",
+        "排優先序",
+        &["補上匯出 CSV 功能"],
+        &at(&w.plan),
+        false,
+        "agent",
+    )
+    .unwrap();
+    let id = r["todos"][0].as_str().unwrap().to_string();
+    // 剛開：還在進行
+    let now = api::review_todos(&w.sp, &at(&w.plan)).unwrap();
+    assert_eq!(review_item(&now, &id)["verdict"], "active");
+    // 20 天後、期間沒人提到：擱置（開出它的那筆交接不算「有人提到」，也不算證據）
+    let later = Local::now().naive_local() + chrono::Duration::days(20);
+    let v = api::review_todos_at(&w.sp, &at(&w.plan), Some(later)).unwrap();
+    let it = review_item(&v, &id);
+    assert_eq!(it["verdict"], "stale");
+    assert!(it["evidence"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn review_keeps_mentioned_todo_active() {
+    let w = two_groups();
+    let id = todo(&w, "等法務回覆授權條款", &w.impl_)["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let later = Local::now().naive_local() + chrono::Duration::days(20);
+    // 有人後來提到 #N（不是做完，只是還在等）
+    spine_mod::append_event(
+        &w.sp,
+        "decision",
+        "agent",
+        &["group:產品", "repo:impl"],
+        &format!("{id} 還在等，先做別的"),
+        Some(Local::now().naive_local() + chrono::Duration::minutes(2)),
+    )
+    .unwrap();
+    let v = api::review_todos_at(&w.sp, &at(&w.impl_), Some(later)).unwrap();
+    assert_eq!(review_item(&v, &id)["verdict"], "active");
+}
+
+#[test]
+fn session_start_shows_review_hint_for_overdue_untouched_todo() {
+    let w = two_groups();
+    let yesterday = (Local::now() - chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    let r = api::add_todo(
+        &w.sp,
+        "補 Windows 測試",
+        Some(&yesterday),
+        &at(&w.impl_),
+        false,
+        "agent",
+    )
+    .unwrap();
+    let id = r["id"].as_str().unwrap();
+    let out = hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "rv", "cwd": w.impl_.to_string_lossy()}),
+        None,
+    );
+    assert!(
+        out.contains("體檢：") && out.contains(&format!("逾期或擱置沒動靜 {id}")),
+        "{out}"
+    );
+}

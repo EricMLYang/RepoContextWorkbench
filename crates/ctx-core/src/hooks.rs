@@ -134,6 +134,9 @@ pub fn render_start(c: &ContextFor) -> String {
                 loops.len() - 6
             ));
         }
+        if let Some(h) = &c.review_hint {
+            out.push(h.clone());
+        }
     }
     for a in ctx["attention"].as_array().into_iter().flatten().take(3) {
         out.push(format!("注意：{}", s(a, "text")));
@@ -219,7 +222,8 @@ fn session_start_inner(
     let Some(repo) = w.repo.clone() else {
         return Ok(String::new());
     };
-    let ctx = agentapi::context_for_full(spine_dir, &Target::at(&cwd_p), false)?;
+    let mut ctx = agentapi::context_for_full(spine_dir, &Target::at(&cwd_p), false)?;
+    ctx.review_hint = agentapi::review_hint(spine_dir, &Target::at(&cwd_p));
     if ruminate::is_stale(spine_dir, now) {
         // 背景補跑；這次開場用上一輪的結果
         let _ = ruminate::spawn_detached(spine_dir);

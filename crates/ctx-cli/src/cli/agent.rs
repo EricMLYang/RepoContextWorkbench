@@ -415,12 +415,15 @@ pub fn cmd_log(ctx: &Ctx, a: &LogArgs) -> CmdResult {
 pub enum TodoAction {
     Add,
     Close,
+    /// 體檢：哪些可能已處理（附證據）、哪些擱置太久（Rust 才有）
+    Review,
 }
 
 #[derive(Args, Debug)]
 pub struct TodoArgs {
     pub action: TodoAction,
-    /// add：要做的事；close：編號（#3 或 3）
+    /// add：要做的事；close：編號（#3 或 3）；review：不用
+    #[arg(default_value = "")]
     pub text: String,
     /// YYYY-MM-DD
     #[arg(long)]
@@ -435,7 +438,19 @@ pub struct TodoArgs {
 }
 
 pub fn cmd_todo(ctx: &Ctx, a: &TodoArgs) -> CmdResult {
+    if a.text.is_empty() && !matches!(a.action, TodoAction::Review) {
+        return Err(fail(
+            "bad_request",
+            "todo add／close 需要 <TEXT>（add：要做的事；close：編號）",
+            None,
+            2,
+        ));
+    }
     match a.action {
+        TodoAction::Review => {
+            let t = a.scope.target();
+            agent_call(ctx, |d| agentapi::review_todos(d, &t), h_review)
+        }
         TodoAction::Add => {
             let t = a.scope.target();
             agent_call(
@@ -464,6 +479,49 @@ pub fn cmd_todo(ctx: &Ctx, a: &TodoArgs) -> CmdResult {
             )
         }
     }
+}
+
+/// `todo review` 的人話：可能已處理（附證據）→ 擱置太久 → 其餘只算數量。
+fn h_review(r: &Value) -> String {
+    let c = &r["counts"];
+    let mut out = vec![format!(
+        "未結體檢（{}）：可能已處理 {}、擱置太久 {}、進行中 {}",
+        s(&r["scope"], "label"),
+        s(c, "maybe_done"),
+        s(c, "stale"),
+        s(c, "active")
+    )];
+    for it in arr(r, "items") {
+        let tag = match it["verdict"].as_str() {
+            Some("maybe_done") => "可能已處理",
+            Some("stale") => "擱置太久",
+            _ => continue,
+        };
+        let bf = if it["backfilled"] == true {
+            "（回填）"
+        } else {
+            ""
+        };
+        out.push(format!("- {} [{tag}] {}{bf}", s(it, "id"), s(it, "text")));
+        out.push(format!("    {}", s(it, "why")));
+        for e in arr(it, "evidence") {
+            let shared: Vec<String> = arr(e, "shared").iter().map(pystr::py_str).collect();
+            out.push(format!(
+                "    · {} {} {}——蓋住 {}%：{}",
+                s(e, "at"),
+                s(e, "ref"),
+                pystr::take_chars(&s(e, "text"), 60),
+                (e["cover"].as_f64().unwrap_or(0.0) * 100.0).round(),
+                shared.join("、")
+            ));
+        }
+    }
+    if out.len() == 1 {
+        out.push("沒有看起來已處理或擱置太久的項目。".into());
+    } else {
+        out.push("確認後：ctx todo close <#N> --note \"怎麼結的\"；還要做就 ctx todo add 重開一筆新的 due。".into());
+    }
+    out.join("\n")
 }
 
 #[derive(Args, Debug)]
