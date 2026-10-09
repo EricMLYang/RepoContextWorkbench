@@ -40,18 +40,18 @@
 | F-30 | 執行層 | 會話重播：交接附關鍵步驟摘要和 diff | 留痕 | Conductor diff 審查 | P2 | 構想 | R01 | R01 |
 | F-31 | 執行層 | 當其他工具的脈絡層：Orca／Conductor 開的會話也自動掛 ctx 的 MCP＋hooks | 同介面 | Orca、Conductor | P1 | 候選 | R01 | R01 |
 | F-32 | 跨 repo | 上游一改，下游自動起 PR 草稿（drift 從提醒進一步到行動） | 脈絡 | — | P2 | 構想 | R01 | R01 |
-| F-33 | 跨 repo | 相關 repo 建議（共同詞／引用／commit 時間點）；R02：mra 用 5 種掃描器（docker-compose、共用 DB、gateway、共用套件、API 呼叫）自動偵測相依，可以直接抄；R06：做法：四種可解釋訊號——文件裡直接提到對方 repo（Obsidian 未連結提及）、引用紀錄、同一段時間一起改（co-change）、共同主題詞；只建議、附理由，人確認後才 relate；R07：迭代 5（6253123）：`ctx registry suggest`；真資料 15 repo 零關係 → 10 筆建議，PM_Head 推測為 8 個專案的 pm-of；App 還看不到 → F-47 | 脈絡 | — | P2 | 完成（CLI＋開場） | R01 | R07 |
+| F-33 | 跨 repo | 相關 repo 建議（共同詞／引用／commit 時間點）；R02：mra 用 5 種掃描器（docker-compose、共用 DB、gateway、共用套件、API 呼叫）自動偵測相依，可以直接抄；R06：做法：四種可解釋訊號——文件裡直接提到對方 repo（Obsidian 未連結提及）、引用紀錄、同一段時間一起改（co-change）、共同主題詞；只建議、附理由，人確認後才 relate；R07：迭代 5（6253123）：`ctx registry suggest`；真資料 15 repo 零關係 → 10 筆建議，PM_Head 推測為 8 個專案的 pm-of；App 還看不到 → F-47；R22：R22：Adamic-Adar（共同鄰居、少見的鄰居權重高）適合「已有關係後再推更多」；目前零關係，延後 | 脈絡 | — | P2 | 完成（CLI＋開場） | R01 | R22 |
 | F-34 | 跨 repo | Incubator 主題一鍵轉 repo（建立＋登記＋關係＋初始脈絡）；R09：R09：痛點 1「Incubator 主題轉 repo」至今沒有任何迭代碰到，排在 F-22 之後；R10：R10：spawn --from-incubator 已有；spine incubator 目前是空的，邊際價值低 | 脈絡 | — | P2 | 延後 | R01 | R10 |
 | F-35 | 觀測 | 脈絡命中率：開場注入的內容 agent 實際用了幾成 | 脈絡 | — | P1 | 併入 N-03 | R01 | R01 |
 | F-36 | 觀測 | 健康指標：未交接率、跨組被拒次數；R17：`ctx health`：使用者真用幾天後，用數字判斷 15 個迭代有沒有用——交接率（會話有沒有交接）、推薦命中率、判斷結果記錄率、未結關閉速度、工具用量（MCP 呼叫紀錄）；**迭代 16 完成**：`ctx health`；使用前基準：交接率 76%、推薦命中率 0%（45 筆）、未結開 46 關 6| 留痕 | — | P2 | 完成 | R01 | R17 |
 | F-37 | 入口 | 選單列隨手捕捉一句想法或判斷，直接寫進 spine | 留痕、同介面 | — | P2 | 構想 | R01 | R01 |
 | F-38 | 入口 | 外部收件匣：ClickUp／Gmail connector 拉進或推出；R02：Paseo 做了跨裝置控制層，可參考 | 同介面 | — | P2 | 構想 | R01 | R02 |
 | F-39 | 入口 | Windows／VDI 入口 | 同介面 | — | P2 | 併入 N-10 | R01 | R01 |
-| F-40 | 判斷品味 | decision 可匯出成 AgDR 相容格式（Y 句型、考慮過的選項、agent／model 中繼資料），讓別的工具也讀得到 | 留痕、同介面 | AgDR | P2 | 構想 | R02 | R02 |
+| F-40 | 判斷品味 | decision 可匯出成 AgDR 相容格式（Y 句型、考慮過的選項、agent／model 中繼資料），讓別的工具也讀得到；R22：Claude Code Projects 9/23 起可在本機跑 thread；不掛 ctx MCP 的 agent 也一定讀得到 repo 檔——`ctx decisions export --agdr <dir>` 把判斷（含取代、重看、結果）寫成 AgDR md，是最通用的介面 | 留痕、同介面 | AgDR | P2 | 排入（迭代 21） | R02 | R22 |
 | F-41 | 跨 repo | 跨 repo 分支：同一功能在多個 repo 開同名分支，依相依順序開 PR、等 CI 再合併 | 脈絡 | mra | P2 | 構想 | R02 | R02 |
 | F-42 | 流程 | 任務包：替每個 todo 產生一張乾淨的脈絡卡，交給全新 context 的 subagent（state 放在磁碟、不放在模型裡）；R11：`ctx todo brief #N`：目標／背景（組目標、相關判斷＋取代與重看、上次交接）／輸入（相關檔 ref）／限制（範圍、不能改的）／完成條件——全由引擎現有資料組；App 未結卡「用任務包開會話」；R12：迭代 10（125c227）：`ctx todo brief`＋App「用任務包開會話」；判斷蓋住 ≥20% 才放 | 脈絡 | GSD、Ralph loop | P1 | 完成 | R02 | R12 |
 | F-43 | 入口 | 手機或遠端檢視收件匣與會話狀態 | 同介面 | Paseo、Superset 遠端工作區 | P2 | 構想 | R02 | R02 |
-| F-44 | 定位 | 平台整合：spine 摘要可匯出成 Claude Managed Agents 的檔案式記憶；單 agent 的記憶整理交給平台，ctx 專注跨 repo 與人的判斷；R03：Claude Code Projects（09-17）已做「每個 repo 一個 thread＋共享記憶」，但只在雲端、官方未說記憶可編輯或匯出 → 本工具差異收斂為「本機、可讀、可改、在 git 裡的判斷留痕，涵蓋知識 repo＋人的收件匣」 | 同介面 | Anthropic Memory、Dreaming、Projects | P1 | 構想 | R02 | R03 |
+| F-44 | 定位 | 平台整合：spine 摘要可匯出成 Claude Managed Agents 的檔案式記憶；單 agent 的記憶整理交給平台，ctx 專注跨 repo 與人的判斷；R03：Claude Code Projects（09-17）已做「每個 repo 一個 thread＋共享記憶」，但只在雲端、官方未說記憶可編輯或匯出 → 本工具差異收斂為「本機、可讀、可改、在 git 裡的判斷留痕，涵蓋知識 repo＋人的收件匣」；R22：Projects 已有本機版（🔗 官方 X 9/23）：本機 thread 若是一般 Claude Code 會話，hook／MCP 照樣掛上；先用 F-40 的 repo 檔對接 | 同介面 | Anthropic Memory、Dreaming、Projects | P1 | 構想 | R02 | R22 |
 
 ## 非功能（N）——每項附證據
 

@@ -39,7 +39,7 @@
 | DeepWiki Open | repo 轉 wiki | 自架 wiki 產生器 | 私有 repo、Ollama 本機模型、Mermaid 圖、FAISS 純檔案 | Python＋Next＋Docker，太重 → F-11 | 觀察 | 🔗 | 2026-10-09 | R02 查詢 5 | [介紹](https://www.hostinger.com/applications/deepwiki-open) |
 | DiffMem | Agent 記憶 | md 只存「現在」，歷史交給 git diff／log | 不用向量庫；歷史用 git 查 | — → F-07 | 參考 | 🔗 | 2026-10-09 | R02 查詢 6 | [landscape](https://landscape.jimmysong.io/projects/diffmem) |
 | MarkMem | Agent 記憶 | YAML 雙時間事實＋git | 舊事實不刪：寫 valid_until＋successor；git log 就是稽核紀錄 | — → F-07 | 參考 | 🔗 | 2026-10-09 | R02 查詢 6 | [PyPI](https://pypi.org/project/markmem/) |
-| **Anthropic 平台（Managed Agents Memory、Dreaming、Outcomes、Claude Code Projects）** | 平台（**會吃掉單 agent 記憶**） | 記憶以檔案存放；Dreaming 排程整理；Projects 協調多個 thread 共享記憶（2026-09-17） | 檔案式記憶、排程整理、評分 rubric | 平台不管跨 repo 和人的判斷；我們整合，不重做 → F-44、F-24、F-13 | 標竿（平台風險） | ✅（Code with Claude 文）／🔗（Projects） | 2026-10-10（R03：讀官方頁 ✅——Projects 每個 repo 一個 thread、共享記憶；只在雲端，未說記憶可編輯／匯出） | R02 延伸（Tasks） | [mindstudio](https://www.mindstudio.ai/blog/code-with-claude-2026-new-agent-features)、[Projects 官方](https://claude.com/resources/articles/projects-redesigned) |
+| **Anthropic 平台（Managed Agents Memory、Dreaming、Outcomes、Claude Code Projects）** | 平台（**會吃掉單 agent 記憶**） | 記憶以檔案存放；Dreaming 排程整理；Projects 協調多個 thread 共享記憶（2026-09-17） | 檔案式記憶、排程整理、評分 rubric | 平台不管跨 repo 和人的判斷；我們整合，不重做 → F-44、F-24、F-13 | 標竿（平台風險） | ✅（Code with Claude 文）／🔗（Projects） | 2026-10-10（R03：讀官方頁 ✅——Projects 每個 repo 一個 thread、共享記憶；R22：🔗 9/23 起支援本機 thread，功能請求 #99156 要求本機 thread 等同一般會話） | R02 延伸（Tasks） | [mindstudio](https://www.mindstudio.ai/blog/code-with-claude-2026-new-agent-features)、[Projects 官方](https://claude.com/resources/articles/projects-redesigned) |
 | Claude Code Tasks | 任務記憶 | session 內的執行步驟（可存檔延續） | — | 管執行；Beads／ctx todo 管捕捉，兩者互補 → F-19 | 觀察 | 🔗 | 2026-10-09 | R02 查詢 2 | [keepcoding](https://keepcoding.io/blog-frr/tasks-vs-beads-memoria-claude-code/) |
 | Kilo Agent Manager | 平行執行台 | VS Code 面板 | — | 綁 Kilo 擴充 | 觀察 | 🔗 | 2026-10-09 | R02 查詢 1（Orca 延伸） | [Kilo blog](https://blog.kilo.ai/p/orca-vs-kilo-agent-manager) |
 | Claude Squad | 平行執行台 | 終端機多工 | 暫停／審查／出貨 | — | 觀察 | 🔗 | 2026-10-09 | 待查 | [review](https://vibecodinghub.org/blog/claude-squad-review) |
@@ -129,10 +129,12 @@
 - R19：讀 Matuschak 原文（WebFetch）
 
 - R20：`macOS replace running .app bundle safely install script quit app first ditto codesign verify 2026`
+- R22：`Claude Code Projects local threads release October 2026`（extended）
+- R22：`Adamic-Adar link prediction small graph explainable recommendation common neighbors`
 
 ### 下一輪查詢
-1. `Nx Polygraph synthetic monorepo agent memory`（延伸：看它的「記憶」怎麼跨 repo）
-2. `Claude Code Projects local threads release`（盯平台本機版）
-3. `Adamic-Adar link prediction small graph explainable suggestions`（F-33 加共同鄰居？）
-4. `desktop app performance budget file watcher recompute state large dataset`（N-12 之後）
-5. `AgDR export format tooling adoption`（F-40）
+1. `Claude Code Projects local thread hooks MCP SessionStart`（本機 thread 會不會觸發 hook／掛 MCP）
+2. `AgDR tooling adoption 2026 decision records in repo agents read`（F-40 之後）
+3. `Nx Polygraph synthetic monorepo agent memory`（R14 留下）
+4. `desktop app command palette accessibility keyboard-first React 2026`（N-09）
+5. `session time tracking AI coding agents cost per task dashboard`（F-29）
