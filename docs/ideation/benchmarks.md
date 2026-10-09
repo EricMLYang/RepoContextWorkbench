@@ -67,6 +67,7 @@
 | Nx Polygraph（synthetic monorepo） | 跨 repo 脈絡 | 多 repo 接成一張相依圖 | 不搬 code 就有 monorepo 的讀／寫／記憶；跨 repo 協調 PR | 程式碼相依為主 → 驗證方向 | 參考 | 🔗 | 2026-10-10 | R14 查詢 1（mra 延伸） | [monorepo.tools](https://monorepo.tools/synthetic-monorepos) |
 | Emdash | 平行執行台 | 多 agent 協調 | — | **agent 之間不共享脈絡**（跟一個 agent 說的限制，其他不知道）＝本工具補的那塊 | 觀察 | 🔗 | 2026-10-10 | R14 查詢 1 | [augmentcode](https://www.augmentcode.com/tools/best-warp-alternatives) |
 | Claude Code Plugins（官方） | 技能包 | skills＋hooks＋agents＋MCP 的發佈單位 | 官方把「tribal knowledge」交給 plugin；marketplace 數百個 | ctx setup 已有同等安裝 → F-16 延後 | 觀察 | 🔗 | 2026-10-10 | R14 查詢 2 | [指南](https://hidekazu-konishi.com/entry/claude_code_plugins_complete_guide.html) |
+| macOS 替換執行中 App 的做法（Apple 論壇／社群） | 發佈與升級 | — | 先結束 App；用 ditto 整包替換（cp 改內容會讓下次啟動簽章崩潰）；清 quarantine | — → F-49 | 參考 | 🔗 | 2026-10-10 | R20 查詢 | [Apple 論壇](https://developer.apple.com/forums/thread/761433)、[updating mac software](https://developer.apple.com/documentation/security/updating-mac-software.md) |
 | Claude Code auto memory | 平台 | `~/.claude/projects/<路徑>/memory/*.md` | 本機 md 記憶；匯出／匯入功能請求被關成不做 | 單一路徑、不跨 repo → F-44 可對接 | 觀察 | 🔗 | 2026-10-10 | R04 查詢 | [docs](https://code.claude.com/docs/en/memory)、[issue #67369](https://github.com/anthropics/claude-code/issues/67369) |
 
 ## 待查對標（下一輪處理）
@@ -126,6 +127,8 @@
 - R14：`"ask the expert" agent per repository answer questions with citations local codebase knowledge MCP 2026`
 
 - R19：讀 Matuschak 原文（WebFetch）
+
+- R20：`macOS replace running .app bundle safely install script quit app first ditto codesign verify 2026`
 
 ### 下一輪查詢
 1. `Nx Polygraph synthetic monorepo agent memory`（延伸：看它的「記憶」怎麼跨 repo）
