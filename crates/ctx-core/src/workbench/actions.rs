@@ -56,6 +56,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("ack", a_ack),
     ("relate", a_relate),
     ("unrelate", a_unrelate),
+    ("relation_dismiss", a_relation_dismiss),
     ("collide", a_collide),
     ("collide_rerun", a_collide_rerun),
     ("ignore", a_ignore),
@@ -242,6 +243,18 @@ fn a_relate(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
             json!({"relation": r})
         },
     )
+}
+
+/// Rust 才有（F-47）：關係建議「不相關」——記住，之後不再建議。
+fn a_relation_dismiss(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let (Some(a), Some(b)) = (
+        s(p, "a").filter(|x| !x.is_empty()),
+        s(p, "b").filter(|x| !x.is_empty()),
+    ) else {
+        return Err(Error::invalid("relation_dismiss 需要 a 與 b"));
+    };
+    crate::relsuggest::dismiss(d, &a, &b)?;
+    Ok(json!({"ok": true, "dismissed": [a, b]}))
 }
 
 fn a_unrelate(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {

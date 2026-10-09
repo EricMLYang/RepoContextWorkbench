@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Relation } from "../../api/types";
+import type { Relation, RelationSuggestion } from "../../api/types";
 import { DetailLayout, useDetail } from "../../dialogs/Modal";
 import { matchesSearch, relationLabel, scopeRepos } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
@@ -28,6 +28,7 @@ export function RelationsPane({ query, active }: { query: string; active: boolea
           ＋ 新增關係
         </button>
       </div>
+      <Suggestions />
       <div id="reltable">
         {list.length ? (
           list.map((r) => (
@@ -74,16 +75,99 @@ export function RelationsPane({ query, active }: { query: string; active: boolea
   );
 }
 
-function RelationForm() {
+/** 關係建議（引擎算好的）：理由＋證據；有推測種類的直接套用，沒有的開預填表單；不相關＝記住不再建議。 */
+function Suggestions() {
+  const { state } = useSnapshot();
+  const list = state.relation_suggestions ?? [];
+  if (!list.length) return null;
+  return (
+    <div id="relsuggest" className="relsuggest">
+      <h3 className="small">建議設定的關係（{list.length}）</h3>
+      <p className="small muted">從文件互相提到、引用紀錄推出來的；設了之後 agent 開場就看得到鄰居。</p>
+      {list.map((x) => (
+        <SuggestionRow key={x.from + ">" + x.to} x={x} />
+      ))}
+    </div>
+  );
+}
+
+function SuggestionRow({ x }: { x: RelationSuggestion }) {
+  const store = useStore();
+  const ui = useUi();
+  const { state } = useSnapshot();
+  const [error, setError] = useState("");
+  const label = x.kind ? state.rel_kinds[x.kind]?.forward ?? x.kind : "有關";
+  return (
+    <div className="relation suggestion">
+      <div className="relationcopy">
+        <div className="relationname">
+          {x.from}
+          <span>{label + " →"}</span>
+          {x.to}
+        </div>
+        <p>{x.reason}</p>
+        {x.files.length ? <p className="small muted">{"依據：" + x.files.join("、")}</p> : null}
+        <p className="error" role="alert" hidden={!error}>
+          {error}
+        </p>
+      </div>
+      <div className="relacts">
+        {x.kind ? (
+          <AsyncButton
+            className="small primary"
+            onError={setError}
+            run={async () => {
+              await store.action("relate", { a: x.from, b: x.to, kind: x.kind ?? "", note: "" });
+              await store.refreshState();
+              store.toast("關係已建立");
+            }}
+          >
+            套用
+          </AsyncButton>
+        ) : null}
+        <button
+          type="button"
+          className="small"
+          onClick={() =>
+            ui.openDetail({
+              title: "新增 Repo 關係",
+              eyebrow: "RELATIONSHIP",
+              content: <RelationForm initial={{ a: x.from, b: x.to, kind: x.kind ?? undefined }} />,
+            })
+          }
+        >
+          設定…
+        </button>
+        <AsyncButton
+          className="ghost small"
+          onError={setError}
+          run={async () => {
+            await store.action("relation_dismiss", { a: x.from, b: x.to });
+            await store.refreshState();
+          }}
+        >
+          不相關
+        </AsyncButton>
+      </div>
+    </div>
+  );
+}
+
+function RelationForm({ initial }: { initial?: { a: string; b: string; kind?: string } }) {
   const store = useStore();
   const { setError, close } = useDetail();
   const { state, scope } = useSnapshot();
-  const sources = scopeRepos(scope, state);
+  const inScope = scopeRepos(scope, state);
+  // 建議的來源可能在範圍外（跨組關係）：預填時一併列進來源選單
+  const sources = initial && !inScope.includes(initial.a) ? [initial.a, ...inScope] : inScope;
   const kinds = Object.keys(state.rel_kinds);
-  const [a, setA] = useState(sources[0] ?? "");
-  const [kind, setKind] = useState(kinds[0] ?? "");
+  const [a, setA] = useState(initial?.a ?? sources[0] ?? "");
+  const [kind, setKind] = useState(
+    initial?.kind && kinds.includes(initial.kind) ? initial.kind : (kinds[0] ?? ""),
+  );
   // 預設目標避開跟來源同一個
   const [b, setB] = useState(() => {
+    if (initial?.b) return initial.b;
     const first = state.repos[0] ?? "";
     if (first === a && state.repos.length > 1) return state.repos[1];
     return first;

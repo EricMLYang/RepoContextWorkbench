@@ -955,6 +955,26 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
             v
         })
         .collect();
+    // Rust 才有（F-47）：關係建議（反芻時算好的快取；純檔案讀）——碰到目前範圍、還沒設關係的。
+    // 沒有建議時不放這個鍵（舊版前端與對拍都看不到差異）。
+    let related: HashSet<(String, String)> = registry::relations(spine_dir, None)?
+        .into_iter()
+        .map(|r| crate::relsuggest::pair(&r.from, &r.to))
+        .collect();
+    let suggestions: Vec<Value> = crate::relsuggest::load(spine_dir)
+        .into_iter()
+        .filter(|x| !related.contains(&crate::relsuggest::pair(&x.a, &x.b)))
+        .filter(|x| !scoped || members.contains(&x.a) || members.contains(&x.b))
+        .map(|x| {
+            let (from, to) = match &x.hint {
+                Some((f, t, _)) => (f.clone(), t.clone()),
+                None if x.a_mentions_b >= x.b_mentions_a => (x.a.clone(), x.b.clone()),
+                None => (x.b.clone(), x.a.clone()),
+            };
+            json!({"from": from, "to": to, "kind": x.hint.as_ref().map(|h| h.2.clone()),
+                   "reason": x.reason(), "files": x.files})
+        })
+        .collect();
 
     let mut unread: Vec<Value> = p
         .interrupt
@@ -1000,7 +1020,7 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
         tags.insert(r.id(), t);
     }
 
-    Ok(json!({
+    let mut out = json!({
         "groups": groups,
         "repos": data.repos.iter().map(|r| r.id()).collect::<Vec<_>>(),
         "tiers": tiers,
@@ -1015,7 +1035,11 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
         "recent": recent,
         "stats": stats,
         "scope": {"group": scope.group, "repos": scope.repos, "members": members},
-    }))
+    });
+    if !suggestions.is_empty() {
+        out["relation_suggestions"] = Value::Array(suggestions);
+    }
+    Ok(out)
 }
 
 pub(crate) use crate::pystr::truthy;

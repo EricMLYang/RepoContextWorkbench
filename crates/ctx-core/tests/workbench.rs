@@ -1215,3 +1215,50 @@ fn loop_card_shows_review_verdict_after_scan() {
     let c2 = loops.iter().find(|c| c["num"] == "#2").unwrap();
     assert!(c2.get("verdict").is_none()); // 進行中的不加註
 }
+
+// Rust 才有（F-47）：關係建議進 App 的 state；打掉後消失、設了關係後消失
+#[test]
+fn relation_suggestions_in_state_and_dismiss() {
+    let (_t, d) = spine_with_repos();
+    let a = registry::get_repo(&d, "repo-a").unwrap().path();
+    for i in 0..3 {
+        std::fs::write(
+            a.join(format!("plan{i}.md")),
+            format!("# 計畫\nrepo-b 的進度 {i}\n"),
+        )
+        .unwrap();
+    }
+    ctx_core::relsuggest::compute(&d).unwrap();
+    let s = st(&d);
+    let sug = s["relation_suggestions"].as_array().expect("要有建議");
+    assert_eq!(
+        (sug[0]["from"].as_str(), sug[0]["to"].as_str()),
+        (Some("repo-a"), Some("repo-b"))
+    );
+    act(
+        &d,
+        "relation_dismiss",
+        json!({"a": "repo-b", "b": "repo-a"}),
+    )
+    .unwrap();
+    assert!(st(&d).get("relation_suggestions").is_none());
+    // 重新算也不再出現
+    assert!(ctx_core::relsuggest::compute(&d).unwrap().is_empty());
+}
+
+#[test]
+fn relation_suggestion_disappears_after_relate() {
+    let (_t, d) = spine_with_repos();
+    let a = registry::get_repo(&d, "repo-a").unwrap().path();
+    for i in 0..3 {
+        std::fs::write(a.join(format!("plan{i}.md")), format!("repo-b 週報 {i}\n")).unwrap();
+    }
+    ctx_core::relsuggest::compute(&d).unwrap();
+    act(
+        &d,
+        "relate",
+        json!({"a": "repo-a", "b": "repo-b", "kind": "pm-of"}),
+    )
+    .unwrap();
+    assert!(st(&d).get("relation_suggestions").is_none());
+}

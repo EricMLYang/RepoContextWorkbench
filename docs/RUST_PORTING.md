@@ -126,6 +126,9 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   主要訊號＝A 的 md 提到 B 的 repo id 或目錄名（≥3 份）；引用紀錄（≥2 筆）；只出現在這兩個 repo 的主題詞只當佐證。
   一個 repo 當主要提到者的建議 ≥4 筆＝推測它是 PM（`pm-of`）。只建議不寫入；已有關係的不列。
   反芻跑完順便算進 `.state/relation_suggest.json`，開場只讀檔、跟主場有關的提一行。對拍時這個快取列為允許差異。
+  App（F-47）：`build_state` 多一個 `relation_suggestions`（碰到目前範圍、還沒設關係的；沒有建議時不給這個鍵），
+  「關係」分頁列建議＋理由＋依據，有推測的「套用」、沒推測的「設定…」開預填表單、「不相關」＝新動作
+  `relation_dismiss`（記在 `.state/relation_suggest_dismissed.json`，ctx `registry suggest --dismiss A B` 同一份）。
 
 CLI／MCP（ctx-cli）：
 

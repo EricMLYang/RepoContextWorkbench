@@ -883,6 +883,18 @@ td button {
   color: var(--blue);
   padding: 0 10px;
 }
+/* 關係建議（F-47）：虛線框跟已設的關係分開 */
+.relsuggest {
+  margin-bottom: 16px;
+}
+.relsuggest h3 {
+  color: var(--ink2);
+  margin-bottom: 2px;
+}
+.relation.suggestion {
+  border-style: dashed;
+  background: transparent;
+}
 .relation p {
   font-size: 12px;
   color: var(--sub);

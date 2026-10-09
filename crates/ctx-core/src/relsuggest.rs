@@ -81,12 +81,47 @@ fn cache_path(spine_dir: &Path) -> PathBuf {
     spine_dir.join(".state").join("relation_suggest.json")
 }
 
-/// 讀上次算好的建議（沒有或壞掉＝空）。
+fn dismissed_path(spine_dir: &Path) -> PathBuf {
+    spine_dir
+        .join(".state")
+        .join("relation_suggest_dismissed.json")
+}
+
+/// 使用者說過「不相關」的組合（排序後的 (a, b)）。
+pub fn dismissed(spine_dir: &Path) -> HashSet<(String, String)> {
+    std::fs::read_to_string(dismissed_path(spine_dir))
+        .ok()
+        .and_then(|s| serde_json::from_str::<Vec<(String, String)>>(&s).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
+}
+
+/// 打掉一筆建議：記住，之後算建議時不再出現（ctx 與 App 共用）。
+pub fn dismiss(spine_dir: &Path, x: &str, y: &str) -> Result<()> {
+    let mut all: Vec<(String, String)> = dismissed(spine_dir).into_iter().collect();
+    let p = pair(x, y);
+    if !all.contains(&p) {
+        all.push(p);
+    }
+    all.sort();
+    if let Some(parent) = dismissed_path(spine_dir).parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(dismissed_path(spine_dir), serde_json::to_string(&all)?)?;
+    Ok(())
+}
+
+/// 讀上次算好的建議（沒有或壞掉＝空），去掉之後被打掉的。已經設了關係的由呼叫端濾（它手上有 registry）。
 pub fn load(spine_dir: &Path) -> Vec<Suggestion> {
+    let gone = dismissed(spine_dir);
     std::fs::read_to_string(cache_path(spine_dir))
         .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
+        .and_then(|s| serde_json::from_str::<Vec<Suggestion>>(&s).ok())
         .unwrap_or_default()
+        .into_iter()
+        .filter(|s| !gone.contains(&pair(&s.a, &s.b)))
+        .collect()
 }
 
 /// 算建議並寫進快取。已經有關係的（任一方向）不列。
@@ -94,11 +129,12 @@ pub fn compute(spine_dir: &Path) -> Result<Vec<Suggestion>> {
     let reg = registry::load(spine_dir)?;
     let refs: Vec<RepoRef> = reg.repos.iter().map(RepoRef::from).collect();
     let docs = knowledge::build_docs(&refs, Some(spine_dir));
-    let related: HashSet<(String, String)> = registry::relations(spine_dir, None)?
+    let mut related: HashSet<(String, String)> = registry::relations(spine_dir, None)?
         .into_iter()
         .map(|r| pair(&r.from, &r.to))
         .collect();
-    // 每個 repo 會被認出的名字：id，以及目錄名（id 跟目錄名常不同，例 id `pm` 的目錄叫 `pm_work`）
+    related.extend(dismissed(spine_dir)); // 打掉的跟已設的一樣不再建議
+                                          // 每個 repo 會被認出的名字：id，以及目錄名（id 跟目錄名常不同，例 id `pm` 的目錄叫 `pm_work`）
     let names: Vec<(String, Vec<String>)> = reg
         .repos
         .iter()
@@ -126,7 +162,8 @@ pub fn compute(spine_dir: &Path) -> Result<Vec<Suggestion>> {
     Ok(suggestions)
 }
 
-fn pair(x: &str, y: &str) -> (String, String) {
+/// 排序後的一對 id（無方向）。
+pub fn pair(x: &str, y: &str) -> (String, String) {
     if x <= y {
         (x.to_string(), y.to_string())
     } else {

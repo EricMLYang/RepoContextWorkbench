@@ -122,7 +122,11 @@ pub enum RegistryCmd {
     /// 讀關係（給 id＝站在該 repo 兩向讀）
     Relations { id: Option<String> },
     /// 建議該設的關係：文件互相提到、引用紀錄、只有兩邊有的主題詞（Rust 才有；只建議，不寫）
-    Suggest,
+    Suggest {
+        /// 打掉一筆建議（不相關）：給兩個 repo id，之後不再建議
+        #[arg(long, num_args = 2, value_names = ["A", "B"])]
+        dismiss: Option<Vec<String>>,
+    },
     /// 登記 export：<repo>:<名稱> → repo 內路徑
     Export {
         id: String,
@@ -194,7 +198,16 @@ pub fn cmd_registry(ctx: &Ctx, c: &RegistryCmd) -> CmdResult {
             json!({"a": a, "b": b, "kind": kind}),
         ),
         Relations { id } => registry_relations(ctx, id.as_deref()),
-        Suggest => registry_suggest(ctx),
+        Suggest { dismiss } => match dismiss.as_deref() {
+            Some([a, b]) => {
+                ctx_core::relsuggest::dismiss(&ctx.spine_dir()?, a, b)?;
+                ctx.emit(&json!({"ok": true, "dismissed": [a, b]}), |_| {
+                    format!("已打掉：{a} ↔ {b}（之後不再建議）")
+                });
+                Ok(())
+            }
+            _ => registry_suggest(ctx),
+        },
         Export {
             id,
             name,

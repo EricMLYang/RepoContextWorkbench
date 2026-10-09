@@ -157,6 +157,15 @@ export interface Relation {
   task: string;
 }
 
+/** 關係建議（Rust 引擎 F-47；反芻時算好）：from→to 是建議的方向，kind 有推測才有。 */
+export interface RelationSuggestion {
+  from: string;
+  to: string;
+  kind: string | null;
+  reason: string;
+  files: string[];
+}
+
 export interface RelationKind {
   forward: string;
   inverse: string;
@@ -190,6 +199,8 @@ export interface WorkbenchState {
   tag_vocab: string[];
   relations: Relation[];
   rel_kinds: Record<string, RelationKind>;
+  /** 碰到目前範圍、還沒設的關係建議；沒有建議時引擎不給這個鍵。 */
+  relation_suggestions?: RelationSuggestion[];
   unread: (SpineEvent & { interrupt?: boolean })[];
   loops: SpineEvent[];
   cards: StateCard[];
@@ -313,6 +324,11 @@ export interface ActionMap {
   unrelate: {
     payload: { a: string; b: string; kind?: string };
     result: { ok: true } & Record<string, unknown>;
+  };
+  /** 關係建議「不相關」：記住，之後不再建議（Rust 引擎 F-47）。 */
+  relation_dismiss: {
+    payload: { a: string; b: string };
+    result: { ok: true; dismissed: [string, string] };
   };
   collide: {
     payload: { idea: string; wait?: boolean } & ScopePayload;

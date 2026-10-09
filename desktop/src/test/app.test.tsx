@@ -145,3 +145,53 @@ describe("範圍", () => {
     });
   });
 });
+
+describe("關係建議（F-47）", () => {
+  const suggestion = {
+    from: "a",
+    to: "b",
+    kind: "pm-of",
+    reason: "推測 a pm-of b；12 份文件互相提到",
+    files: ["a:plan.md"],
+  };
+
+  it("列出理由與依據；套用呼叫 relate，不相關呼叫 relation_dismiss", async () => {
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({ rel_kinds: { "pm-of": { forward: "規劃", backward: "被規劃" } as never }, relation_suggestions: [suggestion] }),
+      ),
+    });
+    await mount(backend);
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="relations"]')!));
+    const box = document.getElementById("relsuggest")!;
+    expect(box.textContent).toContain("12 份文件互相提到");
+    expect(box.textContent).toContain("依據：a:plan.md");
+    const apply = [...box.querySelectorAll("button")].find((b) => b.textContent === "套用")!;
+    await act(async () => fireEvent.click(apply));
+    expect(backend.action).toHaveBeenCalledWith("relate", { a: "a", b: "b", kind: "pm-of", note: "" });
+    const dismiss = [...box.querySelectorAll("button")].find((b) => b.textContent === "不相關")!;
+    await act(async () => fireEvent.click(dismiss));
+    expect(backend.action).toHaveBeenCalledWith("relation_dismiss", { a: "a", b: "b" });
+  });
+
+  it("沒有建議時不顯示建議區塊", async () => {
+    await mount();
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="relations"]')!));
+    expect(document.getElementById("relsuggest")).toBeNull();
+  });
+
+  it("套用失敗把錯誤顯示在那一筆建議上", async () => {
+    const backend = mockBackend({
+      getState: vi.fn(async () => makeState({ relation_suggestions: [{ ...suggestion }] })),
+      action: vi.fn(async () => {
+        throw new Error("registry 寫入失敗");
+      }),
+    });
+    await mount(backend);
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="relations"]')!));
+    const box = document.getElementById("relsuggest")!;
+    const apply = [...box.querySelectorAll("button")].find((b) => b.textContent === "套用")!;
+    await act(async () => fireEvent.click(apply));
+    expect(box.querySelector(".error")!.textContent).toBe("registry 寫入失敗");
+  });
+});
