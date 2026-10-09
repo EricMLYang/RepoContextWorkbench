@@ -52,6 +52,12 @@ ls .github/workflows 2>/dev/null; grep -ro '#\[test\]' crates | wc -l   # 測試
 另外看開場注入的品質：本次 SessionStart 推的「新料」共同詞是否有意義（雜訊 bigram＝推送準度問題）。
 量不到的項目寫「未量」，不要估。
 
+再補兩種量測（2026-10-10 自動迭代後加）：
+- **行為**：`ctx health`（交接率、推薦命中率、判斷結果記錄率、未結開／關／逾期、工具用量）——跟 baseline 的「使用前基準」比。
+- **規模**：`python3 scripts/perf_spine.py <spine> <scratchpad>/big` 產生 1 萬筆事件的合成 spine，量開場 hook／`build_state`／
+  `todo review`／`context --json` 的時間與輸出大小（預算：hook < 500ms、build_state < 300ms、review < 300ms）。
+- 已安裝版跟 repo 裡新 build 的版本要分開量（`ctx` vs `target/release/ctx --spine <副本>`），別混在同一欄。
+
 ### 2. 搜尋對標（從清單延伸，不從零開始）
 1. **先跑 `benchmarks.md`「下一輪查詢」**，再處理「待查對標」。
 2. **延伸法**：對狀態為「標竿」或「參考」的對標，各搜一次 `<名稱> alternatives` 或 `<名稱> vs`，從比較文找出更新、更好的對象。
@@ -80,3 +86,21 @@ ls .github/workflows 2>/dev/null; grep -ro '#\[test\]' crates | wc -l   # 測試
 - 使用者同意排入的 P0 項目才 `add_todo`（先列給使用者挑，不要自己全開）。
 - 這個 skill 只做盤點與文件，**不改產品程式碼**；要實作另開工作。
 - 回覆使用者：本輪新增幾個構想、幾個對標、基準的變化、前 3～5 項建議，附輪次檔路徑與來源連結。
+
+## 搭配開發迭代時（2026-10-10 自動迭代學到的）
+
+使用者要「一次開發一項 → 驗體驗 → 再跑這個 skill 調整排序」時，每個迭代照這個走：
+
+1. **體驗驗證用 spine 副本**：`rsync -a <spine>/ <scratchpad>/sim/`，新版指令都帶 `--spine <副本>`。
+   不要在使用者真的 spine 上試寫入；hook 量測用固定的 probe id，量完刪掉 marker。
+2. **從使用者角度讀輸出**，不只看測試綠燈：第一版常常「功能對、體驗錯」——
+   例：體檢第一版 10 項誤判 7 項、判斷回顧第一版選到工具自己的紀錄、任務包放了弱相關的判斷。
+3. **每個迭代都跑完整檢查**：`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、
+   `cargo test --workspace`、`bash scripts/parity.sh`、**`python3 scripts/parity_state.py`**（漏跑過一次，誤刪的檔兩輪後才發現）、
+   前端 `npm run build && npm test && npm run lint`。
+4. **刻意差異都要有交代**：Rust 才有的行為寫進 `docs/RUST_PORTING.md`「刻意差異」；對拍要比對前拿掉的東西
+   加在 `scripts/parity.py`（`ALLOW_FILES`／`strip_rust_only`／`MCP_EXTRA_PARAMS`）或 `parity_state.py`，並寫理由。
+5. **暫存檔只刪自己建的**：暫存範例用唯一檔名（`examples/zz_tmp_*.rs`）並只刪那一個，不要 `rm -rf` 目錄。
+6. **使用者的 App 開著就不做 GUI 實測**（重 bundle 會覆寫、另開會搶焦點）；記下來等使用者。
+7. **節奏**：連續迭代很耗用量；迭代之間可以在背景等一段時間（`sleep` 放背景，完成會被通知）。
+8. **收尾**：更新 `docs/<日期>_自動迭代驗收清單.md`（裝上步驟、使用前基準、每項在真實使用中看什麼）、spine 交接。
