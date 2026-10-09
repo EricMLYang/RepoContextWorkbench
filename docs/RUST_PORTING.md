@@ -12,7 +12,8 @@ crates/ctx-cli/            bin `ctx`：CLI（clap）＋MCP server（stdio）＋h
 desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React（Vite＋TS）前端
 ```
 
-模組一對一：`repo_context/spine.py` → `crates/ctx-core/src/spine.rs`，`registry/` → `src/registry/`，
+模組一對一：`repo_context/spine.py` → `crates/ctx-core/src/spine.rs`（例外：`agentapi.py` → `src/agentapi/mod.rs`，
+Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision_search、fresh_try、task_brief、retro、hints、agdr），`registry/` → `src/registry/`，
 `webui/state.py`、`webui/actions.py` → `src/workbench/{state,actions}.rs`（給桌面 App 用，與 HTTP 無關）。
 
 ## 合約（不准改）
