@@ -114,6 +114,11 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   判斷／交接的「完成：」行，算證據蓋住事項文字的比例（中文用連續命中的片段，不數零散 bigram）；≥45%＝可能已處理，
   逾期或開了 14 天以上、期間沒人提到 `#N` 也沒相關動靜＝擱置。提到 `#N` 的只算「有人提到」不算證據，開出這項的交接
   （同一分鐘）也不算。只提議不自動關。SessionStart 注入在「未結」段尾多一行「體檢：…」（有可清的才出現）。
+- **判斷取代＋何時重看**（2026-10-10，ideation F-07；Python 沒有）：`log_decision` 可帶 `supersedes`（`decision:<id>`，要存在）
+  與 `reopen_when`。寫進 body 的結構化行 `取代：decision:<id>`、`何時重看：<條件>`，被取代的同時寫成 `ref:` token——
+  標頭文法不變，Python 讀得回（只是不懂它的意思）。被取代的判斷不再出現在 `context_for` 的最近事件、反芻的手上工作
+  與推給別組的判斷候選；帶重看條件的有效判斷列在 `context_for.reopen`（只在有的時候出現），開場注入「該重看」（條件裡
+  的日期已到）／「有條件的判斷」各一行。MCP `log_decision` 多兩個選填參數（對拍時拿掉後比，記為允許差異）。
 
 CLI／MCP（ctx-cli）：
 

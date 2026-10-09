@@ -656,3 +656,90 @@ fn session_start_shows_review_hint_for_overdue_untouched_todo() {
         "{out}"
     );
 }
+
+// ---- Rust 才有（F-07）：判斷取代＋何時重看 ----
+
+fn log_ext(
+    w: &World,
+    text: &str,
+    sup: Option<&str>,
+    reopen: Option<&str>,
+) -> ctx_core::Result<Value> {
+    api::log_decision_ext(
+        &w.sp,
+        text,
+        &at(&w.impl_),
+        None,
+        &api::DecisionExtra {
+            supersedes: sup.map(str::to_string),
+            reopen_when: reopen.map(str::to_string),
+        },
+        false,
+        "agent",
+    )
+}
+
+#[test]
+fn superseded_decision_leaves_recent_events() {
+    let w = two_groups();
+    let old = log_ext(&w, "快取用 LRU", None, None).unwrap()["ref"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let new = log_ext(&w, "快取改用 LFU", Some(&old), None).unwrap();
+    let body = new["event"]["body"].as_str().unwrap();
+    assert!(body.contains(&format!("取代：{old}")));
+    let ev = spine_mod::iter_events(&w.sp)
+        .unwrap()
+        .into_iter()
+        .last()
+        .unwrap();
+    assert_eq!(ev.kv("ref"), Some(old.as_str())); // 也寫成 ref token（Python 看得到關聯）
+    let ctx = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
+    let refs: Vec<&str> = ctx["recent_events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|e| e["ref"].as_str())
+        .collect();
+    assert!(!refs.contains(&old.as_str()) && refs.contains(&new["ref"].as_str().unwrap()));
+    assert_eq!(
+        api::superseded_map(&spine_mod::iter_events(&w.sp).unwrap())[&old],
+        new["ref"]
+    );
+}
+
+#[test]
+fn supersedes_must_point_to_existing_decision() {
+    let w = two_groups();
+    let e = log_ext(&w, "亂取代", Some("decision:2099-01-01-d1"), None).unwrap_err();
+    assert_eq!(code_of(e).0, "bad_request");
+}
+
+#[test]
+fn reopen_condition_with_past_date_is_flagged_at_session_start() {
+    let w = two_groups();
+    let yesterday = (Local::now() - chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    log_ext(
+        &w,
+        "先不做 Windows",
+        None,
+        Some(&format!("VDI 使用者回報問題，或 {yesterday}")),
+    )
+    .unwrap();
+    log_ext(&w, "索引用 JSON", None, Some("repo 超過 50 個")).unwrap();
+    let ctx = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
+    let reopen = ctx["reopen"].as_array().unwrap();
+    assert_eq!(reopen.len(), 2);
+    let out = hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "ro", "cwd": w.impl_.to_string_lossy()}),
+        None,
+    );
+    assert!(
+        out.contains("該重看：先不做 Windows") && out.contains("有條件的判斷：索引用 JSON"),
+        "{out}"
+    );
+}

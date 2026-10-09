@@ -174,9 +174,12 @@ pub fn focus(
         parts.extend(mine.iter().map(|ev| ev.first_line().to_string()));
         basis.push(format!("未結 {}", mine.len()));
     }
+    // Rust 才有（F-07）：被取代的判斷不算手上工作
+    let superseded = crate::agentapi::superseded_map(events);
     let work: Vec<&Event> = events
         .iter()
         .filter(|ev| is_work(ev) && spine::in_scope(ev, Some(group), &ids))
+        .filter(|ev| !superseded.contains_key(&crate::agentapi::event_ref(ev)))
         .collect();
     if !work.is_empty() {
         let k = work.len().saturating_sub(FOCUS_DECISIONS);
@@ -371,8 +374,13 @@ struct Cand {
 /// 對應 `_event_docs`：上次反芻後新留下的判斷／交接 → [(候選, 事件)]；排除本組由呼叫端做。
 fn event_docs<'a>(events: &'a [Event], since: &str) -> Vec<(Cand, &'a Event)> {
     let mut out = Vec::new();
+    // Rust 才有（F-07）：被取代的判斷不推給別組
+    let superseded = crate::agentapi::superseded_map(events);
     for ev in events {
         if !is_work(ev) || ev.stamp().as_str() < since {
+            continue;
+        }
+        if superseded.contains_key(&crate::agentapi::event_ref(ev)) {
             continue;
         }
         let counted = knowledge::count(knowledge::tokenize(&ev.body));

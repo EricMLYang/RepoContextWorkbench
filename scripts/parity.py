@@ -55,6 +55,23 @@ ALLOW_FILES = [
      "provider 原始紀錄（除錯用 log，含 prompt 全文與呼叫序號；MockProvider 計數改成實例層）"),
 ]
 
+# MCP 工具上 Rust 才有的選填參數：(工具名, 參數名, 理由)。比對 tools/list 前從 Rust 那邊拿掉，記為允許差異。
+MCP_EXTRA_PARAMS = [
+    ("log_decision", "supersedes", "log_decision 多了選填 supersedes／reopen_when（F-07 判斷取代＋何時重看，Rust 才有）"),
+    ("log_decision", "reopen_when", "log_decision 多了選填 supersedes／reopen_when（F-07 判斷取代＋何時重看，Rust 才有）"),
+]
+
+
+def drop_mcp_extras(resp, allowed):
+    """tools/list 回應：拿掉 Rust 才有的選填參數（就地改），用到的理由加進 allowed。"""
+    for t in ((resp.get("result") or {}).get("tools") or []):
+        props = (t.get("inputSchema") or {}).get("properties") or {}
+        for name, param, why in MCP_EXTRA_PARAMS:
+            if t.get("name") == name and param in props:
+                del props[param]
+                allowed.add(why)
+
+
 SETUP_EXE_REASON = ("agentsetup 的 MCP／hooks 指令改指 Rust ctx（`<ctx> hook …`／`-- <ctx> mcp`），"
                     "Python 是 `<python> -m repo_context …`——指令字串不同，其餘照比")
 
@@ -389,6 +406,9 @@ def mcp_compare(name, sides, msgs, admin, results, cwd="repos/impl"):
     lb = [json.loads(norm_text(x, sides[1])) for x in outs[1].stdout.splitlines() if x.strip()]
     if len(la) != len(lb):
         problems.append(f"回應數 py={len(la)} rs={len(lb)}；stderr rs={outs[1].stderr[-300:]}")
+    allowed = set()
+    for y in lb:
+        drop_mcp_extras(y, allowed)
     for x, y in zip(la, lb):
         # tool 回的 text 若是 JSON 就解析後比（工作層），否則逐字比
         for r in (x, y):
@@ -400,7 +420,6 @@ def mcp_compare(name, sides, msgs, admin, results, cwd="repos/impl"):
         if d:
             problems.append(d)
             break
-    allowed = set()
     fd = diff_snapshots(snapshot(sides[0]), snapshot(sides[1]), allowed)
     if fd:
         problems.append(f"檔案 {fd}")

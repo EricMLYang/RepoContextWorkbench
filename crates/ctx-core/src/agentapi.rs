@@ -493,7 +493,31 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         .iter()
         .filter(|ev| ev.etype != EventType::Presented && s.contains(ev))
         .collect();
-    let recent: Vec<Value> = evs.iter().rev().take(8).map(|e| event_dict(e)).collect();
+    // Rust 才有（F-07）：被取代的判斷不列進最近事件（要看沿革用 query）；帶重看條件的有效判斷另列
+    let superseded = superseded_map(&all);
+    let recent: Vec<Value> = evs
+        .iter()
+        .rev()
+        .filter(|e| e.etype != EventType::Decision || !superseded.contains_key(&event_ref(e)))
+        .take(8)
+        .map(|e| event_dict(e))
+        .collect();
+    let td = today();
+    let reopen: Vec<Value> = evs
+        .iter()
+        .rev()
+        .filter(|e| e.etype == EventType::Decision && !superseded.contains_key(&event_ref(e)))
+        .filter_map(|e| {
+            let cond = reopen_when(e)?;
+            let due = ANY_DATE
+                .find_iter(&cond)
+                .map(|m| m.as_str().to_string())
+                .min()
+                .filter(|d| d.as_str() <= td.as_str());
+            Some(json!({"ref": event_ref(e), "text": first(e), "when": cond, "due": due.is_some()}))
+        })
+        .take(5)
+        .collect();
     let ids: Vec<String> = entries.iter().map(Repo::id).collect();
     let rid = w.repo_id().map(str::to_string);
     let neighbors = match &rid {
@@ -534,6 +558,9 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         "drift": drift,
         "fresh": fresh,
     });
+    if !reopen.is_empty() {
+        out["reopen"] = Value::Array(reopen);
+    }
     if card {
         let text = context::build_context(
             spine_dir,
@@ -905,6 +932,109 @@ fn append(
 /// 對應 `agentapi.log_decision`：記一筆判斷（decision）。回傳 ref，之後可以用它引用這筆。
 /// Python 預設 `source="agent"`。
 pub fn log_decision(
+    spine_dir: &Path,
+    text: &str,
+    t: &Target,
+    reference: Option<&str>,
+    cross_scope_ok: bool,
+    source: &str,
+) -> Result<Value> {
+    log_decision_ext(
+        spine_dir,
+        text,
+        t,
+        reference,
+        &DecisionExtra::default(),
+        cross_scope_ok,
+        source,
+    )
+}
+
+/// Rust 才有（F-07）：判斷的取代與重看條件。寫進 body 的結構化行（標頭 token 不變，Python 讀得回）：
+/// `取代：decision:<id>`、`何時重看：<條件>`。
+#[derive(Debug, Clone, Default)]
+pub struct DecisionExtra {
+    /// 這筆取代哪一筆判斷（`decision:<id>`）；沒給 ref 時也寫成 `ref:` token
+    pub supersedes: Option<String>,
+    /// 什麼情況要重看這個判斷（自由文字；寫了日期 `YYYY-MM-DD`，到期時開場會提醒）
+    pub reopen_when: Option<String>,
+}
+
+static SUPERSEDE_LINE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?m)^取代：\s*(decision:\S+)").expect("寫死的 regex"));
+static REOPEN_LINE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?m)^何時重看：\s*(.+?)\s*$").expect("寫死的 regex"));
+static ANY_DATE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\d{4}-\d{2}-\d{2}").expect("寫死的 regex"));
+
+/// 被取代的判斷 → 取代它的判斷（ref → ref）。
+pub fn superseded_map(events: &[Event]) -> std::collections::HashMap<String, String> {
+    events
+        .iter()
+        .filter(|ev| ev.etype == EventType::Decision)
+        .flat_map(|ev| {
+            let new = event_ref(ev);
+            SUPERSEDE_LINE
+                .captures_iter(&ev.body)
+                .map(move |c| (c[1].to_string(), new.clone()))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// 判斷的重看條件（`何時重看：` 行）。
+pub fn reopen_when(ev: &Event) -> Option<String> {
+    REOPEN_LINE.captures(&ev.body).map(|c| c[1].to_string())
+}
+
+/// 同 [`log_decision`]，可帶取代與重看條件（F-07）。
+pub fn log_decision_ext(
+    spine_dir: &Path,
+    text: &str,
+    t: &Target,
+    reference: Option<&str>,
+    extra: &DecisionExtra,
+    cross_scope_ok: bool,
+    source: &str,
+) -> Result<Value> {
+    let supersedes = extra
+        .supersedes
+        .as_deref()
+        .map(str::trim)
+        .filter(|x| !x.is_empty());
+    let reopen = extra
+        .reopen_when
+        .as_deref()
+        .map(|x| x.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|x| !x.is_empty());
+    let mut body = clean(text, "text")?;
+    if let Some(old) = supersedes {
+        let exists = spine::iter_events(spine_dir)?
+            .iter()
+            .any(|ev| ev.etype == EventType::Decision && event_ref(ev) == old);
+        if !old.starts_with("decision:") || !exists {
+            return Err(agent_error(
+                "bad_request",
+                format!("找不到要取代的判斷：{}", repr(old)),
+                Some("用 log_decision 回傳的 ref，例如 decision:2026-09-25-d1。"),
+            ));
+        }
+        body.push_str(&format!("\n取代：{old}"));
+    }
+    if let Some(r) = &reopen {
+        body.push_str(&format!("\n何時重看：{r}"));
+    }
+    log_decision_body(
+        spine_dir,
+        &body,
+        t,
+        reference.filter(|r| !r.is_empty()).or(supersedes),
+        cross_scope_ok,
+        source,
+    )
+}
+
+fn log_decision_body(
     spine_dir: &Path,
     text: &str,
     t: &Target,

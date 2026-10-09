@@ -387,6 +387,12 @@ pub struct LogArgs {
     /// 相關事件 ref，例 decision:2026-09-25-d1
     #[arg(long = "ref")]
     pub reference: Option<String>,
+    /// 這筆取代哪一筆判斷（decision:<id>；Rust 才有）
+    #[arg(long)]
+    pub supersedes: Option<String>,
+    /// 什麼情況要重看（寫日期 YYYY-MM-DD 會在到期時提醒；Rust 才有）
+    #[arg(long)]
+    pub reopen_when: Option<String>,
     #[command(flatten)]
     pub scope: Scoped,
     #[command(flatten)]
@@ -395,14 +401,19 @@ pub struct LogArgs {
 
 pub fn cmd_log(ctx: &Ctx, a: &LogArgs) -> CmdResult {
     let t = a.scope.target();
+    let extra = agentapi::DecisionExtra {
+        supersedes: a.supersedes.clone(),
+        reopen_when: a.reopen_when.clone(),
+    };
     agent_call(
         ctx,
         |d| {
-            agentapi::log_decision(
+            agentapi::log_decision_ext(
                 d,
                 &a.text,
                 &t,
                 nz(&a.reference),
+                &extra,
                 a.w.cross_scope_ok,
                 a.w.source(),
             )

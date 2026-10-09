@@ -614,11 +614,16 @@ fn w_next(d: &Path, a: &Args, here: &Path) -> Result<Value> {
 }
 fn w_log(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("log_decision", a, &["text"])?;
-    agentapi::log_decision(
+    let extra = agentapi::DecisionExtra {
+        supersedes: nz(a, "supersedes"),
+        reopen_when: nz(a, "reopen_when"),
+    };
+    agentapi::log_decision_ext(
         d,
         &arg_s(a, "text").unwrap_or_default(),
         &target(a, here),
         nz(a, "ref").as_deref(),
+        &extra,
         arg_flag(a, "cross_scope_ok"),
         "agent",
     )
@@ -786,6 +791,20 @@ pub static WORK_TOOLS: Lazy<Vec<Tool>> = Lazy::new(|| {
                             d_(
                                 str_t(),
                                 "相關事件的 ref（例 decision:2026-09-25-d1、collision:2026-09-25-a）",
+                            ),
+                        ),
+                        (
+                            "supersedes",
+                            d_(
+                                str_t(),
+                                "這筆判斷取代哪一筆（decision:<id>）；被取代的之後不再出現在最近事件",
+                            ),
+                        ),
+                        (
+                            "reopen_when",
+                            d_(
+                                str_t(),
+                                "什麼情況要重看這個判斷（例：repo 超過 50 個、2026-12-01 前）；寫日期會在到期時提醒",
                             ),
                         ),
                     ],

@@ -138,6 +138,22 @@ pub fn render_start(c: &ContextFor) -> String {
             out.push(h.clone());
         }
     }
+    // Rust 才有（F-07）：帶重看條件的有效判斷（到期的先列）
+    let mut reopen: Vec<&Value> = ctx["reopen"].as_array().into_iter().flatten().collect();
+    reopen.sort_by_key(|r| r["due"] != true);
+    for r in reopen.iter().take(3) {
+        let tag = if r["due"] == true {
+            "該重看"
+        } else {
+            "有條件的判斷"
+        };
+        out.push(format!(
+            "{tag}：{}（何時重看：{}）[{}]",
+            s(r, "text"),
+            s(r, "when"),
+            s(r, "ref")
+        ));
+    }
     for a in ctx["attention"].as_array().into_iter().flatten().take(3) {
         out.push(format!("注意：{}", s(a, "text")));
     }
