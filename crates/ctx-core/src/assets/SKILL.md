@@ -46,6 +46,18 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 `read_from` 那個 ref（讀了會算「用上了」，推薦就會越調越準）；無關就略過，不必解釋。
 要看完整清單：`ctx fresh --json`。
 
+## 判斷的沿革、回顧與交辦（Rust 版）
+
+開場注入的「## 提醒」一段是要處理的事（MCP `context_for` 的 `hints` 是同一份），**先問使用者再動手**：
+- **改掉舊判斷**：`log_decision` 帶 `supersedes=<舊的 ref>`（舊的之後不再出現在最近事件，沿革仍查得到）；
+  寫得出「什麼情況要重看」就帶 `reopen_when`（寫日期，到期時開場會提醒「該重看」）。
+- **判斷後來怎樣**：`log_decision` 帶 `outcome_of=<判斷的 ref>` 記一筆結果。提醒裡的「判斷回顧」就是在問這個。
+- **找過去的判斷**：`search_knowledge` 的 `decisions` 段（被取代的標出取代者、帶結果）。做新判斷前先查有沒有前例。
+- **未結體檢**：`ctx todo review --json`——哪些可能已處理（附證據）、哪些逾期沒動靜。確認後才 `close_todo`。
+- **交辦給新會話**：`ctx todo brief '#N'` 產生任務包（目標／背景／輸入／限制／完成條件）。
+- **關係建議**：`ctx registry suggest --json`；使用者同意才 `ctx registry relate`。
+- **新料拿來試**：`ctx fresh --try <id>` 在推薦所屬的組開一個帶出處的待辦。
+
 ## 範圍規則
 
 - 查詢預設只看主場。寫入主場以外的組會被拒（`error: cross_scope`）。

@@ -506,7 +506,8 @@ def main():
     impl, notes = "repos/impl", "repos/notes"
 
     # ── 讀（初始狀態）──
-    C("instructions", ["instructions"], spine=False)
+    C("instructions", ["instructions"], spine=False,
+      stdout_fix=lambda s: re.sub(r"\n## 判斷的沿革、回顧與交辦（Rust 版）\n.*?(?=\n## )", "", s, flags=re.S))
     C("registry list", ["registry", "list"])
     C("registry list --json", ["registry", "list", "--json"])
     C("registry relations", ["registry", "relations"])

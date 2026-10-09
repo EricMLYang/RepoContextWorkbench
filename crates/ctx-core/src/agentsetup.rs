@@ -34,7 +34,7 @@ static CTX_HOOK_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?:^|[/\\'"\s])ctx(?:\.exe)?['"]?\s+hook(?:\s|$)"#).expect("固定 regex")
 });
 
-/// skill 內容（與 Python `repo_context/assets/SKILL.md` 同一份，冪等比對靠它逐字相同）。
+/// skill 內容。與 Python `repo_context/assets/SKILL.md` 只差「判斷的沿革、回顧與交辦（Rust 版）」一段（2026-10-10，ideation N-23；對拍時拿掉這段再比）；冪等比對靠它逐字相同。
 pub const SKILL_MD: &str = include_str!("assets/SKILL.md");
 
 /// 一步的結果：給人看的一行＋是否成功（失敗要讓入口回非 0）。

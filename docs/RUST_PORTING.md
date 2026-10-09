@@ -164,6 +164,9 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   （工具、毫秒、成功與否；寫不進去不影響工具）。對拍時這個檔列為允許差異。
 - **遞增延後**（2026-10-10，ideation F-45）：App 未結卡的延期依已延次數 7 → 14 → 30 天（次數＝spine 裡「延期 N 天」
   事件數；第一次同 Python 的「延 7 天」，之後標成「之後再說（N 天）」），延 3 次以上卡上提醒「還要做嗎」。
+- **agent 看的 skill 多一段**（2026-10-10，ideation N-23）：`assets/SKILL.md` 加「判斷的沿革、回顧與交辦（Rust 版）」
+  ——提醒段、supersedes／reopen_when／outcome_of、判斷搜尋、todo review／brief、registry suggest、fresh --try。
+  對拍 `ctx instructions` 時拿掉這段再比。`ctx todo` 說明補 review／brief。
 
 CLI／MCP（ctx-cli）：
 
