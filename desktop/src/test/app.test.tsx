@@ -286,3 +286,24 @@ describe("該重看的判斷卡（F-46）", () => {
     expect(backend.action).toHaveBeenCalledWith("reopen_defer", { ref: "decision:2026-01-01-d1", days: 14 });
   });
 });
+
+describe("健康指標（F-50）", () => {
+  it("活動分頁最上方一行；沒有 health 鍵（舊引擎）就不顯示", async () => {
+    const health = {
+      days: 14,
+      handoff: { handoffs: 28, missed: 9, rate: 0.76 },
+      fresh: { found: 45, used: 0, dismissed: 0, hit_rate: 0 },
+      decisions: { with_outcome: 0, awaiting_retro: 0, outcome_rate: null },
+      loops: { opened: 46, closed: 6, open_now: 40, overdue: 0 },
+    };
+    await mount(mockBackend({ getState: vi.fn(async () => makeState({ health })) }));
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="activity"]')!));
+    const el = document.getElementById("health")!;
+    expect(el.textContent).toContain("交接率 76%（沒交接 9）");
+    expect(el.textContent).toContain("推薦命中 0%（0/45）");
+    expect(el.textContent).toContain("判斷有結果 —");
+    cleanup();
+    await mount();
+    expect(document.getElementById("health")).toBeNull();
+  });
+});

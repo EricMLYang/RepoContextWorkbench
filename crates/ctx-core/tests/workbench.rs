@@ -1423,3 +1423,20 @@ fn loop_defer_escalates() {
         .iter()
         .any(|l| l.as_str().unwrap().contains("已延 3 次")));
 }
+
+// Rust 才有（F-50）：state 帶健康指標（同 ctx health）
+#[test]
+fn state_carries_health() {
+    let (_t, d) = spine_with_repos();
+    ev(
+        &d,
+        "open-loop",
+        "agent",
+        &["#1", "group:g1"],
+        "opened → 補測試",
+        ago(60),
+    );
+    let s = st(&d);
+    assert_eq!(s["health"]["days"], 14);
+    assert_eq!(s["health"]["loops"]["opened"], 1);
+}

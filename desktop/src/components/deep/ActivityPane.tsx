@@ -40,6 +40,28 @@ function EventList({ list }: { list: RecentEvent[] }) {
   );
 }
 
+const pct = (x: number | null) => (x === null ? "—" : Math.round(x * 100) + "%");
+
+/** 健康指標（同 `ctx health`，引擎算好；這裡只排版）：真用一陣子後看行為有沒有改變。 */
+function HealthLine() {
+  const { state } = useSnapshot();
+  const h = state.health;
+  if (!h) return null;
+  return (
+    <div id="health" className="sectionintro">
+      <div>
+        <h2>{`健康（近 ${h.days} 天）`}</h2>
+        <p className="small muted">
+          {`交接率 ${pct(h.handoff.rate)}（沒交接 ${h.handoff.missed}）· ` +
+            `推薦命中 ${pct(h.fresh.hit_rate)}（${h.fresh.used}/${h.fresh.found}）· ` +
+            `判斷有結果 ${pct(h.decisions.outcome_rate)}（待回顧 ${h.decisions.awaiting_retro}）· ` +
+            `未結 開 ${h.loops.opened}／關 ${h.loops.closed}，逾期 ${h.loops.overdue}`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /** 活動分頁：近期 commit＋脈動、範圍內事件（依事件時間）、全域與未分類（收合）、累計統計。 */
 export function ActivityPane({ query, active }: { query: string; active: boolean }) {
   const { scan, state } = useSnapshot();
@@ -52,6 +74,7 @@ export function ActivityPane({ query, active }: { query: string; active: boolean
   const s = state.stats;
   return (
     <section id="tab-activity" className={"tabpane" + (active ? " on" : "")} aria-label="活動記錄">
+      <HealthLine />
       <div className="sectionintro">
         <div>
           <h2>近期 commit</h2>

@@ -1263,6 +1263,10 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
     if !suggestions.is_empty() {
         out["relation_suggestions"] = Value::Array(suggestions);
     }
+    // Rust 才有（F-50）：健康指標（同 `ctx health`；只讀檔）——App 活動分頁最上方
+    if let Ok(h) = crate::health::health(spine_dir, 14, None) {
+        out["health"] = h;
+    }
     Ok(out)
 }
 

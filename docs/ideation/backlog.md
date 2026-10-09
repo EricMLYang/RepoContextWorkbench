@@ -86,4 +86,4 @@
 | F-49 | 發佈與升級 | 一鍵安裝＋驗收清單：`scripts/install-app.sh`（App 開著就停、build、驗 ctx、備份、ditto、清 quarantine、刪 bundle 那份、驗證）＋自動迭代的驗收清單（每項在真實使用中怎麼看、`ctx health` 前後比）；**迭代 19 完成**：`scripts/install-app.sh`（含 --dry-run；修掉 BSD head 與 bash 把全形括號吃進變數名兩個 bug）＋`docs/20261010_自動迭代驗收清單.md`| R20：18 個迭代都沒裝；使用者開的是 target/release/bundle 那份、Spotlight 有兩個；安裝步驟靠手動 | 同介面 | P0 | 完成 | R20 | R20 |
 | N-23 | 同介面（agent 文件） | agent 看的說明跟上新能力：skill（`ctx setup --claude` 裝的 repo-context）加一段「判斷沿革、回顧、交辦」；`ctx todo --help` 等說明補 review／brief；**迭代 20 完成**；驗收清單補「重跑 ctx setup --claude 更新 skill」| R21：skill 與 `ctx todo` 說明仍只寫 add／close；agent 靠 skill 決定用哪些工具 | 同介面 | P1 | 完成 | R21 | R21 |
 | N-24 | 可維護 | agentapi.rs 裡 Rust 才有的段落搬進 `agentapi/` 子模組（review／brief／judgment／hints／agdr／fresh_try），行為不變；`agentapi.rs` 回到對應 Python 的那部分；**迭代 22 完成**：mod.rs 2,319→1,407 行，7 個子模組；測試未改、全過| R23：agentapi.rs 1,150→2,319 行，新增 1,175 行全是 Rust 才有的功能疊在後面 | — | P2 | 完成 | R23 | R23 |
-| F-50 | 同介面 | App「活動」分頁最上方顯示健康指標（交接率、推薦命中率、判斷結果記錄率、未結開／關／逾期）——跟 `ctx health` 同一份 | 同介面、留痕 | — | P1 | 排入（迭代 23） | R24 | R24 |
+| F-50 | 同介面 | App「活動」分頁最上方顯示健康指標（交接率、推薦命中率、判斷結果記錄率、未結開／關／逾期）——跟 `ctx health` 同一份；**迭代 23 完成**| 同介面、留痕 | — | P1 | 完成 | R24 | R24 |

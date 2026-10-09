@@ -228,6 +228,15 @@ export interface StateScope {
   members: string[];
 }
 
+/** 健康指標（Rust 引擎 F-36／F-50；同 `ctx health`）。比率是 0–1，沒有分母時是 null。 */
+export interface Health {
+  days: number;
+  handoff: { handoffs: number; missed: number; rate: number | null };
+  fresh: { found: number; used: number; dismissed: number; hit_rate: number | null };
+  decisions: { with_outcome: number; awaiting_retro: number; outcome_rate: number | null };
+  loops: { opened: number; closed: number; open_now: number; overdue: number };
+}
+
 export interface WorkbenchState {
   groups: GroupInfo[];
   repos: string[];
@@ -236,6 +245,8 @@ export interface WorkbenchState {
   tag_vocab: string[];
   relations: Relation[];
   rel_kinds: Record<string, RelationKind>;
+  /** 健康指標（舊版引擎沒有這個鍵）。 */
+  health?: Health;
   /** 碰到目前範圍、還沒設的關係建議；沒有建議時引擎不給這個鍵。 */
   relation_suggestions?: RelationSuggestion[];
   unread: (SpineEvent & { interrupt?: boolean })[];
