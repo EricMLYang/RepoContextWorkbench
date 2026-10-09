@@ -254,3 +254,35 @@ describe("任務包開會話（F-42）", () => {
     expect(task.value).toContain("# 任務包：#3 驗證 VDI");
   });
 });
+
+describe("該重看的判斷卡（F-46）", () => {
+  it("排在需要判斷之後自成一段；延 14 天呼叫 reopen_defer", async () => {
+    const card: StateCard = {
+      key: "reopen:decision:2026-01-01-d1",
+      kind: "reopen",
+      lane: "scope",
+      ref: "decision:2026-01-01-d1",
+      scope_kind: "group",
+      scope_label: "產品開發",
+      scope_repos: ["a", "b"],
+      date: "2026-01-01",
+      time: "09:00",
+      title: "該重看：先不做 Windows",
+      lines: ["當初說的重看條件：2026-10-01 或 VDI 使用者回報"],
+      actions: [
+        { label: "開會話重看", action: "term_create", payload: { kind: "agent", group: "產品開發", task: "重看判斷" } },
+        { label: "延 14 天", action: "reopen_defer", payload: { ref: "decision:2026-01-01-d1", days: 14 } },
+      ],
+    };
+    const backend = mockBackend({ getState: vi.fn(async () => makeState({ cards: [card] })) });
+    await mount(backend);
+    const article = (await screen.findByText("該重看：先不做 Windows")).closest("article")!;
+    expect(article.textContent).toContain("當初說的重看條件");
+    expect(document.body.textContent).toContain("該重看的判斷");
+    await act(async () => fireEvent.click(article.querySelector(".more")!));
+    const dialog = document.getElementById("detaildialog")!;
+    const defer = [...dialog.querySelectorAll("button")].find((b) => b.textContent === "延 14 天")!;
+    await act(async () => fireEvent.click(defer));
+    expect(backend.action).toHaveBeenCalledWith("reopen_defer", { ref: "decision:2026-01-01-d1", days: 14 });
+  });
+});

@@ -505,18 +505,15 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         .map(|e| event_dict(e))
         .collect();
     let td = today();
+    let snoozes = reopen_snoozes(spine_dir);
     let reopen: Vec<Value> = evs
         .iter()
         .rev()
         .filter(|e| e.etype == EventType::Decision && !superseded.contains_key(&event_ref(e)))
         .filter_map(|e| {
             let cond = reopen_when(e)?;
-            let due = ANY_DATE
-                .find_iter(&cond)
-                .map(|m| m.as_str().to_string())
-                .min()
-                .filter(|d| d.as_str() <= td.as_str());
-            Some(json!({"ref": event_ref(e), "text": first(e), "when": cond, "due": due.is_some()}))
+            let due = reopen_is_due(&cond, &event_ref(e), &td, &snoozes);
+            Some(json!({"ref": event_ref(e), "text": first(e), "when": cond, "due": due}))
         })
         .take(5)
         .collect();
@@ -989,6 +986,53 @@ pub fn superseded_map(events: &[Event]) -> std::collections::HashMap<String, Str
                 .collect::<Vec<_>>()
         })
         .collect()
+}
+
+fn reopen_snooze_path(spine_dir: &Path) -> PathBuf {
+    spine_dir.join(".state").join("reopen_snooze.json")
+}
+
+/// 「該重看」延後到哪天（ref → YYYY-MM-DD）。Rust 才有（F-46）。
+pub fn reopen_snoozes(spine_dir: &Path) -> Map<String, Value> {
+    std::fs::read_to_string(reopen_snooze_path(spine_dir))
+        .ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default()
+}
+
+/// 把一筆「該重看」延後 `days` 天（人看過、決定先維持）。回傳延到哪天。
+pub fn snooze_reopen(spine_dir: &Path, reference: &str, days: i64) -> Result<String> {
+    let mut m = reopen_snoozes(spine_dir);
+    let until = (Local::now() + chrono::Duration::days(days.max(1)))
+        .format("%Y-%m-%d")
+        .to_string();
+    m.insert(reference.to_string(), json!(until));
+    let p = reopen_snooze_path(spine_dir);
+    if let Some(parent) = p.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&p, serde_json::to_string(&m)?)?;
+    Ok(until)
+}
+
+/// 判斷的重看條件是否到期：條件裡最早的日期已到，且沒有延後到今天之後。
+pub fn reopen_is_due(
+    cond: &str,
+    reference: &str,
+    today: &str,
+    snoozes: &Map<String, Value>,
+) -> bool {
+    let date_due = ANY_DATE
+        .find_iter(cond)
+        .map(|m| m.as_str())
+        .min()
+        .is_some_and(|d| d <= today);
+    let snoozed = snoozes
+        .get(reference)
+        .and_then(Value::as_str)
+        .is_some_and(|u| u > today);
+    date_due && !snoozed
 }
 
 /// 判斷的重看條件（`何時重看：` 行）。

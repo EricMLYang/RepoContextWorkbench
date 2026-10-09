@@ -1302,3 +1302,45 @@ fn fresh_cards_in_inbox_and_dismiss() {
     act(&d, "fresh_dismiss", json!({"id": "r1"})).unwrap();
     assert!(cards_of(&st(&d), "fresh").is_empty());
 }
+
+// Rust 才有（F-46）：重看條件到期的判斷成卡；延後之後卡片與 agent 開場一起消失
+#[test]
+fn reopen_cards_due_and_defer() {
+    let (_t, d) = spine_with_repos();
+    let yesterday = (Local::now() - Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    ev(
+        &d,
+        "decision",
+        "agent",
+        &["id:2026-01-01-d1", "group:g1"],
+        &format!("先不做 Windows\n何時重看：{yesterday} 或 VDI 使用者回報"),
+        ago(60),
+    );
+    ev(
+        &d,
+        "decision",
+        "agent",
+        &["id:2026-01-01-d2", "group:g1"],
+        "索引用 JSON\n何時重看：repo 超過 50 個",
+        ago(50),
+    );
+    let s = st(&d);
+    let rc = cards_of(&s, "reopen");
+    assert_eq!(rc.len(), 1); // 沒日期的條件不成卡（agent 開場仍列為「有條件的判斷」）
+    assert_eq!(rc[0]["title"], "該重看：先不做 Windows");
+    assert_eq!(rc[0]["actions"][0]["action"], "term_create");
+    assert!(rc[0]["actions"][0]["payload"]["task"]
+        .as_str()
+        .unwrap()
+        .contains("supersedes decision:2026-01-01-d1"));
+    let r = act(
+        &d,
+        "reopen_defer",
+        json!({"ref": "decision:2026-01-01-d1", "days": 14}),
+    )
+    .unwrap();
+    assert!(r["until"].as_str().is_some());
+    assert!(cards_of(&st(&d), "reopen").is_empty());
+}

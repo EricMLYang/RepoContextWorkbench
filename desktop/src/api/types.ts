@@ -45,7 +45,8 @@ export interface CardAction {
 
 // ── 收件匣卡片（state.build_cards ＋ brief.build_question_cards）────
 
-export type CardKind = "interrupt" | "question" | "collision" | "event" | "loop" | "pending" | "fresh";
+export type CardKind =
+  "interrupt" | "question" | "collision" | "event" | "loop" | "pending" | "fresh" | "reopen";
 
 interface CardBase {
   key: string;
@@ -103,7 +104,14 @@ export interface FreshCard extends CardBase, Provenance {
   id: string;
 }
 
-export type StateCard = CollisionCard | EventCard | PendingCard | LoopCard | FreshCard;
+/** 該重看的判斷（Rust 引擎 F-46）：重看條件的日期到了；出口＝開會話重看／延 14 天。 */
+export interface ReopenCard extends CardBase, Provenance {
+  kind: "reopen";
+  lane: Lane;
+  ref: string;
+}
+
+export type StateCard = CollisionCard | EventCard | PendingCard | LoopCard | FreshCard | ReopenCard;
 export type InboxCard = StateCard | QuestionCard;
 
 // ── 會話清冊（term.TermManager.list ＋ state.annotate_terms）────────
@@ -336,6 +344,11 @@ export interface ActionMap {
   fresh_try: {
     payload: { id: string };
     result: { ok: true; todo: string; group: string; ref: string; text: string };
+  };
+  /** 「該重看」延後（Rust 引擎 F-46）。 */
+  reopen_defer: {
+    payload: { ref: string; days: number };
+    result: { ok: true; until: string };
   };
   /** 未結事項的任務包 markdown（Rust 引擎 F-42；前端 brief_session 用它開會話）。 */
   todo_brief: {

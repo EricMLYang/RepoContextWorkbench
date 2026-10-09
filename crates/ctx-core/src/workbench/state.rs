@@ -859,6 +859,64 @@ fn add_brief_action(cards: &mut [Value]) {
     }
 }
 
+/// Rust 才有（F-46）：重看條件到期的有效判斷成卡（同 agent 開場的「該重看」；純事件讀）。
+/// 出口：開會話重看（帶好任務）／延 14 天（人看過、先維持）。
+fn reopen_cards(spine_dir: &Path, events: &[Event], scopes: &[Prov]) -> Vec<Value> {
+    let superseded = crate::agentapi::superseded_map(events);
+    let snoozes = crate::agentapi::reopen_snoozes(spine_dir);
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let mut out = Vec::new();
+    for (ev, prov) in events.iter().zip(scopes) {
+        if ev.etype != EventType::Decision {
+            continue;
+        }
+        let r = crate::agentapi::event_ref(ev);
+        if superseded.contains_key(&r) {
+            continue;
+        }
+        let Some(cond) = crate::agentapi::reopen_when(ev) else {
+            continue;
+        };
+        if !crate::agentapi::reopen_is_due(&cond, &r, &today, &snoozes) {
+            continue;
+        }
+        let text = first_or_tokens(ev);
+        let mut session = collision_scope(ev.kv("group"));
+        if session.is_empty() {
+            if let Some(repo) = ev.kv("repo").filter(|x| !x.is_empty()) {
+                session.insert("repos".into(), json!([repo]));
+            }
+        }
+        session.insert("kind".into(), json!("agent"));
+        session.insert(
+            "task".into(),
+            json!(format!(
+                "重看判斷 {r}：{text}\n當初說的重看條件：{cond}\n先用 search_knowledge 看這段期間相關的判斷與變化，\
+                 跟我討論後：要改就 log_decision 並帶 supersedes {r}；維持原判斷就說明理由。"
+            )),
+        );
+        session.insert("origin".into(), json!(format!("reopen:{r}")));
+        let mut m = Map::new();
+        m.insert("key".into(), json!(format!("reopen:{r}")));
+        m.insert("kind".into(), json!("reopen"));
+        m.insert("ref".into(), json!(r));
+        m.insert("title".into(), json!(format!("該重看：{text}")));
+        m.insert("date".into(), json!(ev.date));
+        m.insert("time".into(), json!(ev.time));
+        m.insert("lines".into(), json!([format!("當初說的重看條件：{cond}")]));
+        prov.put(&mut m);
+        m.insert(
+            "actions".into(),
+            json!([
+                act("開會話重看", "term_create", Value::Object(session)),
+                act("延 14 天", "reopen_defer", json!({"ref": r, "days": 14})),
+            ]),
+        );
+        out.push(Value::Object(m));
+    }
+    out
+}
+
 /// Rust 才有（F-48）：反芻推薦成卡（排在最後；只放目前規則、近幾天的＝跟 agent 開場看到的同一批）。
 /// 純檔案讀（`.state/ruminate.json`）。出口：拿來試（開帶出處的待辦）／不相關。
 fn fresh_cards(spine_dir: &Path, data: &RegistryData) -> Result<Vec<Value>> {
@@ -991,6 +1049,7 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
     let mut cards = build_cards(&events, &p, &loops, &scopes);
     attach_review(&mut cards, &crate::agentapi::load_review_cache(spine_dir));
     add_brief_action(&mut cards);
+    cards.extend(reopen_cards(spine_dir, &events, &scopes));
     cards.extend(fresh_cards(spine_dir, &data)?);
     for c in &mut cards {
         let l = lane(&prov_of(c), scoped, &members, c["kind"] == "interrupt");

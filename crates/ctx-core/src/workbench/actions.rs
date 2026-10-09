@@ -59,6 +59,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("relation_dismiss", a_relation_dismiss),
     ("fresh_try", a_fresh_try),
     ("todo_brief", a_todo_brief),
+    ("reopen_defer", a_reopen_defer),
     ("fresh_dismiss", a_fresh_dismiss),
     ("collide", a_collide),
     ("collide_rerun", a_collide_rerun),
@@ -246,6 +247,16 @@ fn a_relate(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
             json!({"relation": r})
         },
     )
+}
+
+/// Rust 才有（F-46）：「該重看」延後（人看過、先維持原判斷）。
+fn a_reopen_defer(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let Some(r) = s(p, "ref").filter(|x| !x.is_empty()) else {
+        return Err(Error::invalid("reopen_defer 需要 ref"));
+    };
+    let days = p.get("days").and_then(Value::as_i64).unwrap_or(14);
+    let until = crate::agentapi::snooze_reopen(d, &r, days)?;
+    Ok(json!({"ok": true, "until": until}))
 }
 
 /// Rust 才有（F-42）：未結事項的任務包（前端拿 markdown 當新會話的任務）。

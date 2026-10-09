@@ -38,6 +38,7 @@ export const KINDNAME: Record<CardKind, string> = {
   loop: "待跟進",
   pending: "處理中",
   fresh: "相關新料",
+  reopen: "該重看的判斷",
 };
 
 export function isValidScope(s: unknown): s is Scope {
@@ -108,7 +109,16 @@ export function cardSections(
       note: "跨組顯示，操作只影響卡片標示的來源。",
       cards: globalWarnings,
     });
-  for (const kind of ["interrupt", "question", "collision", "loop", "fresh", "event", "pending"] as const) {
+  for (const kind of [
+    "interrupt",
+    "question",
+    "reopen",
+    "collision",
+    "loop",
+    "fresh",
+    "event",
+    "pending",
+  ] as const) {
     const cards = local.filter((c) => c.kind === kind && accept(c));
     if (cards.length) sections.push({ key: kind, title: KINDNAME[kind], cards });
   }
