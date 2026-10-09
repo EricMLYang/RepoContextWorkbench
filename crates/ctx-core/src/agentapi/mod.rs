@@ -557,6 +557,9 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
     if !reopen.is_empty() {
         out["reopen"] = Value::Array(reopen);
     }
+    // Rust 才有（N-26）：未結太多時只給最該處理的 CONTEXT_LOOP_CAP 項（逾期 → 到期近 → 沒期限），
+    // 其餘只給數量——規模大時 context_for 曾到 51KB（約 1.5 萬 token），agent 每次開工都要吞
+    cap_open_loops(&mut out);
     // Rust 才有（N-22）：要處理的提醒集中成一份——hook 開場與 MCP context_for 共用（同介面）；沒有就不給這個鍵
     let hints = collect_hints(spine_dir, t, &out);
     if !hints.is_empty() {
@@ -1387,6 +1390,33 @@ pub(crate) fn tokens_of(
         explicit: false,
     };
     tokens_for(&s, repo_id)
+}
+
+/// `context_for` 一次最多給幾項未結（N-26）。
+pub const CONTEXT_LOOP_CAP: usize = 30;
+
+fn cap_open_loops(out: &mut Value) {
+    let Some(loops) = out["open_loops"].as_array_mut() else {
+        return;
+    };
+    if loops.len() <= CONTEXT_LOOP_CAP {
+        return;
+    }
+    let total = loops.len();
+    // 穩定排序：逾期的先、再依到期日（沒期限的最後），同類保留原順序
+    loops.sort_by_key(|lp| {
+        let due = lp["due"].as_str().map(str::to_string);
+        (
+            lp["overdue"] != true,
+            due.is_none(),
+            due.unwrap_or_default(),
+        )
+    });
+    loops.truncate(CONTEXT_LOOP_CAP);
+    out["open_loops_more"] = json!({
+        "count": total - CONTEXT_LOOP_CAP, "total": total,
+        "hint": "只列最該處理的幾項；完整清單用 next_work（或 ctx next --limit 100）",
+    });
 }
 
 // ---------------------------------------------------------------- Rust 才有的功能（各自一個子模組）

@@ -1061,3 +1061,38 @@ fn export_agdr_marks_superseded_and_outcomes_idempotently() {
     let again = api::export_agdr(&w.sp, &at(&w.impl_), &out).unwrap();
     assert!(again["written"].as_array().unwrap().is_empty() && again["unchanged"] == 2);
 }
+
+// Rust 才有（N-26）：未結太多時 context_for 只給最該處理的 30 項，開場仍報總數
+#[test]
+fn context_for_caps_open_loops() {
+    let w = two_groups();
+    let yesterday = (Local::now() - chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    for i in 0..34 {
+        todo(&w, &format!("待辦 {i}"), &w.impl_);
+    }
+    api::add_todo(
+        &w.sp,
+        "逾期那一項",
+        Some(&yesterday),
+        &at(&w.impl_),
+        false,
+        "agent",
+    )
+    .unwrap();
+    let ctx = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
+    let loops = ctx["open_loops"].as_array().unwrap();
+    assert_eq!(loops.len(), api::CONTEXT_LOOP_CAP);
+    assert_eq!(loops[0]["text"], "逾期那一項"); // 逾期的排最前
+    assert_eq!(ctx["open_loops_more"]["total"], 35);
+    let out = hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "cap", "cwd": w.impl_.to_string_lossy()}),
+        None,
+    );
+    assert!(
+        out.contains("未結（35）") && out.contains("…另 29 項"),
+        "{out}"
+    );
+}

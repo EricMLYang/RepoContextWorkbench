@@ -470,6 +470,9 @@ pub struct TodoArgs {
     /// close 時：怎麼結的
     #[arg(long)]
     pub note: Option<String>,
+    /// review 時：連進行中的也完整列出（含證據）；預設進行中的只給編號、文字、理由
+    #[arg(long)]
+    pub all: bool,
     #[command(flatten)]
     pub scope: Scoped,
     #[command(flatten)]
@@ -488,7 +491,18 @@ pub fn cmd_todo(ctx: &Ctx, a: &TodoArgs) -> CmdResult {
     match a.action {
         TodoAction::Review => {
             let t = a.scope.target();
-            agent_call(ctx, |d| agentapi::review_todos(d, &t), h_review)
+            let all = a.all;
+            agent_call(
+                ctx,
+                |d| {
+                    let mut v = agentapi::review_todos(d, &t)?;
+                    if !all {
+                        trim_quiet_items(&mut v);
+                    }
+                    Ok(v)
+                },
+                h_review,
+            )
         }
         TodoAction::Brief => {
             let t = a.scope.target();
@@ -528,6 +542,30 @@ pub fn cmd_todo(ctx: &Ctx, a: &TodoArgs) -> CmdResult {
     }
 }
 
+/// `todo review` 預設最多完整列幾項「可能已處理／擱置」（其餘給數量；`--all` 全給）。
+const REVIEW_CAP: usize = 20;
+
+/// `todo review` 預設的精簡（N-26）：進行中的只留編號、文字、理由（`active`），證據只給
+/// 「可能已處理」與「擱置」的——那才是要 agent 處理的；`--all` 才全給。
+fn trim_quiet_items(v: &mut Value) {
+    let Some(items) = v["items"].as_array().cloned() else {
+        return;
+    };
+    let (active, mut flagged): (Vec<Value>, Vec<Value>) =
+        items.into_iter().partition(|it| it["verdict"] == "active");
+    if flagged.len() > REVIEW_CAP {
+        v["items_more"] = json!(flagged.len() - REVIEW_CAP);
+        flagged.truncate(REVIEW_CAP);
+    }
+    v["items"] = Value::Array(flagged);
+    v["active"] = Value::Array(
+        active
+            .iter()
+            .map(|it| json!({"id": it["id"], "text": it["text"], "why": it["why"]}))
+            .collect(),
+    );
+}
+
 /// `todo review` 的人話：可能已處理（附證據）→ 擱置太久 → 其餘只算數量。
 fn h_review(r: &Value) -> String {
     let c = &r["counts"];
@@ -562,6 +600,9 @@ fn h_review(r: &Value) -> String {
                 shared.join("、")
             ));
         }
+    }
+    if let Some(n) = r.get("items_more").and_then(Value::as_u64) {
+        out.push(format!("…另 {n} 項（ctx todo review --all 看全部）"));
     }
     if out.len() == 1 {
         out.push("沒有看起來已處理或擱置太久的項目。".into());

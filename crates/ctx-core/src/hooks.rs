@@ -118,7 +118,12 @@ pub fn render_start(c: &ContextFor) -> String {
     }
     let loops = ctx["open_loops"].as_array().cloned().unwrap_or_default();
     if !loops.is_empty() {
-        out.push(format!("未結（{}）：", loops.len()));
+        // 未結被設上限時（N-26）總數用 open_loops_more.total
+        let total = ctx["open_loops_more"]["total"]
+            .as_u64()
+            .map(|n| n as usize)
+            .unwrap_or(loops.len());
+        out.push(format!("未結（{total}）："));
         for lp in loops.iter().take(6) {
             let flag = if lp["overdue"] == true {
                 "，已逾期"
@@ -133,10 +138,10 @@ pub fn render_start(c: &ContextFor) -> String {
             let text = BACKFILL_TAIL.replace_all(s(lp, "text"), "");
             out.push(format!("- {} {}{due}", py_str(&lp["id"]), text.trim_end()));
         }
-        if loops.len() > 6 {
+        if total > 6 {
             out.push(format!(
                 "- …另 {} 項（用 next_work 看完整清單）",
-                loops.len() - 6
+                total - 6.min(loops.len())
             ));
         }
     }

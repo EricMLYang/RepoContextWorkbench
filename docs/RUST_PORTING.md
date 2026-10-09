@@ -173,6 +173,10 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
 - **判斷匯出成 AgDR `ctx decisions export <dir>`**（2026-10-10，ideation F-40；Python 沒有）：範圍內人／agent／回填寫的、
   有 id、不是交接的判斷寫成 `<dir>/AgDR-<id>.md`（frontmatter：id、timestamp、agent、status executed／superseded、
   supersedes、superseded_by、group／repo；內文：判斷、何時重看、結果）。沒變的檔不重寫；只寫指定目錄。
+- **agent 拿到的資料設上限**（2026-10-10，ideation N-26）：`context_for` 未結超過 30 項只給 30 項（逾期 → 到期近 →
+  沒期限），另給 `open_loops_more {count,total,hint}`，開場的「未結（N）」用總數；`ctx todo review` 預設進行中的只給
+  `active[{id,text,why}]`、「可能已處理／擱置」最多 20 項（`items_more`），`--all` 才全給。規模 1 萬筆：context 51→33KB、
+  review 157→34KB；真資料副本 review 8→2.1KB。只在超過時發生，對拍不受影響。
 
 CLI／MCP（ctx-cli）：
 

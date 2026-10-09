@@ -176,3 +176,22 @@ fn test_setup_rejects_non_spine() {
     let r = ctx(t.path()).run(&["setup", "--spine", s(t.path()), "--json"]);
     assert!(r.code == 3 && r.json()["error"] == "no_spine");
 }
+
+// Rust 才有（N-26）：todo review 預設精簡（進行中只給編號／文字／理由），--all 才全給
+#[test]
+fn todo_review_trims_by_default() {
+    let e = env_spine();
+    let c = ctx(e.tmp()).cwd(&e.impl_).env("REPOENGINE_SPINE", &e.sp);
+    for t in ["甲", "乙"] {
+        assert_eq!(c.clone().run(&["todo", "add", t, "--json"]).code, 0);
+    }
+    let r = c.clone().run(&["todo", "review", "--json"]);
+    let v = r.json();
+    assert!(v["items"].as_array().unwrap().is_empty());
+    let active = v["active"].as_array().unwrap();
+    assert_eq!(active.len(), 2);
+    assert!(active[0].get("evidence").is_none());
+    let all = c.run(&["todo", "review", "--all", "--json"]).json();
+    assert_eq!(all["items"].as_array().unwrap().len(), 2);
+    assert!(all.get("active").is_none());
+}
