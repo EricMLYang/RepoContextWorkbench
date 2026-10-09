@@ -7,6 +7,7 @@
 //!   開場脈絡；順手記下會話開始時間與 HEAD。cwd 沒登記＝什麼都不輸出（不打擾非本工具的 repo）。
 //! - SessionEnd：會話期間若沒有交接，但有 commit／未提交檔／留痕，就落一筆 suggestion [hook]——
 //!   「這次會話沒交接就結束了」，只陳述採得到的事實，不替 agent 編成果。
+//!   （Rust 才有）之後補一次 spine 批次 commit（[`spine::autocommit`]），判斷不會只躺在工作目錄裡。
 //!
 //! hook 的輸入是 Claude Code 從 stdin 給的 JSON（session_id／cwd／hook_event_name…）。
 //! 任何錯誤都吞掉並回空字串／None：hook 壞掉不能擋住使用者開 agent。
@@ -224,6 +225,16 @@ fn session_start_inner(
         let _ = ruminate::spawn_detached(spine_dir);
     }
     let now = now.unwrap_or_else(|| Local::now().naive_local());
+    let output = py_dumps(&json!({"hookSpecificOutput": {
+        "hookEventName": "SessionStart",
+        "additionalContext": render_start(&ctx),
+    }}));
+    if !has_session_id(payload) {
+        // 刻意差異（N-14）：沒有 session_id 的不是 Claude Code 開的會話（手動試跑、量測、誤觸）——
+        // 照樣輸出注入內容，但不記 marker：Python 會寫成 `unknown.json`，之後被當成一場會話、
+        // 下一個同樣沒 id 的 session-end 還會把它記成「未交接」。
+        return Ok(output);
+    }
     let d = marker_dir(spine_dir);
     std::fs::create_dir_all(&d)?;
     let head = git_lines(&repo.path, &["rev-parse", "HEAD"])
@@ -243,10 +254,12 @@ fn session_start_inner(
         d.join(format!("{}.json", safe(payload.get("session_id")))),
         py_dumps(&marker),
     )?;
-    Ok(py_dumps(&json!({"hookSpecificOutput": {
-        "hookEventName": "SessionStart",
-        "additionalContext": render_start(&ctx),
-    }})))
+    Ok(output)
+}
+
+/// hook 輸入有沒有可用的 session_id（[`safe`] 會換成 `unknown` 的那些都算沒有）。
+fn has_session_id(payload: &Value) -> bool {
+    safe(payload.get("session_id")) != "unknown"
 }
 
 /// 對應 `hooks.session_end`：會話結束——沒交接但有事發生 → suggestion [hook]。回傳寫入的事件 dict 或 None。
@@ -259,6 +272,9 @@ fn session_end_inner(
     payload: &Value,
     now: Option<NaiveDateTime>,
 ) -> Result<Option<Value>> {
+    if !has_session_id(payload) {
+        return Ok(None); // 同 session_start：沒 id 的不是一場會話
+    }
     let p = marker_dir(spine_dir).join(format!("{}.json", safe(payload.get("session_id"))));
     if !p.exists() {
         return Ok(None);
@@ -351,6 +367,8 @@ pub fn run_hook(spine_dir: &Path, event: &str, stdin: &str) -> String {
         session_start(spine_dir, &payload, None)
     } else {
         session_end(spine_dir, &payload, None);
+        // Rust 才有（N-01）：App 沒開時 timer 的排程 commit 不會跑——會話結束順手補一次
+        let _ = spine::autocommit(spine_dir, None);
         String::new()
     }
 }

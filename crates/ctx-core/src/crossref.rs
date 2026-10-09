@@ -781,30 +781,44 @@ pub fn code_search(entries: &[Repo], query: &str, limit: usize, per_repo: usize)
         return Vec::new();
     }
     let lows: Vec<String> = terms.iter().map(|t| t.to_lowercase()).collect();
+    let mut args: Vec<&str> = vec!["grep", "-n", "-I", "-i", "-F", "--max-count=20"];
+    for t in &terms {
+        args.push("-e");
+        args.push(t);
+    }
+    args.extend([
+        "--",
+        ".",
+        ":(exclude)*.md",
+        ":(exclude)*.lock",
+        ":(exclude)*-lock.json",
+        ":(exclude)*.min.js",
+        ":(exclude)*.svg",
+    ]);
+    // 各 repo 的 git grep 同時跑（Rust 才有：依序跑時 15 個 repo 要 0.6 秒以上）；結果照 repo 順序合併
+    let outs: Vec<Option<(i32, String)>> = std::thread::scope(|sc| {
+        let hs: Vec<_> = entries
+            .iter()
+            .map(|e| {
+                let args = &args;
+                sc.spawn(move || {
+                    let root = e.path();
+                    (root.is_dir() && e.kind().as_deref() != Some("external"))
+                        .then(|| git(&root, args, Duration::from_secs(10)))
+                })
+            })
+            .collect();
+        hs.into_iter().map(|h| h.join().ok().flatten()).collect()
+    });
     let mut rows: Vec<CodeHit> = Vec::new();
-    for e in entries {
-        let root = e.path();
-        if !root.is_dir() || e.kind().as_deref() == Some("external") {
+    for (e, res) in entries.iter().zip(outs) {
+        let Some((rc, out)) = res else {
             continue;
-        }
-        let mut args: Vec<&str> = vec!["grep", "-n", "-I", "-i", "-F", "--max-count=20"];
-        for t in &terms {
-            args.push("-e");
-            args.push(t);
-        }
-        args.extend([
-            "--",
-            ".",
-            ":(exclude)*.md",
-            ":(exclude)*.lock",
-            ":(exclude)*-lock.json",
-            ":(exclude)*.min.js",
-            ":(exclude)*.svg",
-        ]);
-        let (rc, out) = git(&root, &args, Duration::from_secs(10));
+        };
         if rc != 0 || out.is_empty() {
             continue;
         }
+        let root = e.path();
         let mut per_file: Vec<(String, Vec<(usize, String)>)> = Vec::new();
         let mut idx: HashMap<String, usize> = HashMap::new();
         for ln in out.lines().take(2000) {

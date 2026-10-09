@@ -57,10 +57,10 @@
 
 | ID | 品質屬性 | 構想 | 證據（R01 量測或程式位置） | 準則 | P | 狀態 | 首次 | 最後更新 |
 |---|---|---|---|---|---|---|---|---|
-| N-01 | 資料安全 | handoff 或每天自動 commit spine＋私有 remote 自動推送 | 3 份事件檔沒 commit、無 remote（＝#8） | 留痕 | P0 | 候選 | R01 | R01 |
-| N-02 | 效能 | search 降到 500ms 以內：有型別的反序列化 → MCP 常駐時把索引留在記憶體做增量 → 合併後換 bincode／SQLite FTS5 | `ctx search` 2.2–3.0s；索引 54MB 每次整份解析（`knowledge.rs:104`） | 脈絡 | P0 | 候選 | R01 | R01 |
-| N-03 | agent 端 token 效能 | 推送降噪：bigram 停用詞、不跨詞邊界、相關度門檻；量注入 token 數與 read_from 轉換率；R02：做法：比照 Lucene CJKBigram＋StopFilter，用哈工大停用詞表，先不加 jieba-rs；同 3 筆雜訊連兩輪都被推送 | 開場新料共同詞為「用後、登記、際使」等雜訊 | 脈絡 | P0 | 候選 | R01 | R02 |
-| N-04 | 可維護 | GitHub Actions：test／clippy／fmt／parity／前端測試，加 Windows 編譯 | 無 `.github/workflows`；312 個 Rust 測試只能手動跑 | — | P0 | 候選 | R01 | R01 |
+| N-01 | 資料安全 | handoff 或每天自動 commit spine＋私有 remote 自動推送；**開發 2026-10-09**：SessionEnd hook 自動 commit（`spine::autocommit`，上次 commit 超過 6 小時、可設 `thresholds.spine_autocommit_hours`），有 upstream 就背景 push | 3 份事件檔沒 commit、無 remote（＝#8） | 留痕 | P0 | 進行（commit 完成；remote 待使用者決定 #8） | R01 | R02 |
+| N-02 | 效能 | search 降到 500ms 以內：有型別的反序列化 → MCP 常駐時把索引留在記憶體做增量 → 合併後換 bincode／SQLite FTS5；**開發 2026-10-09**：search 2.1–3.0s → 約 0.55s（只要 md 0.38s），結果相同；順手修掉浮點解析不精確導致 631 檔每次重算的舊 bug | `ctx search` 2.2–3.0s；索引 54MB 每次整份解析（`knowledge.rs:104`） | 脈絡 | P0 | 完成 | R01 | R02 |
+| N-03 | agent 端 token 效能 | 推送降噪：bigram 停用詞、不跨詞邊界、相關度門檻；量注入 token 數與 read_from 轉換率；R02：做法：比照 Lucene CJKBigram＋StopFilter，用哈工大停用詞表，先不加 jieba-rs；同 3 筆雜訊連兩輪都被推送；**開發 2026-10-09**：共同詞去掉數字日期與跨詞邊界假詞（黏度 ≥0.08）、待處理中不重推；真資料上共同詞變乾淨，但被選的檔沒變——推得準不準要看 `ctx fresh --stats` 的命中率 | 開場新料共同詞為「用後、登記、際使」等雜訊 | 脈絡 | P0 | 完成（第一步） | R01 | R02 |
+| N-04 | 可維護 | GitHub Actions：test／clippy／fmt／parity／前端測試，加 Windows 編譯；**開發 2026-10-09**：`.github/workflows/ci.yml`：macOS 全套（前端、fmt、clippy、test、對拍），Windows 只編 ctx（不擋） | 無 `.github/workflows`；312 個 Rust 測試只能手動跑 | — | P0 | 完成（待第一次 push 驗證） | R01 | R02 |
 | N-05 | 併發一致 | 所有寫入路徑走鎖＋暫存檔改名；寫入帶 opId 防重複；timer 單例；R02：Beads 用雜湊 ID 避免多 agent 撞號，可參考 | 常駐 4 支 `ctx mcp`＋App＋timer 共寫 spine | 留痕 | P1 | 構想 | R01 | R02 |
 | N-06 | 閒置耗能 | 量 App 開一小時的能耗；改用 FSEvents（`notify` crate）取代輪詢 | 未量 | — | P1 | 構想 | R01 | R01 |
 | N-07 | 可觀測 | 每次 MCP 呼叫記到 `.state/metrics.jsonl`；`ctx doctor`；錯誤附下一步；R02：mra 有 mra_doctor，可對照 | 目前沒有工具層計時 | 脈絡 | P1 | 構想 | R01 | R02 |
@@ -70,5 +70,5 @@
 | N-11 | 隱私安全 | ask_repo 唯讀沙盒確認；spine 推送前先過洩密哨兵；R02：dev.to 提出用 symlink＋chmod 做「核心層強制」的唯讀，見 N-15 | — | — | P2 | 構想 | R01 | R02 |
 | N-12 | 規模 | 合成 100 repo／1 萬筆事件，測 context 與 search 的上限 | 目前 spine 事件 8 份、.state 71MB | 脈絡 | P2 | 構想 | R01 | R01 |
 | N-13 | 可維護 | 合併後刪 Python 版與 `pyjson.rs`／`pystr.rs` 相容層；資料格式加 `schema_version`；MCP 輸出 JSON Schema＋合約測試 | — | 同介面 | P2 | 構想 | R01 | R01 |
-| N-14 | 資料安全 | hook 收到沒有 session_id 的輸入時要拒絕或提供 `--dry-run`；不然量測或誤觸會在 spine 留下假會話（被記成未交接） | R02 量測時 `ctx hook session-start </dev/null` 產生 `hook_sessions/unknown.json` | 留痕 | P1 | 候選 | R02 | R02 |
+| N-14 | 資料安全 | hook 收到沒有 session_id 的輸入時要拒絕或提供 `--dry-run`；不然量測或誤觸會在 spine 留下假會話（被記成未交接）；**開發 2026-10-09**：沒 session_id 照樣注入、不記 marker；量測不再留下假會話 | R02 量測時 `ctx hook session-start </dev/null` 產生 `hook_sessions/unknown.json` | 留痕 | P1 | 完成 | R02 | R02 |
 | N-15 | 隱私安全 | 寫入範圍改由檔案系統強制：ask_repo 或跨組讀取走唯讀 view 目錄（symlink＋chmod），不靠 prompt 也不只靠工具層 | `cross_scope` 只擋 MCP／CLI，agent 用 shell 還是寫得進去 | 同介面 | P2 | 構想 | R02 | R02 |

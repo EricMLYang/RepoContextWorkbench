@@ -10,7 +10,7 @@ license = "MIT"
 [workspace.dependencies]
 ctx-core = { path = "crates/ctx-core" }
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+serde_json = { version = "1", features = ["preserve_order", "raw_value", "float_roundtrip"] }
 serde_yaml = "0.9"
 thiserror = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

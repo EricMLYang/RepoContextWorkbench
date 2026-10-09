@@ -186,6 +186,44 @@ fn search_skips_secret_files_and_caches() {
     assert_eq!(r2.files, r3.files);
 }
 
+/// Rust 才有（N-02）：mtime 帶很多位小數也要命中快取（serde_json 預設的浮點解析不精確，
+/// 曾讓 631 份檔每次查詢都重算、整份快取重寫），沒有新算的檔就不重寫快取。
+#[test]
+fn cache_hit_with_fractional_mtime_does_not_rewrite() {
+    let w = common::spine_with_repos();
+    let f = w.repo_a.join("README.md");
+    // 1789141470.6707613：預設解析會讀成 …670761，跟 stat 的值對不上
+    let t = std::time::UNIX_EPOCH + std::time::Duration::new(1_789_141_470, 670_761_300);
+    std::fs::File::options()
+        .write(true)
+        .open(&f)
+        .unwrap()
+        .set_modified(t)
+        .unwrap();
+    let search = || {
+        knowledge::search(
+            &w.refs(),
+            "快取",
+            8,
+            Some(&w.spine),
+            &[],
+            &Boosts::default(),
+        )
+    };
+    let first = search();
+    let cache = w.spine.join(".state").join("knowledge_index.json");
+    let stamp = || std::fs::metadata(&cache).unwrap().modified().unwrap();
+    let before = stamp();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    // 模擬另一個行程寫過快取（行程內記憶失效）→ 重讀檔後仍要全部命中
+    let text = std::fs::read_to_string(&cache).unwrap();
+    std::fs::write(&cache, &text).unwrap();
+    let rewritten = stamp();
+    assert!(rewritten > before);
+    assert_eq!(search().files, first.files);
+    assert_eq!(stamp(), rewritten, "全部命中時不該重寫快取");
+}
+
 /// 對應 test_search_neighbor_boost_and_why 的精神：boost 改變排序並留下 why；exclude_paths 排除來源檔。
 #[test]
 fn search_boosts_and_excludes() {

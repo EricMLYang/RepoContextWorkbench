@@ -93,6 +93,19 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
 - **timer.run_loop 睡到下一個排程點**（最多 300 秒重看一次 config），不是固定每 30 秒 tick，閒置不吃 CPU；
   可由 channel 停止。
 - **term kill 先送 SIGHUP＋SIGTERM**（給 shell／agent 收尾的機會），逾時才 SIGKILL。
+- **SessionEnd hook 補一次 spine 批次 commit**（2026-10-09，ideation N-01）：timer 住在桌面 App 裡，App 沒開時
+  21:00 的排程 commit 不會跑。`spine::autocommit`：spine 已有 git 歷史、有變更、上次 commit 超過
+  `thresholds.spine_autocommit_hours`（預設 6；0＝關）才 commit；分支有 upstream 就背景 `git push`。
+  一個 commit 都沒有的 spine 不動（不替使用者開始 git 歷史）。`batch_commit` 改成持 `.engine.lock` 才 add＋commit。
+- **hook 沒有 session_id 不記 marker**（N-14）：Python 寫成 `hook_sessions/unknown.json`；Rust 照樣輸出注入內容，
+  但不記會話（手動試跑、量測不會留下假會話，之後也不會被記成「未交接」）。
+- **知識索引快取**（N-02，格式不變）：不展開成整棵 JSON 樹，只解析用到的檔；沒有新算的檔就不重寫快取
+  （Python 每次查詢整份重寫）；常駐行程（MCP、App）記住上次讀到的快取；列檔與逐檔解析分給多條執行緒；
+  `serde_json` 開 `float_roundtrip`（預設的浮點解析不精確，mtime 對不上 → 曾有 631 份檔每次查詢都重算）。
+  程式碼搜尋（`git grep`）各 repo 同時跑。真資料 `ctx search` 2.1–3.0s → 約 0.55s，結果與舊版相同。
+- **反芻推送降噪**（N-03）：共同詞不收純數字／日期；中文 bigram 要「像一個詞」——含它的文件數 ÷ 含其中較少見
+  那個字的文件數 ≥ 0.08（`CharStats::word_like`），擋掉「者決」「用後」這類跨詞邊界切出來的假詞；
+  同一組同一份料還有沒處理的或被打掉過的推薦，檔案改了也不重推。
 
 CLI／MCP（ctx-cli）：
 

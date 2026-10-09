@@ -283,3 +283,67 @@ fn state_roundtrips_python_shape() {
         .any(|l| l.starts_with("- [r3] 新料 cards:x.md——共同詞：增量")));
     assert!(lines.iter().any(|l| l == "    L1: x"));
 }
+
+// ---- Rust 才有（N-03 推送降噪）----
+
+#[test]
+fn numbers_and_dates_are_not_shared_terms() {
+    for t in ["54", "2026-10-06", "20260908", "1.2.3"] {
+        assert!(!ruminate::meaningful(t), "{t}");
+    }
+    assert!(ruminate::meaningful("v0.2") && ruminate::meaningful("q1"));
+}
+
+#[test]
+fn cross_boundary_bigrams_are_not_word_like() {
+    // 「者」「決」各自很常見，「者決」只是「使用者決定」切出來的
+    let mut docs = Vec::new();
+    for i in 0..200 {
+        let text = match i % 4 {
+            0 if i % 20 == 0 => "使用者決定要不要重建索引".to_string(),
+            0 => format!("編者{i}說明決策"),
+            1 => format!("作者{i}寫了筆記，結論是要決議"),
+            2 => format!("讀者{i}看完後決定延後"),
+            _ => format!("鄰居{i}的狀態，管理者負責解決"),
+        };
+        let tf = ctx_core::knowledge::tokenize(&text).into_iter().fold(
+            std::collections::HashMap::new(),
+            |mut m, t| {
+                *m.entry(t).or_insert(0.0) += 1.0;
+                m
+            },
+        );
+        docs.push(ctx_core::knowledge::Doc {
+            repo: "r".into(),
+            path: format!("/x/{i}.md"),
+            rel: format!("{i}.md"),
+            tf,
+            len: 1.0,
+            htf: Default::default(),
+            hlen: 0.0,
+            mtime: 0.0,
+        });
+    }
+    let st = ruminate::CharStats::from_docs(docs.iter());
+    assert!(!st.word_like("者決"));
+    assert!(st.word_like("鄰居") && st.word_like("hook"));
+}
+
+#[test]
+fn changed_file_is_not_pushed_again_while_pending() {
+    let w = world();
+    let card = w.cards.join("索引重建.md");
+    std::fs::write(&card, CARD).unwrap();
+    let first = ruminate::run(&w.sp, None, None).unwrap();
+    assert_eq!(refs_of(&first, "產品"), vec!["cards:索引重建.md"]);
+    // 檔案改了（mtime 變）：還有一筆沒處理的推薦 → 不再推一筆新的
+    std::fs::write(
+        &card,
+        format!("{CARD}\n補一段：增量重建的水位線要持久化。\n"),
+    )
+    .unwrap();
+    let later = Local::now().naive_local() + chrono::Duration::minutes(1);
+    let second = ruminate::run(&w.sp, Some(later), Some(1)).unwrap();
+    assert!(second.group("產品").is_none());
+    assert_eq!(ruminate::fresh(&w.sp, "產品", false).unwrap().len(), 1);
+}

@@ -393,6 +393,20 @@ fn test_session_start_hook_silent_outside_registry() {
     assert_eq!(out, "");
 }
 
+// Rust 才有（刻意差異 N-14）：沒 session_id＝手動試跑／量測，照樣注入但不留 marker
+#[test]
+fn session_start_without_session_id_leaves_no_marker() {
+    let w = two_groups();
+    let cwd = w.impl_.to_string_lossy().to_string();
+    for payload in [json!({"cwd": cwd}), json!({"session_id": "", "cwd": cwd})] {
+        let out = hooks::session_start(&w.sp, &payload, None);
+        assert!(out.contains("你在 impl"));
+        assert!(hooks::session_end(&w.sp, &payload, None).is_none());
+    }
+    let d = w.sp.join(".state/hook_sessions");
+    assert!(!d.exists() || std::fs::read_dir(&d).unwrap().next().is_none());
+}
+
 #[test]
 fn test_session_end_records_missing_handoff() {
     let w = two_groups();

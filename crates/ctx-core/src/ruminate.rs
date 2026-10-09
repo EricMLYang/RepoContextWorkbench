@@ -230,26 +230,97 @@ const FUNCTION_CHARS: &str =
     "的是了不會在要就也和與及把讓得都而並或很這那有我你他它們一上下起個為以於之所被從到對";
 
 /// 對應 `ruminate._meaningful`：含虛字的中文 bigram、單一非 ASCII 字不算共同詞。
+///
+/// 與 Python 的差異（N-03）：純數字／日期（`54`、`2026-10-06`、`v0.2` 以外只有數字與分隔號的）也不算——
+/// 兩份文件剛好寫了同一天，不代表講同一件事。
 pub fn meaningful(t: &str) -> bool {
     let cs: Vec<char> = t.chars().collect();
     let has_fn =
         cs.len() == 2 && (FUNCTION_CHARS.contains(cs[0]) || FUNCTION_CHARS.contains(cs[1]));
     let lone_cjk = cs.len() == 1 && !cs[0].is_ascii();
-    !has_fn && !lone_cjk
+    let numeric = cs
+        .iter()
+        .all(|c| c.is_ascii_digit() || matches!(c, '-' | '.' | '_' | '/' | ':'));
+    !has_fn && !lone_cjk && !numeric
+}
+
+/// Rust 才有（N-03）：中文 bigram 是否「像一個詞」的門檻——見 [`CharStats::word_like`]。
+pub const MIN_BIGRAM_ASSOC: f64 = 0.08;
+
+fn is_cjk_bigram(t: &str) -> bool {
+    let mut cs = t.chars();
+    matches!((cs.next(), cs.next(), cs.next()), (Some(a), Some(b), None) if is_cjk(a) && is_cjk(b))
+}
+
+fn is_cjk(c: char) -> bool {
+    matches!(c as u32, 0x3400..=0x9FFF | 0xF900..=0xFAFF)
+}
+
+/// 語料裡每個中文 bigram／單字出現在幾份文件——判斷 bigram 是詞還是跨詞邊界切出來的假詞。
+#[derive(Debug, Default)]
+pub struct CharStats {
+    bigram_df: HashMap<String, usize>,
+    char_df: HashMap<char, usize>,
+}
+
+impl CharStats {
+    /// 從文件的 tf（詞 → 次數）統計。
+    pub fn from_docs<'a>(docs: impl Iterator<Item = &'a Doc>) -> Self {
+        let mut st = CharStats::default();
+        for d in docs {
+            let mut chars: HashSet<char> = HashSet::new();
+            for t in d.tf.keys().filter(|t| is_cjk_bigram(t)) {
+                *st.bigram_df.entry(t.clone()).or_default() += 1;
+                chars.extend(t.chars());
+            }
+            for c in chars {
+                *st.char_df.entry(c).or_default() += 1;
+            }
+        }
+        st
+    }
+
+    /// 中文 bigram 的「黏度」＝含這個 bigram 的文件數 ÷ 含其中較少見那個字的文件數。
+    /// 跨詞邊界的假詞（「者決」「用後」「際使」）兩個字都很常見、湊在一起卻很少，黏度 < 0.05；
+    /// 真詞（「鄰居」「回填」「交接」）多在 0.1 以上（2026-10-09 真語料 5,204 份實測：
+    /// 0.08 擋掉 53 個假詞裡的 50 個，留下 25 個真詞裡的 21 個）。非中文 bigram 一律算像詞。
+    pub fn word_like(&self, t: &str) -> bool {
+        if !is_cjk_bigram(t) {
+            return true;
+        }
+        let mut cs = t.chars();
+        let (Some(a), Some(b)) = (cs.next(), cs.next()) else {
+            return true;
+        };
+        let rarer = self
+            .char_df
+            .get(&a)
+            .copied()
+            .unwrap_or(0)
+            .min(self.char_df.get(&b).copied().unwrap_or(0))
+            .max(1);
+        let df = self.bigram_df.get(t).copied().unwrap_or(0);
+        df as f64 / rarer as f64 >= MIN_BIGRAM_ASSOC
+    }
 }
 
 /// 對應 `_shared_terms`：共同的少見詞（idf 高於 floor、不含虛字），依 idf 排序——推薦的「為什麼」。
+///
+/// 與 Python 的差異（N-03）：中文 bigram 還要「像一個詞」（[`CharStats::word_like`]）才算。
 fn shared_terms(
     qcount: &[(String, u64)],
     doc: &Doc,
     idf: &HashMap<String, f64>,
     floor: f64,
+    stats: &CharStats,
 ) -> Vec<String> {
     let idf_of = |t: &str| idf.get(t).copied().unwrap_or(0.0);
     let mut terms: Vec<&String> = qcount
         .iter()
         .map(|(t, _)| t)
-        .filter(|t| doc.tf.contains_key(*t) && idf_of(t) >= floor && meaningful(t))
+        .filter(|t| {
+            doc.tf.contains_key(*t) && idf_of(t) >= floor && meaningful(t) && stats.word_like(t)
+        })
         .collect();
     terms.sort_by(|a, b| idf_of(b).total_cmp(&idf_of(a)));
     terms.into_iter().cloned().collect()
@@ -362,11 +433,20 @@ pub fn run(
     let ev_docs = event_docs(&events, &since);
     let (idf, n_docs) = idf_of(all_docs.iter().chain(ev_docs.iter().map(|(c, _)| &c.doc)));
     let floor = rare_floor(n_docs);
+    let stats = CharStats::from_docs(all_docs.iter().chain(ev_docs.iter().map(|(c, _)| &c.doc)));
     let loops = spine::open_loops_of(&events);
     let known: HashSet<(String, String, String)> = state
         .links
         .iter()
         .map(|l| (l.group.clone(), l.reference.clone(), stamp_key(&l.stamp)))
+        .collect();
+    // 與 Python 的差異（N-03）：同一組同一份料，還有一筆沒處理的（new）或被打掉過（dismissed），
+    // 檔案改了也不再推一筆新的——不然常改的檔（AGENTS.md）每輪都會換個 id 重推。
+    let settled: HashSet<(String, String)> = state
+        .links
+        .iter()
+        .filter(|l| l.status != LinkStatus::Used)
+        .map(|l| (l.group.clone(), l.reference.clone()))
         .collect();
 
     let found_at = now.format("%Y-%m-%d %H:%M").to_string();
@@ -411,7 +491,7 @@ pub fn run(
         let head = knowledge::bm25(&qcount, &docs, true);
         let mut scored: Vec<(f64, &Cand, Vec<String>)> = Vec::new();
         for ((c, sb), sh) in cands.iter().zip(body).zip(head) {
-            let shared = shared_terms(&qcount, &c.doc, &idf, floor);
+            let shared = shared_terms(&qcount, &c.doc, &idf, floor, &stats);
             if (shared.len() as i64) < cfg.min_shared {
                 continue; // 寧缺勿濫：共同少見詞不夠多＝只是剛好用到常見字
             }
@@ -423,7 +503,9 @@ pub fn run(
             if picks.len() as i64 >= cfg.max_per_group {
                 break;
             }
-            if known.contains(&(name.clone(), c.reference.clone(), stamp_key(&c.stamp))) {
+            if known.contains(&(name.clone(), c.reference.clone(), stamp_key(&c.stamp)))
+                || settled.contains(&(name.clone(), c.reference.clone()))
+            {
                 continue;
             }
             picks.push(Link {

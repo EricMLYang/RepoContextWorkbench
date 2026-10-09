@@ -14,13 +14,16 @@
 //! - boosts：呼叫端（agentapi）依主場算好——有關係的 repo 加分、落在 export 內加分；
 //!   近 30 天改過的檔小幅加分。每筆結果帶 why（為什麼排這裡），agent 才判斷得了要不要信。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::value::RawValue;
+use serde_json::{json, Value};
 
 use crate::fsutil::{expanduser, mtime_secs, now_secs, read_text_lossy, resolve};
 use crate::pack::{self, RepoRef};
@@ -98,26 +101,67 @@ fn cache_path(spine_dir: &Path) -> PathBuf {
     spine_dir.join(".state").join("knowledge_index.json")
 }
 
-fn load_cache(spine_dir: &Path) -> Map<String, Value> {
-    std::fs::read_to_string(cache_path(spine_dir))
+/// 快取一筆（`.state/knowledge_index.json` 的 value；欄位同 Python）。只在命中時解析。
+#[derive(Debug, Deserialize)]
+struct CachedRec {
+    mtime: Option<f64>,
+    #[serde(default)]
+    secret: bool,
+    #[serde(default)]
+    tf: HashMap<String, f64>,
+    #[serde(default)]
+    len: f64,
+    #[serde(default)]
+    htf: HashMap<String, f64>,
+    #[serde(default)]
+    hlen: f64,
+    v: Option<i64>,
+}
+
+/// 整份快取：路徑 → 原樣保留的 JSON（不展開成 Value 樹；只解析範圍內命中的那幾筆）。
+type Cache = BTreeMap<String, Box<RawValue>>;
+
+/// 行程內記住上次讀到的快取（MCP server／桌面 App 是常駐行程，同一份檔不用每次重讀重解析）。
+/// 檔案的 (mtime, 大小) 變了＝別的行程（Python 版、另一個 ctx）寫過 → 重讀。
+struct Memo {
+    path: PathBuf,
+    stamp: Option<(SystemTime, u64)>,
+    cache: Cache,
+}
+
+static MEMO: Lazy<Mutex<Option<Memo>>> = Lazy::new(|| Mutex::new(None));
+
+fn file_stamp(p: &Path) -> Option<(SystemTime, u64)> {
+    let m = std::fs::metadata(p).ok()?;
+    Some((m.modified().ok()?, m.len()))
+}
+
+/// 讀快取：行程內有同一份（stamp 沒變）就直接拿走，否則讀檔。壞檔＝空（同 Python）。
+fn take_cache(memo: &mut Option<Memo>, spine_dir: &Path) -> Cache {
+    let p = cache_path(spine_dir);
+    let stamp = file_stamp(&p);
+    if let Some(m) = memo.take() {
+        if m.path == p && m.stamp.is_some() && m.stamp == stamp {
+            return m.cache;
+        }
+    }
+    std::fs::read_to_string(&p)
         .ok()
-        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-        .and_then(|v| match v {
-            Value::Object(m) => Some(m),
-            _ => None,
-        })
+        .and_then(|s| serde_json::from_str::<Cache>(&s).ok())
         .unwrap_or_default()
 }
 
-fn save_cache(spine_dir: &Path, cache: &Map<String, Value>) {
+/// 寫快取（先寫暫存檔再改名，別的行程不會讀到半份）。寫不進去不影響查詢。回傳寫完後的 stamp。
+fn save_cache(spine_dir: &Path, cache: &Cache) -> Option<(SystemTime, u64)> {
     let p = cache_path(spine_dir);
-    // 快取寫不進去不影響查詢
     if let Some(parent) = p.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    if let Ok(s) = serde_json::to_string(cache) {
-        let _ = std::fs::write(&p, s);
-    }
+    let s = serde_json::to_string(cache).ok()?;
+    let tmp = p.with_extension(format!("json.{}.tmp", std::process::id()));
+    std::fs::write(&tmp, s).ok()?;
+    std::fs::rename(&tmp, &p).ok()?;
+    file_stamp(&p)
 }
 
 /// 有序計數（插入順序＝首次出現順序，同 Python `Counter`）。
@@ -140,16 +184,6 @@ fn counts_to_json(c: &[(String, u64)]) -> Value {
     Value::Object(c.iter().map(|(k, v)| (k.clone(), json!(v))).collect())
 }
 
-fn json_to_tf(v: Option<&Value>) -> HashMap<String, f64> {
-    v.and_then(Value::as_object)
-        .map(|m| {
-            m.iter()
-                .filter_map(|(k, v)| v.as_f64().map(|n| (k.clone(), n)))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 /// 索引裡的一份文件（對應 `build_docs` 回傳的 dict）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Doc {
@@ -165,67 +199,158 @@ pub struct Doc {
 }
 
 /// 對應 `knowledge.build_docs`。有 `spine_dir` 就走 mtime 快取（與 Python 共用同一份檔）。
+///
+/// 與 Python 的差異（N-02，格式不變）：快取不展開成整棵 JSON 樹，只解析範圍內命中的檔；
+/// 沒有新算的檔就不重寫快取（Python 每次查詢都整份重寫）；常駐行程記住上次讀到的快取。
 pub fn build_docs(entries: &[RepoRef], spine_dir: Option<&Path>) -> Vec<Doc> {
-    let mut cache = spine_dir.map(load_cache).unwrap_or_default();
-    let mut fresh: Vec<(String, Value)> = Vec::new();
-    let mut docs = Vec::new();
-    for e in entries {
-        let root = expanduser(&e.path);
-        if !root.is_dir() {
-            continue;
-        }
-        for f in pack::doc_files(&root) {
-            let key = f.to_string_lossy().into_owned();
-            let Ok(mtime) = mtime_secs(&f) else { continue };
-            let hit = cache.get(&key).filter(|h| {
-                h.get("mtime").and_then(Value::as_f64) == Some(mtime)
-                    && h.get("v").and_then(Value::as_i64) == Some(INDEX_VERSION)
-            });
-            let rec = match hit {
-                Some(h) => h.clone(),
-                None => {
-                    let Ok(full) = read_text_lossy(&f) else {
-                        continue;
-                    };
-                    let text = take_chars(&full, MAX_CHARS);
-                    if !pack::secret_hits(text).is_empty() {
-                        json!({"mtime": mtime, "secret": true, "v": INDEX_VERSION})
-                    } else {
-                        let tf = count(tokenize(text));
-                        let name = f
-                            .file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_default();
-                        let htf = count(tokenize(&heading_text(text, &name)));
-                        json!({"mtime": mtime, "tf": counts_to_json(&tf),
-                               "len": tf.iter().map(|x| x.1).sum::<u64>(),
-                               "htf": counts_to_json(&htf),
-                               "hlen": htf.iter().map(|x| x.1).sum::<u64>(),
-                               "v": INDEX_VERSION})
-                    }
-                }
-            };
-            let secret = rec.get("secret").and_then(Value::as_bool).unwrap_or(false);
-            if !secret {
-                docs.push(Doc {
-                    repo: e.id.clone(),
-                    path: key.clone(),
-                    rel: pack::rel_posix(&f, &root),
-                    tf: json_to_tf(rec.get("tf")),
-                    len: rec.get("len").and_then(Value::as_f64).unwrap_or(0.0),
-                    htf: json_to_tf(rec.get("htf")),
-                    hlen: rec.get("hlen").and_then(Value::as_f64).unwrap_or(0.0),
-                    mtime: rec.get("mtime").and_then(Value::as_f64).unwrap_or(0.0),
-                });
-            }
-            fresh.push((key, rec));
-        }
-    }
-    if let Some(sd) = spine_dir {
-        cache.extend(fresh);
-        save_cache(sd, &cache);
-    }
+    let Some(sd) = spine_dir else {
+        return build_docs_with(entries, &mut Cache::new()).0;
+    };
+    let mut memo = MEMO.lock().unwrap_or_else(|e| e.into_inner());
+    let mut cache = take_cache(&mut memo, sd);
+    let (docs, dirty) = build_docs_with(entries, &mut cache);
+    let stamp = if dirty {
+        save_cache(sd, &cache)
+    } else {
+        file_stamp(&cache_path(sd))
+    };
+    *memo = Some(Memo {
+        path: cache_path(sd),
+        stamp,
+        cache,
+    });
     docs
+}
+
+/// 回傳 (docs, 快取有沒有新算的檔)。列檔（git ls-files）與逐檔解析／索引都分給多條執行緒，
+/// 結果照原本順序（repo 順序 → 檔案順序）合併。
+fn build_docs_with(entries: &[RepoRef], cache: &mut Cache) -> (Vec<Doc>, bool) {
+    let roots: Vec<(&RepoRef, PathBuf)> = entries
+        .iter()
+        .map(|e| (e, expanduser(&e.path)))
+        .filter(|(_, root)| root.is_dir())
+        .collect();
+    let listed: Vec<Vec<PathBuf>> = std::thread::scope(|sc| {
+        let hs: Vec<_> = roots
+            .iter()
+            .map(|(_, root)| sc.spawn(move || pack::doc_files(root)))
+            .collect();
+        hs.into_iter()
+            .map(|h| h.join().unwrap_or_default())
+            .collect()
+    });
+    let jobs: Vec<(&RepoRef, &Path, PathBuf)> = roots
+        .iter()
+        .zip(listed)
+        .flat_map(|((e, root), files)| files.into_iter().map(move |f| (*e, root.as_path(), f)))
+        .collect();
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .min(8);
+    let chunk = jobs.len().div_ceil(threads).max(64);
+    let shared: &Cache = cache;
+    let results: Vec<Vec<Indexed>> = std::thread::scope(|sc| {
+        let hs: Vec<_> = jobs
+            .chunks(chunk)
+            .map(|part| {
+                sc.spawn(move || {
+                    part.iter()
+                        .filter_map(|(e, root, f)| index_one(shared, e, root, f))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        hs.into_iter()
+            .map(|h| h.join().unwrap_or_default())
+            .collect()
+    });
+    let mut dirty = false;
+    let mut docs = Vec::new();
+    for it in results.into_iter().flatten() {
+        if let Some((key, raw)) = it.fresh {
+            cache.insert(key, raw);
+            dirty = true;
+        }
+        docs.extend(it.doc);
+    }
+    (docs, dirty)
+}
+
+/// 單一檔的結果：要給查詢的 doc（秘密檔沒有）＋要寫回快取的新紀錄（命中快取就沒有）。
+struct Indexed {
+    doc: Option<Doc>,
+    fresh: Option<(String, Box<RawValue>)>,
+}
+
+/// 單一檔：快取命中就解析快取，否則讀檔重算。讀不到的檔＝None（同 Python 略過）。
+fn index_one(cache: &Cache, e: &RepoRef, root: &Path, f: &Path) -> Option<Indexed> {
+    let key = f.to_string_lossy().into_owned();
+    let mtime = mtime_secs(f).ok()?;
+    let hit = cache
+        .get(&key)
+        .and_then(|raw| serde_json::from_str::<CachedRec>(raw.get()).ok())
+        .filter(|r| r.mtime == Some(mtime) && r.v == Some(INDEX_VERSION));
+    let (rec, fresh) = match hit {
+        Some(r) => (r, None),
+        None => {
+            let full = read_text_lossy(f).ok()?;
+            let (raw, rec) = index_file(f, take_chars(&full, MAX_CHARS), mtime);
+            let fresh = serde_json::value::to_raw_value(&raw)
+                .ok()
+                .map(|raw| (key.clone(), raw));
+            (rec, fresh)
+        }
+    };
+    let doc = (!rec.secret).then(|| Doc {
+        repo: e.id.clone(),
+        path: key,
+        rel: pack::rel_posix(f, root),
+        tf: rec.tf,
+        len: rec.len,
+        htf: rec.htf,
+        hlen: rec.hlen,
+        mtime,
+    });
+    Some(Indexed { doc, fresh })
+}
+
+/// 算一個檔的索引：(寫進快取的 JSON——計數是整數，同 Python, 給本次查詢用的紀錄)。
+fn index_file(f: &Path, text: &str, mtime: f64) -> (Value, CachedRec) {
+    if !pack::secret_hits(text).is_empty() {
+        let raw = json!({"mtime": mtime, "secret": true, "v": INDEX_VERSION});
+        let rec = CachedRec {
+            mtime: Some(mtime),
+            secret: true,
+            tf: HashMap::new(),
+            len: 0.0,
+            htf: HashMap::new(),
+            hlen: 0.0,
+            v: Some(INDEX_VERSION),
+        };
+        return (raw, rec);
+    }
+    let tf = count(tokenize(text));
+    let name = f
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let htf = count(tokenize(&heading_text(text, &name)));
+    let len: u64 = tf.iter().map(|x| x.1).sum();
+    let hlen: u64 = htf.iter().map(|x| x.1).sum();
+    let raw = json!({"mtime": mtime, "tf": counts_to_json(&tf), "len": len,
+                     "htf": counts_to_json(&htf), "hlen": hlen, "v": INDEX_VERSION});
+    let to_map = |c: &[(String, u64)]| c.iter().map(|(k, v)| (k.clone(), *v as f64)).collect();
+    let rec = CachedRec {
+        mtime: Some(mtime),
+        secret: false,
+        tf: to_map(&tf),
+        len: len as f64,
+        htf: to_map(&htf),
+        hlen: hlen as f64,
+        v: Some(INDEX_VERSION),
+    };
+    (raw, rec)
 }
 
 /// 命中片段（行號 1 起算）。

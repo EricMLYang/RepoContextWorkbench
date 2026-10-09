@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 
-use chrono::{Duration, Local, NaiveDateTime};
+use chrono::{Duration, Local, NaiveDateTime, TimeZone};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
@@ -612,8 +612,15 @@ pub fn default_due_tokens<S: AsRef<str>>(
 
 /// 對應 `spine.batch_commit`：git 單一提交者的唯一入口（P10 三件套之三）——CLI `commit` 與 S6 timer
 /// 都走這裡，其他進程只寫檔不碰 git。回傳 true＝有 commit，false＝無變更。
+///
+/// 與 Python 的差異：持 `.engine.lock` 才 add＋commit——hook 的自動 commit（[`autocommit`]）與 timer、
+/// CLI 可能同時跑，也不會把寫到一半的事件檔 commit 進去。
 pub fn batch_commit(spine_dir: impl AsRef<Path>, message: &str) -> Result<bool> {
     let d = spine_dir.as_ref();
+    crate::locking::with_spine_lock(d, || git_add_commit(d, message))
+}
+
+fn git_add_commit(d: &Path, message: &str) -> Result<bool> {
     let st = Command::new("git")
         .args(["add", "-A"])
         .current_dir(d)
@@ -633,6 +640,90 @@ pub fn batch_commit(spine_dir: impl AsRef<Path>, message: &str) -> Result<bool> 
 
 /// `batch_commit` 的預設訊息。
 pub const DEFAULT_COMMIT_MESSAGE: &str = "spine: batch commit";
+
+/// [`autocommit`] 的 commit 訊息。
+pub const AUTO_COMMIT_MESSAGE: &str = "spine: auto commit (session end)";
+
+/// config `thresholds.spine_autocommit_hours` 沒設時的預設：上次 commit 超過幾小時才自動 commit。
+pub const AUTOCOMMIT_HOURS_DEFAULT: i64 = 6;
+
+/// [`autocommit`] 做了什麼。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AutoCommit {
+    /// config 設 0＝關掉
+    Disabled,
+    /// spine 不是 git repo，或一個 commit 都還沒有（使用者還沒開始用 git 管它，不替他開頭）
+    NoHistory,
+    /// 沒有變更
+    Clean,
+    /// 上次 commit 還不夠久（留給 timer／手動 commit 批次收）
+    Recent,
+    /// 已 commit；`push`＝有 upstream，已在背景 push
+    Committed { push: bool },
+}
+
+/// Rust 才有（N-01）：會話結束時補一次批次 commit——timer 住在桌面 App 裡，App 沒開時
+/// 排程的 commit 不會跑，判斷就只存在工作目錄裡。條件：spine 已有 git 歷史、有變更、
+/// 上次 commit 超過 `thresholds.spine_autocommit_hours`（預設 6；0＝關）。
+/// commit 走 [`batch_commit`]（單一入口、持鎖）；分支有 upstream 就背景 `git push`（不等、不報錯，
+/// 失敗下次再推）。`REPOCTX_NO_BACKGROUND` 有值時不 push。
+pub fn autocommit(spine_dir: &Path, now: Option<NaiveDateTime>) -> Result<AutoCommit> {
+    let hours = crate::config::load(spine_dir)?
+        .i64("thresholds.spine_autocommit_hours")
+        .unwrap_or(AUTOCOMMIT_HOURS_DEFAULT);
+    if hours <= 0 {
+        return Ok(AutoCommit::Disabled);
+    }
+    if !spine_dir.join(".git").exists() {
+        return Ok(AutoCommit::NoHistory);
+    }
+    let Some(last) = git_out(spine_dir, &["log", "-1", "--format=%ct"])
+        .and_then(|s| s.trim().parse::<i64>().ok())
+    else {
+        return Ok(AutoCommit::NoHistory);
+    };
+    if git_out(spine_dir, &["status", "--porcelain"]).is_none_or(|s| s.trim().is_empty()) {
+        return Ok(AutoCommit::Clean);
+    }
+    let now_ts = Local
+        .from_local_datetime(&now_or(now))
+        .earliest()
+        .map(|t| t.timestamp())
+        .unwrap_or(last);
+    if now_ts - last < hours * 3600 {
+        return Ok(AutoCommit::Recent);
+    }
+    if !batch_commit(spine_dir, AUTO_COMMIT_MESSAGE)? {
+        return Ok(AutoCommit::Clean);
+    }
+    let upstream = git_out(
+        spine_dir,
+        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    )
+    .is_some();
+    if upstream && !crate::exe::background_disabled() {
+        if let Some(git) = crate::exe::which("git") {
+            let dir = spine_dir.as_os_str();
+            let _ = crate::exe::spawn_detached(
+                &git,
+                ["-C".as_ref(), dir, "push".as_ref(), "-q".as_ref()],
+            );
+        }
+    }
+    Ok(AutoCommit::Committed { push: upstream })
+}
+
+/// `git -C <d> <args>` 成功時的 stdout；失敗＝None。
+fn git_out(d: &Path, args: &[&str]) -> Option<String> {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(d)
+        .output()
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
 
 /// 對應 `spine.last_seen_path`。
 pub fn last_seen_path(spine_dir: impl AsRef<Path>) -> PathBuf {
