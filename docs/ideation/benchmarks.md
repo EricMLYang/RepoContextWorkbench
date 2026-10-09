@@ -59,6 +59,7 @@
 | Qodo cross-repo review | 跨 repo 連動 | 自動發現 repo 間關係＋跨 repo 審 PR | 從技術訊號自動推關係，也可手動定義 | 商業、程式碼為主 → F-33 | 參考 | 🔗 | 2026-10-10 | R06 查詢 1 | [docs](https://docs.qodo.ai/governance/cross-repo-code-review) |
 | co-change mining（Kagdi 等） | 跨 repo 連動（研究） | 版本歷史 | 一起被 commit 的檔／repo＝隱性關係，靜態分析看不到 | — → F-33 | 參考 | 🔗 | 2026-10-10 | R06 查詢 1 | [Kagdi07](https://www.cs.kent.edu/~jmaletic/cs63902/Papers/Kagdi07.pdf) |
 | Obsidian 未連結提及／Atomic Insights（Adamic-Adar） | 知識庫連結建議 | 筆記庫 | 「提到了卻沒連」一鍵建連結；共同鄰居（Adamic-Adar）推薦 | 單一 vault → F-33 | 參考 | 🔗 | 2026-10-10 | R06 查詢 2 | [Atomic Insights](https://community.obsidian.md/plugins/atomic-insights) |
+| Microsoft HAX Toolkit（G7／G11／G13） | 入口（AI 建議 UX 準則） | — | 建議要能輕鬆略過、說得出為什麼、記住使用者的選擇並說明會怎麼影響之後 | — → F-47 | 參考 | 🔗 | 2026-10-10 | R07 查詢 | [HAX](https://www.microsoft.com/en-us/haxtoolkit/application-type/prediction/page/5) |
 | Claude Code auto memory | 平台 | `~/.claude/projects/<路徑>/memory/*.md` | 本機 md 記憶；匯出／匯入功能請求被關成不做 | 單一路徑、不跨 repo → F-44 可對接 | 觀察 | 🔗 | 2026-10-10 | R04 查詢 | [docs](https://code.claude.com/docs/en/memory)、[issue #67369](https://github.com/anthropics/claude-code/issues/67369) |
 
 ## 待查對標（下一輪處理）
@@ -104,6 +105,8 @@
 - R05：`desktop app inbox design triage stale tasks evidence suggestions UX 2026 agent`（→ Matuschak）
 - R06：`automatically infer relationships between repositories cross-repo references co-change analysis`
 - R06：`personal knowledge base suggest links between notes unlinked mentions Obsidian algorithm`
+
+- R07：`explainable suggestions UI accept dismiss "why am I seeing this" pattern design 2026`
 
 ### 下一輪查詢
 1. `multi-repo-agent mra alternatives polyrepo AI agent orchestration`（R02 留下）
