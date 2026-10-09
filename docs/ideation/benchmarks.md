@@ -68,6 +68,7 @@
 | Emdash | 平行執行台 | 多 agent 協調 | — | **agent 之間不共享脈絡**（跟一個 agent 說的限制，其他不知道）＝本工具補的那塊 | 觀察 | 🔗 | 2026-10-10 | R14 查詢 1 | [augmentcode](https://www.augmentcode.com/tools/best-warp-alternatives) |
 | Claude Code Plugins（官方） | 技能包 | skills＋hooks＋agents＋MCP 的發佈單位 | 官方把「tribal knowledge」交給 plugin；marketplace 數百個 | ctx setup 已有同等安裝 → F-16 延後 | 觀察 | 🔗 | 2026-10-10 | R14 查詢 2 | [指南](https://hidekazu-konishi.com/entry/claude_code_plugins_complete_guide.html) |
 | macOS 替換執行中 App 的做法（Apple 論壇／社群） | 發佈與升級 | — | 先結束 App；用 ditto 整包替換（cp 改內容會讓下次啟動簽章崩潰）；清 quarantine | — → F-49 | 參考 | 🔗 | 2026-10-10 | R20 查詢 | [Apple 論壇](https://developer.apple.com/forums/thread/761433)、[updating mac software](https://developer.apple.com/documentation/security/updating-mac-software.md) |
+| agentsview／tuneloop／agentacct | 觀測（成本與時間） | 讀本機 Claude Code 等會話紀錄 | 每會話 token、成本、依日／模型／agent 分；本機、無遙測 | 已做得好 → F-29 整合不重做 | 零件 | 🔗 | 2026-10-10 | R24 查詢 | [agentsview](https://braindetox.kr/en/posts/agentsview_agent_session_analytics_2026.html)、[tuneloop](https://cdn.jsdelivr.net/npm/tuneloop@0.8.1/README.md)、[agentacct](https://www.everydev.ai/tools/agentacct/llms.txt) |
 | Claude Code auto memory | 平台 | `~/.claude/projects/<路徑>/memory/*.md` | 本機 md 記憶；匯出／匯入功能請求被關成不做 | 單一路徑、不跨 repo → F-44 可對接 | 觀察 | 🔗 | 2026-10-10 | R04 查詢 | [docs](https://code.claude.com/docs/en/memory)、[issue #67369](https://github.com/anthropics/claude-code/issues/67369) |
 
 ## 待查對標（下一輪處理）
@@ -131,6 +132,8 @@
 - R20：`macOS replace running .app bundle safely install script quit app first ditto codesign verify 2026`
 - R22：`Claude Code Projects local threads release October 2026`（extended）
 - R22：`Adamic-Adar link prediction small graph explainable recommendation common neighbors`
+
+- R24：`track time and cost per task across AI coding agent sessions dashboard local 2026`
 
 ### 下一輪查詢
 1. `Claude Code Projects local thread hooks MCP SessionStart`（本機 thread 會不會觸發 hook／掛 MCP）
