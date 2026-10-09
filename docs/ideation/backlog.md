@@ -49,7 +49,7 @@
 | F-39 | 入口 | Windows／VDI 入口 | 同介面 | — | P2 | 併入 N-10 | R01 | R01 |
 | F-40 | 判斷品味 | decision 可匯出成 AgDR 相容格式（Y 句型、考慮過的選項、agent／model 中繼資料），讓別的工具也讀得到 | 留痕、同介面 | AgDR | P2 | 構想 | R02 | R02 |
 | F-41 | 跨 repo | 跨 repo 分支：同一功能在多個 repo 開同名分支，依相依順序開 PR、等 CI 再合併 | 脈絡 | mra | P2 | 構想 | R02 | R02 |
-| F-42 | 流程 | 任務包：替每個 todo 產生一張乾淨的脈絡卡，交給全新 context 的 subagent（state 放在磁碟、不放在模型裡）；R11：`ctx todo brief #N`：目標／背景（組目標、相關判斷＋取代與重看、上次交接）／輸入（相關檔 ref）／限制（範圍、不能改的）／完成條件——全由引擎現有資料組；App 未結卡「用任務包開會話」 | 脈絡 | GSD、Ralph loop | P1 | 排入（迭代 10） | R02 | R11 |
+| F-42 | 流程 | 任務包：替每個 todo 產生一張乾淨的脈絡卡，交給全新 context 的 subagent（state 放在磁碟、不放在模型裡）；R11：`ctx todo brief #N`：目標／背景（組目標、相關判斷＋取代與重看、上次交接）／輸入（相關檔 ref）／限制（範圍、不能改的）／完成條件——全由引擎現有資料組；App 未結卡「用任務包開會話」；R12：迭代 10（125c227）：`ctx todo brief`＋App「用任務包開會話」；判斷蓋住 ≥20% 才放 | 脈絡 | GSD、Ralph loop | P1 | 完成 | R02 | R12 |
 | F-43 | 入口 | 手機或遠端檢視收件匣與會話狀態 | 同介面 | Paseo、Superset 遠端工作區 | P2 | 構想 | R02 | R02 |
 | F-44 | 定位 | 平台整合：spine 摘要可匯出成 Claude Managed Agents 的檔案式記憶；單 agent 的記憶整理交給平台，ctx 專注跨 repo 與人的判斷；R03：Claude Code Projects（09-17）已做「每個 repo 一個 thread＋共享記憶」，但只在雲端、官方未說記憶可編輯或匯出 → 本工具差異收斂為「本機、可讀、可改、在 git 裡的判斷留痕，涵蓋知識 repo＋人的收件匣」 | 同介面 | Anthropic Memory、Dreaming、Projects | P1 | 構想 | R02 | R03 |
 
@@ -72,11 +72,11 @@
 | N-13 | 可維護 | 合併後刪 Python 版與 `pyjson.rs`／`pystr.rs` 相容層；資料格式加 `schema_version`；MCP 輸出 JSON Schema＋合約測試 | — | 同介面 | P2 | 構想 | R01 | R01 |
 | N-14 | 資料安全 | hook 收到沒有 session_id 的輸入時要拒絕或提供 `--dry-run`；不然量測或誤觸會在 spine 留下假會話（被記成未交接）；**開發 2026-10-09**：沒 session_id 照樣注入、不記 marker；量測不再留下假會話 | R02 量測時 `ctx hook session-start </dev/null` 產生 `hook_sessions/unknown.json` | 留痕 | P1 | 完成 | R02 | R02 |
 | N-15 | 隱私安全 | 寫入範圍改由檔案系統強制：ask_repo 或跨組讀取走唯讀 view 目錄（symlink＋chmod），不靠 prompt 也不只靠工具層 | `cross_scope` 只擋 MCP／CLI，agent 用 shell 還是寫得進去 | 同介面 | P2 | 構想 | R02 | R02 |
-| N-16 | 資料安全 | 沒走 SessionEnd 的會話 marker 會一直留著（`hook_sessions/` 6 個，最舊 10-05）；開場時清掉超過 N 天的，必要時補記「未交接」 | R03 量測 | 留痕 | P2 | 候選 | R03 | R03 |
+| N-16 | 資料安全 | 沒走 SessionEnd 的會話 marker 會一直留著（`hook_sessions/` 6 個，最舊 10-05）；開場時清掉超過 N 天的，必要時補記「未交接」；R12：跟 N-18 一起做：開場時清掉超過 N 天沒結束的會話 marker | R03 量測 | 留痕 | P2 | 排入（迭代 11） | R03 | R12 |
 | N-17 | 效能 | 有檔改過就整份 54MB 知識快取重寫（約 0.5s）：改成依 repo 分檔或追加式 | R04：工作中改檔後 `ctx search` 1.09s（未改 0.56s） | 脈絡 | P2 | 候選 | R04 | R04 |
 | F-45 | 入口 | 收件匣「之後再說」改成間隔遞增（1→3→7 天），不是固定延 7 天；清理不再有壓力 | 脈絡 | Andy Matuschak〈Spaced repetition can lower the stakes around destructive inbox-maintenance〉 | P2 | 構想 | R05 | R05 |
 | F-46 | 同介面 | 桌面 App 收件匣看得到 agent 看到的：未結卡帶體檢結論＋證據、到期的「該重看」判斷成卡；R06：迭代 4（e1c2043）：未結卡帶「可能已處理／擱置沒動靜」標籤＋證據；該重看判斷的卡片還沒做（收件匣要新卡種） | 同介面、留痕 | — | P1 | 完成（重點部分） | R05 | R06 |
-| N-18 | 可維護 | parity「mcp 管理層」notify 未讀跨分鐘偶發不同（last_seen 是 HH:MM） | R05：迭代 3 對拍一次失敗、重跑兩次皆過 | — | P2 | 候選 | R05 | R05 |
+| N-18 | 可維護 | parity「mcp 管理層」notify 未讀跨分鐘偶發不同（last_seen 是 HH:MM）；R12：第二次發生（迭代 10 對拍 mcp 兩項偶發失敗、重跑過）；不穩定的對拍會讓人習慣性重跑、忽略真問題 | R05：迭代 3 對拍一次失敗、重跑兩次皆過 | — | P2 | 排入（迭代 11） | R05 | R12 |
 | N-19 | 可維護 | 每次迭代的檢查清單要包含 `parity_state.py`（迭代 2 誤刪 `examples/workbench_dump.rs` 兩輪後才發現）；暫存範例用唯一檔名、只刪自己建的檔 | R06：誤刪事件 | — | P1 | 完成（流程） | R06 | R06 |
 | F-47 | 同介面 | App「關係」分頁列出關係建議（理由＋證據），有推測的一鍵套用、沒推測的開預填表單、「不相關」打掉後不再出現；R08：迭代 6（270e73c）：App 關係分頁建議＋套用／設定…／不相關；真資料工作台範圍 1 筆、全部 10 筆 | 同介面、脈絡 | Microsoft HAX（說明為什麼、容易略過、記住使用者的選擇） | P1 | 完成 | R07 | R08 |
 | N-20 | agent 端 token 效能 | 推薦帶規則版本：舊規則產生的不再推進開場（保留資料，`ctx fresh --all` 看得到）；開場推薦再加時間衰減（太舊的不推）；R09：迭代 7（fb597e3）：rules 版本＋7 天衰減＋一般用語門檻 1/2；開場注入 2,549→1,881 字元，舊雜訊消失；未結 #46 不刪資料即解 | R08：新版開場仍推 r23–r25（舊規則雜訊），要等 30 天才淡出；對應未結 #46 | 脈絡 | P0 | 完成 | R08 | R09 |
