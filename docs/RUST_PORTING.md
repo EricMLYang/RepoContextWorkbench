@@ -192,6 +192,8 @@ CLI／MCP（ctx-cli）：
   「睡到下一個排程點，最多 300s 重看一次」。
 - **`--help` 的排版是 clap 的**（子命令順序、說明文字照 Python；argparse 與 clap 的版面不同，不對拍）。
   長旗標可縮寫（`infer_long_args`，同 argparse 的 prefix matching）。用法錯誤一律 exit 2（同 argparse）。
+- **SIGPIPE 恢復預設**（2026-10-10，ideation N-27）：`ctx … | head` 截斷時安靜結束（exit 141），不再 panic
+  「failed printing to stdout: Broken pipe」。Python 的行為是 BrokenPipeError traceback；Unix 指令慣例是安靜結束。
 - **沒接住的錯誤**：Python 會印 traceback、exit 1；Rust 印一行「錯誤：<訊息>」到 stderr、exit 1（exit code 相同）。
   例：`collide run <不存在的 cid>`、`append` 不帶 `--dead-letter` 卻被 validator 拒。
 - **`ctx search` 不給查詢文字**：Python 因參數被濾掉而 TypeError（traceback、exit 1）；Rust 走 agentapi 的

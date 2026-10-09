@@ -26,6 +26,11 @@ clap = { version = "4", features = ["derive"] }
 # 平台分支；只需要「收到中斷 → 送一個停止訊號給 run_loop」這一件事
 ctrlc = "3"
 
+
+[target.'cfg(unix)'.dependencies]
+# 恢復 SIGPIPE 預設（輸出被 `| head` 截斷時安靜結束，不 panic）；workspace 既有依賴
+libc.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true
 serde_yaml.workspace = true
