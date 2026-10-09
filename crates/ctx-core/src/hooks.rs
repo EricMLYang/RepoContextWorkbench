@@ -166,6 +166,9 @@ pub fn render_start(c: &ContextFor) -> String {
             st.get("text").map(py_str).unwrap_or_default()
         ));
     }
+    if let Some(h) = &c.relation_hint {
+        out.push(h.clone());
+    }
     if !c.neighbors.is_empty() {
         out.push(String::new());
         out.push(
@@ -240,6 +243,7 @@ fn session_start_inner(
     };
     let mut ctx = agentapi::context_for_full(spine_dir, &Target::at(&cwd_p), false)?;
     ctx.review_hint = agentapi::review_hint(spine_dir, &Target::at(&cwd_p));
+    ctx.relation_hint = relation_hint(spine_dir, &ctx);
     if ruminate::is_stale(spine_dir, now) {
         // 背景補跑；這次開場用上一輪的結果
         let _ = ruminate::spawn_detached(spine_dir);
@@ -397,4 +401,23 @@ pub fn run_hook(spine_dir: &Path, event: &str, stdin: &str) -> String {
 pub fn parse_payload(stdin: &str) -> Value {
     let text = if stdin.is_empty() { "{}" } else { stdin };
     serde_json::from_str(text).unwrap_or_else(|_| json!({}))
+}
+
+/// Rust 才有（F-33）：開場只讀上次算好的關係建議（`.state/relation_suggest.json`），
+/// 跟主場範圍有關的第一筆提一行。
+fn relation_hint(spine_dir: &Path, c: &ContextFor) -> Option<String> {
+    let repos: Vec<&str> = c.value["scope"]["repos"]
+        .as_array()?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let s = crate::relsuggest::load(spine_dir)
+        .into_iter()
+        .find(|s| repos.contains(&s.a.as_str()) || repos.contains(&s.b.as_str()))?;
+    Some(format!(
+        "關係建議：{} ↔ {} 還沒設關係（{}）——問使用者要不要設，`ctx registry suggest` 看全部",
+        s.a,
+        s.b,
+        s.reason()
+    ))
 }

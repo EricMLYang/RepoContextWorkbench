@@ -455,6 +455,8 @@ pub struct ContextFor {
     pub fresh: Vec<Link>,
     /// Rust 才有（F-21）：未結體檢摘要一行（hooks 開場時填；沒有可清的＝None）。
     pub review_hint: Option<String>,
+    /// Rust 才有（F-33）：相關 repo 建議一行（hooks 開場時填）。
+    pub relation_hint: Option<String>,
 }
 
 /// 對應 `agentapi.context_for`：開場一次拿齊——我在哪、範圍、目標、上次交接、下一步、未結、
@@ -581,6 +583,7 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         drift,
         fresh,
         review_hint: None,
+        relation_hint: None,
     })
 }
 

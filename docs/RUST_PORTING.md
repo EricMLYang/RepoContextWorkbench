@@ -122,6 +122,10 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
 - **桌面 App 收件匣帶體檢結果**（2026-10-10，ideation F-46）：`review_todos` 每次算完併進 `.state/review.json`；
   `build_scan`（本來就跑 git 的重層）順便逐組更新；`build_state` 只讀這個檔（仍是純檔案讀），把「可能已處理」「擱置沒動靜」
   掛到未結卡的 `verdict`（卡片標籤）與 `lines`（描述＋證據），進行中的不加註。前端不用改。對拍時 `.state/review.json` 列為允許差異。
+- **相關 repo 建議 `ctx registry suggest`**（2026-10-10，ideation F-33；Python 沒有，新模組 `relsuggest`）：
+  主要訊號＝A 的 md 提到 B 的 repo id 或目錄名（≥3 份）；引用紀錄（≥2 筆）；只出現在這兩個 repo 的主題詞只當佐證。
+  一個 repo 當主要提到者的建議 ≥4 筆＝推測它是 PM（`pm-of`）。只建議不寫入；已有關係的不列。
+  反芻跑完順便算進 `.state/relation_suggest.json`，開場只讀檔、跟主場有關的提一行。對拍時這個快取列為允許差異。
 
 CLI／MCP（ctx-cli）：
 

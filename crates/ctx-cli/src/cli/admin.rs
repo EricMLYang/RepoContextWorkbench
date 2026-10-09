@@ -121,6 +121,8 @@ pub enum RegistryCmd {
     },
     /// 讀關係（給 id＝站在該 repo 兩向讀）
     Relations { id: Option<String> },
+    /// 建議該設的關係：文件互相提到、引用紀錄、只有兩邊有的主題詞（Rust 才有；只建議，不寫）
+    Suggest,
     /// 登記 export：<repo>:<名稱> → repo 內路徑
     Export {
         id: String,
@@ -192,6 +194,7 @@ pub fn cmd_registry(ctx: &Ctx, c: &RegistryCmd) -> CmdResult {
             json!({"a": a, "b": b, "kind": kind}),
         ),
         Relations { id } => registry_relations(ctx, id.as_deref()),
+        Suggest => registry_suggest(ctx),
         Export {
             id,
             name,
@@ -292,6 +295,40 @@ fn registry_audit(ctx: &Ctx, scan: &[String]) -> CmdResult {
         return Err(Exit::Code(EXIT_FINDINGS));
     }
     println!("audit 零紅字 OK");
+    Ok(())
+}
+
+fn registry_suggest(ctx: &Ctx) -> CmdResult {
+    let d = ctx.spine_dir()?;
+    let rows = ctx_core::relsuggest::compute(&d)?;
+    ctx.emit(&json!({"ok": true, "suggestions": rows}), |_| {
+        if rows.is_empty() {
+            return "沒有建議：找不到互相提到或引用夠多、卻還沒設關係的 repo。".to_string();
+        }
+        let mut out = vec![format!("關係建議 {} 筆（只建議；確認後用 registry relate 設）：", rows.len())];
+        for r in &rows {
+            out.push(format!("- {} ↔ {}：{}", r.a, r.b, r.reason()));
+            for f in r.files.iter().take(2) {
+                out.push(format!("    · {f}"));
+            }
+            match &r.hint {
+                Some((x, y, kind)) => out.push(format!(
+                    "    設定：ctx registry relate {x} {y} --kind {kind} --note \"…\""
+                )),
+                None => {
+                    let (x, y) = if r.a_mentions_b >= r.b_mentions_a {
+                        (&r.a, &r.b)
+                    } else {
+                        (&r.b, &r.a)
+                    };
+                    out.push(format!(
+                        "    設定：ctx registry relate {x} {y} --kind <pm-of|feeds|derived-from|upstream-of|sibling-topic> --note \"…\""
+                    ));
+                }
+            }
+        }
+        out.join("\n")
+    });
     Ok(())
 }
 

@@ -614,6 +614,8 @@ pub fn run(
         save_state(spine_dir, &state)?;
     }
     let _ = std::fs::remove_file(running_path(spine_dir));
+    // Rust 才有（F-33）：每天的反芻順便更新相關 repo 建議（共用同一份知識索引快取）
+    let _ = crate::relsuggest::compute(spine_dir);
     Ok(RunResult {
         since,
         candidates: fresh_files.len(),

@@ -28,6 +28,7 @@ pub mod pack;
 pub mod pyjson;
 pub mod pystr;
 pub mod registry;
+pub mod relsuggest;
 pub mod repocard;
 pub mod route;
 pub mod ruminate;
