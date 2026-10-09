@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type { CardAction, InboxCard } from "../../api/types";
 import { Icon } from "../../lib/icons";
 import { cardSections, emptyState, type CardSection } from "../../lib/view";
@@ -6,6 +6,9 @@ import { useSnapshot, useUi } from "../../store/context";
 import { Card } from "./Card";
 import { cardDetailSpec, useRunAction } from "./cardActions";
 import { Summary } from "./Summary";
+
+/** 每段一次畫幾張卡（N-25）。 */
+export const PAGE = 50;
 
 function Section({
   section,
@@ -21,13 +24,17 @@ function Section({
   onDetail: (c: InboxCard) => void;
 }) {
   const title = section.title + " · " + section.cards.length;
+  // 一段先畫 PAGE 張（spine 長大後一段可能上千則，全畫進 DOM 會卡住 WebView）；其餘按鈕展開
+  const [limit, setLimit] = useState(PAGE);
+  const shown = section.cards.slice(0, limit);
+  const rest = section.cards.length - shown.length;
   const inner = (
     <>
       <p className="lane-note" hidden={!section.note}>
         {section.note || ""}
       </p>
       <div className="sectioncards">
-        {section.cards.map((c) => (
+        {shown.map((c) => (
           <Card
             key={c.key}
             card={c}
@@ -38,6 +45,11 @@ function Section({
           />
         ))}
       </div>
+      {rest > 0 ? (
+        <button type="button" className="ghost small showmore" onClick={() => setLimit(limit + PAGE)}>
+          {`再顯示 ${Math.min(rest, PAGE)} 則（還有 ${rest} 則）`}
+        </button>
+      ) : null}
     </>
   );
   return section.collapsed ? (

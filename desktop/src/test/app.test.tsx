@@ -307,3 +307,43 @@ describe("健康指標（F-50）", () => {
     expect(document.getElementById("health")).toBeNull();
   });
 });
+
+describe("收件匣分段懶顯示（N-25）", () => {
+  const many = async (n: number) => {
+    const { loopCard } = await import("./fixtures");
+    return Array.from({ length: n }, (_, i) => ({
+      ...loopCard,
+      key: "loop:#" + (i + 1),
+      num: "#" + (i + 1),
+      title: "待辦 " + (i + 1),
+    })) as StateCard[];
+  };
+
+  it("一段先畫 50 張，其餘按鈕展開", async () => {
+    const cards = await many(120);
+    await mount(mockBackend({ getState: vi.fn(async () => makeState({ cards })) }));
+    await screen.findByText("待辦 1");
+    const count = () => document.querySelectorAll("#cards article.card.loop").length;
+    expect(count()).toBe(50);
+    const more = () => document.querySelector("#cards .showmore") as HTMLButtonElement | null;
+    expect(more()!.textContent).toBe("再顯示 50 則（還有 70 則）");
+    await act(async () => fireEvent.click(more()!));
+    expect(count()).toBe(100);
+    expect(more()!.textContent).toBe("再顯示 20 則（還有 20 則）");
+    await act(async () => fireEvent.click(more()!));
+    expect(count()).toBe(120);
+    expect(more()).toBeNull();
+    // 段標題仍是全部的數量
+    expect(document.querySelector("#cards .secttl")!.textContent).toContain("120");
+  });
+
+  it("5000 張卡也只畫 50 張（規模）", async () => {
+    const cards = await many(5000);
+    const t0 = performance.now();
+    await mount(mockBackend({ getState: vi.fn(async () => makeState({ cards })) }));
+    await screen.findByText("待辦 1");
+    const ms = performance.now() - t0;
+    expect(document.querySelectorAll("#cards article.card.loop").length).toBe(50);
+    console.log(`5000 張卡首次渲染 ${ms.toFixed(0)}ms`);
+  });
+});

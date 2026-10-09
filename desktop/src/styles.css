@@ -883,6 +883,11 @@ td button {
   color: var(--blue);
   padding: 0 10px;
 }
+/* 收件匣分段懶顯示（N-25） */
+.showmore {
+  margin: 4px 0 12px;
+}
+
 /* 關係建議（F-47）：虛線框跟已設的關係分開 */
 .relsuggest {
   margin-bottom: 16px;
