@@ -56,6 +56,9 @@
 | linklore-mcp | 判斷留痕 | 專案記憶 MCP | 記決策、踩坑、規格，下次開場帶回 | — | 觀察 | 🔗 | 2026-10-10 | R04 查詢 | [enterprisedna](https://enterprisedna.co/directories/mcp/linklore-linklore-mcp) |
 | DEG（Decision-Evidence Graph，`degraph`） | 判斷留痕 | 跨會話的決策記憶 | 為什麼、放棄了什麼、何時重看＋完整出處 | Python 套件 → F-07 | 觀察 | 🔗 | 2026-10-10 | R05 延伸（shadowgraph alternatives） | [PyPI](https://pypi.org/project/degraph/) |
 | Andy Matuschak〈Spaced repetition … inbox-maintenance〉 | 入口（UX 論述） | 收件匣整理 | 把「刪掉」改成「之後再說」，間隔遞增再出現，降低清理的壓力 | — → F-45 | 參考 | 🔗 | 2026-10-10 | R05 查詢 2 | [notes](https://notes.andymatuschak.org/zJ5Yzvba2729XKXivBBZ91J) |
+| Qodo cross-repo review | 跨 repo 連動 | 自動發現 repo 間關係＋跨 repo 審 PR | 從技術訊號自動推關係，也可手動定義 | 商業、程式碼為主 → F-33 | 參考 | 🔗 | 2026-10-10 | R06 查詢 1 | [docs](https://docs.qodo.ai/governance/cross-repo-code-review) |
+| co-change mining（Kagdi 等） | 跨 repo 連動（研究） | 版本歷史 | 一起被 commit 的檔／repo＝隱性關係，靜態分析看不到 | — → F-33 | 參考 | 🔗 | 2026-10-10 | R06 查詢 1 | [Kagdi07](https://www.cs.kent.edu/~jmaletic/cs63902/Papers/Kagdi07.pdf) |
+| Obsidian 未連結提及／Atomic Insights（Adamic-Adar） | 知識庫連結建議 | 筆記庫 | 「提到了卻沒連」一鍵建連結；共同鄰居（Adamic-Adar）推薦 | 單一 vault → F-33 | 參考 | 🔗 | 2026-10-10 | R06 查詢 2 | [Atomic Insights](https://community.obsidian.md/plugins/atomic-insights) |
 | Claude Code auto memory | 平台 | `~/.claude/projects/<路徑>/memory/*.md` | 本機 md 記憶；匯出／匯入功能請求被關成不做 | 單一路徑、不跨 repo → F-44 可對接 | 觀察 | 🔗 | 2026-10-10 | R04 查詢 | [docs](https://code.claude.com/docs/en/memory)、[issue #67369](https://github.com/anthropics/claude-code/issues/67369) |
 
 ## 待查對標（下一輪處理）
@@ -99,10 +102,12 @@
 - R04：`Claude Code Projects local execution memory export October 2026`（extended）
 - R05：`decision memory for AI agents reopen conditions alternatives shadowgraph 2026`（→ DEG）
 - R05：`desktop app inbox design triage stale tasks evidence suggestions UX 2026 agent`（→ Matuschak）
+- R06：`automatically infer relationships between repositories cross-repo references co-change analysis`
+- R06：`personal knowledge base suggest links between notes unlinked mentions Obsidian algorithm`
 
 ### 下一輪查詢
-1. `multi-repo-agent mra alternatives polyrepo AI agent orchestration`（R02 留下，F-33 前要查）
-2. `repository relationship detection dependency graph across repos automatically`（F-33）
-3. `supermemory agent decision records`（延伸：判斷留痕同類）
-4. `MCP server latency caching long-running index Rust`（N-17）
-5. `Claude Code Projects local threads release`（盯平台本機版）
+1. `multi-repo-agent mra alternatives polyrepo AI agent orchestration`（R02 留下）
+2. `supermemory agent decision records`
+3. `MCP server latency caching long-running index Rust`（N-17）
+4. `Claude Code Projects local threads release`（盯平台本機版）
+5. `Adamic-Adar link prediction small graph explainable suggestions`（F-33 做完後要不要加共同鄰居）
