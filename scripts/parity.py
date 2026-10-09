@@ -63,6 +63,7 @@ ALLOW_FILES = [
 MCP_EXTRA_PARAMS = [
     ("log_decision", "supersedes", "log_decision 多了選填 supersedes／reopen_when（F-07 判斷取代＋何時重看，Rust 才有）"),
     ("log_decision", "reopen_when", "log_decision 多了選填 supersedes／reopen_when（F-07 判斷取代＋何時重看，Rust 才有）"),
+    ("log_decision", "outcome_of", "log_decision 多了選填 outcome_of（F-23 判斷回顧：記結果，Rust 才有）"),
 ]
 
 

@@ -617,6 +617,7 @@ fn w_log(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     let extra = agentapi::DecisionExtra {
         supersedes: nz(a, "supersedes"),
         reopen_when: nz(a, "reopen_when"),
+        outcome_of: nz(a, "outcome_of"),
     };
     agentapi::log_decision_ext(
         d,
@@ -805,6 +806,13 @@ pub static WORK_TOOLS: Lazy<Vec<Tool>> = Lazy::new(|| {
                             d_(
                                 str_t(),
                                 "什麼情況要重看這個判斷（例：repo 超過 50 個、2026-12-01 前）；寫日期會在到期時提醒",
+                            ),
+                        ),
+                        (
+                            "outcome_of",
+                            d_(
+                                str_t(),
+                                "這段文字是哪一筆判斷後來的結果（decision:<id>）；會寫成結果（outcome）並指回它",
                             ),
                         ),
                     ],

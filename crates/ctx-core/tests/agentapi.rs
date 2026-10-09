@@ -673,6 +673,7 @@ fn log_ext(
         &api::DecisionExtra {
             supersedes: sup.map(str::to_string),
             reopen_when: reopen.map(str::to_string),
+            outcome_of: None,
         },
         false,
         "agent",
@@ -876,4 +877,93 @@ fn stale_session_markers_are_swept_at_session_start() {
         "{}",
         ev.body
     );
+}
+
+// ---- Rust 才有（F-23）：判斷回顧 ----
+
+#[test]
+fn retro_candidates_and_outcome_closes_the_loop() {
+    let w = two_groups();
+    let old = Local::now().naive_local() - chrono::Duration::days(20);
+    let tok = |id: &str| vec![format!("id:{id}"), "group:產品".into(), "repo:impl".into()];
+    spine_mod::append_event(
+        &w.sp,
+        "decision",
+        "agent",
+        &tok("2026-01-01-d1"),
+        "快取用 LRU",
+        Some(old),
+    )
+    .unwrap();
+    spine_mod::append_event(
+        &w.sp,
+        "decision",
+        "registry",
+        &tok("2026-01-01-d2"),
+        "〔registry〕登記 repo：x",
+        Some(old),
+    )
+    .unwrap();
+    spine_mod::append_event(
+        &w.sp,
+        "decision",
+        "agent",
+        &tok("2026-01-01-d3"),
+        "剛做的判斷",
+        None,
+    )
+    .unwrap();
+    let events = spine_mod::iter_events(&w.sp).unwrap();
+    let now = Local::now().naive_local();
+    let ids = vec!["plan".to_string(), "impl".to_string()];
+    let c = api::retro_candidates(&w.sp, &events, Some(("產品", &ids)), now);
+    let refs: Vec<&str> = c.iter().filter_map(|x| x["ref"].as_str()).collect();
+    assert_eq!(refs, vec!["decision:2026-01-01-d1"]); // 工具紀錄、太新的都不算
+                                                      // 開場提一行
+    let out = hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "rt", "cwd": w.impl_.to_string_lossy()}),
+        None,
+    );
+    assert!(
+        out.contains("判斷回顧（共 1 筆待回顧）：decision:2026-01-01-d1"),
+        "{out}"
+    );
+    // 記結果：寫成 outcome、ref 指回它；之後不再待回顧，判斷搜尋帶出結果
+    let r = api::log_decision_ext(
+        &w.sp,
+        "上線後命中率 92%，判斷正確",
+        &at(&w.impl_),
+        None,
+        &api::DecisionExtra {
+            outcome_of: Some("decision:2026-01-01-d1".into()),
+            ..Default::default()
+        },
+        false,
+        "agent",
+    )
+    .unwrap();
+    assert_eq!(r["event"]["type"], "outcome");
+    let events = spine_mod::iter_events(&w.sp).unwrap();
+    assert!(api::retro_candidates(&w.sp, &events, Some(("產品", &ids)), now).is_empty());
+    let s =
+        api::search_knowledge(&w.sp, "快取 LRU", &at(&w.impl_), &SearchOpts::default()).unwrap();
+    assert_eq!(
+        s["decisions"][0]["outcomes"][0]["text"],
+        "上線後命中率 92%，判斷正確"
+    );
+    // 結果要指向存在的判斷
+    let bad = api::log_decision_ext(
+        &w.sp,
+        "x",
+        &at(&w.impl_),
+        None,
+        &api::DecisionExtra {
+            outcome_of: Some("decision:2099-01-01-d9".into()),
+            ..Default::default()
+        },
+        false,
+        "agent",
+    );
+    assert_eq!(code_of(bad.unwrap_err()).0, "bad_request");
 }

@@ -1344,3 +1344,32 @@ fn reopen_cards_due_and_defer() {
     assert!(r["until"].as_str().is_some());
     assert!(cards_of(&st(&d), "reopen").is_empty());
 }
+
+// Rust 才有（F-23）：判斷回顧卡；延 30 天後消失
+#[test]
+fn retro_cards_and_defer() {
+    let (_t, d) = spine_with_repos();
+    ev(
+        &d,
+        "decision",
+        "agent",
+        &["id:2026-01-01-d1", "group:g1"],
+        "快取用 LRU",
+        ago(60 * 24 * 20),
+    );
+    let s = st(&d);
+    let rc = cards_of(&s, "retro");
+    assert_eq!(rc.len(), 1);
+    assert_eq!(rc[0]["title"], "判斷回顧：快取用 LRU");
+    assert!(rc[0]["actions"][0]["payload"]["task"]
+        .as_str()
+        .unwrap()
+        .contains("outcome_of=decision:2026-01-01-d1"));
+    act(
+        &d,
+        "reopen_defer",
+        json!({"ref": "decision:2026-01-01-d1", "days": 30}),
+    )
+    .unwrap();
+    assert!(cards_of(&st(&d), "retro").is_empty());
+}

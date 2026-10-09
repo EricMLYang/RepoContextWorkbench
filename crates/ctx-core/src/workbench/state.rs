@@ -917,6 +917,73 @@ fn reopen_cards(spine_dir: &Path, events: &[Event], scopes: &[Prov]) -> Vec<Valu
     out
 }
 
+/// Rust 才有（F-23）：判斷回顧——滿 14 天、還沒記結果的判斷，最舊的幾筆成卡。
+/// 出口：開會話回顧（任務帶好 outcome_of 做法）／延 30 天。
+const RETRO_CARDS: usize = 5;
+
+fn retro_cards(spine_dir: &Path, events: &[Event], scopes: &[Prov]) -> Vec<Value> {
+    let prov: HashMap<String, &Prov> = events
+        .iter()
+        .zip(scopes)
+        .filter(|(e, _)| e.etype == EventType::Decision)
+        .map(|(e, p)| (crate::agentapi::event_ref(e), p))
+        .collect();
+    let now = chrono::Local::now().naive_local();
+    crate::agentapi::retro_candidates(spine_dir, events, None, now)
+        .into_iter()
+        .take(RETRO_CARDS)
+        .map(|c| {
+            let r = c["ref"].as_str().unwrap_or("").to_string();
+            let text = c["text"].as_str().unwrap_or("").to_string();
+            let (date, time) = c["at"]
+                .as_str()
+                .unwrap_or("")
+                .split_once(' ')
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .unwrap_or_default();
+            let mut session = collision_scope(c["group"].as_str());
+            if session.is_empty() {
+                if let Some(repo) = c["repo"].as_str() {
+                    session.insert("repos".into(), json!([repo]));
+                }
+            }
+            session.insert("kind".into(), json!("agent"));
+            session.insert(
+                "task".into(),
+                json!(format!(
+                    "回顧判斷 {r}（{} 天前）：{text}\n先看這段期間的 commit、判斷與交接，跟我確認它後來怎樣：\
+                     做得好不好、有沒有後悔、學到什麼。確認後用 log_decision 帶 outcome_of={r} 記一筆結果。",
+                    c["days"]
+                )),
+            );
+            session.insert("origin".into(), json!(format!("retro:{r}")));
+            let mut m = Map::new();
+            m.insert("key".into(), json!(format!("retro:{r}")));
+            m.insert("kind".into(), json!("retro"));
+            m.insert("ref".into(), json!(r));
+            m.insert("title".into(), json!(format!("判斷回顧：{text}")));
+            m.insert("date".into(), json!(date));
+            m.insert("time".into(), json!(time));
+            m.insert(
+                "lines".into(),
+                json!([format!("{} 天前的判斷，還沒記結果——後來怎樣？", c["days"])]),
+            );
+            match prov.get(&r) {
+                Some(p) => p.put(&mut m),
+                None => Prov::unclassified().put(&mut m),
+            }
+            m.insert(
+                "actions".into(),
+                json!([
+                    act("開會話回顧", "term_create", Value::Object(session)),
+                    act("延 30 天", "reopen_defer", json!({"ref": r, "days": 30})),
+                ]),
+            );
+            Value::Object(m)
+        })
+        .collect()
+}
+
 /// Rust 才有（F-48）：反芻推薦成卡（排在最後；只放目前規則、近幾天的＝跟 agent 開場看到的同一批）。
 /// 純檔案讀（`.state/ruminate.json`）。出口：拿來試（開帶出處的待辦）／不相關。
 fn fresh_cards(spine_dir: &Path, data: &RegistryData) -> Result<Vec<Value>> {
@@ -1050,6 +1117,7 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
     attach_review(&mut cards, &crate::agentapi::load_review_cache(spine_dir));
     add_brief_action(&mut cards);
     cards.extend(reopen_cards(spine_dir, &events, &scopes));
+    cards.extend(retro_cards(spine_dir, &events, &scopes));
     cards.extend(fresh_cards(spine_dir, &data)?);
     for c in &mut cards {
         let l = lane(&prov_of(c), scoped, &members, c["kind"] == "interrupt");

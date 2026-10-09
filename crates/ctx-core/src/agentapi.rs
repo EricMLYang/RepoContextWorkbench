@@ -457,6 +457,8 @@ pub struct ContextFor {
     pub review_hint: Option<String>,
     /// Rust 才有（F-33）：相關 repo 建議一行（hooks 開場時填）。
     pub relation_hint: Option<String>,
+    /// Rust 才有（F-23）：判斷回顧一行（hooks 開場時填）。
+    pub retro_hint: Option<String>,
 }
 
 /// 對應 `agentapi.context_for`：開場一次拿齊——我在哪、範圍、目標、上次交接、下一步、未結、
@@ -582,6 +584,7 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         fresh,
         review_hint: None,
         relation_hint: None,
+        retro_hint: None,
     })
 }
 
@@ -964,6 +967,8 @@ pub struct DecisionExtra {
     pub supersedes: Option<String>,
     /// 什麼情況要重看這個判斷（自由文字；寫了日期 `YYYY-MM-DD`，到期時開場會提醒）
     pub reopen_when: Option<String>,
+    /// Rust 才有（F-23）：這段文字是哪一筆判斷「後來的結果」——寫成 outcome 事件、`ref:` 指回它
+    pub outcome_of: Option<String>,
 }
 
 static SUPERSEDE_LINE: Lazy<Regex> =
@@ -1060,6 +1065,33 @@ pub fn log_decision_ext(
         .as_deref()
         .map(|x| x.split_whitespace().collect::<Vec<_>>().join(" "))
         .filter(|x| !x.is_empty());
+    if let Some(of) = extra
+        .outcome_of
+        .as_deref()
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+    {
+        let exists = spine::iter_events(spine_dir)?
+            .iter()
+            .any(|ev| ev.etype == EventType::Decision && event_ref(ev) == of);
+        if !of.starts_with("decision:") || !exists {
+            return Err(agent_error(
+                "bad_request",
+                format!("找不到這個結果所屬的判斷：{}", repr(of)),
+                Some("用判斷的 ref，例如 decision:2026-09-25-d1（search_knowledge 的 decisions 段有）。"),
+            ));
+        }
+        return write_event_body(
+            spine_dir,
+            "outcome",
+            "o",
+            &clean(text, "text")?,
+            t,
+            Some(of),
+            cross_scope_ok,
+            source,
+        );
+    }
     let mut body = clean(text, "text")?;
     if let Some(old) = supersedes {
         let exists = spine::iter_events(spine_dir)?
@@ -1095,11 +1127,35 @@ fn log_decision_body(
     cross_scope_ok: bool,
     source: &str,
 ) -> Result<Value> {
+    write_event_body(
+        spine_dir,
+        "decision",
+        "d",
+        text,
+        t,
+        reference,
+        cross_scope_ok,
+        source,
+    )
+}
+
+/// 判斷（decision）與結果（outcome，Rust 才有的入口）共用的寫入：id、範圍 token、ref。
+#[allow(clippy::too_many_arguments)]
+fn write_event_body(
+    spine_dir: &Path,
+    etype: &str,
+    id_prefix: &str,
+    text: &str,
+    t: &Target,
+    reference: Option<&str>,
+    cross_scope_ok: bool,
+    source: &str,
+) -> Result<Value> {
     let w = where_am_i(spine_dir, t.cwd.as_deref())?;
     let s = scope_of(spine_dir, &w, t)?;
     check_write_scope(spine_dir, &w, &s, cross_scope_ok)?;
     let events = spine::iter_events(spine_dir)?;
-    let eid = next_id(&events, &today(), "d");
+    let eid = next_id(&events, &today(), id_prefix);
     let mut toks = vec![format!("id:{eid}")];
     toks.extend(tokens_for(&s, w.repo_id()));
     if let Some(r) = reference.filter(|r| !r.is_empty()) {
@@ -1114,7 +1170,7 @@ fn log_decision_body(
         }
         toks.push(format!("ref:{r}"));
     }
-    let ev = append(spine_dir, "decision", source, &toks, &clean(text, "text")?)?;
+    let ev = append(spine_dir, etype, source, &toks, &clean(text, "text")?)?;
     Ok(json!({"ok": true, "ref": event_ref(&ev), "event": event_dict(&ev)}))
 }
 
@@ -2022,4 +2078,82 @@ pub fn todo_brief(spine_dir: &Path, num: &str, t: &Target) -> Result<Value> {
         "decisions": decisions, "files": files,
         "markdown": md.join("\n"),
     }))
+}
+
+// ---------------------------------------------------------------- 判斷回顧（Rust 才有，F-23）
+
+/// 判斷滿這麼多天、還沒記結果，就提醒回顧（跟未結事項預設期限一樣）。
+pub const RETRO_DAYS: i64 = 14;
+
+/// 待回顧的判斷（舊的在前）：範圍內、人或 agent 寫的（有 id）、不是交接、沒被取代、滿 [`RETRO_DAYS`] 天、
+/// 還沒有 outcome 指回它、
+/// 沒延後（跟「該重看」共用 `.state/reopen_snooze.json`）。`scope`＝None 是全部。
+pub fn retro_candidates(
+    spine_dir: &Path,
+    events: &[Event],
+    scope: Option<(&str, &[String])>,
+    now: chrono::NaiveDateTime,
+) -> Vec<Value> {
+    let superseded = superseded_map(events);
+    let snoozes = reopen_snoozes(spine_dir);
+    let today = now.format("%Y-%m-%d").to_string();
+    let cutoff = (now - chrono::Duration::days(RETRO_DAYS))
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    let has_outcome: HashSet<&str> = events
+        .iter()
+        .filter(|e| e.etype == EventType::Outcome)
+        .filter_map(|e| e.kv("ref"))
+        .collect();
+    events
+        .iter()
+        .filter(|e| e.etype == EventType::Decision && !is_handoff(e) && e.stamp() <= cutoff)
+        // 只回顧人、agent 或回填（從過去會話整理出的）判斷：工具自己留的操作紀錄（〔registry〕…）不算；沒有 id 的 ref 只有時間，
+        // 不同天同一分鐘會撞，結果會指錯
+        .filter(|e| {
+            matches!(e.source.as_str(), "agent" | "manual" | "backfill")
+                && e.kv("id").is_some_and(|i| !i.is_empty())
+                && !e.body.starts_with('〔')
+        })
+        .filter(|e| scope.is_none_or(|(g, ids)| spine::in_scope(e, Some(g), ids)))
+        .filter(|e| {
+            let r = event_ref(e);
+            !superseded.contains_key(&r)
+                && !has_outcome.contains(r.as_str())
+                && !snoozes
+                    .get(&r)
+                    .and_then(Value::as_str)
+                    .is_some_and(|u| u > today.as_str())
+        })
+        .map(|e| {
+            let days = chrono::NaiveDateTime::parse_from_str(&e.stamp(), "%Y-%m-%d %H:%M")
+                .map(|t| (now - t).num_days())
+                .unwrap_or(0);
+            json!({"ref": event_ref(e), "at": e.stamp(), "days": days, "text": first(e),
+                   "group": kv_opt(e, "group"), "repo": kv_opt(e, "repo")})
+        })
+        .collect()
+}
+
+/// 開場一行：主場範圍內最舊的待回顧判斷。
+pub fn retro_hint(spine_dir: &Path, t: &Target) -> Option<String> {
+    let w = where_am_i(spine_dir, t.cwd.as_deref()).ok()?;
+    let s = scope_of(spine_dir, &w, t).ok()?;
+    let g = s.group.clone()?;
+    let events = spine::iter_events(spine_dir).ok()?;
+    let all = retro_candidates(
+        spine_dir,
+        &events,
+        Some((&g, s.ids())),
+        Local::now().naive_local(),
+    );
+    let first = all.first()?;
+    Some(format!(
+        "判斷回顧（共 {} 筆待回顧）：{}（{} 天前）「{}」後來怎樣？有結果就 log_decision 帶 outcome_of={}",
+        all.len(),
+        first["ref"].as_str().unwrap_or(""),
+        first["days"],
+        crate::pystr::take_chars(first["text"].as_str().unwrap_or(""), 50),
+        first["ref"].as_str().unwrap_or("")
+    ))
 }

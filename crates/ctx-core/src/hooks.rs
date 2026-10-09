@@ -169,6 +169,9 @@ pub fn render_start(c: &ContextFor) -> String {
     if let Some(h) = &c.relation_hint {
         out.push(h.clone());
     }
+    if let Some(h) = &c.retro_hint {
+        out.push(h.clone());
+    }
     if !c.neighbors.is_empty() {
         out.push(String::new());
         out.push(
@@ -244,6 +247,7 @@ fn session_start_inner(
     let mut ctx = agentapi::context_for_full(spine_dir, &Target::at(&cwd_p), false)?;
     ctx.review_hint = agentapi::review_hint(spine_dir, &Target::at(&cwd_p));
     ctx.relation_hint = relation_hint(spine_dir, &ctx);
+    ctx.retro_hint = agentapi::retro_hint(spine_dir, &Target::at(&cwd_p));
     if ruminate::is_stale(spine_dir, now) {
         // 背景補跑；這次開場用上一輪的結果
         let _ = ruminate::spawn_detached(spine_dir);

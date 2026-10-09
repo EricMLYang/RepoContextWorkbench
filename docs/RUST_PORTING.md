@@ -148,6 +148,10 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   目標（待辦＋期限）／背景（範圍、組目標、上次交接、蓋住待辦文字 ≥20% 的有效判斷）／輸入（知識搜尋前 5 個 ref）／
   限制（範圍、相關判斷的重看條件、卡住 report_status）／完成條件（close_todo／handoff）。App 未結卡多「用任務包開會話」
   （前端動作 `brief_session`：先呼叫 `todo_brief`，再開預填任務的會話對話框）；`parity_state.py` 比對前拿掉這個動作。
+- **判斷回顧**（2026-10-10，ideation F-23；Python 沒有）：`log_decision` 多選填 `outcome_of`（CLI `--outcome-of`）——
+  寫成 outcome 事件、`ref:` 指回那筆判斷（要存在）；判斷搜尋會帶出它。滿 14 天、人／agent／回填寫的（有 id、不是
+  〔工具紀錄〕、不是交接）、沒被取代、還沒有結果、沒延後的判斷＝待回顧：開場提最舊的一筆，App 收件匣 `retro` 卡
+  （開會話回顧／延 30 天，延後跟「該重看」共用 `.state/reopen_snooze.json`）。
 
 CLI／MCP（ctx-cli）：
 

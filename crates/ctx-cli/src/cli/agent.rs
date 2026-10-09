@@ -415,6 +415,9 @@ pub struct LogArgs {
     /// 什麼情況要重看（寫日期 YYYY-MM-DD 會在到期時提醒；Rust 才有）
     #[arg(long)]
     pub reopen_when: Option<String>,
+    /// 這段文字是哪一筆判斷後來的結果（decision:<id>；寫成 outcome；Rust 才有）
+    #[arg(long)]
+    pub outcome_of: Option<String>,
     #[command(flatten)]
     pub scope: Scoped,
     #[command(flatten)]
@@ -426,6 +429,7 @@ pub fn cmd_log(ctx: &Ctx, a: &LogArgs) -> CmdResult {
     let extra = agentapi::DecisionExtra {
         supersedes: a.supersedes.clone(),
         reopen_when: a.reopen_when.clone(),
+        outcome_of: a.outcome_of.clone(),
     };
     agent_call(
         ctx,

@@ -46,7 +46,15 @@ export interface CardAction {
 // ── 收件匣卡片（state.build_cards ＋ brief.build_question_cards）────
 
 export type CardKind =
-  "interrupt" | "question" | "collision" | "event" | "loop" | "pending" | "fresh" | "reopen";
+  | "interrupt"
+  | "question"
+  | "collision"
+  | "event"
+  | "loop"
+  | "pending"
+  | "fresh"
+  | "reopen"
+  | "retro";
 
 interface CardBase {
   key: string;
@@ -111,7 +119,21 @@ export interface ReopenCard extends CardBase, Provenance {
   ref: string;
 }
 
-export type StateCard = CollisionCard | EventCard | PendingCard | LoopCard | FreshCard | ReopenCard;
+/** 判斷回顧（Rust 引擎 F-23）：滿 14 天、還沒記結果的判斷；出口＝開會話回顧／延 30 天。 */
+export interface RetroCard extends CardBase, Provenance {
+  kind: "retro";
+  lane: Lane;
+  ref: string;
+}
+
+export type StateCard =
+  | CollisionCard
+  | EventCard
+  | PendingCard
+  | LoopCard
+  | FreshCard
+  | ReopenCard
+  | RetroCard;
 export type InboxCard = StateCard | QuestionCard;
 
 // ── 會話清冊（term.TermManager.list ＋ state.annotate_terms）────────

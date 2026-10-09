@@ -39,6 +39,7 @@ export const KINDNAME: Record<CardKind, string> = {
   pending: "處理中",
   fresh: "相關新料",
   reopen: "該重看的判斷",
+  retro: "判斷回顧",
 };
 
 export function isValidScope(s: unknown): s is Scope {
@@ -116,6 +117,7 @@ export function cardSections(
     "collision",
     "loop",
     "fresh",
+    "retro",
     "event",
     "pending",
   ] as const) {

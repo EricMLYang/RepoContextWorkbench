@@ -10,6 +10,7 @@ const ICON: Partial<Record<InboxCard["kind"], IconName>> = {
   loop: "clock",
   fresh: "file",
   reopen: "alert",
+  retro: "chat",
 };
 
 /**
