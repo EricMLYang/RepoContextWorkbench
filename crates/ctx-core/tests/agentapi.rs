@@ -743,3 +743,64 @@ fn reopen_condition_with_past_date_is_flagged_at_session_start() {
         "{out}"
     );
 }
+
+// ---- Rust 才有（F-22）：判斷可搜尋 ----
+
+#[test]
+fn search_finds_past_decisions_with_supersede_and_outcome() {
+    let w = two_groups();
+    let old = log_ext(&w, "快取淘汰策略用 LRU：讀多寫少", None, None).unwrap()["ref"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let new = log_ext(&w, "快取淘汰策略改用 LFU：熱點集中", Some(&old), None).unwrap()["ref"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    spine_mod::append_event(
+        &w.sp,
+        "outcome",
+        "manual",
+        &["group:產品", &format!("ref:{new}")],
+        "上線一週命中率 92%",
+        None,
+    )
+    .unwrap();
+    let r = api::search_knowledge(&w.sp, "快取淘汰策略", &at(&w.impl_), &SearchOpts::default())
+        .unwrap();
+    let ds = r["decisions"].as_array().expect("要搜到判斷");
+    assert_eq!(ds[0]["ref"], new.as_str()); // 有效的排前面
+    assert_eq!(ds[0]["outcomes"][0]["text"], "上線一週命中率 92%");
+    let o = ds.iter().find(|d| d["ref"] == old.as_str()).unwrap();
+    assert_eq!(o["superseded_by"], new.as_str());
+}
+
+#[test]
+fn search_decisions_respect_scope_and_skip_noise() {
+    let w = two_groups();
+    // 研究組（notes）的判斷：在產品組搜不到（--here）
+    api::log_decision(
+        &w.sp,
+        "向量索引用 HNSW",
+        &at(&w.notes),
+        None,
+        false,
+        "agent",
+    )
+    .unwrap();
+    let here = SearchOpts {
+        everywhere: false,
+        ..SearchOpts::default()
+    };
+    let r = api::search_knowledge(&w.sp, "向量索引", &at(&w.impl_), &here).unwrap();
+    assert!(r.get("decisions").is_none());
+    // 沒有相關判斷：不放這個鍵
+    let r = api::search_knowledge(
+        &w.sp,
+        "完全無關的詞彙",
+        &at(&w.impl_),
+        &SearchOpts::default(),
+    )
+    .unwrap();
+    assert!(r.get("decisions").is_none());
+}

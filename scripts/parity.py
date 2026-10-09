@@ -311,7 +311,8 @@ def snapshot(side):
 
 FILE_ALLOWED_USED = set()
 
-RULES_WHY = "反芻推薦多了 rules（N-20 規則版本，Rust 才有）——比對前拿掉"
+RULES_WHY = ("Rust 才有的鍵，比對前拿掉：反芻推薦的 rules（N-20 規則版本）、"
+             "search 結果的 decisions（F-22 判斷可搜尋）")
 
 
 def strip_rust_only(v):
@@ -320,6 +321,9 @@ def strip_rust_only(v):
     if isinstance(v, dict):
         if "terms" in v and "found" in v and "rules" in v:
             del v["rules"]
+            hit = True
+        if "query" in v and "files" in v and "decisions" in v:  # search_knowledge 的判斷段（F-22）
+            del v["decisions"]
             hit = True
         for x in v.values():
             hit = strip_rust_only(x) or hit
@@ -517,7 +521,8 @@ def main():
     C("context --json", ["context", "--json"], cwd=impl)
     C("next", ["next"], cwd=impl)
     C("next --json", ["next", "--json"], cwd=notes)
-    C("search", ["search", "快取", "LRU"], cwd=impl)
+    C("search", ["search", "快取", "LRU"], cwd=impl,
+      stdout_fix=lambda s: re.sub(r"\n過去的判斷：.*?(?=\n程式碼：|\Z)", "", s, flags=re.S))
     C("search --json --here", ["search", "快取", "--here", "--json"], cwd=impl)
     C("resolve", ["resolve", "notes:書摘/ch01.md"])
     C("resolve --json", ["resolve", "notes", "--json"])

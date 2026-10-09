@@ -133,6 +133,10 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   App（F-47）：`build_state` 多一個 `relation_suggestions`（碰到目前範圍、還沒設關係的；沒有建議時不給這個鍵），
   「關係」分頁列建議＋理由＋依據，有推測的「套用」、沒推測的「設定…」開預填表單、「不相關」＝新動作
   `relation_dismiss`（記在 `.state/relation_suggest_dismissed.json`，ctx `registry suggest --dismiss A B` 同一份）。
+- **判斷可搜尋**（2026-10-10，ideation F-22；Python 沒有）：`search_knowledge`／`ctx search` 多一段 `decisions`
+  （有命中才給）：範圍內的 decision（含交接）BM25，查詢詞先去含虛字的 bigram；被取代的打五折並標 `superseded_by`、
+  帶 `reopen_when` 與之後的 `outcomes`（`ref:` 指回它的結果事件）；只留分數 ≥ 最高分 30% 的。
+  對拍時比對前拿掉 `decisions` 鍵／終端機輸出的「過去的判斷」段。
 
 CLI／MCP（ctx-cli）：
 

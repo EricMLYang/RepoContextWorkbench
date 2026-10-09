@@ -217,6 +217,28 @@ fn h_search(r: &Value) -> String {
         ));
         snippet_lines(&mut out, f);
     }
+    let decisions = arr(r, "decisions");
+    if !decisions.is_empty() {
+        out.push("過去的判斷：".into());
+        for d in decisions {
+            let mut tail = String::new();
+            if has(d, "superseded_by") {
+                tail.push_str(&format!("（已被 {} 取代）", s(d, "superseded_by")));
+            }
+            for o in arr(d, "outcomes") {
+                tail.push_str(&format!("（結果 {}：{}）", s(o, "at"), s(o, "text")));
+            }
+            out.push(format!(
+                "- {} {} {}{tail}",
+                s(d, "at"),
+                s(d, "ref"),
+                s(d, "text")
+            ));
+            if has(d, "hit") {
+                out.push(format!("    {}", s(d, "hit")));
+            }
+        }
+    }
     out.join("\n")
 }
 
