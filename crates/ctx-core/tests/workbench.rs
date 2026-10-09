@@ -411,7 +411,16 @@ fn test_cards_interrupt_first_and_loops() {
         .map(|a| a["action"].as_str().unwrap())
         .collect();
     names.sort();
-    assert_eq!(names, vec!["close_loop", "collide_prefill", "loop_defer"]);
+    // brief_session＝Rust 才有（F-42 用任務包開會話）；其餘三個同 Python
+    assert_eq!(
+        names,
+        vec![
+            "brief_session",
+            "close_loop",
+            "collide_prefill",
+            "loop_defer"
+        ]
+    );
     // open-loop 事件只以 loop 卡呈現，不再重複成一則「其他未讀」
     assert!(!cards_of(&s, "event")
         .iter()

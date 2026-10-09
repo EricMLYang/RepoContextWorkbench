@@ -140,6 +140,10 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
 - **反芻推薦拿來試＋App 可見**（2026-10-10，ideation F-26／F-48；Python 沒有）：`ctx fresh --try <id>`／
   `agentapi::try_fresh` 在推薦所屬的組開待辦「試用：<檔名>（<ref>，反芻 <id>）」並把推薦標成 used（`used_at`）。
   App 收件匣多一種卡 `fresh`（`push_links` 那一批＝跟 agent 開場看到的同一批），動作 `fresh_try`／`fresh_dismiss`。
+- **任務包 `ctx todo brief #N`**（2026-10-10，ideation F-42；Python 沒有）：把一項未結組成給全新會話的 markdown——
+  目標（待辦＋期限）／背景（範圍、組目標、上次交接、蓋住待辦文字 ≥20% 的有效判斷）／輸入（知識搜尋前 5 個 ref）／
+  限制（範圍、相關判斷的重看條件、卡住 report_status）／完成條件（close_todo／handoff）。App 未結卡多「用任務包開會話」
+  （前端動作 `brief_session`：先呼叫 `todo_brief`，再開預填任務的會話對話框）；`parity_state.py` 比對前拿掉這個動作。
 
 CLI／MCP（ctx-cli）：
 

@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { WorkbenchStore } from "../store/store";
+import type { Backend } from "../api";
 import type { StateCard } from "../api/types";
 import { makeState, mockBackend } from "./fixtures";
 
@@ -225,5 +226,31 @@ describe("相關新料卡（F-48）", () => {
     const btn = [...card.querySelectorAll("button")].find((b) => b.textContent === "拿來試")!;
     await act(async () => fireEvent.click(btn));
     expect(backend.action).toHaveBeenCalledWith("fresh_try", { id: "r7" });
+  });
+});
+
+describe("任務包開會話（F-42）", () => {
+  it("先向引擎要任務包，再開預填任務的會話對話框", async () => {
+    const { loopCard } = await import("./fixtures");
+    const card = {
+      ...loopCard,
+      actions: [...loopCard.actions, { label: "用任務包開會話", action: "brief_session" as const, payload: { num: "#3" } }],
+    } as StateCard;
+    const backend = mockBackend({
+      getState: vi.fn(async () => makeState({ cards: [card] })),
+      action: vi.fn(async (name: string) =>
+        name === "todo_brief" ? { ok: true, id: "#3", markdown: "# 任務包：#3 驗證 VDI\n## 目標" } : { ok: true },
+      ) as unknown as Backend["action"],
+    });
+    await mount(backend);
+    const article = (await screen.findByText("驗證 VDI")).closest("article")!;
+    await act(async () => fireEvent.click(article.querySelector(".more")!));
+    const dialog = document.getElementById("detaildialog")!;
+    const btn = [...dialog.querySelectorAll("button")].find((b) => b.textContent === "用任務包開會話")!;
+    await act(async () => fireEvent.click(btn));
+    expect(backend.action).toHaveBeenCalledWith("todo_brief", { num: "#3" });
+    await waitFor(() => expect(dialog.textContent).toContain("開啟 Agent 會話"));
+    const task = dialog.querySelector("textarea") as HTMLTextAreaElement;
+    expect(task.value).toContain("# 任務包：#3 驗證 VDI");
   });
 });

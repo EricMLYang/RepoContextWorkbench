@@ -450,12 +450,14 @@ pub enum TodoAction {
     Close,
     /// 體檢：哪些可能已處理（附證據）、哪些擱置太久（Rust 才有）
     Review,
+    /// 任務包：把一項未結組成給全新會話的 markdown（目標／背景／輸入／限制／完成條件；Rust 才有）
+    Brief,
 }
 
 #[derive(Args, Debug)]
 pub struct TodoArgs {
     pub action: TodoAction,
-    /// add：要做的事；close：編號（#3 或 3）；review：不用
+    /// add：要做的事；close／brief：編號（#3 或 3）；review：不用
     #[arg(default_value = "")]
     pub text: String,
     /// YYYY-MM-DD
@@ -474,7 +476,7 @@ pub fn cmd_todo(ctx: &Ctx, a: &TodoArgs) -> CmdResult {
     if a.text.is_empty() && !matches!(a.action, TodoAction::Review) {
         return Err(fail(
             "bad_request",
-            "todo add／close 需要 <TEXT>（add：要做的事；close：編號）",
+            "todo add／close／brief 需要 <TEXT>（add：要做的事；close／brief：編號）",
             None,
             2,
         ));
@@ -483,6 +485,14 @@ pub fn cmd_todo(ctx: &Ctx, a: &TodoArgs) -> CmdResult {
         TodoAction::Review => {
             let t = a.scope.target();
             agent_call(ctx, |d| agentapi::review_todos(d, &t), h_review)
+        }
+        TodoAction::Brief => {
+            let t = a.scope.target();
+            agent_call(
+                ctx,
+                |d| agentapi::todo_brief(d, &a.text, &t),
+                |r| s(r, "markdown"),
+            )
         }
         TodoAction::Add => {
             let t = a.scope.target();

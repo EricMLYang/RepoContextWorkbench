@@ -58,6 +58,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("unrelate", a_unrelate),
     ("relation_dismiss", a_relation_dismiss),
     ("fresh_try", a_fresh_try),
+    ("todo_brief", a_todo_brief),
     ("fresh_dismiss", a_fresh_dismiss),
     ("collide", a_collide),
     ("collide_rerun", a_collide_rerun),
@@ -245,6 +246,14 @@ fn a_relate(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
             json!({"relation": r})
         },
     )
+}
+
+/// Rust 才有（F-42）：未結事項的任務包（前端拿 markdown 當新會話的任務）。
+fn a_todo_brief(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let Some(num) = s(p, "num").filter(|x| !x.is_empty()) else {
+        return Err(Error::invalid("todo_brief 需要 num"));
+    };
+    crate::agentapi::todo_brief(d, &num, &crate::agentapi::Target::default())
 }
 
 /// Rust 才有（F-26）：反芻推薦「拿來試」——在該組開帶出處的待辦（人在 App 按的＝manual）。

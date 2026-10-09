@@ -29,6 +29,27 @@ export function useRunAction(): RunAction {
         });
         return;
       }
+      if (a.action === "brief_session") {
+        // 任務包（Rust 引擎 F-42）：先請引擎組好 markdown，再用它當新會話的任務
+        store.setBusy(c.key, true);
+        store.setCardError(c.key, "");
+        try {
+          const r = await store.action("todo_brief", { num: String(a.payload.num ?? "") });
+          ui.closeDetail();
+          ui.openSession({
+            ...(c.scope_kind === "group" ? { group: c.scope_label, repos: null } : { repos: c.scope_repos }),
+            task: r.markdown,
+            origin: "loop:" + String(a.payload.num ?? ""),
+          });
+        } catch (e) {
+          const msg = (e as Error).message;
+          if (from === "card") store.setCardError(c.key, msg);
+          else ui.setDetailError(msg);
+        } finally {
+          store.setBusy(c.key, false);
+        }
+        return;
+      }
       if (a.action === "route_pick") {
         ui.openDetail({
           title: "選擇儲存位置",

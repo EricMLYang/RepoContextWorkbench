@@ -109,10 +109,27 @@ def python_dump(sp):
     }
 
 
+# Rust 才有的卡片動作（比對前從 Rust 那邊拿掉）：F-42 未結卡的「用任務包開會話」
+RUST_ONLY_ACTIONS = {"brief_session"}
+
+
+def drop_rust_only(v):
+    if isinstance(v, dict):
+        if isinstance(v.get("actions"), list):
+            v["actions"] = [a for a in v["actions"]
+                            if not (isinstance(a, dict) and a.get("action") in RUST_ONLY_ACTIONS)]
+        for x in v.values():
+            drop_rust_only(x)
+    elif isinstance(v, list):
+        for x in v:
+            drop_rust_only(x)
+    return v
+
+
 def rust_dump(sp):
     out = subprocess.run(["cargo", "run", "-q", "-p", "ctx-core", "--example", "workbench_dump",
                           "--", str(sp)], cwd=ROOT, check=True, capture_output=True, text=True)
-    return json.loads(out.stdout)
+    return drop_rust_only(json.loads(out.stdout))
 
 
 def normalize(v, path=()):

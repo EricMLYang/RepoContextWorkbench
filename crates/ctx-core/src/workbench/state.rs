@@ -849,6 +849,16 @@ fn rel_kinds_json(kinds: &registry::RelationKinds) -> Value {
     Value::Object(m)
 }
 
+/// Rust 才有（F-42）：未結卡多一個「用任務包開會話」（前端先叫 `todo_brief` 拿 markdown，再開會話）。
+fn add_brief_action(cards: &mut [Value]) {
+    for c in cards.iter_mut().filter(|c| c["kind"] == "loop") {
+        let num = c["num"].clone();
+        if let Some(a) = c["actions"].as_array_mut() {
+            a.push(act("用任務包開會話", "brief_session", json!({"num": num})));
+        }
+    }
+}
+
 /// Rust 才有（F-48）：反芻推薦成卡（排在最後；只放目前規則、近幾天的＝跟 agent 開場看到的同一批）。
 /// 純檔案讀（`.state/ruminate.json`）。出口：拿來試（開帶出處的待辦）／不相關。
 fn fresh_cards(spine_dir: &Path, data: &RegistryData) -> Result<Vec<Value>> {
@@ -980,6 +990,7 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
 
     let mut cards = build_cards(&events, &p, &loops, &scopes);
     attach_review(&mut cards, &crate::agentapi::load_review_cache(spine_dir));
+    add_brief_action(&mut cards);
     cards.extend(fresh_cards(spine_dir, &data)?);
     for c in &mut cards {
         let l = lane(&prov_of(c), scoped, &members, c["kind"] == "interrupt");

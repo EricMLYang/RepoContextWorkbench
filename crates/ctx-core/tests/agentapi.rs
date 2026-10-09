@@ -804,3 +804,38 @@ fn search_decisions_respect_scope_and_skip_noise() {
     .unwrap();
     assert!(r.get("decisions").is_none());
 }
+
+// ---- Rust 才有（F-42）：任務包 ----
+
+#[test]
+fn todo_brief_assembles_goal_context_inputs_constraints() {
+    let w = two_groups();
+    registry::set_group_field(&w.sp, "產品", "goal", "把快取做穩").unwrap();
+    std::fs::write(
+        w.impl_.join("cache_design.md"),
+        "# 快取淘汰設計\n快取淘汰策略的取捨\n",
+    )
+    .unwrap();
+    log_ext(&w, "快取淘汰策略用 LFU", None, Some("熱點分散時")).unwrap();
+    let id = todo(&w, "實作快取淘汰策略", &w.impl_)["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let r = api::todo_brief(&w.sp, &id, &at(&w.plan)).unwrap();
+    let md = r["markdown"].as_str().unwrap();
+    for part in [
+        "## 目標",
+        "實作快取淘汰策略",
+        "組目標：把快取做穩",
+        "快取淘汰策略用 LFU",
+        "impl:cache_design.md",
+        "熱點分散時",
+        &format!("close_todo {id}"),
+    ] {
+        assert!(md.contains(part), "缺 {part}：\n{md}");
+    }
+    assert_eq!(
+        code_of(api::todo_brief(&w.sp, "#999", &at(&w.plan)).unwrap_err()).0,
+        "not_found"
+    );
+}

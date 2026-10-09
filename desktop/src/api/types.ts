@@ -36,10 +36,10 @@ export interface SpineEvent {
 
 // ── 卡片動作（每個按鈕＝一個 action 名稱＋payload）──────────────────
 
-/** 卡片上的按鈕。action 是 ACTIONS 的鍵，或前端自己處理的 route_pick／collide_prefill。 */
+/** 卡片上的按鈕。action 是 ACTIONS 的鍵，或前端自己處理的 route_pick／collide_prefill／brief_session。 */
 export interface CardAction {
   label: string;
-  action: ActionName | "route_pick" | "collide_prefill";
+  action: ActionName | "route_pick" | "collide_prefill" | "brief_session";
   payload: Record<string, unknown>;
 }
 
@@ -336,6 +336,11 @@ export interface ActionMap {
   fresh_try: {
     payload: { id: string };
     result: { ok: true; todo: string; group: string; ref: string; text: string };
+  };
+  /** 未結事項的任務包 markdown（Rust 引擎 F-42；前端 brief_session 用它開會話）。 */
+  todo_brief: {
+    payload: { num: string };
+    result: { ok: true; id: string; markdown: string } & Record<string, unknown>;
   };
   /** 反芻推薦「不相關」（Rust 引擎 F-48）。 */
   fresh_dismiss: {
