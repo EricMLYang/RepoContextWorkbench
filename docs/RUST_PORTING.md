@@ -137,6 +137,9 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   （有命中才給）：範圍內的 decision（含交接）BM25，查詢詞先去含虛字的 bigram；被取代的打五折並標 `superseded_by`、
   帶 `reopen_when` 與之後的 `outcomes`（`ref:` 指回它的結果事件）；只留分數 ≥ 最高分 30% 的。
   對拍時比對前拿掉 `decisions` 鍵／終端機輸出的「過去的判斷」段。
+- **反芻推薦拿來試＋App 可見**（2026-10-10，ideation F-26／F-48；Python 沒有）：`ctx fresh --try <id>`／
+  `agentapi::try_fresh` 在推薦所屬的組開待辦「試用：<檔名>（<ref>，反芻 <id>）」並把推薦標成 used（`used_at`）。
+  App 收件匣多一種卡 `fresh`（`push_links` 那一批＝跟 agent 開場看到的同一批），動作 `fresh_try`／`fresh_dismiss`。
 
 CLI／MCP（ctx-cli）：
 

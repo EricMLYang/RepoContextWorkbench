@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { WorkbenchStore } from "../store/store";
+import type { StateCard } from "../api/types";
 import { makeState, mockBackend } from "./fixtures";
 
 async function mount(backend = mockBackend()) {
@@ -193,5 +194,36 @@ describe("關係建議（F-47）", () => {
     const apply = [...box.querySelectorAll("button")].find((b) => b.textContent === "套用")!;
     await act(async () => fireEvent.click(apply));
     expect(box.querySelector(".error")!.textContent).toBe("registry 寫入失敗");
+  });
+});
+
+describe("相關新料卡（F-48）", () => {
+  const freshCard: StateCard = {
+    key: "fresh:r7",
+    kind: "fresh",
+    lane: "scope",
+    id: "r7",
+    scope_kind: "group",
+    scope_label: "產品開發",
+    scope_repos: ["a", "b"],
+    date: "2026-10-10",
+    time: "06:30",
+    title: "新料：notes:索引重建.md",
+    lines: ["共同詞：增量、重建、水位線"],
+    actions: [
+      { label: "拿來試", action: "fresh_try", payload: { id: "r7" } },
+      { label: "不相關", action: "fresh_dismiss", payload: { id: "r7" } },
+    ],
+  };
+
+  it("自成一段，主要動作是拿來試", async () => {
+    const backend = mockBackend({ getState: vi.fn(async () => makeState({ cards: [freshCard] })) });
+    await mount(backend);
+    const card = (await screen.findByText("新料：notes:索引重建.md")).closest("article")!;
+    expect(card.textContent).toContain("共同詞：增量、重建、水位線");
+    expect(document.body.textContent).toContain("相關新料");
+    const btn = [...card.querySelectorAll("button")].find((b) => b.textContent === "拿來試")!;
+    await act(async () => fireEvent.click(btn));
+    expect(backend.action).toHaveBeenCalledWith("fresh_try", { id: "r7" });
   });
 });

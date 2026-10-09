@@ -849,6 +849,50 @@ fn rel_kinds_json(kinds: &registry::RelationKinds) -> Value {
     Value::Object(m)
 }
 
+/// Rust 才有（F-48）：反芻推薦成卡（排在最後；只放目前規則、近幾天的＝跟 agent 開場看到的同一批）。
+/// 純檔案讀（`.state/ruminate.json`）。出口：拿來試（開帶出處的待辦）／不相關。
+fn fresh_cards(spine_dir: &Path, data: &RegistryData) -> Result<Vec<Value>> {
+    let mut out = Vec::new();
+    for g in &data.groups {
+        let name = g.name();
+        for l in crate::ruminate::push_links(spine_dir, &name, None)? {
+            let id = l.id.clone().unwrap_or_default();
+            let (date, time) = l.found.split_once(' ').unwrap_or((l.found.as_str(), ""));
+            let mut lines = vec![json!(format!("共同詞：{}", l.terms.join("、")))];
+            if let Some(sn) = l.snippets.as_ref().and_then(|v| v.first()) {
+                lines.push(json!(format!(
+                    "L{}：{}",
+                    sn.line,
+                    crate::pystr::take_chars(&sn.text, 100)
+                )));
+            }
+            let mut m = Map::new();
+            m.insert("key".into(), json!(format!("fresh:{id}")));
+            m.insert("kind".into(), json!("fresh"));
+            m.insert("id".into(), json!(id));
+            m.insert("title".into(), json!(format!("新料：{}", l.reference)));
+            m.insert("date".into(), json!(date));
+            m.insert("time".into(), json!(time));
+            m.insert("lines".into(), Value::Array(lines));
+            Prov {
+                kind: "group",
+                label: name.clone(),
+                repos: g.members(),
+            }
+            .put(&mut m);
+            m.insert(
+                "actions".into(),
+                json!([
+                    act("拿來試", "fresh_try", json!({"id": id})),
+                    act("不相關", "fresh_dismiss", json!({"id": id})),
+                ]),
+            );
+            out.push(Value::Object(m));
+        }
+    }
+    Ok(out)
+}
+
 /// Rust 才有（F-46）：未結卡帶上 agent 看到的同一份體檢結果（`.state/review.json`，由開場／`ctx todo review` 算好）。
 /// 只有「可能已處理」「擱置」才加 `verdict`（卡片上的標籤）；有證據的列進 `lines`（描述＋詳情）。
 fn attach_review(cards: &mut [Value], review: &Map<String, Value>) {
@@ -936,6 +980,7 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
 
     let mut cards = build_cards(&events, &p, &loops, &scopes);
     attach_review(&mut cards, &crate::agentapi::load_review_cache(spine_dir));
+    cards.extend(fresh_cards(spine_dir, &data)?);
     for c in &mut cards {
         let l = lane(&prov_of(c), scoped, &members, c["kind"] == "interrupt");
         if let Some(o) = c.as_object_mut() {

@@ -1262,3 +1262,34 @@ fn relation_suggestion_disappears_after_relate() {
     .unwrap();
     assert!(st(&d).get("relation_suggestions").is_none());
 }
+
+// Rust 才有（F-48）：反芻推薦成收件匣卡，出口＝拿來試／不相關
+#[test]
+fn fresh_cards_in_inbox_and_dismiss() {
+    let (_t, d) = spine_with_repos();
+    let state_p = d.join(".state/ruminate.json");
+    std::fs::create_dir_all(state_p.parent().unwrap()).unwrap();
+    let found = Local::now().format("%Y-%m-%d %H:%M").to_string();
+    let link = |id: &str, rules: Option<u32>| {
+        let mut l = json!({"id": id, "group": "g1", "kind": "file", "repo": "x", "ref": format!("x:{id}.md"),
+            "title": format!("{id}.md"), "stamp": 1, "score": 9.0, "terms": ["向量", "索引"], "basis": [],
+            "found": found, "status": "new"});
+        if let Some(r) = rules {
+            l["rules"] = json!(r);
+        }
+        l
+    };
+    std::fs::write(
+        &state_p,
+        json!({"last_run": null, "links": [link("r1", Some(ctx_core::ruminate::RULES_VERSION)), link("r2", None)]})
+            .to_string(),
+    )
+    .unwrap();
+    let s = st(&d);
+    let fresh = cards_of(&s, "fresh");
+    assert_eq!(fresh.len(), 1); // 舊規則的 r2 不成卡
+    assert_eq!(fresh[0]["scope_label"], "g1");
+    assert_eq!(fresh[0]["actions"][0]["action"], "fresh_try");
+    act(&d, "fresh_dismiss", json!({"id": "r1"})).unwrap();
+    assert!(cards_of(&st(&d), "fresh").is_empty());
+}

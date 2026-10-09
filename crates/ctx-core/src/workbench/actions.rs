@@ -57,6 +57,8 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("relate", a_relate),
     ("unrelate", a_unrelate),
     ("relation_dismiss", a_relation_dismiss),
+    ("fresh_try", a_fresh_try),
+    ("fresh_dismiss", a_fresh_dismiss),
     ("collide", a_collide),
     ("collide_rerun", a_collide_rerun),
     ("ignore", a_ignore),
@@ -243,6 +245,23 @@ fn a_relate(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
             json!({"relation": r})
         },
     )
+}
+
+/// Rust 才有（F-26）：反芻推薦「拿來試」——在該組開帶出處的待辦（人在 App 按的＝manual）。
+fn a_fresh_try(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let Some(id) = s(p, "id").filter(|x| !x.is_empty()) else {
+        return Err(Error::invalid("fresh_try 需要 id"));
+    };
+    crate::agentapi::try_fresh(d, &id, "manual")
+}
+
+/// Rust 才有（F-48）：反芻推薦「不相關」（同 `ctx fresh --dismiss`）。
+fn a_fresh_dismiss(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let Some(id) = s(p, "id").filter(|x| !x.is_empty()) else {
+        return Err(Error::invalid("fresh_dismiss 需要 id"));
+    };
+    let l = crate::ruminate::dismiss(d, &id)?;
+    Ok(json!({"ok": true, "dismissed": l.id}))
 }
 
 /// Rust 才有（F-47）：關係建議「不相關」——記住，之後不再建議。

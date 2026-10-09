@@ -471,3 +471,33 @@ fn old_rule_pending_link_does_not_block_new_rules() {
     assert_eq!(refs_of(&again, "產品"), vec!["cards:索引重建.md"]);
     assert_eq!(ruminate::push_links(&w.sp, "產品", None).unwrap().len(), 1);
 }
+
+// ---- Rust 才有（F-26／F-48）：拿來試 ----
+
+#[test]
+fn try_fresh_opens_todo_in_link_group_and_marks_used() {
+    let w = world();
+    std::fs::write(w.cards.join("索引重建.md"), CARD).unwrap();
+    ruminate::run(&w.sp, None, None).unwrap();
+    let id = ruminate::push_links(&w.sp, "產品", None).unwrap()[0]
+        .id
+        .clone()
+        .unwrap();
+    let r = ctx_core::agentapi::try_fresh(&w.sp, &id, "manual").unwrap();
+    assert_eq!(r["group"], "產品");
+    let text = r["text"].as_str().unwrap();
+    assert!(
+        text.starts_with("試用：索引重建（cards:索引重建.md") && text.contains(&id),
+        "{text}"
+    );
+    // 推薦標成用上了：不再推
+    assert!(ruminate::push_links(&w.sp, "產品", None)
+        .unwrap()
+        .is_empty());
+    let loops = spine::open_loops(&w.sp).unwrap();
+    assert!(loops
+        .iter()
+        .any(|ev| ev.body.contains("試用：索引重建") && ev.kv("group") == Some("產品")));
+    // 找不到的 id
+    assert!(ctx_core::agentapi::try_fresh(&w.sp, "r999", "manual").is_err());
+}

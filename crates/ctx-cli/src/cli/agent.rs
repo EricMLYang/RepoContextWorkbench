@@ -672,6 +672,9 @@ pub struct FreshArgs {
     /// 略過一筆推薦，例 r3
     #[arg(long, value_name = "ID")]
     pub dismiss: Option<String>,
+    /// 拿來試：在推薦所屬的組開一個帶出處的待辦，推薦標成用上了（Rust 才有）
+    #[arg(long = "try", value_name = "ID")]
+    pub try_id: Option<String>,
     /// 命中率：推薦後來有多少被讀了
     #[arg(long)]
     pub stats: bool,
@@ -730,6 +733,21 @@ fn h_fresh(r: &Value) -> String {
 }
 
 pub fn cmd_fresh(ctx: &Ctx, a: &FreshArgs) -> CmdResult {
+    if let Some(id) = a.try_id.as_deref() {
+        let source = if ctx.json { "agent" } else { "manual" };
+        return agent_call(
+            ctx,
+            |d| agentapi::try_fresh(d, id, source),
+            |r| {
+                format!(
+                    "已開待辦 {}（{}）：{}",
+                    s(r, "todo"),
+                    s(r, "group"),
+                    s(r, "text")
+                )
+            },
+        );
+    }
     let d = ctx.spine_dir()?;
     if a.run {
         let res = ruminate::run(&d, None, a.days)?;

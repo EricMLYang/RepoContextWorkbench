@@ -45,7 +45,7 @@ export interface CardAction {
 
 // ── 收件匣卡片（state.build_cards ＋ brief.build_question_cards）────
 
-export type CardKind = "interrupt" | "question" | "collision" | "event" | "loop" | "pending";
+export type CardKind = "interrupt" | "question" | "collision" | "event" | "loop" | "pending" | "fresh";
 
 interface CardBase {
   key: string;
@@ -96,7 +96,14 @@ export interface QuestionCard extends CardBase, Provenance {
   repo: string;
 }
 
-export type StateCard = CollisionCard | EventCard | PendingCard | LoopCard;
+/** 反芻推薦（Rust 引擎 F-48）：別組新進的知識跟本組手上工作相關；出口＝拿來試／不相關。 */
+export interface FreshCard extends CardBase, Provenance {
+  kind: "fresh";
+  lane: Lane;
+  id: string;
+}
+
+export type StateCard = CollisionCard | EventCard | PendingCard | LoopCard | FreshCard;
 export type InboxCard = StateCard | QuestionCard;
 
 // ── 會話清冊（term.TermManager.list ＋ state.annotate_terms）────────
@@ -324,6 +331,16 @@ export interface ActionMap {
   unrelate: {
     payload: { a: string; b: string; kind?: string };
     result: { ok: true } & Record<string, unknown>;
+  };
+  /** 反芻推薦「拿來試」：在該組開帶出處的待辦（Rust 引擎 F-26）。 */
+  fresh_try: {
+    payload: { id: string };
+    result: { ok: true; todo: string; group: string; ref: string; text: string };
+  };
+  /** 反芻推薦「不相關」（Rust 引擎 F-48）。 */
+  fresh_dismiss: {
+    payload: { id: string };
+    result: { ok: true; dismissed: string };
   };
   /** 關係建議「不相關」：記住，之後不再建議（Rust 引擎 F-47）。 */
   relation_dismiss: {

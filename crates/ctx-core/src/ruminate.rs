@@ -726,6 +726,30 @@ pub fn push_links(spine_dir: &Path, group: &str, now: Option<NaiveDateTime>) -> 
         .collect())
 }
 
+/// Rust 才有（F-26）：一筆推薦標成「用上了」（拿來試）。回傳那筆推薦；找不到＝`Error::Invalid`。
+pub fn mark_tried(spine_dir: &Path, link_id: &str, when: &str) -> Result<Link> {
+    let _g = FileLock::new(spine_dir.join(LOCK_NAME)).acquire()?;
+    let mut state = load_state(spine_dir);
+    let hit = state
+        .links
+        .iter_mut()
+        .find(|l| l.id.as_deref() == Some(link_id))
+        .map(|l| {
+            l.status = LinkStatus::Used;
+            l.used_at = Some(when.to_string());
+            l.clone()
+        });
+    match hit {
+        Some(l) => {
+            save_state(spine_dir, &state)?;
+            Ok(l)
+        }
+        None => Err(Error::invalid(format!(
+            "找不到推薦 {link_id}（ctx fresh --all 看全部）"
+        ))),
+    }
+}
+
 /// 對應 `ruminate.dismiss`：打掉一筆推薦。找不到＝`Error::Invalid`。
 pub fn dismiss(spine_dir: &Path, link_id: &str) -> Result<Link> {
     let _g = FileLock::new(spine_dir.join(LOCK_NAME)).acquire()?;

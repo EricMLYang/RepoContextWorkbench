@@ -133,6 +133,7 @@ export function Workspace(props: {
             <option value="question">需要判斷</option>
             <option value="collision">分析結果</option>
             <option value="loop">待跟進</option>
+            <option value="fresh">相關新料</option>
             <option value="pending">處理中</option>
           </select>
           <span className="spacer" />
