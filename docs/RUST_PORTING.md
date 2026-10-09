@@ -97,6 +97,8 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   21:00 的排程 commit 不會跑。`spine::autocommit`：spine 已有 git 歷史、有變更、上次 commit 超過
   `thresholds.spine_autocommit_hours`（預設 6；0＝關）才 commit；分支有 upstream 就背景 `git push`。
   一個 commit 都沒有的 spine 不動（不替使用者開始 git 歷史）。`batch_commit` 改成持 `.engine.lock` 才 add＋commit。
+- **陳舊會話 marker**（N-16）：開場時把開了超過 7 天、沒收到 SessionEnd 的 marker 當成已結束——照 SessionEnd 的規則
+  判斷（有事發生又沒交接才記一筆，理由寫「超過 7 天沒有收到結束訊號」），然後清掉。門檻保守，會話可能一開好幾天。
 - **hook 沒有 session_id 不記 marker**（N-14）：Python 寫成 `hook_sessions/unknown.json`；Rust 照樣輸出注入內容，
   但不記會話（手動試跑、量測不會留下假會話，之後也不會被記成「未交接」）。
 - **知識索引快取**（N-02，格式不變）：不展開成整棵 JSON 樹，只解析用到的檔；沒有新算的檔就不重寫快取

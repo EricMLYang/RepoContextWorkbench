@@ -278,7 +278,44 @@ fn session_start_inner(
         d.join(format!("{}.json", safe(payload.get("session_id")))),
         py_dumps(&marker),
     )?;
+    let _ = sweep_stale_markers(spine_dir, now);
     Ok(output)
+}
+
+/// Rust 才有（N-16）：會話被直接關掉（沒走 SessionEnd）時 marker 會一直留著。開場時把開了超過
+/// [`STALE_MARKER_DAYS`] 天的當成已結束：照 SessionEnd 的規則判斷（有事發生又沒交接才記一筆），然後清掉。
+/// 門檻保守——會話可能一開好幾天。
+pub const STALE_MARKER_DAYS: i64 = 7;
+
+fn sweep_stale_markers(spine_dir: &Path, now: NaiveDateTime) -> Result<usize> {
+    let mut n = 0;
+    for ent in std::fs::read_dir(marker_dir(spine_dir))?.flatten() {
+        let p = ent.path();
+        let Ok(text) = std::fs::read_to_string(&p) else {
+            continue;
+        };
+        let Ok(m) = serde_json::from_str::<Value>(&text) else {
+            continue;
+        };
+        let started = m["started_iso"]
+            .as_str()
+            .and_then(|t| NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M:%S").ok());
+        if !started.is_some_and(|t| now - t > chrono::Duration::days(STALE_MARKER_DAYS)) {
+            continue;
+        }
+        let sid = p
+            .file_stem()
+            .map(|x| x.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let payload = json!({
+            "session_id": sid,
+            "reason": format!("超過 {STALE_MARKER_DAYS} 天沒有收到結束訊號，會話可能被直接關掉"),
+        });
+        session_end(spine_dir, &payload, Some(now));
+        let _ = std::fs::remove_file(&p); // session_end 沒處理到（例如壞檔）也要清
+        n += 1;
+    }
+    Ok(n)
 }
 
 /// hook 輸入有沒有可用的 session_id（[`safe`] 會換成 `unknown` 的那些都算沒有）。

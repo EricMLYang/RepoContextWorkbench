@@ -370,6 +370,15 @@ def subst(s, side):
     return s.replace("<today>", time.strftime("%Y-%m-%d"))
 
 
+def align_minute(margin=15):
+    """未讀用 HH:MM 記「已讀到哪」：兩邊各跑一次，分鐘交界若落在兩邊之間，未讀數就差一筆
+    （兩個引擎都沒錯，是對拍的時序）。離整分鐘不到 margin 秒就先等到下一分鐘開頭再跑。"""
+    import time
+    sec = time.localtime().tm_sec
+    if sec >= 60 - margin:
+        time.sleep(60 - sec + 1)
+
+
 def run_side(side, args, cwd=None, stdin=None, spine=True, env_extra=None, pre=()):
     cmd = (PY if side["name"] == "py" else [str(side["exe"])])
     full = list(cmd) + list(pre)
@@ -633,6 +642,7 @@ def main():
     C("hook session-end", ["hook", "session-end"], cwd="home",
       stdin=json.dumps({"session_id": "abc"}))
     C("unread 寫完後", ["unread"])
+    align_minute()  # ack 與之後讀未讀的步驟要在兩邊同一分鐘內（N-18）
     C("unread --ack", ["unread", "--ack"])
     C("notify ack 後", ["notify"])
     C("lint 寫完後", ["lint"])
@@ -666,6 +676,7 @@ def main():
             {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
             {"jsonrpc": "2.0", "id": 3, "method": "ping"},
             {"jsonrpc": "2.0", "id": 4, "method": "no/such"}]
+    align_minute(25)  # MCP 一段會寫事件又讀 notify：整段要落在同一分鐘（N-18）
     mcp_compare("mcp 工作層", sides, init + [
         tool(10, "where_am_i"),
         tool(11, "context_for", card=False),
@@ -685,6 +696,7 @@ def main():
         tool(25, "spine_append", type="decision", source="agent"),
         tool(26, "no_such_tool"),
     ], admin=False, results=res)
+    align_minute(25)
     mcp_compare("mcp 管理層", sides, init + [
         tool(30, "registry_list"),
         tool(31, "registry_audit"),

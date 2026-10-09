@@ -839,3 +839,41 @@ fn todo_brief_assembles_goal_context_inputs_constraints() {
         "not_found"
     );
 }
+
+// Rust 才有（N-16）：開了超過 7 天沒結束訊號的會話 marker，開場時當成已結束處理並清掉
+#[test]
+fn stale_session_markers_are_swept_at_session_start() {
+    let w = two_groups();
+    let cwd = w.impl_.to_string_lossy().to_string();
+    let long_ago = Local::now().naive_local() - chrono::Duration::days(10);
+    hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "old", "cwd": cwd}),
+        Some(long_ago),
+    );
+    // 那個會話期間有事發生（commit），卻沒有交接
+    std::fs::write(w.impl_.join("f.md"), "x\n").unwrap();
+    git(&w.impl_, &["add", "-A"], &[]);
+    git(&w.impl_, &["commit", "-q", "-m", "做了一半"], &[]);
+    // 2 天前開的還不算陳舊（那一次開場會先清掉 old）
+    let recent = Local::now().naive_local() - chrono::Duration::days(2);
+    hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "recent", "cwd": cwd}),
+        Some(recent),
+    );
+    hooks::session_start(&w.sp, &json!({"session_id": "now", "cwd": cwd}), None);
+    let d = w.sp.join(".state/hook_sessions");
+    assert!(!d.join("old.json").exists());
+    assert!(d.join("recent.json").exists() && d.join("now.json").exists());
+    let ev = spine_mod::iter_events(&w.sp)
+        .unwrap()
+        .into_iter()
+        .rfind(|e| e.source == "hook")
+        .expect("要記一筆沒交接");
+    assert!(
+        ev.body.contains("沒有交接") && ev.body.contains("沒有收到結束訊號"),
+        "{}",
+        ev.body
+    );
+}
