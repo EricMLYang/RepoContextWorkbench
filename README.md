@@ -38,6 +38,9 @@ cd desktop && npm run build && npm test && npm run lint
 
 ## 安裝
 
+重裝桌面 App（含 ctx）最省事：先從選單列結束 App，再 `bash scripts/install-app.sh`（`--dry-run` 先看步驟；
+會備份舊版到 `~/.cache/repo-context/app-backups/`、用 ditto 整包替換、刪掉 build 目錄那份）。
+
 ```bash
 cargo install --path crates/ctx-cli      # ctx 裝到 ~/.cargo/bin/ctx
 # 桌面 App：把 target/release/bundle/macos/Repo Context.app 拖到 /Applications
