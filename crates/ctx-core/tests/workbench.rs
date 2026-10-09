@@ -1177,3 +1177,41 @@ fn test_term_create_agent_goes_through_session_build() {
         "未知會話: t5"
     );
 }
+
+// Rust 才有（F-46）：收件匣的未結卡帶上 agent 看到的同一份體檢結果
+#[test]
+fn loop_card_shows_review_verdict_after_scan() {
+    let (_t, d) = spine_with_repos();
+    let yesterday = (Local::now() - Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    ev(
+        &d,
+        "open-loop",
+        "agent",
+        &["#1", "group:g1", &format!("due:{yesterday}")],
+        "補 Windows 測試",
+        ago(60 * 24 * 3),
+    );
+    ev(
+        &d,
+        "open-loop",
+        "agent",
+        &["#2", "group:g1"],
+        "剛開的事",
+        ago(5),
+    );
+    // scan 前：收件匣只做純檔案讀，沒有體檢結果
+    let before = st(&d);
+    assert!(cards_of(&before, "loop")
+        .iter()
+        .all(|c| c.get("verdict").is_none()));
+    build_scan(&d, Some("g1"), None).unwrap();
+    let after = st(&d);
+    let loops = cards_of(&after, "loop");
+    let c1 = loops.iter().find(|c| c["num"] == "#1").unwrap();
+    assert_eq!(c1["verdict"], "擱置沒動靜");
+    assert!(c1["lines"][0].as_str().unwrap().starts_with("體檢"));
+    let c2 = loops.iter().find(|c| c["num"] == "#2").unwrap();
+    assert!(c2.get("verdict").is_none()); // 進行中的不加註
+}

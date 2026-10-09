@@ -119,6 +119,9 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   標頭文法不變，Python 讀得回（只是不懂它的意思）。被取代的判斷不再出現在 `context_for` 的最近事件、反芻的手上工作
   與推給別組的判斷候選；帶重看條件的有效判斷列在 `context_for.reopen`（只在有的時候出現），開場注入「該重看」（條件裡
   的日期已到）／「有條件的判斷」各一行。MCP `log_decision` 多兩個選填參數（對拍時拿掉後比，記為允許差異）。
+- **桌面 App 收件匣帶體檢結果**（2026-10-10，ideation F-46）：`review_todos` 每次算完併進 `.state/review.json`；
+  `build_scan`（本來就跑 git 的重層）順便逐組更新；`build_state` 只讀這個檔（仍是純檔案讀），把「可能已處理」「擱置沒動靜」
+  掛到未結卡的 `verdict`（卡片標籤）與 `lines`（描述＋證據），進行中的不加註。前端不用改。對拍時 `.state/review.json` 列為允許差異。
 
 CLI／MCP（ctx-cli）：
 

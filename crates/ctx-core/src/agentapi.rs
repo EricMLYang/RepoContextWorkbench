@@ -1553,6 +1553,8 @@ pub fn review_todos_at(
         _ => 2,
     };
     items.sort_by_key(rank);
+    // 同一份結果給桌面 App（收件匣只做純檔案讀，不自己跑 git）：寫進 .state/review.json
+    let _ = save_review_cache(spine_dir, &items, &now);
     Ok(json!({
         "ok": true, "scope": scope_json(&s),
         "counts": {"maybe_done": n_done, "stale": n_stale, "active": loops.len() - n_done - n_stale},
@@ -1589,4 +1591,41 @@ pub fn review_hint(spine_dir: &Path, t: &Target) -> Option<String> {
         "體檢：{}——`ctx todo review` 看證據；做完就 close，還要做就重開給新 due（先問使用者）",
         parts.join("；")
     ))
+}
+
+fn review_cache_path(spine_dir: &Path) -> PathBuf {
+    spine_dir.join(".state").join("review.json")
+}
+
+/// 把這次體檢的結果併進 `.state/review.json`（`{"items": {"#N": {verdict, why, evidence, at}}}`）。
+/// 範圍外的項目保留上次的結果（別的組開場時會更新）。
+fn save_review_cache(spine_dir: &Path, items: &[Value], now: &chrono::NaiveDateTime) -> Result<()> {
+    let p = review_cache_path(spine_dir);
+    let mut cache = load_review_cache(spine_dir);
+    let at = now.format("%Y-%m-%d %H:%M").to_string();
+    for it in items {
+        if let Some(id) = it["id"].as_str().filter(|x| !x.is_empty()) {
+            cache.insert(
+                id.to_string(),
+                json!({"verdict": it["verdict"], "why": it["why"],
+                       "evidence": it["evidence"], "at": at}),
+            );
+        }
+    }
+    if let Some(parent) = p.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = p.with_extension(format!("json.{}.tmp", std::process::id()));
+    std::fs::write(&tmp, crate::pyjson::dumps(&json!({"items": cache})))?;
+    std::fs::rename(&tmp, &p)?;
+    Ok(())
+}
+
+/// `.state/review.json` 的 items（讀不到或壞掉＝空）。
+pub fn load_review_cache(spine_dir: &Path) -> Map<String, Value> {
+    std::fs::read_to_string(review_cache_path(spine_dir))
+        .ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .and_then(|v| v.get("items").and_then(Value::as_object).cloned())
+        .unwrap_or_default()
 }

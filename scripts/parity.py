@@ -51,6 +51,8 @@ ALLOW = {
 ALLOW_FILES = [
     (r"^\.mcp\.json$",
      "session 掛的 MCP 指令改指 Rust ctx（`ctx mcp`），不再是 `python -m repo_context mcp`"),
+    (r"^\.state/review\.json$",
+     "未結體檢結果快取（F-21／F-46，Rust 才有：開場與 scan 算好給桌面 App 收件匣讀）"),
     (r"^\.agent_logs/",
      "provider 原始紀錄（除錯用 log，含 prompt 全文與呼叫序號；MockProvider 計數改成實例層）"),
 ]

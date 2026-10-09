@@ -849,6 +849,53 @@ fn rel_kinds_json(kinds: &registry::RelationKinds) -> Value {
     Value::Object(m)
 }
 
+/// Rust 才有（F-46）：未結卡帶上 agent 看到的同一份體檢結果（`.state/review.json`，由開場／`ctx todo review` 算好）。
+/// 只有「可能已處理」「擱置」才加 `verdict`（卡片上的標籤）；有證據的列進 `lines`（描述＋詳情）。
+fn attach_review(cards: &mut [Value], review: &Map<String, Value>) {
+    for c in cards.iter_mut() {
+        if c["kind"] != "loop" {
+            continue;
+        }
+        let Some(r) = c["num"].as_str().and_then(|n| review.get(n)) else {
+            continue;
+        };
+        let label = match r["verdict"].as_str() {
+            Some("maybe_done") => Some("可能已處理"),
+            Some("stale") => Some("擱置沒動靜"),
+            _ => None,
+        };
+        // 進行中的不加註（人看收件匣時那只是雜訊；agent 要細節用 ctx todo review）
+        if label.is_none() {
+            continue;
+        }
+        let mut lines: Vec<Value> = Vec::new();
+        {
+            lines.push(json!(format!(
+                "體檢（{}）：{}",
+                r["at"].as_str().unwrap_or(""),
+                r["why"].as_str().unwrap_or("")
+            )));
+        }
+        for e in r["evidence"].as_array().into_iter().flatten().take(3) {
+            lines.push(json!(format!(
+                "證據 {} {}（蓋住 {}%）：{}",
+                e["at"].as_str().unwrap_or(""),
+                e["ref"].as_str().unwrap_or(""),
+                (e["cover"].as_f64().unwrap_or(0.0) * 100.0).round(),
+                crate::pystr::take_chars(e["text"].as_str().unwrap_or(""), 80)
+            )));
+        }
+        if let Some(o) = c.as_object_mut() {
+            if let Some(l) = label {
+                o.insert("verdict".into(), json!(l));
+            }
+            if !lines.is_empty() {
+                o.insert("lines".into(), Value::Array(lines));
+            }
+        }
+    }
+}
+
 /// 對應 `state.build_state`：輕量狀態（純檔案讀）。interrupt 先於 normal（打斷要掙得，其餘累積）。
 ///
 /// `scope`＝畫面目前選的範圍：每張卡、每筆事件多帶 `lane`，每條關係多帶 `in_scope`／`task`，
@@ -888,6 +935,7 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
         .collect();
 
     let mut cards = build_cards(&events, &p, &loops, &scopes);
+    attach_review(&mut cards, &crate::agentapi::load_review_cache(spine_dir));
     for c in &mut cards {
         let l = lane(&prov_of(c), scoped, &members, c["kind"] == "interrupt");
         if let Some(o) = c.as_object_mut() {
@@ -1013,6 +1061,29 @@ pub fn build_scan(
     let cfg = config::load(spine_dir)?;
     let (gname, entries) = registry::resolve_group(spine_dir, group, repos)?;
     let states = collect::collect_group(&brief::repo_specs(&entries), Some(spine_dir));
+    // Rust 才有（F-46）：scan 是重的那一層（本來就跑 git），順便更新這個範圍的未結體檢——
+    // 結果寫進 .state/review.json，收件匣（純檔案讀）下次重整就看得到。失敗不影響 scan。
+    // 沒選範圍（全部）＝逐組跑；不靠 cwd 推主場（App 行程的目錄不是任何 repo）
+    let targets: Vec<crate::agentapi::Target> = if group.is_none() && repos.is_none() {
+        registry::load(spine_dir)?
+            .groups
+            .iter()
+            .map(|g| crate::agentapi::Target {
+                cwd: None,
+                group: Some(g.name()),
+                repos: None,
+            })
+            .collect()
+    } else {
+        vec![crate::agentapi::Target {
+            cwd: None,
+            group: group.map(str::to_string),
+            repos: repos.map(<[String]>::to_vec),
+        }]
+    };
+    for t in &targets {
+        let _ = crate::agentapi::review_todos(spine_dir, t);
+    }
     let snoozed = brief::snoozed(spine_dir, None)?;
     let cards: Vec<brief::QuestionCard> = brief::build_question_cards(&states, &cfg.thresholds())
         .into_iter()
