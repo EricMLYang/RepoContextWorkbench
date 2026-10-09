@@ -43,7 +43,7 @@
 | F-33 | 跨 repo | 相關 repo 建議（共同詞／引用／commit 時間點）；R02：mra 用 5 種掃描器（docker-compose、共用 DB、gateway、共用套件、API 呼叫）自動偵測相依，可以直接抄；R06：做法：四種可解釋訊號——文件裡直接提到對方 repo（Obsidian 未連結提及）、引用紀錄、同一段時間一起改（co-change）、共同主題詞；只建議、附理由，人確認後才 relate；R07：迭代 5（6253123）：`ctx registry suggest`；真資料 15 repo 零關係 → 10 筆建議，PM_Head 推測為 8 個專案的 pm-of；App 還看不到 → F-47 | 脈絡 | — | P2 | 完成（CLI＋開場） | R01 | R07 |
 | F-34 | 跨 repo | Incubator 主題一鍵轉 repo（建立＋登記＋關係＋初始脈絡）；R09：R09：痛點 1「Incubator 主題轉 repo」至今沒有任何迭代碰到，排在 F-22 之後；R10：R10：spawn --from-incubator 已有；spine incubator 目前是空的，邊際價值低 | 脈絡 | — | P2 | 延後 | R01 | R10 |
 | F-35 | 觀測 | 脈絡命中率：開場注入的內容 agent 實際用了幾成 | 脈絡 | — | P1 | 併入 N-03 | R01 | R01 |
-| F-36 | 觀測 | 健康指標：未交接率、跨組被拒次數；R17：`ctx health`：使用者真用幾天後，用數字判斷 15 個迭代有沒有用——交接率（會話有沒有交接）、推薦命中率、判斷結果記錄率、未結關閉速度、工具用量（MCP 呼叫紀錄） | 留痕 | — | P2 | 排入（迭代 16） | R01 | R17 |
+| F-36 | 觀測 | 健康指標：未交接率、跨組被拒次數；R17：`ctx health`：使用者真用幾天後，用數字判斷 15 個迭代有沒有用——交接率（會話有沒有交接）、推薦命中率、判斷結果記錄率、未結關閉速度、工具用量（MCP 呼叫紀錄）；**迭代 16 完成**：`ctx health`；使用前基準：交接率 76%、推薦命中率 0%（45 筆）、未結開 46 關 6| 留痕 | — | P2 | 完成 | R01 | R17 |
 | F-37 | 入口 | 選單列隨手捕捉一句想法或判斷，直接寫進 spine | 留痕、同介面 | — | P2 | 構想 | R01 | R01 |
 | F-38 | 入口 | 外部收件匣：ClickUp／Gmail connector 拉進或推出；R02：Paseo 做了跨裝置控制層，可參考 | 同介面 | — | P2 | 構想 | R01 | R02 |
 | F-39 | 入口 | Windows／VDI 入口 | 同介面 | — | P2 | 併入 N-10 | R01 | R01 |
@@ -63,7 +63,7 @@
 | N-04 | 可維護 | GitHub Actions：test／clippy／fmt／parity／前端測試，加 Windows 編譯；**開發 2026-10-09**：`.github/workflows/ci.yml`：macOS 全套（前端、fmt、clippy、test、對拍），Windows 只編 ctx（不擋） | 無 `.github/workflows`；312 個 Rust 測試只能手動跑 | — | P0 | 完成（待第一次 push 驗證） | R01 | R02 |
 | N-05 | 併發一致 | 所有寫入路徑走鎖＋暫存檔改名；寫入帶 opId 防重複；timer 單例；R02：Beads 用雜湊 ID 避免多 agent 撞號，可參考 | 常駐 4 支 `ctx mcp`＋App＋timer 共寫 spine | 留痕 | P1 | 構想 | R01 | R02 |
 | N-06 | 閒置耗能 | 量 App 開一小時的能耗；改用 FSEvents（`notify` crate）取代輪詢 | 未量 | — | P1 | 構想 | R01 | R01 |
-| N-07 | 可觀測 | 每次 MCP 呼叫記到 `.state/metrics.jsonl`；`ctx doctor`；錯誤附下一步；R02：mra 有 mra_doctor，可對照；R17：MCP 每次呼叫記一行到 `.state/metrics.jsonl`（工具、毫秒、成功與否），給 `ctx health` 算工具用量與延遲 | 目前沒有工具層計時 | 脈絡 | P1 | 排入（迭代 16） | R01 | R17 |
+| N-07 | 可觀測 | 每次 MCP 呼叫記到 `.state/metrics.jsonl`；`ctx doctor`；錯誤附下一步；R02：mra 有 mra_doctor，可對照；R17：MCP 每次呼叫記一行到 `.state/metrics.jsonl`（工具、毫秒、成功與否），給 `ctx health` 算工具用量與延遲；**迭代 16 完成**：MCP 呼叫記 `.state/metrics.jsonl`| 目前沒有工具層計時 | 脈絡 | P1 | 完成 | R01 | R17 |
 | N-08 | 發佈與升級 | codesign＋notarize、Tauri updater 或 Homebrew cask；R02：notarytool＋.dmg 首裝＋updater 讀 GitHub Releases 上的 latest.json | 重 build 後要手動重新裝到 /Applications | 同介面 | P1 | 構想 | R01 | R02 |
 | N-09 | 前端體驗 | ⌘K 指令面板、慢動作顯示秒數並可取消、無障礙稽核（#12） | — | 同介面 | P1 | 構想 | R01 | R01 |
 | N-10 | 可攜 | Windows／VDI：ConPTY、補 PATH、路徑大小寫、多使用者 token 隔離 | AGENTS.md 要求註明 Windows 有沒有測，目前全空白（#12） | 同介面 | P2 | 構想 | R01 | R01 |

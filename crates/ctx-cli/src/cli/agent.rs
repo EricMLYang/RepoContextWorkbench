@@ -1248,3 +1248,68 @@ pub fn cmd_refs(ctx: &Ctx, a: &RefsArgs) -> CmdResult {
         }
     }
 }
+
+/// 健康指標（Rust 才有，F-36／N-07）：真用一陣子後，用數字看行為有沒有改變。
+pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
+    let d = ctx.spine_dir()?;
+    let v = ctx_core::health::health(&d, days, None)?;
+    ctx.emit(&v, |r| {
+        let pct = |x: &Value| {
+            x.as_f64()
+                .map(|f| format!("{:.0}%", f * 100.0))
+                .unwrap_or_else(|| "—".into())
+        };
+        let mut out = vec![format!(
+            "# 健康指標（近 {} 天，自 {}）",
+            s(r, "days"),
+            s(r, "since")
+        )];
+        let h = &r["handoff"];
+        out.push(format!(
+            "- 交接率 {}：交接 {}、沒交接就結束 {}",
+            pct(&h["rate"]),
+            s(h, "handoffs"),
+            s(h, "missed")
+        ));
+        let f = &r["fresh"];
+        out.push(format!(
+            "- 推薦命中率 {}：推了 {}、用上 {}、略過 {}",
+            pct(&f["hit_rate"]),
+            s(f, "found"),
+            s(f, "used"),
+            s(f, "dismissed")
+        ));
+        let dd = &r["decisions"];
+        out.push(format!(
+            "- 判斷結果記錄率 {}：有結果 {}、待回顧 {}",
+            pct(&dd["outcome_rate"]),
+            s(dd, "with_outcome"),
+            s(dd, "awaiting_retro")
+        ));
+        let l = &r["loops"];
+        out.push(format!(
+            "- 未結：期間開 {}、關 {}；現在 {} 項，逾期 {}",
+            s(l, "opened"),
+            s(l, "closed"),
+            s(l, "open_now"),
+            s(l, "overdue")
+        ));
+        let tools = arr(r, "tools");
+        if tools.is_empty() {
+            out.push("- 工具用量：還沒有紀錄（MCP 呼叫才會記，`.state/metrics.jsonl`）".into());
+        } else {
+            out.push("- 工具用量：".into());
+            for t in tools {
+                out.push(format!(
+                    "    {}：{} 次，平均 {}ms，失敗 {}",
+                    s(t, "tool"),
+                    s(t, "calls"),
+                    s(t, "avg_ms"),
+                    s(t, "errors")
+                ));
+            }
+        }
+        out.join("\n")
+    });
+    Ok(())
+}

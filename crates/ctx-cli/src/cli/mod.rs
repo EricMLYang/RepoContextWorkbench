@@ -132,6 +132,12 @@ pub enum Cmd {
     Search(agent::SearchArgs),
     /// 反芻推薦：別組新進的知識／判斷中，跟主場手上工作強相關的
     Fresh(agent::FreshArgs),
+    /// 健康指標：交接率、推薦命中率、判斷結果記錄率、未結、工具用量（Rust 才有）
+    Health {
+        /// 看近幾天
+        #[arg(long, default_value_t = 14)]
+        days: i64,
+    },
     /// 回填：從過去的 Claude Code 會話撈判斷／待辦／交接（scan／run／review／accept）
     Backfill(agent::BackfillArgs),
     /// 名字 → 路徑：<repo>、<repo>:<export>[/子路徑]、<repo>:<相對路徑>
@@ -193,6 +199,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Handoff(a) => agent::cmd_handoff(ctx, a),
         Search(a) => agent::cmd_search(ctx, a),
         Fresh(a) => agent::cmd_fresh(ctx, a),
+        Health { days } => agent::cmd_health(ctx, *days),
         Backfill(a) => agent::cmd_backfill(ctx, a),
         Resolve { reference } => agent::cmd_resolve(ctx, reference),
         Read(a) => agent::cmd_read(ctx, a),

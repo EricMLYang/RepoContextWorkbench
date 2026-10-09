@@ -156,6 +156,9 @@ desktop/                   Tauri v2 殼（src-tauri，依賴 ctx-core）＋React
   判斷回顧、關係建議、有條件的判斷），開場渲染成「## 提醒」一段（取代先前散在各處的單行）；工作約定多一行新能力
   （supersedes／outcome_of／`ctx todo brief`）；開場的未結與建議下一步不印「（回填自…）」尾巴（資料不動）。
   對拍時比對前拿掉 `hints`、提醒段與新能力那一行。
+- **健康指標 `ctx health [--days 14]`**（2026-10-10，ideation F-36／N-07；Python 沒有，新模組 `health`）：交接率、
+  推薦命中率、判斷結果記錄率、未結開／關／逾期、工具用量。MCP 每次工具呼叫記一行到 `.state/metrics.jsonl`
+  （工具、毫秒、成功與否；寫不進去不影響工具）。對拍時這個檔列為允許差異。
 
 CLI／MCP（ctx-cli）：
 

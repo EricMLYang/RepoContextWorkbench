@@ -51,6 +51,8 @@ ALLOW = {
 ALLOW_FILES = [
     (r"^\.mcp\.json$",
      "session 掛的 MCP 指令改指 Rust ctx（`ctx mcp`），不再是 `python -m repo_context mcp`"),
+    (r"^\.state/metrics\.jsonl$",
+     "MCP 呼叫紀錄（N-07，Rust 才有：ctx health 算工具用量）"),
     (r"^\.state/relation_suggest\.json$",
      "相關 repo 建議快取（F-33，Rust 才有：反芻時順便算，開場讀）"),
     (r"^\.state/review\.json$",

@@ -1269,6 +1269,7 @@ pub fn handle_message(
                 .or_else(|| std::env::current_dir().ok())
                 .unwrap_or_else(|| PathBuf::from(".")),
         };
+        let started = std::time::Instant::now();
         let (text, is_error) = match &tool.kind {
             ToolKind::Work(f) => match f(spine_dir, &args, &here) {
                 Ok(v) => (text_of(&v), false),
@@ -1280,6 +1281,8 @@ pub fn handle_message(
                 Err(e) => (e.to_string(), true),
             },
         };
+        // Rust 才有（N-07）：每次呼叫記一行（ctx health 算工具用量與延遲）
+        ctx_core::health::record_call(spine_dir, name, started.elapsed().as_millis(), !is_error);
         return Some(ok(json!({
             "content": [{"type": "text", "text": text}],
             "isError": is_error,

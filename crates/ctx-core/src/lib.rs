@@ -18,6 +18,7 @@ pub mod digest;
 pub mod error;
 pub mod exe;
 pub mod fsutil;
+pub mod health;
 pub mod hooks;
 pub mod init;
 pub mod knowledge;
