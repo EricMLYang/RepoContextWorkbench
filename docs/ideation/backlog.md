@@ -88,3 +88,4 @@
 | N-24 | 可維護 | agentapi.rs 裡 Rust 才有的段落搬進 `agentapi/` 子模組（review／brief／judgment／hints／agdr／fresh_try），行為不變；`agentapi.rs` 回到對應 Python 的那部分；**迭代 22 完成**：mod.rs 2,319→1,407 行，7 個子模組；測試未改、全過| R23：agentapi.rs 1,150→2,319 行，新增 1,175 行全是 Rust 才有的功能疊在後面 | — | P2 | 完成 | R23 | R23 |
 | F-50 | 同介面 | App「活動」分頁最上方顯示健康指標（交接率、推薦命中率、判斷結果記錄率、未結開／關／逾期）——跟 `ctx health` 同一份；**迭代 23 完成**| 同介面、留痕 | — | P1 | 完成 | R24 | R24 |
 | N-25 | 前端體驗／效能 | 收件匣每段先畫 50 張，其餘「再顯示 N 則」展開（純畫面處理，不放業務邏輯）；**迭代 24 完成**：jsdom 5,000 張卡首次渲染 1,990→105ms| R25：迭代 13 的 1 萬筆規模下 build_state 給 5,389 張卡，App 全部畫進 DOM 可能卡死 WebView | 同介面 | P1 | 完成 | R25 | R25 |
+| N-26 | agent 端 token 效能 | agent 拿到的資料設上限：`context_for` 的未結超過 30 項只給最該處理的 30（逾期→到期近→其餘），另給 `open_loops_more`；`todo review --json` 進行中又沒證據的只給編號（`--all` 才全給） | R26：1 萬筆規模 context_for 51KB（104 項未結全列）、todo review 157KB | 脈絡 | P1 | 排入（迭代 25） | R26 | R26 |
