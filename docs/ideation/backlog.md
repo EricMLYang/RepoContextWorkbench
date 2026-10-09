@@ -14,7 +14,7 @@
 | F-04 | 專家 | 專家可信度：用引用紀錄加結果統計誰常被採用、常被推翻 | 脈絡 | — | P2 | 構想 | R01 | R01 |
 | F-05 | 專家 | 反方專家：專找判斷跟既有知識矛盾的地方 | 留痕 | — | P2 | 構想 | R01 | R01 |
 | F-06 | 知識庫 | card_notes 編譯成 LLM Wiki（概念頁＋反向連結＋對哪些 repo 有用）；R02：已有可安裝的 karpathy-llm-wiki skill，整合不重做，ctx 只負責把 raw 對到 repo | 脈絡 | Karpathy LLM Wiki | P1 | 候選 | R01 | R02 |
-| F-07 | 知識庫 | 有時效的判斷：decision 帶成立時間與被誰推翻，預設只給目前有效的；R02：純檔案做法已有人驗證（DiffMem、MarkMem：valid_until＋successor；AgDR 的 supersedes） | 脈絡、留痕 | Graphiti 雙時間軸 | P1 | 候選（R02 升為功能首位） | R01 | R02 |
+| F-07 | 知識庫 | 有時效的判斷：decision 帶成立時間與被誰推翻，預設只給目前有效的；R02：純檔案做法已有人驗證（DiffMem、MarkMem：valid_until＋successor；AgDR 的 supersedes）；R03：ADR 實務：舊紀錄要在自己身上看得到「已被取代」，不能只靠索引 | 脈絡、留痕 | Graphiti 雙時間軸 | P1 | 排入（迭代 3） | R01 | R03 |
 | F-08 | 知識庫 | 跨 repo 矛盾偵測 → 碰撞卡 | 留痕 | — | P2 | 構想 | R01 | R01 |
 | F-09 | 知識庫 | 術語表：跨 repo 共用詞統一定義並注入 | 脈絡 | — | P2 | 構想 | R01 | R01 |
 | F-10 | 知識庫 | 知識週報：新知識影響了哪些專案（反芻從「推一筆」升級成「整理一份」） | 脈絡 | — | P2 | 構想 | R01 | R01 |
@@ -28,7 +28,7 @@
 | F-18 | 技能包 | 同類 decision 累積到 N 筆 → 建議寫成 skill（把品味固化） | 留痕 | — | P2 | 構想 | R01 | R01 |
 | F-19 | 任務圖 | todo 加相依關係（blocks／related／parent），可跨 repo，next_work 照相依排；R02：Tasks 管執行、Beads 管捕捉；ctx 的 todo 屬於捕捉層。抄「只浮出沒被擋的工作」；Beads 改用 Dolt 後出現穩定性問題，所以維持 md 格式 | 脈絡 | Beads | P1 | 候選 | R01 | R02 |
 | F-20 | 任務圖 | todo 帶完成條件；close 時附證據（commit／測試） | 留痕 | — | P2 | 構想 | R01 | R01 |
-| F-21 | 任務圖 | 未結事項自動清理：agent 提議哪些可能已完成並附證據 | 留痕 | — | P1 | 構想 | R01 | R01 |
+| F-21 | 任務圖 | 未結事項自動清理：agent 提議哪些可能已完成並附證據；R03：體驗缺口第一名：開場未結 10 項、其中 6 項回填的 due 今天，明天全變逾期雜訊；做法抄 Stale Issue Auditor／Next.js：提議關閉＋附證據（commit、檔案、後續事件），人或 agent 一鍵確認 | 留痕 | — | P1 | 排入（迭代 2） | R01 | R03 |
 | F-22 | 判斷品味 | 判例搜尋：新判斷前列出過去類似 decision 與結果；R02：AI Agentree 已做判例搜尋＋結果追蹤（向量）；我們的差異是跨 repo 而且人和 agent 同一份紀錄 | 脈絡、留痕 | — | P1 | 候選 | R01 | R02 |
 | F-23 | 判斷品味 | 判斷回顧：30／90 天後追問「後來對嗎」，累積命中率 | 留痕 | — | P1 | 候選 | R01 | R01 |
 | F-24 | 判斷品味 | 品味檔案：從 decision 提煉取捨原則，注入給 agent 自我審查；R02：Anthropic Dreaming（排程整理記憶、抽出重複錯誤與偏好）屬於同一類，單 agent 的部分交給平台 | 脈絡 | — | P2 | 構想 | R01 | R02 |
@@ -51,7 +51,7 @@
 | F-41 | 跨 repo | 跨 repo 分支：同一功能在多個 repo 開同名分支，依相依順序開 PR、等 CI 再合併 | 脈絡 | mra | P2 | 構想 | R02 | R02 |
 | F-42 | 流程 | 任務包：替每個 todo 產生一張乾淨的脈絡卡，交給全新 context 的 subagent（state 放在磁碟、不放在模型裡） | 脈絡 | GSD、Ralph loop | P1 | 構想 | R02 | R02 |
 | F-43 | 入口 | 手機或遠端檢視收件匣與會話狀態 | 同介面 | Paseo、Superset 遠端工作區 | P2 | 構想 | R02 | R02 |
-| F-44 | 定位 | 平台整合：spine 摘要可匯出成 Claude Managed Agents 的檔案式記憶；單 agent 的記憶整理交給平台，ctx 專注跨 repo 與人的判斷 | 同介面 | Anthropic Memory、Dreaming、Projects | P1 | 構想 | R02 | R02 |
+| F-44 | 定位 | 平台整合：spine 摘要可匯出成 Claude Managed Agents 的檔案式記憶；單 agent 的記憶整理交給平台，ctx 專注跨 repo 與人的判斷；R03：Claude Code Projects（09-17）已做「每個 repo 一個 thread＋共享記憶」，但只在雲端、官方未說記憶可編輯或匯出 → 本工具差異收斂為「本機、可讀、可改、在 git 裡的判斷留痕，涵蓋知識 repo＋人的收件匣」 | 同介面 | Anthropic Memory、Dreaming、Projects | P1 | 構想 | R02 | R03 |
 
 ## 非功能（N）——每項附證據
 
@@ -59,7 +59,7 @@
 |---|---|---|---|---|---|---|---|---|
 | N-01 | 資料安全 | handoff 或每天自動 commit spine＋私有 remote 自動推送；**開發 2026-10-09**：SessionEnd hook 自動 commit（`spine::autocommit`，上次 commit 超過 6 小時、可設 `thresholds.spine_autocommit_hours`），有 upstream 就背景 push | 3 份事件檔沒 commit、無 remote（＝#8） | 留痕 | P0 | 進行（commit 完成；remote 待使用者決定 #8） | R01 | R02 |
 | N-02 | 效能 | search 降到 500ms 以內：有型別的反序列化 → MCP 常駐時把索引留在記憶體做增量 → 合併後換 bincode／SQLite FTS5；**開發 2026-10-09**：search 2.1–3.0s → 約 0.55s（只要 md 0.38s），結果相同；順手修掉浮點解析不精確導致 631 檔每次重算的舊 bug | `ctx search` 2.2–3.0s；索引 54MB 每次整份解析（`knowledge.rs:104`） | 脈絡 | P0 | 完成 | R01 | R02 |
-| N-03 | agent 端 token 效能 | 推送降噪：bigram 停用詞、不跨詞邊界、相關度門檻；量注入 token 數與 read_from 轉換率；R02：做法：比照 Lucene CJKBigram＋StopFilter，用哈工大停用詞表，先不加 jieba-rs；同 3 筆雜訊連兩輪都被推送；**開發 2026-10-09**：共同詞去掉數字日期與跨詞邊界假詞（黏度 ≥0.08）、待處理中不重推；真資料上共同詞變乾淨，但被選的檔沒變——推得準不準要看 `ctx fresh --stats` 的命中率 | 開場新料共同詞為「用後、登記、際使」等雜訊 | 脈絡 | P0 | 完成（第一步） | R01 | R02 |
+| N-03 | agent 端 token 效能 | 推送降噪：bigram 停用詞、不跨詞邊界、相關度門檻；量注入 token 數與 read_from 轉換率；R02：做法：比照 Lucene CJKBigram＋StopFilter，用哈工大停用詞表，先不加 jieba-rs；同 3 筆雜訊連兩輪都被推送；**開發 2026-10-09**：共同詞去掉數字日期與跨詞邊界假詞（黏度 ≥0.08）、待處理中不重推；真資料上共同詞變乾淨，但被選的檔沒變——推得準不準要看 `ctx fresh --stats` 的命中率；R03：迭代 1：一般用語過濾（repo 散布 >2/3）、並行反芻去重、fresh 同一份只列一次；真資料模擬 16 筆→3 筆 | 開場新料共同詞為「用後、登記、際使」等雜訊 | 脈絡 | P0 | 完成（第二步） | R01 | R03 |
 | N-04 | 可維護 | GitHub Actions：test／clippy／fmt／parity／前端測試，加 Windows 編譯；**開發 2026-10-09**：`.github/workflows/ci.yml`：macOS 全套（前端、fmt、clippy、test、對拍），Windows 只編 ctx（不擋） | 無 `.github/workflows`；312 個 Rust 測試只能手動跑 | — | P0 | 完成（待第一次 push 驗證） | R01 | R02 |
 | N-05 | 併發一致 | 所有寫入路徑走鎖＋暫存檔改名；寫入帶 opId 防重複；timer 單例；R02：Beads 用雜湊 ID 避免多 agent 撞號，可參考 | 常駐 4 支 `ctx mcp`＋App＋timer 共寫 spine | 留痕 | P1 | 構想 | R01 | R02 |
 | N-06 | 閒置耗能 | 量 App 開一小時的能耗；改用 FSEvents（`notify` crate）取代輪詢 | 未量 | — | P1 | 構想 | R01 | R01 |
@@ -72,3 +72,4 @@
 | N-13 | 可維護 | 合併後刪 Python 版與 `pyjson.rs`／`pystr.rs` 相容層；資料格式加 `schema_version`；MCP 輸出 JSON Schema＋合約測試 | — | 同介面 | P2 | 構想 | R01 | R01 |
 | N-14 | 資料安全 | hook 收到沒有 session_id 的輸入時要拒絕或提供 `--dry-run`；不然量測或誤觸會在 spine 留下假會話（被記成未交接）；**開發 2026-10-09**：沒 session_id 照樣注入、不記 marker；量測不再留下假會話 | R02 量測時 `ctx hook session-start </dev/null` 產生 `hook_sessions/unknown.json` | 留痕 | P1 | 完成 | R02 | R02 |
 | N-15 | 隱私安全 | 寫入範圍改由檔案系統強制：ask_repo 或跨組讀取走唯讀 view 目錄（symlink＋chmod），不靠 prompt 也不只靠工具層 | `cross_scope` 只擋 MCP／CLI，agent 用 shell 還是寫得進去 | 同介面 | P2 | 構想 | R02 | R02 |
+| N-16 | 資料安全 | 沒走 SessionEnd 的會話 marker 會一直留著（`hook_sessions/` 6 個，最舊 10-05）；開場時清掉超過 N 天的，必要時補記「未交接」 | R03 量測 | 留痕 | P2 | 候選 | R03 | R03 |

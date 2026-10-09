@@ -39,7 +39,7 @@
 | DeepWiki Open | repo 轉 wiki | 自架 wiki 產生器 | 私有 repo、Ollama 本機模型、Mermaid 圖、FAISS 純檔案 | Python＋Next＋Docker，太重 → F-11 | 觀察 | 🔗 | 2026-10-09 | R02 查詢 5 | [介紹](https://www.hostinger.com/applications/deepwiki-open) |
 | DiffMem | Agent 記憶 | md 只存「現在」，歷史交給 git diff／log | 不用向量庫；歷史用 git 查 | — → F-07 | 參考 | 🔗 | 2026-10-09 | R02 查詢 6 | [landscape](https://landscape.jimmysong.io/projects/diffmem) |
 | MarkMem | Agent 記憶 | YAML 雙時間事實＋git | 舊事實不刪：寫 valid_until＋successor；git log 就是稽核紀錄 | — → F-07 | 參考 | 🔗 | 2026-10-09 | R02 查詢 6 | [PyPI](https://pypi.org/project/markmem/) |
-| **Anthropic 平台（Managed Agents Memory、Dreaming、Outcomes、Claude Code Projects）** | 平台（**會吃掉單 agent 記憶**） | 記憶以檔案存放；Dreaming 排程整理；Projects 協調多個 thread 共享記憶（2026-09-17） | 檔案式記憶、排程整理、評分 rubric | 平台不管跨 repo 和人的判斷；我們整合，不重做 → F-44、F-24、F-13 | 標竿（平台風險） | ✅（Code with Claude 文）／🔗（Projects） | 2026-10-09 | R02 延伸（Tasks） | [mindstudio](https://www.mindstudio.ai/blog/code-with-claude-2026-new-agent-features)、[Projects beta](https://startupfortune.com/anthropic-turns-claude-code-into-a-multi-agent-team-with-new-projects-beta/) |
+| **Anthropic 平台（Managed Agents Memory、Dreaming、Outcomes、Claude Code Projects）** | 平台（**會吃掉單 agent 記憶**） | 記憶以檔案存放；Dreaming 排程整理；Projects 協調多個 thread 共享記憶（2026-09-17） | 檔案式記憶、排程整理、評分 rubric | 平台不管跨 repo 和人的判斷；我們整合，不重做 → F-44、F-24、F-13 | 標竿（平台風險） | ✅（Code with Claude 文）／🔗（Projects） | 2026-10-10（R03：讀官方頁 ✅——Projects 每個 repo 一個 thread、共享記憶；只在雲端，未說記憶可編輯／匯出） | R02 延伸（Tasks） | [mindstudio](https://www.mindstudio.ai/blog/code-with-claude-2026-new-agent-features)、[Projects 官方](https://claude.com/resources/articles/projects-redesigned) |
 | Claude Code Tasks | 任務記憶 | session 內的執行步驟（可存檔延續） | — | 管執行；Beads／ctx todo 管捕捉，兩者互補 → F-19 | 觀察 | 🔗 | 2026-10-09 | R02 查詢 2 | [keepcoding](https://keepcoding.io/blog-frr/tasks-vs-beads-memoria-claude-code/) |
 | Kilo Agent Manager | 平行執行台 | VS Code 面板 | — | 綁 Kilo 擴充 | 觀察 | 🔗 | 2026-10-09 | R02 查詢 1（Orca 延伸） | [Kilo blog](https://blog.kilo.ai/p/orca-vs-kilo-agent-manager) |
 | Claude Squad | 平行執行台 | 終端機多工 | 暫停／審查／出貨 | — | 觀察 | 🔗 | 2026-10-09 | 待查 | [review](https://vibecodinghub.org/blog/claude-squad-review) |
@@ -49,6 +49,9 @@
 | GSD（Get Shit Done） | 流程／context engineering | spec→研究→原子任務包 | 每個任務交給全新 200K context 的 subagent，防 context rot | — → F-42 | 參考 | 🔗 | 2026-10-09 | 待查 | [mindstudio](https://www.mindstudio.ai/blog/gsd-framework-prevent-context-rot-claude-code) |
 | Ralph loop | 流程 | 固定 prompt 的無限迴圈，state 存在磁碟 | 每輪全新 context，從檔案讀狀態 | token 成本高 → F-42 | 觀察 | 🔗 | 2026-10-09 | 待查 | [Thoughtworks Radar](https://www.thoughtworks.com/radar/techniques/ralph-loop) |
 | karpathy-llm-wiki skill（astro-han） | 知識編譯 | raw/ → wiki/，做成可安裝的 skill | 直接拿來用 | — → F-06 整合不重做 | 零件 | 🔗 | 2026-10-09 | R02 延伸（LLM Wiki） | [skills.sh](https://www.skills.sh/astro-han/karpathy-llm-wiki/karpathy-llm-wiki) |
+| ADK Stale Issue Auditor（google/adk-python PR #3546） | 任務記憶清理 | 每天排程審 issue 時間軸 | 標 stale → 通知 → 二次門檻才關；依時間軸判斷是否還活著 | GitHub issue 限定 → F-21 | 參考 | 🔗 | 2026-10-10 | R03 查詢 1 | [PR](https://github.com/google/adk-python/pull/3546) |
+| Next.js〈How we closed 1500 GitHub issues〉 | 任務記憶清理 | 大量積壓的整理實務 | 關閉要附理由、可重開 | 文章 → F-21 | 參考 | 🔗 | 2026-10-10 | R03 查詢 1 | [blog](https://nextjs.org/blog/how-we-closed-1500-github-issues) |
+| 〈The ADR your agent never read〉（tianpan） | 判斷留痕（論述） | ADR 實務 | 不改舊紀錄、寫新的取代它，並在**舊紀錄自己身上**標已被取代；可取回「目前有效」與整條沿革 | — → F-07 | 參考 | 🔗 | 2026-10-10 | R03 查詢 2 | [blog](https://tianpan.co/blog/2026/07/02/the-adr-your-agent-never-read) |
 
 ## 待查對標（下一輪處理）
 
@@ -62,6 +65,8 @@
 | WolfDB、StudioMeyer Memory | 雙時間記憶，宣稱可像 git 一樣檢視 | DiffMem／MarkMem |
 | lucasastorian/llmwiki、Pratiyush/llm-wiki、memory-compiler | LLM Wiki 的其他實作，有一個會自動抓對話 | karpathy-llm-wiki |
 | AgenticAKM（arXiv 2602.04445） | 用 agent 管架構知識的研究 | AgDR |
+| Decision Log MCP（decisionlog.ai） | 判斷留痕做成 MCP，可能是直接同類 | R03 查詢 2 |
+| agdr-aki（Rust crate） | 封存式 AgDR，Rust 實作 | R03 查詢 2 |
 
 ## 搜尋線索
 
@@ -82,12 +87,14 @@
 - R02：`Tauri app auto update notarize best practice 2026`
 - R02：`Chinese BM25 tokenization bigram stopwords Rust`
 - R02：`Claude Squad Superset Paneflow Mux Paseo …`、`Kiro …; GSD …; Ralph loop`、`Anthropic Claude Code agent teams memory 2026`（extended）、`Beads alternatives …`、`Karpathy LLM wiki implementation …`
+- R03：`AI agent stale issues cleanup propose close with evidence from commits 2026`
+- R03：`AgDR agent decision records supersede search across repositories`
+- R03：`Claude Code Projects threads shared memory multi-repo September 2026`（extended）＋讀官方頁
 
 ### 下一輪查詢
-1. `multi-repo-agent mra alternatives polyrepo AI agent orchestration`（延伸：mra，找同形狀但更成熟的）
-2. `AgDR agent decision records adoption tools search supersede`（延伸：AgDR，看有沒有跨 repo 搜尋的實作）
-3. `Claude Managed Agents memory files format export import`（F-44：確認平台記憶的檔案格式能不能對接）
-4. `Claude Code Projects threads shared memory multi-repo`（平台會不會往跨 repo 走——最大風險）
-5. `personal knowledge management agent decision journal outcome review`（F-23：找判斷回顧的同類，可能在 PKM 圈）
-6. `git-native personal CRM knowledge spine markdown events agent`（找 spine 形狀的同類）
-7. `MCP server latency caching long-running index Rust`（N-02：常駐索引的做法）
+1. `Claude Code Projects local execution memory export`（官方說本機版「很快」，盯平台會不會變成可讀寫的記憶）
+2. `decisionlog.ai MCP decision log`（直接同類？）
+3. `multi-repo-agent mra alternatives polyrepo AI agent orchestration`（R02 留下）
+4. `personal knowledge management agent decision journal outcome review`（R02 留下，F-23）
+5. `todo staleness detection evidence git activity personal task manager`（F-21 做完後找更好的判準）
+6. `MCP server latency caching long-running index Rust`（R02 留下）
