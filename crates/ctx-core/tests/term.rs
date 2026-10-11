@@ -83,6 +83,7 @@ fn test_manager_agent_spawns_via_login_shell() {
         })
         .unwrap(); // 不給 group/repos＝（全部）
     assert_eq!(s.title(), "fake · 全部");
+    assert_eq!(s.info().home_group, None);
     let marker = "文件地圖 it's ok".as_bytes();
     assert!(wait_until(15, || count(&s.replay(), marker) >= 1));
     // 程序結束 → reader 收尾清 marker
@@ -164,4 +165,42 @@ fn exit_event_reaches_subscribers_and_buffer_is_capped() {
     let r = s.replay();
     assert!(r.len() <= ctx_core::term::BUFFER_CAP + 70_000);
     assert!(String::from_utf8_lossy(&r).contains("進程已結束"));
+}
+
+/// Rust 才有（2026-10-12）：所屬牌組只給畫面歸類——對單一 repo 開時 scope 是 repo、home_group 是組；
+/// 對整組開沒給 home_group 就用 group。沒有就不輸出這個鍵（跟 Python 版欄位一樣）。
+#[test]
+fn test_agent_home_group_for_display() {
+    std::env::set_var("SHELL", "/bin/sh");
+    let (_tmp, d) = spine_with_repos();
+    let m = TermManager::new(&d);
+    let launch = |repo: Option<&str>, group: Option<&str>, home: Option<&str>| AgentLaunch {
+        agent: "fake".into(),
+        argv: vec!["/bin/echo".into(), "x".into()],
+        cwd: d.clone(),
+        repo: repo.map(Into::into),
+        repos: repo.map(|r| vec![r.to_string()]),
+        group: group.map(Into::into),
+        home_group: home.map(Into::into),
+        ..Default::default()
+    };
+    let one = m
+        .create_agent(launch(Some("repo-a"), None, Some("g1")))
+        .unwrap()
+        .info();
+    assert_eq!(
+        (one.scope.as_deref(), one.home_group.as_deref()),
+        (Some("repo-a"), Some("g1"))
+    );
+    let whole = m
+        .create_agent(launch(None, Some("g1"), None))
+        .unwrap()
+        .info();
+    assert_eq!(whole.home_group.as_deref(), Some("g1"));
+    let shell = m.create_shell(None, None).unwrap().info();
+    assert!(serde_json::to_value(&shell)
+        .unwrap()
+        .get("home_group")
+        .is_none());
+    m.kill_all();
 }

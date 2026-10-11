@@ -24,6 +24,7 @@ pub mod hooks;
 pub mod init;
 pub mod knowledge;
 pub mod locking;
+pub mod notes;
 pub mod notify;
 pub mod ops;
 pub mod pack;

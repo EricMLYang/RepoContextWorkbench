@@ -109,6 +109,9 @@ pub struct TermMeta {
     pub scope: Option<String>,
     pub scope_repos: Option<Vec<String>>,
     pub task: Option<String>,
+    /// Rust 才有（2026-10-11）：所屬牌組，只給畫面歸類（會話列放進牌組區塊、終端標題「組 › repo」）。
+    /// 跟 `scope` 不同：從某組裡對單一 repo 開的會話，`scope` 是 repo、這裡是那個組。
+    pub home_group: Option<String>,
 }
 
 impl TermMeta {
@@ -120,6 +123,7 @@ impl TermMeta {
             scope: None,
             scope_repos: None,
             task: None,
+            home_group: None,
         }
     }
 }
@@ -136,6 +140,9 @@ pub struct TermInfo {
     pub scope_repos: Option<Vec<String>>,
     pub started: String,
     pub task: Option<String>,
+    /// 見 [`TermMeta::home_group`]；沒有就不輸出（欄位與 Python 版相同）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub home_group: Option<String>,
 }
 
 struct Shared {
@@ -435,6 +442,7 @@ impl TermSession {
             scope_repos: self.meta.scope_repos.clone(),
             started: self.started.clone(),
             task: self.meta.task.clone(),
+            home_group: self.meta.home_group.clone(),
         }
     }
 }
@@ -514,6 +522,8 @@ pub struct AgentLaunch {
     pub repo: Option<String>,
     pub task: Option<String>,
     pub origin: Option<String>,
+    /// 所屬牌組（畫面歸類用，見 [`TermMeta::home_group`]）；沒給就用 `group`。
+    pub home_group: Option<String>,
 }
 
 type ExitListener = Arc<dyn Fn(&str) + Send + Sync>;
@@ -618,6 +628,7 @@ impl TermManager {
             scope: Some(scope),
             scope_repos: launch.repos.clone(),
             task: launch.task.clone(),
+            home_group: launch.home_group.clone().or_else(|| launch.group.clone()),
         };
         let s = TermSession::spawn(&sid, &spec, meta, Some(self.exit_hook(&sid, true)))?;
         // agent 偵測（gitpane 課）：標記存活會話，P3 採集據此標「🤖 誰在跑」

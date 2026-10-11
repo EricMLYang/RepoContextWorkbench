@@ -171,6 +171,8 @@ export interface TermInfo {
   report_basis: string;
   /** 只有 agent 會話有這個鍵。 */
   agent_status?: AgentStatus | null;
+  /** Rust 才有：所屬牌組（畫面歸類用；從組裡對單一 repo 開的會話，scope 是 repo、這裡是組）。 */
+  home_group?: string;
 }
 
 // ── /api/state ──────────────────────────────────────────────────────
@@ -243,6 +245,20 @@ export interface TreeEntry {
   path: string;
   abs: string;
   dir: boolean;
+}
+
+export interface GroupNote {
+  /** YYYY-MM-DD HH:MM */
+  at: string;
+  text: string;
+}
+
+export interface GroupNotes {
+  ok: true;
+  group: string;
+  /** 筆記檔的絕對路徑（人跟 agent 都能直接讀）。 */
+  path: string;
+  notes: GroupNote[];
 }
 
 /** read_file 的結果：文字、圖片（base64）、其他二進位或太大只有大小。 */
@@ -477,6 +493,10 @@ export interface ActionMap {
   };
   /** Rust 才有：唯讀檢視器讀一個檔。 */
   read_file: { payload: { id: string; path: string }; result: FileContent };
+  /** Rust 才有：牌組筆記（spine 的 groups/<組>/notes.md；新的在前）。 */
+  group_notes: { payload: { group: string }; result: GroupNotes };
+  note_add: { payload: { group: string; text: string }; result: GroupNotes };
+  note_remove: { payload: { group: string; at: string; text: string }; result: GroupNotes };
   register_repos: {
     payload: { repos: { path: string; id: string }[]; group?: string };
     result: { ok: true; added: string[]; group: string | null };
@@ -490,6 +510,8 @@ export interface ActionMap {
       origin?: string;
       repo?: string;
       cwd?: string;
+      /** 所屬牌組（只給畫面歸類）。 */
+      home_group?: string;
     } & ScopePayload;
     result: { ok: true; sid: string; title: string };
   };

@@ -8,6 +8,7 @@
 pub mod app_state;
 pub mod env_path;
 pub mod terminal;
+pub mod tree_watch;
 pub mod watch;
 pub mod workbench;
 
@@ -24,6 +25,8 @@ use app_state::{persist_spine, spine_json, AppState, Notifier};
 
 /// 前端監聽的事件名（IPC.md「事件」）。
 pub const EVENT_CHANGED: &str = "workbench://changed";
+/// 檔案樹展開中的資料夾有變動（`{id, paths}`，見 `tree_watch`）。
+pub const EVENT_REPO_CHANGED: &str = "repo://changed";
 const MAIN: &str = "main";
 const TRAY_ID: &str = "main";
 
@@ -192,6 +195,33 @@ async fn pick_folder(app: AppHandle) -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
+/// 檔案樹要跟著磁碟變：前端給「每個 repo 展開中的資料夾」（`{id: [相對路徑…]}`，`""`＝根），
+/// 殼只監看這些 repo、只報這些資料夾裡的變動。空物件＝全部停掉。查不到的 repo 略過。
+#[tauri::command]
+async fn watch_tree(
+    app: AppHandle,
+    repos: std::collections::HashMap<String, Vec<String>>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(tw) = app.try_state::<tree_watch::TreeWatcher>() else {
+            return;
+        };
+        let spine = app.state::<AppState>().spine();
+        let list = repos
+            .into_iter()
+            .filter_map(|(id, dirs)| {
+                let root = ctx_core::registry::get_repo(spine.as_deref()?, &id)
+                    .ok()?
+                    .path();
+                Some((id, root, dirs))
+            })
+            .collect();
+        tw.set(list);
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 pub fn run() {
     env_path::fix_path();
     let args: Vec<String> = std::env::args().collect();
@@ -219,6 +249,16 @@ pub fn run() {
                 let _ = state.activate(&sp);
             }
             app.manage(state);
+            let h2 = handle.clone();
+            // 監看起不來不擋啟動：檔案樹還有手動 ⟳
+            if let Ok(tw) = tree_watch::TreeWatcher::start(move |id, paths| {
+                let _ = h2.emit(
+                    EVENT_REPO_CHANGED,
+                    serde_json::json!({ "id": id, "paths": paths }),
+                );
+            }) {
+                app.manage(tw);
+            }
             build_tray(&handle)?;
             refresh_unread(&handle);
             Ok(())
@@ -239,6 +279,7 @@ pub fn run() {
             get_scan,
             run_action,
             pick_folder,
+            watch_tree,
             terminal::term_open,
             terminal::term_write,
             terminal::term_resize,

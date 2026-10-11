@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FileContent } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
+import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
 import { useStore, useUi } from "../../store/context";
 
 export interface OpenFile {
@@ -142,6 +143,11 @@ export function FileViewer({ file, hidden }: { file: OpenFile; hidden: boolean }
     setError("");
     setNonce((n) => n + 1);
   };
+  // 檔案在磁碟上被改了（agent 在寫、git 切分支…）就自己重讀
+  useWatchDirs(store.backend, repo, [parentDir(path)]);
+  useRepoChanged(store.backend, repo, (paths) => {
+    if (paths.includes(path)) reload();
+  });
 
   const hooks: MdHooks = {
     onLink(href) {

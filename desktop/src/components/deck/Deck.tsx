@@ -1,9 +1,10 @@
 import { memo, type HTMLAttributes, type Ref } from "react";
-import type { GroupInfo, RepoState } from "../../api/types";
+import type { GroupInfo, RepoState, TermInfo } from "../../api/types";
 import { Icon } from "../../lib/icons";
-import { groupMeta, scopeRepos, type Scope } from "../../lib/view";
+import { groupMeta, scopeRepos, sessionInGroup, type Scope } from "../../lib/view";
 import { useSortable } from "../../lib/useSortable";
 import { useSnapshot, useStore, useUi } from "../../store/context";
+import { SessionRow } from "../sessions/SessionRow";
 
 interface DeckEntry {
   name: string | null; // null＝所有 repo；"__adhoc__"＝臨時組
@@ -21,6 +22,8 @@ const GroupCard = memo(function GroupCard(props: {
   onToggle: (key: string) => void;
   onRepo: (id: string) => void;
   onRepoMenu: (id: string, x: number, y: number) => void;
+  /** 這個組的會話（執行中的一直顯示；已結束的展開才顯示）。 */
+  sessions?: TermInfo[];
   /** 組員拖曳排序存檔（沒給＝不能排）。 */
   onReorder?: (order: string[]) => Promise<void>;
   /** 整張牌可拖（牌組排序）：ref 量位置、手把事件掛在標題列。 */
@@ -33,6 +36,9 @@ const GroupCard = memo(function GroupCard(props: {
   const adhoc = g.name === "__adhoc__";
   const on = adhoc ? Array.isArray(scope.repos) : !Array.isArray(scope.repos) && scope.group === g.name;
   const title = adhoc ? "臨時工作組" : g.name || "所有 repo";
+  const sessions = props.sessions || [];
+  const live = sessions.filter((s) => s.alive);
+  const shownSessions = opened ? sessions : live;
   return (
     <div
       className={"gcard" + (on ? " on" : "") + (props.drag?.dragging ? " dragging" : "")}
@@ -51,7 +57,10 @@ const GroupCard = memo(function GroupCard(props: {
           <Icon name="stack" />
           <span className="gcopy">
             <span className="gname">{title}</span>
-            <span className="gmeta">{groupMeta(g.members, lastStates)}</span>
+            <span className="gmeta">
+              {groupMeta(g.members, lastStates)}
+              {live.length ? " · " + live.length + " 個會話" : ""}
+            </span>
           </span>
         </button>
         {g.group ? (
@@ -96,6 +105,13 @@ const GroupCard = memo(function GroupCard(props: {
             ))
           : null}
       </div>
+      {shownSessions.length ? (
+        <div className="gsessions" aria-label={title + " 的會話"}>
+          {shownSessions.map((s) => (
+            <SessionRow key={s.sid} s={s} inGroup />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 });
@@ -125,6 +141,7 @@ export function Deck() {
     }
   };
   const byName = new Map(state.groups.map((g) => [g.name, g]));
+  const terms = state.terms || [];
   const adhoc = Array.isArray(scope.repos);
   const card = (g: DeckEntry, extra: Partial<Parameters<typeof GroupCard>[0]> = {}) => (
     <GroupCard
@@ -153,6 +170,7 @@ export function Deck() {
         return card(
           { name, members: grp.members, group: grp },
           {
+            sessions: terms.filter((s) => sessionInGroup(s, name)),
             onReorder: reorder("members", name),
             drag: {
               ref,

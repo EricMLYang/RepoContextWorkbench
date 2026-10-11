@@ -107,7 +107,6 @@ export function RepoPanel({ id }: { id: string }) {
         </button>
       </div>
       <div className="panelsection">
-        <h3 className="eyebrow">檔案</h3>
         <RepoRoot key={id} id={id} bare />
       </div>
     </aside>

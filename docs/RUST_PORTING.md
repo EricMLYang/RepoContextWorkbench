@@ -184,6 +184,16 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   同 `repo_tree` 的路徑防護；文字 ≤1MB、圖片 ≤8MB 以 base64 給 `<img>`、其他二進位只回大小）；Markdown 由前端
   自己轉成 React 元素（不用 innerHTML，repo 裡的 md 不能在 App 裡跑腳本），相對連結開新分頁、外部連結只複製。
   macOS：單元／整合測試過，GUI 未實測；Windows：未測。
+- **會話歸組、牌組筆記、檔案樹跟著磁碟變**（2026-10-12；Python 沒有）：
+  - `term_create` 多收 `home_group`（所屬牌組，只給畫面歸類：會話列放進牌組區塊、終端標題「組 › repo」）；
+    `TermInfo` 有值才輸出 `home_group` 鍵，沒有時欄位跟 Python 一樣。
+  - 牌組筆記：`notes` 模組＋action `group_notes`／`note_add`／`note_remove`，存 `<spine>/groups/<組>/notes.md`
+    （普通 Markdown，一則＝`## YYYY-MM-DD HH:MM`＋內文，新的在上面；跟組資料夾一起改名、刪組保留）。
+    不是脊椎事件：不進收件匣、不算判斷。
+  - 殼多命令 `watch_tree`＋事件 `repo://changed`（`tree_watch.rs`）：只監看前端展開中的資料夾所在的 repo，
+    只報這些資料夾裡的變動；檔案樹改成 VS Code 檔案總管風格（攤平列、縮排導引線、檔案圖示、目前檔案反白、
+    右鍵複製路徑／相對路徑、方向鍵操作）。
+  macOS：單元／整合測試過，GUI 未實測；Windows：未測（ReadDirectoryChangesW 遞迴監看理論上可用）。
 - **判斷匯出成 AgDR `ctx decisions export <dir>`**（2026-10-10，ideation F-40；Python 沒有）：範圍內人／agent／回填寫的、
   有 id、不是交接的判斷寫成 `<dir>/AgDR-<id>.md`（frontmatter：id、timestamp、agent、status executed／superseded、
   supersedes、superseded_by、group／repo；內文：判斷、何時重看、結果）。沒變的檔不重寫；只寫指定目錄。

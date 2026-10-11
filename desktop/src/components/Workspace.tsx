@@ -15,9 +15,11 @@ import { FilesPane } from "./deep/FilesPane";
 import { RelationsPane } from "./deep/RelationsPane";
 import { ReposPane } from "./deep/ReposPane";
 import { InboxPane } from "./inbox/InboxPane";
+import { NotesPane } from "./notes/NotesPane";
 
 const TABS: [Tab, string][] = [
   ["inbox", "待處理"],
+  ["notes", "筆記"],
   ["repos", "Repo"],
   ["files", "檔案"],
   ["activity", "活動"],
@@ -69,6 +71,15 @@ export function Workspace(props: {
             </p>
           </div>
           <div className="head-actions">
+            <button
+              type="button"
+              id="notebtn"
+              disabled={!stateReady || !scope.group}
+              title={scope.group ? "記一筆到這個牌組（不屬於任何 repo 的事）" : "筆記記在牌組上；先選一個牌組"}
+              onClick={() => ui.showTab("notes")}
+            >
+              ＋ 記一筆
+            </button>
             <button type="button" id="ideatoggle" disabled={noScope} onClick={ui.showComposer}>
               ＋ 新增想法
             </button>
@@ -175,6 +186,7 @@ export function Workspace(props: {
           </button>
         </div>
         <InboxPane query={q} filter={filter} active={tab === "inbox"} />
+        <NotesPane query={q} active={tab === "notes"} />
         <ReposPane query={q} active={tab === "repos"} />
         <FilesPane query={q} active={tab === "files"} />
         <ActivityPane query={q} active={tab === "activity"} />

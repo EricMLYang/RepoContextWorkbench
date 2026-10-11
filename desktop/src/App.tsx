@@ -119,6 +119,10 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     [files],
   );
   const shownFile = files.some((f) => fileKey(f) === activeFile) ? activeFile : null;
+  const shownFileObj = useMemo(
+    () => files.find((f) => fileKey(f) === shownFile) ?? null,
+    [files, shownFile],
+  );
 
   // ── 終端 ──
   const [activeSid, setActiveSid] = useState<string | null>(null);
@@ -133,6 +137,19 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       openPicker,
       openSession(extra = {}) {
         const payload = sessionPayload(store.scopePayload, extra);
+        // 對單一 repo 開：記下它屬於哪個牌組（目前選的組有它就是這組；不然只有一個組有它才算）
+        const repo = typeof payload.repo === "string" ? payload.repo : "";
+        if (repo && !payload.group) {
+          const { scope, state } = store.getSnapshot();
+          const owners = state.groups.filter((g) => g.members.includes(repo)).map((g) => g.name);
+          const home =
+            scope.group && owners.includes(scope.group)
+              ? scope.group
+              : owners.length === 1
+                ? owners[0]
+                : null;
+          if (home) payload.home_group = home;
+        }
         openDetail({
           title: "開啟 Agent 會話",
           eyebrow: "NEW SESSION",
@@ -147,6 +164,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       closeRepo: () => setPanel(null),
       repoMenu: (id, x, y) => setMenu({ id, x, y }),
       openFile,
+      activeFile: shownFileObj,
       showComposer,
       draft,
       setDraft,
@@ -179,6 +197,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       panelRepo,
       setPanel,
       openFile,
+      shownFileObj,
       termCollapsed,
       activeSid,
       openGroups,

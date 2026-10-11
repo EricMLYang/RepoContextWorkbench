@@ -349,6 +349,29 @@ export function reportLine(s: TermInfo): string {
   return "尚無回報——這個會話期間，範圍內還沒有任何脊椎留痕";
 }
 
+/**
+ * 會話在哪：所屬牌組（home_group）＋對單一 repo 開的那個 repo。
+ * label：「組 › repo」「組」「repo」「臨時（3 個 repo）」「本機 Shell」。
+ */
+export function sessionWhere(s: TermInfo): { group: string | null; repo: string | null; label: string } {
+  const group = s.home_group ?? null;
+  const repo =
+    s.scope && s.scope_repos?.length === 1 && s.scope_repos[0] === s.scope ? s.scope : null;
+  const label =
+    group && repo
+      ? group + " › " + repo
+      : group || repo ||
+        (s.scope === "臨時" && s.scope_repos?.length
+          ? "臨時（" + s.scope_repos.length + " 個 repo）"
+          : s.scope || "本機 Shell");
+  return { group, repo, label };
+}
+
+/** 會話屬於這個牌組嗎（舊會話沒有 home_group：看 scope 是不是組名）。 */
+export function sessionInGroup(s: TermInfo, group: string): boolean {
+  return s.home_group ? s.home_group === group : s.scope === group;
+}
+
 export function sessionMeta(s: TermInfo): string {
   const proc = s.alive ? "程序執行中" : "程序已結束";
   const work =
@@ -359,7 +382,7 @@ export function sessionMeta(s: TermInfo): string {
         : s.report
           ? "最近留痕 " + s.report.at.slice(11)
           : "尚無回報";
-  return proc + " · " + work + " · " + (s.scope || "本機 Shell");
+  return proc + " · " + work + " · " + sessionWhere(s).label;
 }
 
 export function sessionTooltip(s: TermInfo): string {
@@ -368,7 +391,7 @@ export function sessionTooltip(s: TermInfo): string {
     "\n" +
     (s.task || "") +
     "\n範圍：" +
-    (s.scope || "本機 Shell") +
+    sessionWhere(s).label +
     "\n" +
     reportLine(s) +
     "\n依據：" +
@@ -402,8 +425,9 @@ export function sessionPayload(
 
 export function sessionTarget(payload: Record<string, unknown>): string {
   const repos = payload.repos as string[] | null | undefined;
+  const home = payload.home_group as string | undefined;
   return (
-    (payload.repo as string) ||
+    (payload.repo ? (home ? home + " › " : "") + (payload.repo as string) : "") ||
     (payload.group as string) ||
     (repos ? "臨時工作組 · " + repos.length + " 個 repo" : "所有 repo")
   );

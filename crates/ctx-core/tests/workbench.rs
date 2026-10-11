@@ -798,6 +798,7 @@ fn term_info(sid: &str, title: &str, scope: Option<&str>, origin: Option<&str>) 
         scope_repos: None,
         started: String::new(),
         task: None,
+        home_group: None,
     }
 }
 
@@ -1603,4 +1604,54 @@ fn read_file_action_returns_text_and_guards_paths() {
     )
     .contains("repo 裡"));
     assert!(act(&d, "read_file", json!({"id": "repo-a"})).is_err());
+}
+
+// ── 2026-10-12：牌組筆記（Rust 才有）──
+
+#[test]
+fn group_notes_add_list_remove_and_follow_rename() {
+    let (_t, d) = spine_with_repos();
+    let r = act(&d, "group_notes", json!({"group": "g1"})).unwrap();
+    assert_eq!(r["notes"], json!([]));
+    let r = act(
+        &d,
+        "note_add",
+        json!({"group": "g1", "text": "問設計 *規格*"}),
+    )
+    .unwrap();
+    let n = r["notes"][0].clone();
+    assert_eq!(n["text"], json!("問設計 *規格*"));
+    let file = d.join("groups").join("g1").join("notes.md");
+    assert_eq!(r["path"], json!(file.to_string_lossy()));
+    assert!(std::fs::read_to_string(&file).unwrap().contains("問設計"));
+    // 不是脊椎事件：不進收件匣
+    assert!(!spine::iter_events(&d)
+        .unwrap()
+        .iter()
+        .any(|e| e.body.contains("問設計")));
+
+    // 改組名：筆記跟著組走
+    act(
+        &d,
+        "update_group",
+        json!({"name": "g1", "new_name": "g2", "repos": ["repo-a", "repo-b"]}),
+    )
+    .unwrap();
+    let r = act(&d, "group_notes", json!({"group": "g2"})).unwrap();
+    assert_eq!(r["notes"][0]["text"], json!("問設計 *規格*"));
+
+    assert!(err(
+        &d,
+        "note_remove",
+        json!({"group": "g2", "at": n["at"], "text": "改過了"})
+    )
+    .contains("不在了"));
+    let r = act(
+        &d,
+        "note_remove",
+        json!({"group": "g2", "at": n["at"], "text": n["text"]}),
+    )
+    .unwrap();
+    assert_eq!(r["notes"], json!([]));
+    assert!(err(&d, "note_add", json!({"group": "", "text": "x"})).contains("牌組"));
 }

@@ -82,6 +82,9 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("group_add_folder", a_group_add_folder),
     ("reorder", a_reorder),
     ("read_file", a_read_file),
+    ("group_notes", a_group_notes),
+    ("note_add", a_note_add),
+    ("note_remove", a_note_remove),
     ("brief", a_brief),
     ("term_create", a_term_create),
     ("term_kill", a_term_kill),
@@ -668,6 +671,39 @@ fn a_read_file(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     Ok(out)
 }
 
+fn notes_json(d: &Path, group: &str, notes: &[crate::notes::Note]) -> Value {
+    let items: Vec<Value> = notes
+        .iter()
+        .map(|n| json!({"at": n.at, "text": n.text}))
+        .collect();
+    json!({"ok": true, "group": group,
+           "path": crate::notes::path(d, group).to_string_lossy(), "notes": items})
+}
+
+/// Rust 才有（2026-10-11）：牌組筆記（`groups/<組>/notes.md`，見 [`crate::notes`]）。
+fn a_group_notes(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let group = raw(p, "group").unwrap_or_default().trim().to_string();
+    let notes = crate::notes::list(d, &group)?;
+    Ok(notes_json(d, &group, &notes))
+}
+
+fn a_note_add(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let group = raw(p, "group").unwrap_or_default().trim().to_string();
+    crate::notes::add(d, &group, &raw(p, "text").unwrap_or_default(), None)?;
+    a_group_notes(d, &json!({"group": group}), None)
+}
+
+fn a_note_remove(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let group = raw(p, "group").unwrap_or_default().trim().to_string();
+    crate::notes::remove(
+        d,
+        &group,
+        &raw(p, "at").unwrap_or_default(),
+        &raw(p, "text").unwrap_or_default(),
+    )?;
+    a_group_notes(d, &json!({"group": group}), None)
+}
+
 /// Rust 才有（2026-10-11）：像 IDE 的 Add Folder to Workspace——一個 repo 資料夾加進牌組
 /// （沒登記就先登記；`group` 空＝只登記，給臨時組用）。
 fn a_group_add_folder(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
@@ -780,6 +816,7 @@ fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
             repo,
             task,
             origin: s(p, "origin"),
+            home_group: s(p, "home_group"),
         })?
     } else {
         let cwd = s(p, "cwd").map(std::path::PathBuf::from);

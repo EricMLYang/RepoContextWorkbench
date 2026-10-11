@@ -400,18 +400,18 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
 
     await act(async () => fireEvent.click(within(document.getElementById("tab-files")!).getByRole("button", { name: "a" })));
     expect(backend.action).toHaveBeenCalledWith("repo_tree", { id: "a", dir: "" });
-    await act(async () => fireEvent.click(await screen.findByRole("button", { name: /docs\// })));
+    await act(async () => fireEvent.click(await screen.findByRole("treeitem", { name: "docs" })));
     expect(backend.action).toHaveBeenCalledWith("repo_tree", { id: "a", dir: "docs" });
 
     const write = vi.fn(async () => {});
     Object.assign(navigator, { clipboard: { writeText: write } });
-    await act(async () =>
-      fireEvent.click(await screen.findByRole("button", { name: "複製 plan.md 的相對路徑" })),
-    );
+    const plan = await screen.findByRole("treeitem", { name: "plan.md" });
+    expect(plan.getAttribute("aria-level")).toBe("2");
+    fireEvent.contextMenu(plan);
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: /複製相對路徑/ })));
     expect(write).toHaveBeenCalledWith("docs/plan.md");
-    await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: "複製 plan.md 的絕對路徑" })),
-    );
+    // 鍵盤：⌥⌘C 複製路徑
+    await act(async () => fireEvent.keyDown(plan, { code: "KeyC", key: "ç", altKey: true, metaKey: true }));
     expect(write).toHaveBeenCalledWith("/r/a/docs/plan.md");
   });
 
@@ -595,7 +595,7 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
   it("點檔案開分頁：md 預設預覽、可切原始碼；相對連結開新分頁；關掉回到工作區", async () => {
     const backend = viewerBackend();
     await openTree(backend);
-    await act(async () => fireEvent.click(await screen.findByRole("button", { name: "README.md" })));
+    await act(async () => fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" })));
     expect(backend.action).toHaveBeenCalledWith("read_file", { id: "a", path: "README.md" });
     expect(document.getElementById("workspace")!.hidden).toBe(true);
     const viewer = () => document.querySelector(".viewer:not([hidden])")!;
@@ -624,7 +624,7 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
   it("程式碼有行號；讀取失敗顯示錯誤", async () => {
     const backend = viewerBackend();
     await openTree(backend);
-    await act(async () => fireEvent.click(await screen.findByRole("button", { name: "main.rs" })));
+    await act(async () => fireEvent.click(await screen.findByRole("treeitem", { name: "main.rs" })));
     const lines = document.querySelectorAll(".viewer:not([hidden]) .codeview .cl");
     expect(lines.length).toBe(3);
     expect(lines[1].querySelector(".ln")!.textContent).toBe("2");
@@ -665,5 +665,172 @@ describe("側欄排序與寬度", () => {
     expect(localStorage.getItem("workbench:sideWidth")).toBe("280");
     await act(async () => fireEvent.doubleClick(handle));
     expect(document.documentElement.style.getPropertyValue("--sidew")).toBe("");
+  });
+});
+
+describe("檔案樹跟著磁碟變", () => {
+  it("展開的資料夾登記給殼監看；有變動就重讀那一層，開著的檔案也重讀", async () => {
+    const subs = new Set<(id: string, paths: string[]) => void>();
+    const changed = (id: string, paths: string[]) => subs.forEach((cb) => cb(id, paths));
+    const watchTree = vi.fn(async () => {});
+    let round = 0;
+    const backend = mockBackend({
+      watchTree,
+      onRepoChanged: (cb) => {
+        subs.add(cb);
+        return () => subs.delete(cb);
+      },
+      action: vi.fn(async (name: string, p: { id?: string; dir?: string; path?: string }) => {
+        if (name === "repo_tree")
+          return {
+            ok: true,
+            id: p.id,
+            root: "/r/a",
+            dir: p.dir,
+            more: 0,
+            entries: [
+              { name: "README.md", path: "README.md", abs: "/r/a/README.md", dir: false },
+              ...(round ? [{ name: "new.txt", path: "new.txt", abs: "/r/a/new.txt", dir: false }] : []),
+            ],
+          };
+        if (name === "read_file")
+          return { ok: true, id: "a", path: p.path, abs: "/r/a/" + p.path, size: 3, kind: "text", text: "v" + round, truncated: false };
+        return { ok: true };
+      }) as never,
+    });
+    const store = new WorkbenchStore(backend, { group: null, repos: ["a"] });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="files"]')!));
+    // 只有一個 repo：根目錄預設展開
+    await screen.findByRole("treeitem", { name: "README.md" });
+    await waitFor(() => expect(watchTree).toHaveBeenLastCalledWith({ a: [""] }));
+
+    await act(async () => fireEvent.click(screen.getByRole("treeitem", { name: "README.md" })));
+    await screen.findByText("v0");
+    round = 1;
+    await act(async () => changed("a", ["new.txt", "README.md"]));
+    // 主區正在看檔案（工作區藏起來），樹照樣更新
+    expect(await screen.findByRole("treeitem", { name: "new.txt", hidden: true })).toBeTruthy();
+    expect(await screen.findByText("v1")).toBeTruthy();
+    // 子資料夾沒展開的變動不重讀
+    const calls = (backend.action as ReturnType<typeof vi.fn>).mock.calls.length;
+    await act(async () => changed("a", ["src/x.rs"]));
+    expect((backend.action as ReturnType<typeof vi.fn>).mock.calls.length).toBe(calls);
+  });
+});
+
+describe("會話放進所屬牌組", () => {
+  const term = (over: Record<string, unknown>) => ({
+    sid: "t1",
+    title: "claude · a",
+    alive: true,
+    kind: "agent",
+    origin: null,
+    scope: "a",
+    scope_repos: ["a"],
+    started: "2026-10-12 09:00",
+    task: null,
+    report: null,
+    report_basis: "",
+    agent_status: null,
+    ...over,
+  });
+
+  it("牌組的會話在牌組區塊裡（寫 repo），其他的在下面；終端標題寫「組 › repo」", async () => {
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({
+          terms: [
+            term({ home_group: "產品開發" }),
+            term({ sid: "t2", title: "shell", kind: "shell", scope: null, scope_repos: null }),
+            term({ sid: "t3", title: "整組", scope: "產品開發", scope_repos: null }),
+          ] as never,
+        }),
+      ),
+    });
+    await mount(backend);
+    const card = document.querySelector('.gcard[data-key="產品開發"]')!;
+    const inCard = card.querySelector(".gsessions")!;
+    expect(inCard.textContent).toContain("claude · a");
+    expect(inCard.textContent).toContain("整組");
+    expect(card.querySelector(".gmeta")!.textContent).toContain("2 個會話");
+    const others = document.getElementById("sessions")!;
+    expect(others.textContent).toContain("shell");
+    expect(others.textContent).not.toContain("claude · a");
+
+    await act(async () => fireEvent.click(within(inCard as HTMLElement).getByRole("button", { name: /claude · a/ })));
+    expect(document.getElementById("termwhere")!.textContent).toBe("產品開發 › a");
+  });
+
+  it("從牌組裡對 repo 開會話：帶上所屬牌組", async () => {
+    const store = new WorkbenchStore(mockBackend(), { group: "產品開發", repos: null });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    const card = document.querySelector('.gcard[data-key="產品開發"]')!;
+    await act(async () => fireEvent.click(within(card as HTMLElement).getByRole("button", { name: /展開/ })));
+    fireEvent.contextMenu(within(card as HTMLElement).getByRole("button", { name: /^a/ }));
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "開啟 Agent 會話…" })));
+    const dialog = document.getElementById("detaildialog")!;
+    expect(dialog.textContent).toContain("產品開發 › a");
+  });
+});
+
+describe("牌組筆記", () => {
+  const notesBackend = () => {
+    let notes = [{ at: "2026-10-11 09:00", text: "問 PM **規格**" }];
+    return mockBackend({
+      action: vi.fn(async (name: string, p: { text?: string; at?: string }) => {
+        if (name === "note_add") notes = [{ at: "2026-10-12 10:00", text: p.text! }, ...notes];
+        if (name === "note_remove") notes = notes.filter((n) => n.at !== p.at);
+        if (name.endsWith("notes") || name.startsWith("note_"))
+          return { ok: true, group: "產品開發", path: "/sp/groups/產品開發/notes.md", notes };
+        return { ok: true };
+      }) as never,
+    });
+  };
+
+  it("「＋ 記一筆」打開筆記分頁；⌘Enter 記下、刪除要按兩次", async () => {
+    const backend = notesBackend();
+    const store = new WorkbenchStore(backend, { group: "產品開發", repos: null });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "＋ 記一筆" })));
+    expect(backend.action).toHaveBeenCalledWith("group_notes", { group: "產品開發" });
+    const pane = document.getElementById("tab-notes")!;
+    expect((await within(pane).findByText("規格")).tagName).toBe("STRONG");
+    const box = document.getElementById("notebox") as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(box);
+
+    fireEvent.change(box, { target: { value: "  明天跟設計對齊  " } });
+    expect(JSON.parse(localStorage.getItem("workbench:noteDraft:產品開發")!)).toBe("  明天跟設計對齊  ");
+    await act(async () => fireEvent.keyDown(box, { key: "Enter", metaKey: true }));
+    expect(backend.action).toHaveBeenCalledWith("note_add", { group: "產品開發", text: "明天跟設計對齊" });
+    expect(await within(pane).findByText("明天跟設計對齊")).toBeTruthy();
+    expect(box.value).toBe("");
+
+    const items = within(pane).getAllByRole("listitem");
+    await act(async () => fireEvent.click(within(items[1]).getByRole("button", { name: "刪除" })));
+    expect(backend.action).not.toHaveBeenCalledWith("note_remove", expect.anything());
+    await act(async () => fireEvent.click(within(items[1]).getByRole("button", { name: "確定刪除" })));
+    expect(backend.action).toHaveBeenCalledWith("note_remove", {
+      group: "產品開發",
+      at: "2026-10-11 09:00",
+      text: "問 PM **規格**",
+    });
+    await waitFor(() => expect(within(pane).queryByText("規格")).toBeNull());
+  });
+
+  it("所有 repo／臨時組：不能記，說明要先選牌組", async () => {
+    await mount(notesBackend());
+    expect((screen.getByRole("button", { name: "＋ 記一筆" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="notes"]')!));
+    expect(document.getElementById("tab-notes")!.textContent).toContain("筆記記在牌組上");
   });
 });

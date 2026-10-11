@@ -1,0 +1,34 @@
+import type { TermInfo } from "../../api/types";
+import { sessionDot, sessionMeta, sessionTooltip, sessionWhere } from "../../lib/view";
+import { useUi } from "../../store/context";
+
+/**
+ * 會話一列：小圓點（綠＝有留痕、琥珀＝執行中尚無回報、紅＝等你／卡住、灰＝已結束）＋標題＋狀態。
+ * `inGroup`：放在牌組區塊裡時，位置只寫 repo（組名已經是區塊標題）。
+ */
+export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: boolean }) {
+  const ui = useUi();
+  const on = ui.activeSid === s.sid;
+  const where = sessionWhere(s);
+  return (
+    <div className={"session" + (on ? " on" : "") + (inGroup ? " ingroup" : "")}>
+      <button
+        type="button"
+        className="ghost"
+        aria-pressed={on}
+        title={sessionTooltip(s)}
+        onClick={() => ui.selectTerm(s.sid)}
+      >
+        <span className={["dot", ...sessionDot(s)].join(" ")} />
+        <span className="sessioncopy">
+          <span className="sessiontitle">{s.title}</span>
+          <span className="sessionmeta">
+            {inGroup
+              ? (s.alive ? "" : "已結束 · ") + (where.repo ? where.repo : "整組")
+              : sessionMeta(s)}
+          </span>
+        </span>
+      </button>
+    </div>
+  );
+}

@@ -1,39 +1,26 @@
-import { sessionDot, sessionMeta, sessionTooltip } from "../lib/view";
+import { sessionInGroup } from "../lib/view";
 import { useSnapshot, useStore, useUi } from "../store/context";
 import { AsyncButton } from "./AsyncButton";
 import { Deck } from "./deck/Deck";
+import { SessionRow } from "./sessions/SessionRow";
 
-/** 會話列：小圓點（綠＝有留痕、琥珀＝執行中尚無回報、紅＝等你／卡住、灰＝已結束）。 */
+/** 不屬於任何牌組的會話（Shell、臨時組、全部）；屬於牌組的放在牌組區塊裡。 */
 function SessionList() {
   const { state } = useSnapshot();
-  const ui = useUi();
-  const list = state.terms || [];
+  const groups = state.groups.map((g) => g.name);
+  const all = state.terms || [];
+  const list = all.filter((s) => !groups.some((g) => sessionInGroup(s, g)));
   return (
     <>
       <div id="sessions" className="sessions">
-        {list.map((s) => {
-          const on = ui.activeSid === s.sid;
-          return (
-            <div key={s.sid} className={"session" + (on ? " on" : "")}>
-              <button
-                type="button"
-                className="ghost"
-                aria-pressed={on}
-                title={sessionTooltip(s)}
-                onClick={() => ui.selectTerm(s.sid)}
-              >
-                <span className={["dot", ...sessionDot(s)].join(" ")} />
-                <span className="sessioncopy">
-                  <span className="sessiontitle">{s.title}</span>
-                  <span className="sessionmeta">{sessionMeta(s)}</span>
-                </span>
-              </button>
-            </div>
-          );
-        })}
+        {list.map((s) => (
+          <SessionRow key={s.sid} s={s} />
+        ))}
       </div>
       <p id="sessempty" className="emptyhint" hidden={!!list.length}>
-        為目前牌組開啟 Agent 會話，帶著工作脈絡開始。
+        {all.length
+          ? "牌組的會話放在各牌組區塊裡；這裡是 Shell 和臨時範圍的。"
+          : "為目前牌組開啟 Agent 會話，帶著工作脈絡開始。"}
       </p>
     </>
   );

@@ -415,6 +415,18 @@ svg {
 .sessionhead {
   margin-top: 28px;
 }
+/* 牌組區塊裡的會話 */
+.gsessions {
+  margin: 0 4px 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.session.ingroup > button {
+  padding: 5px 8px;
+}
 .sessions {
   display: flex;
   flex-direction: column;
@@ -958,6 +970,23 @@ td button {
   font-size: 12px;
   font-weight: 650;
 }
+/* 終端標題列：這個會話屬於哪個組 › 哪個 repo */
+.termwhere {
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #253047;
+  border: 1px solid #3a4d72;
+  color: #d6e5ff;
+}
+.termwhere strong {
+  font-weight: 650;
+}
 #termtitle {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1430,7 +1459,7 @@ dialog::backdrop {
   padding: 5px 10px;
 }
 
-/* 檔案分頁／repo 詳情的檔案樹（像 IDE 側邊欄）：複製鈕只在滑過或鍵盤聚焦時出現 */
+/* 檔案樹（VS Code 檔案總管風格）：一列 22px、箭頭＋彩色檔案圖示、縮排導引線、目前檔案反白 */
 .filetree {
   display: grid;
   gap: 8px;
@@ -1439,78 +1468,153 @@ dialog::backdrop {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
+  overflow: hidden;
 }
 .reporoot .tree {
   max-height: 420px;
   overflow: auto;
   border-top: 1px solid var(--line);
-  padding: 4px 0;
 }
-.tree,
-.tree ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.tree {
+  padding: 2px 0;
+  font-size: 13px;
+  line-height: 22px;
+  user-select: none;
 }
-.treerow {
+.trow {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 26px;
-  padding-right: 6px;
+  gap: 4px;
+  height: 22px;
+  padding-right: 8px;
+  white-space: nowrap;
+  color: var(--ink2);
+  cursor: pointer;
+  outline: none;
 }
-.treerow:hover {
-  background: var(--panel2);
+.trow.dir {
+  color: var(--ink);
 }
-.rootrow {
-  padding: 4px 6px;
+.trow:hover {
+  background: #232933;
 }
-.treename {
+.trow:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+.trow.selected {
+  background: #2b3a55;
+  color: var(--ink);
+}
+.trow.tnote {
+  cursor: default;
+  color: var(--sub);
+  font-size: 12px;
+}
+.trow.tnote:hover {
+  background: none;
+}
+.trow.tnote.error {
+  color: var(--red);
+  white-space: normal;
+  height: auto;
+}
+.tguide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(160, 170, 186, 0.12);
+}
+.tree:hover .tguide {
+  background: rgba(160, 170, 186, 0.28);
+}
+.tchev {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: var(--sub);
+  transition: transform 0.1s;
+}
+.tchev.open {
+  transform: rotate(90deg);
+}
+.tchevspace {
+  flex: 0 0 16px;
+}
+.ticon {
+  flex: 0 0 16px;
+  text-align: center;
+  font: 700 9px/1 "Cascadia Code", Menlo, Consolas, monospace;
+  letter-spacing: -0.5px;
+  color: #7f8a99;
+}
+.tlabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.explorerhead {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 28px;
+  padding: 0 4px 0 2px;
+}
+.explorerhead .eyebrow {
+  flex: 1;
+  margin: 0;
+  padding-left: 4px;
+}
+.ttools {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: left;
-  font-size: 13px;
-}
-.treename.file {
-  padding-left: 18px;
-  color: var(--ink2);
-}
-.treecaret {
-  width: 12px;
-  color: var(--sub);
-}
-.rootpath {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.treecopy {
-  display: inline-flex;
   gap: 2px;
-  flex-shrink: 0;
   visibility: hidden;
 }
-.treerow:hover .treecopy,
-.treerow:focus-within .treecopy,
-.treecopy.always {
+.explorer:hover .ttools,
+.explorer:focus-within .ttools {
   visibility: visible;
 }
-.treenote {
-  font-size: 12px;
-  padding: 3px 6px;
-}
-.treenote.error {
-  color: var(--red);
-}
 @media (hover: none) {
-  .treecopy {
+  .ttools {
     visibility: visible;
   }
+}
+.explorerhead button.icon {
+  min-height: 22px;
+  min-width: 22px;
+  padding: 0 4px;
+  font-size: 13px;
+  color: var(--sub);
+}
+.troot {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 28px;
+  padding: 0 4px;
+  border: 0;
+  text-align: left;
+}
+.trootname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ctxhint {
+  margin-left: auto;
+  padding-left: 18px;
+  color: var(--sub);
+  font-size: 11px;
+}
+.ctxmenu button {
+  display: flex;
+  align-items: center;
 }
 
 /* 右側欄（點 repo 打開）：寬螢幕多一欄，窄螢幕疊在右邊 */
@@ -1596,9 +1700,6 @@ dialog::backdrop {
 }
 .panelsection .eyebrow {
   margin: 0 0 6px;
-}
-.tree.bare .treerow {
-  border-radius: 6px;
 }
 
 /* 右鍵選單 */
@@ -1932,11 +2033,52 @@ button.filetab.home {
   color: var(--sub);
   font-size: 12px;
 }
-.treerow button {
-  min-height: 24px;
-  padding-top: 1px;
-  padding-bottom: 1px;
+
+/* 筆記分頁（牌組筆記：groups/<組>/notes.md） */
+.notecapture {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
 }
-.treename.file:hover {
-  color: var(--ink);
+.notecapture textarea {
+  width: 100%;
+  resize: vertical;
+  background: var(--bg);
+  padding: 8px 10px;
+}
+.notecapture .composerfoot > span.small:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.note {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 6px 12px 10px;
+}
+.notehead {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.notehead button {
+  min-height: 26px;
+}
+.notebody .markdown > :first-child {
+  margin-top: 0;
+}
+.notebody .markdown > :last-child {
+  margin-bottom: 0;
 }

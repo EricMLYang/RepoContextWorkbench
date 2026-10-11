@@ -35,6 +35,13 @@ export interface Backend {
   /** 卡片按鈕與各表單的寫入動作。失敗一律 reject Error（message 是給人看的中文）。 */
   action<N extends ActionName>(name: N, payload: ActionPayload<N>): Promise<ActionResult<N>>;
   openTerminal(sid: string): TermStream;
+  /**
+   * 選配（Tauri 才有）：檔案樹展開中的資料夾（`{repo id: [相對路徑…]}`，`""`＝根）。
+   * 殼只監看這些，有變動用 onRepoChanged 通知。空物件＝不監看。
+   */
+  watchTree?(repos: Record<string, string[]>): Promise<void>;
+  /** 選配：展開中資料夾裡的檔案有變（新增、刪除、改名、改內容）；回傳取消訂閱。 */
+  onRepoChanged?(cb: (id: string, paths: string[]) => void): () => void;
   /** 選配：原生「選擇資料夾」對話框（Tauri 才有）；取消回 null。 */
   pickFolder?(): Promise<string | null>;
   /**

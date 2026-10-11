@@ -57,7 +57,7 @@ export function FilesPane({ query, active }: { query: string; active: boolean })
           <h2>檔案</h2>
           <p className="muted small">
             「{scopeLabel(scope)}」的 repo 都在這裡，像 IDE
-            的工作區資料夾；每一列都能複製絕對或相對路徑。
+            的工作區資料夾；右鍵可以複製路徑或相對路徑。
           </p>
         </div>
         <div className="head-actions">
@@ -112,6 +112,7 @@ export function FilesPane({ query, active }: { query: string; active: boolean })
               key={id}
               id={id}
               defaultOpen={repos.length === 1}
+              watching={active}
               onRootMenu={(e) => {
                 e.preventDefault();
                 ui.repoMenu(id, e.clientX, e.clientY);

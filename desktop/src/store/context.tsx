@@ -16,7 +16,7 @@ export function useSnapshot(): Snapshot {
   return useSyncExternalStore(store.subscribe, store.getSnapshot);
 }
 
-export type Tab = "inbox" | "repos" | "files" | "activity" | "relations";
+export type Tab = "inbox" | "notes" | "repos" | "files" | "activity" | "relations";
 
 export interface DetailSpec {
   title: string;
@@ -40,6 +40,8 @@ export interface Ui {
   closeRepo(): void;
   /** 在主區開一個唯讀檔案分頁（已開就切過去）。 */
   openFile(repo: string, path: string): void;
+  /** 主區正在看的檔案（檔案樹據此標出目前這一列）；看工作區時 null。 */
+  activeFile: { repo: string; path: string } | null;
   /** repo 的右鍵選單（x、y 是視窗座標）。 */
   repoMenu(id: string, x: number, y: number): void;
   showComposer(): void;

@@ -3,7 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TermStream } from "../../api/backend";
 import type { TermInfo } from "../../api/types";
-import { reportLine } from "../../lib/view";
+import { reportLine, sessionWhere } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { confirmKillSpec, sessionResultSpec } from "./SessionDialogs";
 
@@ -188,10 +188,9 @@ export function TerminalPanel(props: {
   const info: TermInfo | undefined = terms.find((s) => s.sid === activeSid);
   const attached = !!activeSid && activeSid in conn;
   const connected = !!activeSid && conn[activeSid];
+  const where = info ? sessionWhere(info) : null;
   const title = info
     ? info.title +
-      " · " +
-      (info.scope || "本機 Shell") +
       " · " +
       reportLine(info) +
       (attached && !connected ? " · 連線已中斷（畫面可能不是最新）" : "")
@@ -228,6 +227,14 @@ export function TerminalPanel(props: {
       />
       <div id="termbar">
         <span className="termlabel">終端</span>
+        {where ? (
+          <span id="termwhere" className="termwhere" title={"這個會話屬於：" + where.label}>
+            {where.group ? <strong>{where.group}</strong> : null}
+            {where.group && where.repo ? <span aria-hidden="true"> › </span> : null}
+            {where.repo ? <span>{where.repo}</span> : null}
+            {!where.group && !where.repo ? <span>{where.label}</span> : null}
+          </span>
+        ) : null}
         <span id="termtitle" className="small muted">
           {title}
         </span>

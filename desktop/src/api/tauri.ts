@@ -104,6 +104,18 @@ export function createTauriBackend(
     getScan: (p) => run("get_scan", { group: p.group ?? null, repos: p.repos ?? null }),
     action: (name, payload) => run("run_action", { name, payload: payload ?? {} }),
     pickFolder: () => run<string | null>("pick_folder"),
+    watchTree: (repos) => run<void>("watch_tree", { repos }),
+    onRepoChanged(cb) {
+      let stop: (() => void) | null = null;
+      let cancelled = false;
+      listen<{ id: string; paths: string[] }>("repo://changed", (e) => cb(e.payload.id, e.payload.paths))
+        .then((un) => (cancelled ? un() : (stop = un)))
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+        stop?.();
+      };
+    },
     onChanged(cb) {
       let stop: (() => void) | null = null;
       let cancelled = false;
