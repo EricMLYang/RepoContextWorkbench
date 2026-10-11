@@ -1521,3 +1521,86 @@ fn remove_repo_unregisters_but_keeps_files() {
         .contains(&"repo-a".to_string()));
     assert!(a.join("README.md").exists(), "移出工作台不刪檔");
 }
+
+#[test]
+fn reorder_groups_members_and_repos_only_permutes() {
+    let (_t, d) = spine_with_repos();
+    registry::add_group(&d, "g2", &["repo-b"]).unwrap();
+    act(
+        &d,
+        "reorder",
+        json!({"kind": "groups", "order": ["g2", "g1"]}),
+    )
+    .unwrap();
+    let names: Vec<String> = registry::load(&d)
+        .unwrap()
+        .groups
+        .iter()
+        .map(|g| g.name())
+        .collect();
+    assert_eq!(names, vec!["g2", "g1"]);
+    // state 的牌組順序跟著變（側欄就是照這個畫）
+    let s = st(&d);
+    assert_eq!(s["groups"][0]["name"], json!("g2"));
+
+    act(
+        &d,
+        "reorder",
+        json!({"kind": "members", "group": "g1", "order": ["repo-b", "repo-a"]}),
+    )
+    .unwrap();
+    assert_eq!(
+        registry::get_group(&d, "g1").unwrap().members(),
+        vec!["repo-b", "repo-a"]
+    );
+    act(
+        &d,
+        "reorder",
+        json!({"kind": "repos", "order": ["repo-b", "repo-a"]}),
+    )
+    .unwrap();
+    assert_eq!(st(&d)["repos"], json!(["repo-b", "repo-a"]));
+
+    // 不是同一批（少一個或多一個）就拒絕，不改
+    assert!(err(
+        &d,
+        "reorder",
+        json!({"kind": "members", "group": "g1", "order": ["repo-a"]})
+    )
+    .contains("變動"));
+    assert!(err(
+        &d,
+        "reorder",
+        json!({"kind": "groups", "order": ["g1", "g2", "g3"]})
+    )
+    .contains("變動"));
+    assert_eq!(
+        registry::get_group(&d, "g1").unwrap().members(),
+        vec!["repo-b", "repo-a"]
+    );
+    // 排序不記 spine 事件
+    assert!(of_type(&d, EventType::Decision)
+        .iter()
+        .all(|e| !e.body.contains("排序")));
+}
+
+#[test]
+fn read_file_action_returns_text_and_guards_paths() {
+    let (_t, d) = spine_with_repos();
+    let r = act(
+        &d,
+        "read_file",
+        json!({"id": "repo-a", "path": "notes/plan.md"}),
+    )
+    .unwrap();
+    assert_eq!(r["kind"], json!("text"));
+    assert!(r["text"].as_str().unwrap().contains("LRU"));
+    assert_eq!(r["truncated"], json!(false));
+    assert!(err(
+        &d,
+        "read_file",
+        json!({"id": "repo-a", "path": "../repo-b/README.md"})
+    )
+    .contains("repo 裡"));
+    assert!(act(&d, "read_file", json!({"id": "repo-a"})).is_err());
+}

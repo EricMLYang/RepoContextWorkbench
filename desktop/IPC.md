@@ -87,6 +87,8 @@ Rust 端簽名建議：
 | `session_result` | `{sid, text}` | `date`, `time` |
 | `repo_tree`（Rust 才有） | `{id, dir?}`（`dir` 相對 repo 根目錄，空＝根） | `root`, `dir`, `entries: [{name, path, abs, dir}]`, `more` |
 | `group_add_folder`（Rust 才有） | `{path, group?}` | `id`, `registered`, `group` |
+| `reorder`（Rust 才有） | `{kind: "groups"\|"members"\|"repos", order, group?}`（只換順序，不是同一批就拒絕） | — |
+| `read_file`（Rust 才有） | `{id, path}` | `path`, `abs`, `size`, `kind: "text"\|"image"\|"binary"\|"too_large"`（text 帶 `text`、`truncated`；image 帶 `mime`、`base64`） |
 
 未知 name → `Err("未知 action: <name>")`。
 

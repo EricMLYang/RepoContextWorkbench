@@ -549,3 +549,121 @@ describe("repo 右側欄與右鍵選單", () => {
     expect(backend.action).toHaveBeenCalledWith("remove_repo", { id: "a" });
   });
 });
+
+describe("唯讀檢視器（主區檔案分頁）", () => {
+  const files: Record<string, string> = {
+    "README.md": "# 說明\n\n看 [指南](docs/guide.md)，外部 [網站](https://example.com)。",
+    "docs/guide.md": "## 指南\n內容",
+    "src/main.rs": "fn main() {\n    println!(\"hi\");\n}\n",
+  };
+  const viewerBackend = () =>
+    mockBackend({
+      action: vi.fn(async (name: string, p: { id?: string; dir?: string; path?: string }) => {
+        if (name === "repo_tree")
+          return {
+            ok: true,
+            id: p.id,
+            root: "/r/" + p.id,
+            dir: "",
+            more: 0,
+            entries: [
+              { name: "README.md", path: "README.md", abs: "/r/a/README.md", dir: false },
+              { name: "main.rs", path: "src/main.rs", abs: "/r/a/src/main.rs", dir: false },
+            ],
+          };
+        if (name === "read_file") {
+          const text = files[p.path!];
+          if (text == null) throw new Error("檔案不存在：" + p.path);
+          return { ok: true, id: p.id, path: p.path, abs: "/r/a/" + p.path, size: text.length, kind: "text", text, truncated: false };
+        }
+        return { ok: true };
+      }) as never,
+    });
+
+  async function openTree(backend: ReturnType<typeof mockBackend>) {
+    const store = new WorkbenchStore(backend, { group: "產品開發", repos: null });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="files"]')!));
+    await act(async () =>
+      fireEvent.click(within(document.getElementById("tab-files")!).getByRole("button", { name: "a" })),
+    );
+  }
+
+  it("點檔案開分頁：md 預設預覽、可切原始碼；相對連結開新分頁；關掉回到工作區", async () => {
+    const backend = viewerBackend();
+    await openTree(backend);
+    await act(async () => fireEvent.click(await screen.findByRole("button", { name: "README.md" })));
+    expect(backend.action).toHaveBeenCalledWith("read_file", { id: "a", path: "README.md" });
+    expect(document.getElementById("workspace")!.hidden).toBe(true);
+    const viewer = () => document.querySelector(".viewer:not([hidden])")!;
+    expect(viewer().querySelector("h1")!.textContent).toBe("說明");
+
+    await act(async () => fireEvent.click(within(viewer() as HTMLElement).getByRole("button", { name: "原始碼" })));
+    expect(viewer().querySelector(".codeview")!.textContent).toContain("# 說明");
+    await act(async () => fireEvent.click(within(viewer() as HTMLElement).getByRole("button", { name: "預覽" })));
+
+    const write = vi.fn(async () => {});
+    Object.assign(navigator, { clipboard: { writeText: write } });
+    await act(async () => fireEvent.click(within(viewer() as HTMLElement).getByText("網站")));
+    expect(write).toHaveBeenCalledWith("https://example.com");
+
+    await act(async () => fireEvent.click(within(viewer() as HTMLElement).getByText("指南")));
+    expect(backend.action).toHaveBeenCalledWith("read_file", { id: "a", path: "docs/guide.md" });
+    expect(document.querySelectorAll(".filetab:not(.home)").length).toBe(2);
+    expect(viewer().querySelector("h2")!.textContent).toBe("指南");
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "關閉 guide.md" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "關閉 README.md" })));
+    expect(document.querySelector(".filetabs")).toBeNull();
+    expect(document.getElementById("workspace")!.hidden).toBe(false);
+  });
+
+  it("程式碼有行號；讀取失敗顯示錯誤", async () => {
+    const backend = viewerBackend();
+    await openTree(backend);
+    await act(async () => fireEvent.click(await screen.findByRole("button", { name: "main.rs" })));
+    const lines = document.querySelectorAll(".viewer:not([hidden]) .codeview .cl");
+    expect(lines.length).toBe(3);
+    expect(lines[1].querySelector(".ln")!.textContent).toBe("2");
+  });
+});
+
+describe("側欄排序與寬度", () => {
+  it("牌組標題 Alt+↓ 換順序並存檔；組員 Alt+↑ 也是", async () => {
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({
+          groups: [
+            { name: "產品開發", members: ["a", "b"], goal: "", goal_at: "" },
+            { name: "研究", members: ["b"], goal: "", goal_at: "" },
+          ],
+        }),
+      ),
+    });
+    await mount(backend);
+    const head = document.querySelector('.gcard[data-key="產品開發"] .ghead')!;
+    await act(async () => fireEvent.keyDown(head, { key: "ArrowDown", altKey: true }));
+    expect(backend.action).toHaveBeenCalledWith("reorder", { kind: "groups", order: ["研究", "產品開發"] });
+
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "展開所有 repo" })),
+    );
+    const member = document.querySelector('.gcard[data-key="*"] .member:nth-child(2)')!;
+    await act(async () => fireEvent.keyDown(member, { key: "ArrowUp", altKey: true }));
+    expect(backend.action).toHaveBeenCalledWith("reorder", { kind: "repos", order: ["b", "a"] });
+  });
+
+  it("側欄把手：方向鍵調寬度並記住，雙擊回預設", async () => {
+    await mount();
+    const handle = screen.getByRole("separator", { name: "調整左側欄寬度" });
+    document.documentElement.style.setProperty("--sidew", "264px");
+    await act(async () => fireEvent.keyDown(handle, { key: "ArrowRight" }));
+    expect(document.documentElement.style.getPropertyValue("--sidew")).toBe("280px");
+    expect(localStorage.getItem("workbench:sideWidth")).toBe("280");
+    await act(async () => fireEvent.doubleClick(handle));
+    expect(document.documentElement.style.getPropertyValue("--sidew")).toBe("");
+  });
+});

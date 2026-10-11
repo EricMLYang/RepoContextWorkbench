@@ -18,9 +18,9 @@ pub use audit::{
 };
 pub use groups::{
     add_group, add_group_members, add_group_with_landing, check_group_name, get_group,
-    remove_group, remove_group_members, rename_group, resolve_group, set_group_field,
-    set_group_members, split_ids, update_group, GroupRemoved, GroupRenamed, GroupUpdate,
-    GroupUpdated,
+    remove_group, remove_group_members, rename_group, reorder_groups, reorder_members,
+    reorder_repos, resolve_group, set_group_field, set_group_members, split_ids, update_group,
+    GroupRemoved, GroupRenamed, GroupUpdate, GroupUpdated,
 };
 pub use relations::{
     builtin_relation_kinds, exports_of, relate, related_ids, relation_kinds, relation_lines,

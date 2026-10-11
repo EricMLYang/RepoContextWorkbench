@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import type { TreeEntry } from "../../api/types";
-import { useStore } from "../../store/context";
+import { useStore, useUi } from "../../store/context";
 
 interface DirState {
   entries?: TreeEntry[];
@@ -66,6 +66,7 @@ export function RepoRoot(props: {
   const { id, actions, bare = false, onRootMenu } = props;
   const defaultOpen = bare || !!props.defaultOpen;
   const store = useStore();
+  const ui = useUi();
   const [root, setRoot] = useState("");
   const [dirs, setDirs] = useState<Record<string, DirState>>({});
   const [open, setOpen] = useState<Set<string>>(() => new Set(defaultOpen ? [""] : []));
@@ -132,9 +133,14 @@ export function RepoRoot(props: {
                   {e.name}/
                 </button>
               ) : (
-                <span className="treename file" title={e.path}>
+                <button
+                  type="button"
+                  className="ghost treename file"
+                  title={"檢視 " + e.path}
+                  onClick={() => ui.openFile(id, e.path)}
+                >
                   {e.name}
-                </span>
+                </button>
               )}
               <CopyButtons abs={e.abs} rel={e.path} name={e.name} />
             </div>

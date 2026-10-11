@@ -80,6 +80,8 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("register_repos", a_register_repos),
     ("repo_tree", a_repo_tree),
     ("group_add_folder", a_group_add_folder),
+    ("reorder", a_reorder),
+    ("read_file", a_read_file),
     ("brief", a_brief),
     ("term_create", a_term_create),
     ("term_kill", a_term_kill),
@@ -621,6 +623,49 @@ fn a_repo_tree(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
         json!({"ok": true, "id": id, "root": root.to_string_lossy(), "dir": dir,
               "entries": entries, "more": l.more}),
     )
+}
+
+/// Rust 才有（2026-10-11）：側欄拖曳排序。`kind`＝groups（`order`＝組名）｜members（`group`＋repo id）｜
+/// repos（「所有 repo」＝registry 順序）。只換順序、不記 spine 事件。
+fn a_reorder(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let order = list(p, "order").unwrap_or_default();
+    match s(p, "kind").as_deref() {
+        Some("groups") => registry::reorder_groups(d, &order)?,
+        Some("members") => {
+            let Some(g) = s(p, "group") else {
+                return Err(Error::invalid("reorder members 需要 group"));
+            };
+            registry::reorder_members(d, &g, &order)?;
+        }
+        Some("repos") => registry::reorder_repos(d, &order)?,
+        _ => return Err(Error::invalid("kind 需為 groups|members|repos")),
+    }
+    Ok(json!({"ok": true}))
+}
+
+/// Rust 才有（2026-10-11）：唯讀檢視器讀一個檔（見 [`crate::filetree::read_file`]）。
+fn a_read_file(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let (Some(id), Some(path)) = (s(p, "id"), s(p, "path")) else {
+        return Err(Error::invalid("read_file 需要 id 與 path"));
+    };
+    let root = registry::get_repo(d, &id)?.path();
+    let f = crate::filetree::read_file(&root, &path)?;
+    let mut out = json!({"ok": true, "id": id, "path": f.rel.to_string_lossy(),
+                         "abs": f.abs.to_string_lossy(), "size": f.size});
+    let extra = match f.view {
+        crate::filetree::FileView::Text { text, truncated } => {
+            json!({"kind": "text", "text": text, "truncated": truncated})
+        }
+        crate::filetree::FileView::Image { mime, base64 } => {
+            json!({"kind": "image", "mime": mime, "base64": base64})
+        }
+        crate::filetree::FileView::Binary => json!({"kind": "binary"}),
+        crate::filetree::FileView::TooLarge => json!({"kind": "too_large"}),
+    };
+    if let (Value::Object(o), Value::Object(e)) = (&mut out, extra) {
+        o.extend(e);
+    }
+    Ok(out)
 }
 
 /// Rust 才有（2026-10-11）：像 IDE 的 Add Folder to Workspace——一個 repo 資料夾加進牌組

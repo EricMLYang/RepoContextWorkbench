@@ -245,6 +245,14 @@ export interface TreeEntry {
   dir: boolean;
 }
 
+/** read_file 的結果：文字、圖片（base64）、其他二進位或太大只有大小。 */
+export type FileContent = { ok: true; id: string; path: string; abs: string; size: number } & (
+  | { kind: "text"; text: string; truncated: boolean }
+  | { kind: "image"; mime: string; base64: string }
+  | { kind: "binary" }
+  | { kind: "too_large" }
+);
+
 export interface WorkbenchState {
   groups: GroupInfo[];
   repos: string[];
@@ -462,6 +470,13 @@ export interface ActionMap {
     payload: { path: string; group?: string };
     result: { ok: true; id: string; registered: boolean; group: string | null };
   };
+  /** Rust 才有：側欄拖曳排序（只換順序，不記 spine）。 */
+  reorder: {
+    payload: { kind: "groups" | "members" | "repos"; order: string[]; group?: string };
+    result: { ok: true };
+  };
+  /** Rust 才有：唯讀檢視器讀一個檔。 */
+  read_file: { payload: { id: string; path: string }; result: FileContent };
   register_repos: {
     payload: { repos: { path: string; id: string }[]; group?: string };
     result: { ok: true; added: string[]; group: string | null };

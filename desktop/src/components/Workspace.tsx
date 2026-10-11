@@ -30,6 +30,8 @@ export function Workspace(props: {
   composerOpen: boolean;
   composerFocusSeq: number;
   closeComposer: () => void;
+  /** 主區正在看檔案分頁時藏起來（不卸載，搜尋與篩選保留）。 */
+  hidden?: boolean;
 }) {
   const { tab, composerOpen, composerFocusSeq, closeComposer } = props;
   const store = useStore();
@@ -53,8 +55,7 @@ export function Workspace(props: {
   const noScope = !stateReady || !repos.length;
 
   return (
-    <main id="main">
-      <div id="workspace">
+      <div id="workspace" hidden={props.hidden}>
         <div className="eyebrow">
           WORKSPACE <span id="scopekind">{scopeKindLabel(scope)}</span>
         </div>
@@ -179,6 +180,5 @@ export function Workspace(props: {
         <ActivityPane query={q} active={tab === "activity"} />
         <RelationsPane query={q} active={tab === "relations"} />
       </div>
-    </main>
   );
 }

@@ -5,6 +5,9 @@
 //! - 不列 `.git`；git repo 裡被 .gitignore 忽略的不列（交給 `git check-ignore`，規則跟 git 一致），
 //!   不是 git 的資料夾全列。
 //! - 只讀，不改任何檔；`dir` 必須在 repo 裡（擋 `..`、絕對路徑、符號連結跳出 repo）。
+//!
+//! [`read_file`]：App 的唯讀檢視器讀一個檔——文字（UTF-8，壞位元組換成 �）、圖片（base64 給 `<img>`）、
+//! 其他二進位只回大小。文字超過 [`TEXT_MAX`] 只給前段並標 `truncated`。
 
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -34,16 +37,32 @@ pub struct Listing {
     pub more: usize,
 }
 
-/// `dir`（相對路徑，空字串＝根目錄）只能往下走。
-fn checked_rel(dir: &str) -> Result<PathBuf> {
-    let rel = PathBuf::from(dir.trim());
-    for c in rel.components() {
+/// `rel`（相對路徑，空字串＝根目錄）只能往下走。`noun` 只用在錯誤訊息（資料夾／檔案）。
+fn checked_rel(rel: &str, noun: &str) -> Result<PathBuf> {
+    let p = PathBuf::from(rel.trim());
+    for c in p.components() {
         match c {
             Component::Normal(_) | Component::CurDir => {}
-            _ => return Err(Error::invalid(format!("資料夾必須在 repo 裡：{dir}"))),
+            _ => return Err(Error::invalid(format!("{noun}必須在 repo 裡：{rel}"))),
         }
     }
-    Ok(rel)
+    Ok(p)
+}
+
+/// `root/rel` 的實體路徑，必須存在且在 repo 裡（符號連結跳出去也擋）。回 (相對路徑, 實體 root, 實體目標)。
+fn resolve_in(root: &Path, rel: &str, noun: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
+    let rel_p = checked_rel(rel, noun)?;
+    let root_real = root
+        .canonicalize()
+        .map_err(|_| Error::invalid(format!("repo 路徑不存在：{}", root.display())))?;
+    let target_real = root_real
+        .join(&rel_p)
+        .canonicalize()
+        .map_err(|_| Error::invalid(format!("{noun}不存在：{rel}")))?;
+    if !target_real.starts_with(&root_real) {
+        return Err(Error::invalid(format!("{noun}必須在 repo 裡：{rel}")));
+    }
+    Ok((rel_p, root_real, target_real))
 }
 
 /// git repo 裡被忽略的那些（`rels` 是相對 root 的路徑）。不是 git、或 git 不能用＝都不忽略。
@@ -88,17 +107,7 @@ fn ignored(root: &Path, rels: &[PathBuf]) -> Vec<bool> {
 
 /// 列出 `root/dir` 這一層。
 pub fn list_dir(root: &Path, dir: &str) -> Result<Listing> {
-    let rel_dir = checked_rel(dir)?;
-    let root_real = root
-        .canonicalize()
-        .map_err(|_| Error::invalid(format!("repo 路徑不存在：{}", root.display())))?;
-    let target = root_real.join(&rel_dir);
-    let target_real = target
-        .canonicalize()
-        .map_err(|_| Error::invalid(format!("資料夾不存在：{dir}")))?;
-    if !target_real.starts_with(&root_real) {
-        return Err(Error::invalid(format!("資料夾必須在 repo 裡：{dir}")));
-    }
+    let (rel_dir, root_real, target_real) = resolve_in(root, dir, "資料夾")?;
     if !target_real.is_dir() {
         return Err(Error::invalid(format!("不是資料夾：{dir}")));
     }
@@ -135,6 +144,111 @@ pub fn list_dir(root: &Path, dir: &str) -> Result<Listing> {
     let more = entries.len().saturating_sub(MAX_ENTRIES);
     entries.truncate(MAX_ENTRIES);
     Ok(Listing { entries, more })
+}
+
+/// 文字檔最多讀幾個位元組（超過只給前段）。
+pub const TEXT_MAX: u64 = 1024 * 1024;
+/// 圖片最大幾個位元組（超過不載入）。
+pub const IMAGE_MAX: u64 = 8 * 1024 * 1024;
+
+/// 檢視器讀到的內容。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileView {
+    Text {
+        text: String,
+        truncated: bool,
+    },
+    Image {
+        mime: &'static str,
+        base64: String,
+    },
+    /// 不是文字也不是認得的圖片。
+    Binary,
+    /// 圖片太大，不載入。
+    TooLarge,
+}
+
+/// 讀到的檔：`size` 是整個檔的位元組數。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileRead {
+    pub rel: PathBuf,
+    pub abs: PathBuf,
+    pub size: u64,
+    pub view: FileView,
+}
+
+fn image_mime(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_string_lossy().to_lowercase();
+    Some(match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        _ => return None,
+    })
+}
+
+/// 標準 base64（有 `=` 補齊）。只給圖片預覽用，不值得為它加依賴。
+fn base64(bytes: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for c in bytes.chunks(3) {
+        let n = (u32::from(c[0]) << 16)
+            | (u32::from(*c.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*c.get(2).unwrap_or(&0));
+        for (i, shift) in [18u32, 12, 6, 0].into_iter().enumerate() {
+            out.push(if i <= c.len() {
+                T[((n >> shift) & 63) as usize] as char
+            } else {
+                '='
+            });
+        }
+    }
+    out
+}
+
+/// 讀 `root/rel` 一個檔（唯讀）。
+pub fn read_file(root: &Path, rel: &str) -> Result<FileRead> {
+    use std::io::Read;
+    let (rel_p, _root_real, target) = resolve_in(root, rel, "檔案")?;
+    if !target.is_file() {
+        return Err(Error::invalid(format!("不是檔案：{rel}")));
+    }
+    let size = std::fs::metadata(&target)?.len();
+    let abs = root.join(&rel_p);
+    let view = if let Some(mime) = image_mime(&target) {
+        if size > IMAGE_MAX {
+            FileView::TooLarge
+        } else {
+            FileView::Image {
+                mime,
+                base64: base64(&std::fs::read(&target)?),
+            }
+        }
+    } else {
+        let mut buf = Vec::new();
+        std::fs::File::open(&target)?
+            .take(TEXT_MAX)
+            .read_to_end(&mut buf)?;
+        // 前 8KB 有 NUL＝二進位（git 也是這樣判斷）
+        if buf.iter().take(8000).any(|b| *b == 0) {
+            FileView::Binary
+        } else {
+            FileView::Text {
+                text: String::from_utf8_lossy(&buf).into_owned(),
+                truncated: size > TEXT_MAX,
+            }
+        }
+    };
+    Ok(FileRead {
+        rel: rel_p,
+        abs,
+        size,
+        view,
+    })
 }
 
 #[cfg(test)]
@@ -207,5 +321,70 @@ mod tests {
             assert!(!out.dir, "符號連結當檔案");
         }
         assert!(list_dir(&r, "nope").is_err());
+    }
+
+    #[test]
+    fn base64_matches_rfc4648() {
+        for (raw, enc) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foobar", "Zm9vYmFy"),
+        ] {
+            assert_eq!(base64(raw.as_bytes()), enc);
+        }
+    }
+
+    #[test]
+    fn read_file_text_image_binary_and_guards() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path().join("repo");
+        std::fs::create_dir_all(r.join("docs")).unwrap();
+        std::fs::write(r.join("docs").join("a.md"), "# 標題\n內容\n").unwrap();
+        std::fs::write(r.join("logo.png"), [0x89u8, b'P', b'N', b'G']).unwrap();
+        std::fs::write(r.join("blob.bin"), [1u8, 0, 2]).unwrap();
+        std::fs::write(t.path().join("secret.txt"), "x").unwrap();
+
+        let f = read_file(&r, "docs/a.md").unwrap();
+        assert_eq!(
+            f.view,
+            FileView::Text {
+                text: "# 標題\n內容\n".into(),
+                truncated: false
+            }
+        );
+        assert_eq!(f.abs, r.join("docs").join("a.md"));
+        assert!(matches!(
+            read_file(&r, "logo.png").unwrap().view,
+            FileView::Image {
+                mime: "image/png",
+                ..
+            }
+        ));
+        assert_eq!(read_file(&r, "blob.bin").unwrap().view, FileView::Binary);
+        assert!(read_file(&r, "../secret.txt").is_err());
+        assert!(read_file(&r, "docs").is_err(), "資料夾不是檔案");
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(t.path().join("secret.txt"), r.join("link.txt")).unwrap();
+            assert!(
+                read_file(&r, "link.txt").is_err(),
+                "符號連結跳出 repo 應被拒"
+            );
+        }
+    }
+
+    #[test]
+    fn read_file_truncates_big_text() {
+        let t = tempfile::tempdir().unwrap();
+        let big = "a".repeat(TEXT_MAX as usize + 10);
+        std::fs::write(t.path().join("big.txt"), &big).unwrap();
+        let FileView::Text { text, truncated } = read_file(t.path(), "big.txt").unwrap().view
+        else {
+            panic!("要是文字");
+        };
+        assert!(truncated);
+        assert_eq!(text.len(), TEXT_MAX as usize);
     }
 }

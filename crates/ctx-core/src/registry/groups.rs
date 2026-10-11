@@ -379,3 +379,56 @@ pub fn resolve_group(
 pub fn split_ids(s: &str) -> Vec<String> {
     s.split(',').map(|x| x.trim().to_string()).collect()
 }
+
+/// 新順序必須跟現在是同一批（只換順序）；不是就拒絕——畫面拿的是舊資料時不會默默丟掉或多出項目。
+fn same_set(cur: &[String], next: &[String], what: &str) -> Result<()> {
+    let mut a = cur.to_vec();
+    let mut b = next.to_vec();
+    a.sort();
+    b.sort();
+    if a != b {
+        return Err(Error::invalid(format!("{what}已經變動，請重新整理後再排")));
+    }
+    Ok(())
+}
+
+/// Rust 才有（2026-10-11，App 拖曳排序）：牌組的順序（registry.yaml 的 groups 順序）。不記 spine 事件——排序是偏好。
+pub fn reorder_groups<S: AsRef<str>>(spine_dir: impl AsRef<Path>, names: &[S]) -> Result<()> {
+    let names: Vec<String> = names.iter().map(|s| s.as_ref().to_string()).collect();
+    transaction(spine_dir, |data| {
+        let cur: Vec<String> = data.groups.iter().map(Group::name).collect();
+        same_set(&cur, &names, "牌組")?;
+        let mut groups = std::mem::take(&mut data.groups);
+        groups.sort_by_key(|g| names.iter().position(|n| *n == g.name()));
+        data.groups = groups;
+        Ok(())
+    })
+}
+
+/// Rust 才有（2026-10-11）：組員的順序（只換順序）。
+pub fn reorder_members<S: AsRef<str>>(
+    spine_dir: impl AsRef<Path>,
+    name: &str,
+    ids: &[S],
+) -> Result<()> {
+    let ids: Vec<String> = ids.iter().map(|s| s.as_ref().to_string()).collect();
+    transaction(spine_dir, |data| {
+        let g = find_group(data, name)?;
+        same_set(&g.members(), &ids, "組員")?;
+        g.set_members(&ids);
+        Ok(())
+    })
+}
+
+/// Rust 才有（2026-10-11）：「所有 repo」的順序＝registry.yaml 的 repos 順序（只換順序）。
+pub fn reorder_repos<S: AsRef<str>>(spine_dir: impl AsRef<Path>, ids: &[S]) -> Result<()> {
+    let ids: Vec<String> = ids.iter().map(|s| s.as_ref().to_string()).collect();
+    transaction(spine_dir, |data| {
+        let cur: Vec<String> = data.repos.iter().map(Repo::id).collect();
+        same_set(&cur, &ids, "repo 清單")?;
+        let mut repos = std::mem::take(&mut data.repos);
+        repos.sort_by_key(|r| ids.iter().position(|i| *i == r.id()));
+        data.repos = repos;
+        Ok(())
+    })
+}

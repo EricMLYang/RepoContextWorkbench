@@ -178,6 +178,12 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   再加進目前牌組）；「從這組移除」走既有 `update_group`；「移出工作台…」走既有 `remove_repo`（不刪檔）。
   `scan_dir` 動作改用 `scan_dir_with_self`：選到的資料夾本身就是未登記 repo 時排第一個（CLI `registry scan` 不變）。
   殼多命令 `pick_folder`（`tauri-plugin-dialog`，只在 Rust 端用）。macOS：單元／整合測試過，GUI 未實測；Windows：未測。
+- **側欄排序、寬度與唯讀檢視器**（2026-10-11；Python 沒有）：牌組與組員可拖曳排序（Alt+↑↓ 也行）——action `reorder`
+  （registry `reorder_groups`／`reorder_members`／`reorder_repos`：只換 registry.yaml 裡的順序、不是同一批就拒絕、
+  不記 spine 事件）；左右側欄拖曳調寬（存本機偏好）。點檔案在主區開唯讀分頁——action `read_file`（`filetree::read_file`：
+  同 `repo_tree` 的路徑防護；文字 ≤1MB、圖片 ≤8MB 以 base64 給 `<img>`、其他二進位只回大小）；Markdown 由前端
+  自己轉成 React 元素（不用 innerHTML，repo 裡的 md 不能在 App 裡跑腳本），相對連結開新分頁、外部連結只複製。
+  macOS：單元／整合測試過，GUI 未實測；Windows：未測。
 - **判斷匯出成 AgDR `ctx decisions export <dir>`**（2026-10-10，ideation F-40；Python 沒有）：範圍內人／agent／回填寫的、
   有 id、不是交接的判斷寫成 `<dir>/AgDR-<id>.md`（frontmatter：id、timestamp、agent、status executed／superseded、
   supersedes、superseded_by、group／repo；內文：判斷、何時重看、結果）。沒變的檔不重寫；只寫指定目錄。

@@ -1,7 +1,8 @@
-import { memo } from "react";
+import { memo, type HTMLAttributes, type Ref } from "react";
 import type { GroupInfo, RepoState } from "../../api/types";
 import { Icon } from "../../lib/icons";
 import { groupMeta, scopeRepos, type Scope } from "../../lib/view";
+import { useSortable } from "../../lib/useSortable";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 
 interface DeckEntry {
@@ -20,15 +21,25 @@ const GroupCard = memo(function GroupCard(props: {
   onToggle: (key: string) => void;
   onRepo: (id: string) => void;
   onRepoMenu: (id: string, x: number, y: number) => void;
+  /** 組員拖曳排序存檔（沒給＝不能排）。 */
+  onReorder?: (order: string[]) => Promise<void>;
+  /** 整張牌可拖（牌組排序）：ref 量位置、手把事件掛在標題列。 */
+  drag?: { ref: Ref<HTMLDivElement>; handle: HTMLAttributes<HTMLDivElement>; dragging: boolean };
 }) {
   const { entry: g, scope, opened, lastStates, onSelect, onEdit, onToggle, onRepo, onRepoMenu } = props;
+  const sort = useSortable(g.members, props.onReorder || (async () => {}));
+  const members = props.onReorder ? sort.order : g.members;
   const key = g.name || "*";
   const adhoc = g.name === "__adhoc__";
   const on = adhoc ? Array.isArray(scope.repos) : !Array.isArray(scope.repos) && scope.group === g.name;
   const title = adhoc ? "臨時工作組" : g.name || "所有 repo";
   return (
-    <div className={"gcard" + (on ? " on" : "")} data-key={key}>
-      <div className="ghead">
+    <div
+      className={"gcard" + (on ? " on" : "") + (props.drag?.dragging ? " dragging" : "")}
+      data-key={key}
+      ref={props.drag?.ref}
+    >
+      <div className="ghead" {...props.drag?.handle}>
         <button
           type="button"
           className="gselect"
@@ -66,12 +77,13 @@ const GroupCard = memo(function GroupCard(props: {
       </div>
       <div className="members" hidden={!opened}>
         {opened
-          ? g.members.map((r) => (
+          ? members.map((r) => (
               <button
                 key={r}
                 type="button"
-                className="member ghost"
-                title={r + "（右鍵：更多動作）"}
+                className={"member ghost" + (sort.dragging === r ? " dragging" : "")}
+                title={r + (props.onReorder ? "（拖曳排序；右鍵：更多動作）" : "（右鍵：更多動作）")}
+                {...(props.onReorder ? sort.rowProps(r) : {})}
                 onClick={() => onRepo(r)}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -88,34 +100,77 @@ const GroupCard = memo(function GroupCard(props: {
   );
 });
 
-/** 牌組列：列身只切組（aria-pressed），✎ 編輯，箭頭只展開（aria-expanded）。 */
+/** 牌組列：列身只切組（aria-pressed），✎ 編輯，箭頭只展開（aria-expanded）；牌組與組員都能拖曳排序（Alt+↑↓）。 */
 export function Deck() {
   const store = useStore();
   const ui = useUi();
   const { state, scope, lastStates } = useSnapshot();
-  const data: DeckEntry[] = [
-    { name: null, members: state.repos },
-    ...state.groups.map((g) => ({ name: g.name, members: g.members, group: g })),
-  ];
-  if (Array.isArray(scope.repos)) data.push({ name: "__adhoc__", members: scopeRepos(scope, state) });
+  const names = state.groups.map((g) => g.name);
+  const groupSort = useSortable(names, async (order) => {
+    try {
+      await store.action("reorder", { kind: "groups", order });
+      await store.refreshState();
+    } catch (e) {
+      store.toast((e as Error).message);
+      throw e;
+    }
+  });
+  const reorder = (kind: "members" | "repos", group?: string) => async (order: string[]) => {
+    try {
+      await store.action("reorder", group ? { kind, order, group } : { kind, order });
+      await store.refreshState();
+    } catch (e) {
+      store.toast((e as Error).message);
+      throw e;
+    }
+  };
+  const byName = new Map(state.groups.map((g) => [g.name, g]));
+  const adhoc = Array.isArray(scope.repos);
+  const card = (g: DeckEntry, extra: Partial<Parameters<typeof GroupCard>[0]> = {}) => (
+    <GroupCard
+      key={g.name || "*"}
+      entry={g}
+      scope={scope}
+      opened={ui.openGroups.has(g.name || "*")}
+      lastStates={lastStates}
+      onSelect={(e) =>
+        e.name === "__adhoc__" ? ui.openPicker() : store.setScope({ group: e.name, repos: null })
+      }
+      onEdit={(grp) => ui.openPicker(grp)}
+      onToggle={ui.toggleGroup}
+      onRepo={ui.openRepo}
+      onRepoMenu={ui.repoMenu}
+      {...extra}
+    />
+  );
   return (
     <div id="deck" className="deck">
-      {data.map((g) => (
-        <GroupCard
-          key={g.name || "*"}
-          entry={g}
-          scope={scope}
-          opened={ui.openGroups.has(g.name || "*")}
-          lastStates={lastStates}
-          onSelect={(e) =>
-            e.name === "__adhoc__" ? ui.openPicker() : store.setScope({ group: e.name, repos: null })
-          }
-          onEdit={(grp) => ui.openPicker(grp)}
-          onToggle={ui.toggleGroup}
-          onRepo={ui.openRepo}
-          onRepoMenu={ui.repoMenu}
-        />
-      ))}
+      {card({ name: null, members: state.repos }, { onReorder: reorder("repos") })}
+      {groupSort.order.map((name) => {
+        const grp = byName.get(name);
+        if (!grp) return null;
+        const { ref, onPointerDown, onKeyDown, onClickCapture } = groupSort.rowProps(name);
+        return card(
+          { name, members: grp.members, group: grp },
+          {
+            onReorder: reorder("members", name),
+            drag: {
+              ref,
+              handle: { onPointerDown, onKeyDown, onClickCapture },
+              dragging: groupSort.dragging === name,
+            },
+          },
+        );
+      })}
+      {adhoc
+        ? card(
+            { name: "__adhoc__", members: scopeRepos(scope, state) },
+            {
+              onReorder: async (order) =>
+                store.setScope({ group: null, repos: order }),
+            },
+          )
+        : null}
     </div>
   );
 }

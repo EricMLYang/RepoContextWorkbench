@@ -301,17 +301,35 @@ svg {
 .deck {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
+/* 每個牌組是一個區塊：有底色、邊框，組員收在區塊裡 */
 .gcard {
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 3px;
   min-width: 0;
+  background: var(--panel);
+  transition:
+    border-color 0.12s,
+    background 0.12s;
+}
+.gcard:hover {
+  border-color: #46516a;
 }
 .gcard.on {
   background: #252f40;
-  border-color: #405678;
+  border-color: #5a78a8;
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+.gcard.dragging,
+.member.dragging {
+  opacity: 0.7;
+  outline: 1px dashed var(--blue);
+  outline-offset: 1px;
+}
+.gcard.dragging {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
 .ghead {
   display: flex;
@@ -376,9 +394,9 @@ svg {
   color: var(--ink);
 }
 .members {
-  margin: 2px 7px 6px 22px;
-  padding-left: 8px;
-  border-left: 1px solid var(--line);
+  margin: 0 4px 4px;
+  padding: 4px 0 0 18px;
+  border-top: 1px solid var(--line);
 }
 .member {
   display: flex;
@@ -1613,4 +1631,312 @@ dialog::backdrop {
 .ctxmenu button:focus-visible,
 .ctxmenu button:hover {
   background: #303948;
+}
+
+/* 側欄寬度把手（Resizer）：滑過或聚焦才看得到 */
+.resizer {
+  position: fixed;
+  top: 56px;
+  bottom: 26px;
+  width: 7px;
+  z-index: 35;
+  cursor: col-resize;
+  touch-action: none;
+}
+.resizer.left {
+  left: calc(var(--sidew) - 4px);
+}
+.resizer.right {
+  right: calc(min(var(--panelw), 92vw) - 3px);
+}
+.resizer:hover,
+.resizer.active,
+.resizer:focus-visible {
+  background: color-mix(in srgb, var(--blue) 45%, transparent);
+  outline: none;
+}
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+body.resizing iframe,
+body.resizing .xterm {
+  pointer-events: none;
+}
+
+/* 主區分頁列（工作區＋唯讀檔案）：捲動時固定在上面 */
+.filetabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 36px;
+  padding: 0 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.filetab {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  max-width: 260px;
+  border-bottom: 2px solid transparent;
+}
+.filetab.on {
+  border-bottom-color: var(--blue);
+}
+.filetab button,
+button.filetab {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  min-height: 0;
+  height: 100%;
+  font-size: 12px;
+}
+.filetab .tabname {
+  padding: 0 4px 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink2);
+}
+.filetab.on .tabname,
+button.filetab.on {
+  color: var(--ink);
+}
+button.filetab.home {
+  padding: 0 12px;
+  font-weight: 600;
+}
+.filetab .tabclose {
+  padding: 0 8px;
+  color: var(--sub);
+}
+.filetab .tabclose:hover {
+  color: var(--ink);
+}
+
+/* 唯讀檢視器 */
+.viewer {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 28px 40px;
+}
+.viewer[hidden] {
+  display: none;
+}
+.viewerhead {
+  position: sticky;
+  top: 36px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.crumbs {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crumb.last {
+  font-weight: 600;
+}
+.vieweractions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.vieweractions button[aria-pressed="true"] {
+  color: var(--blue);
+}
+.viewerbody {
+  padding-top: 14px;
+}
+.viewernote {
+  color: var(--sub);
+  font-size: 13px;
+}
+.viewererror {
+  margin: 10px 0 0;
+}
+.viewerimage {
+  text-align: center;
+}
+.viewerimage img {
+  max-width: 100%;
+  border-radius: 6px;
+  background: repeating-conic-gradient(#2a303b 0 25%, #20252e 0 50%) 0 0 / 16px 16px;
+}
+.codeview {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 0;
+}
+.codeview .cl {
+  display: flex;
+  min-width: max-content;
+}
+.codeview.wrap .cl {
+  min-width: 0;
+}
+.codeview .ln {
+  flex: none;
+  width: var(--gutter);
+  padding: 0 12px 0 8px;
+  text-align: right;
+  color: #6b7587;
+  user-select: none;
+}
+.codeview .lc {
+  white-space: pre;
+  padding-right: 16px;
+}
+.codeview.wrap .lc {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.showall {
+  margin-top: 10px;
+}
+
+/* Markdown 預覽 */
+.markdown {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink);
+  max-width: 820px;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  line-height: 1.35;
+  margin: 1.4em 0 0.5em;
+}
+.markdown h1 {
+  font-size: 1.7em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--line);
+}
+.markdown h2 {
+  font-size: 1.35em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--line);
+}
+.markdown h3 {
+  font-size: 1.15em;
+}
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown .mdtable,
+.markdown pre {
+  margin: 0 0 0.9em;
+}
+.markdown ul,
+.markdown ol {
+  padding-left: 1.6em;
+}
+.markdown li > ul,
+.markdown li > ol,
+.markdown li > p {
+  margin-bottom: 0.2em;
+}
+.markdown li.task {
+  list-style: none;
+  margin-left: -1.3em;
+}
+.markdown li.task input {
+  margin-right: 0.4em;
+}
+.markdown blockquote {
+  padding: 0.1em 1em;
+  color: var(--ink2);
+  border-left: 3px solid #4a5568;
+}
+.markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--panel2);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+.markdown pre {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  overflow-x: auto;
+}
+.markdown pre code {
+  background: none;
+  padding: 0;
+  font-size: 12.5px;
+  white-space: pre;
+}
+.markdown pre.mdfront {
+  color: var(--sub);
+}
+.markdown a {
+  color: var(--blue);
+  text-decoration: none;
+}
+.markdown a:hover {
+  text-decoration: underline;
+}
+.markdown hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.4em 0;
+}
+.markdown .mdtable {
+  overflow-x: auto;
+}
+.markdown table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--line);
+  padding: 5px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.markdown th {
+  background: var(--panel2);
+}
+.mdimg {
+  max-width: 100%;
+  border-radius: 6px;
+}
+.mdimgalt {
+  color: var(--sub);
+  font-size: 12px;
+}
+.treerow button {
+  min-height: 24px;
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
+.treename.file:hover {
+  color: var(--ink);
 }

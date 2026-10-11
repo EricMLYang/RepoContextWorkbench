@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GroupInfo } from "./api/types";
 import { StatusBar, Toast, TopBar } from "./components/Chrome";
+import { Resizer, useSavedWidths } from "./components/Resizer";
 import { Sidebar } from "./components/Sidebar";
 import { SessionForm } from "./components/sessions/SessionDialogs";
 import { TerminalPanel } from "./components/sessions/TerminalPanel";
 import { Workspace } from "./components/Workspace";
 import { RepoMenu } from "./components/deep/RepoMenu";
 import { RepoPanel } from "./components/deep/RepoPanel";
+import { FileTabs } from "./components/viewer/FileTabs";
+import { FileViewer, fileKey, type OpenFile } from "./components/viewer/FileViewer";
 import { Onboarding } from "./dialogs/misc";
 import { DetailDialog } from "./dialogs/Modal";
 import { PickerDialog } from "./dialogs/PickerDialog";
@@ -72,6 +75,9 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     });
   }, []);
 
+  // 側欄寬度（拖曳把手調的，存在本機偏好）
+  useSavedWidths();
+
   // ── 右側欄（點 repo）＋右鍵選單 ──
   const [panelRepo, setPanelRepo] = useState<string | null>(() => load<string | null>("panelRepo", null));
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -85,6 +91,34 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     document.body.classList.toggle("withpanel", !!panelRepo);
     return () => document.body.classList.remove("withpanel");
   }, [panelRepo]);
+
+  // ── 唯讀檔案分頁（主區）：null＝看工作區 ──
+  const [files, setFiles] = useState<OpenFile[]>(() => load<OpenFile[]>("openFiles", []));
+  const [activeFile, setActiveFile] = useState<string | null>(() => load<string | null>("activeFile", null));
+  useEffect(() => save("openFiles", files), [files]);
+  useEffect(() => save("activeFile", activeFile), [activeFile]);
+  const openFile = useCallback((repo: string, path: string) => {
+    const f = { repo, path };
+    const k = fileKey(f);
+    setFiles((prev) => {
+      if (prev.some((x) => fileKey(x) === k)) return prev;
+      // 最多 12 個分頁：擠掉最舊的
+      return [...prev, f].slice(-12);
+    });
+    setActiveFile(k);
+  }, []);
+  const closeFile = useCallback(
+    (k: string) => {
+      const i = files.findIndex((x) => fileKey(x) === k);
+      const next = files.filter((x) => fileKey(x) !== k);
+      setFiles(next);
+      setActiveFile((cur) =>
+        cur !== k ? cur : next.length ? fileKey(next[Math.min(i, next.length - 1)]) : null,
+      );
+    },
+    [files],
+  );
+  const shownFile = files.some((f) => fileKey(f) === activeFile) ? activeFile : null;
 
   // ── 終端 ──
   const [activeSid, setActiveSid] = useState<string | null>(null);
@@ -112,6 +146,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       openRepo: (id) => setPanel(panelRepo === id ? null : id),
       closeRepo: () => setPanel(null),
       repoMenu: (id, x, y) => setMenu({ id, x, y }),
+      openFile,
       showComposer,
       draft,
       setDraft,
@@ -143,6 +178,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       setDraft,
       panelRepo,
       setPanel,
+      openFile,
       termCollapsed,
       activeSid,
       openGroups,
@@ -188,12 +224,22 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
           }}
         />
         <Sidebar />
-        <Workspace
-          tab={tab}
-          composerOpen={composerOpen}
-          composerFocusSeq={composerFocusSeq}
-          closeComposer={() => setComposerOpen(false)}
-        />
+        <Resizer side="left" />
+        <main id="main" className={files.length ? "withtabs" : undefined}>
+          {files.length ? (
+            <FileTabs files={files} active={shownFile} onSelect={setActiveFile} onClose={closeFile} />
+          ) : null}
+          <Workspace
+            tab={tab}
+            composerOpen={composerOpen}
+            composerFocusSeq={composerFocusSeq}
+            closeComposer={() => setComposerOpen(false)}
+            hidden={!!shownFile}
+          />
+          {files.map((f) => (
+            <FileViewer key={fileKey(f)} file={f} hidden={fileKey(f) !== shownFile} />
+          ))}
+        </main>
         <TerminalPanel
           activeSid={activeSid}
           setActiveSid={setActiveSid}
@@ -202,6 +248,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
           selectSeq={selectSeq}
         />
         {panelRepo ? <RepoPanel id={panelRepo} /> : null}
+        {panelRepo ? <Resizer side="right" /> : null}
         <StatusBar />
         <Toast />
         <PickerDialog open={picker.open} group={picker.group} seq={picker.seq} onClose={closePicker} />

@@ -38,6 +38,8 @@ export interface Ui {
   /** 點 repo：在右側欄打開（同一個再點＝收起）。 */
   openRepo(id: string): void;
   closeRepo(): void;
+  /** 在主區開一個唯讀檔案分頁（已開就切過去）。 */
+  openFile(repo: string, path: string): void;
   /** repo 的右鍵選單（x、y 是視窗座標）。 */
   repoMenu(id: string, x: number, y: number): void;
   showComposer(): void;
