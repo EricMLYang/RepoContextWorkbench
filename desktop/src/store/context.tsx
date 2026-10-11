@@ -16,7 +16,7 @@ export function useSnapshot(): Snapshot {
   return useSyncExternalStore(store.subscribe, store.getSnapshot);
 }
 
-export type Tab = "inbox" | "repos" | "activity" | "relations";
+export type Tab = "inbox" | "repos" | "files" | "activity" | "relations";
 
 export interface DetailSpec {
   title: string;

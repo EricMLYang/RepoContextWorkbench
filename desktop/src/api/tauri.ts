@@ -103,6 +103,7 @@ export function createTauriBackend(
     getState: (p = {}) => run("get_state", { group: p.group ?? null, repos: p.repos ?? null }),
     getScan: (p) => run("get_scan", { group: p.group ?? null, repos: p.repos ?? null }),
     action: (name, payload) => run("run_action", { name, payload: payload ?? {} }),
+    pickFolder: () => run<string | null>("pick_folder"),
     onChanged(cb) {
       let stop: (() => void) | null = null;
       let cancelled = false;

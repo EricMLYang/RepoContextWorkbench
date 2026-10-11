@@ -1411,3 +1411,86 @@ dialog::backdrop {
   min-width: 0;
   padding: 5px 10px;
 }
+
+/* 檔案分頁／repo 詳情的檔案樹（像 IDE 側邊欄）：複製鈕只在滑過或鍵盤聚焦時出現 */
+.filetree {
+  display: grid;
+  gap: 8px;
+}
+.reporoot {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.reporoot .tree {
+  max-height: 420px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  padding: 4px 0;
+}
+.tree,
+.tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.treerow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding-right: 6px;
+}
+.treerow:hover {
+  background: var(--panel2);
+}
+.rootrow {
+  padding: 4px 6px;
+}
+.treename {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 13px;
+}
+.treename.file {
+  padding-left: 18px;
+  color: var(--ink2);
+}
+.treecaret {
+  width: 12px;
+  color: var(--sub);
+}
+.rootpath {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.treecopy {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+  visibility: hidden;
+}
+.treerow:hover .treecopy,
+.treerow:focus-within .treecopy,
+.treecopy.always {
+  visibility: visible;
+}
+.treenote {
+  font-size: 12px;
+  padding: 3px 6px;
+}
+.treenote.error {
+  color: var(--red);
+}
+@media (hover: none) {
+  .treecopy {
+    visibility: visible;
+  }
+}

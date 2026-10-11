@@ -237,6 +237,14 @@ export interface Health {
   loops: { opened: number; closed: number; open_now: number; overdue: number };
 }
 
+/** 檔案清單的一列（path＝相對 repo 根目錄，abs＝絕對路徑；都由引擎給，前端不拼路徑）。 */
+export interface TreeEntry {
+  name: string;
+  path: string;
+  abs: string;
+  dir: boolean;
+}
+
 export interface WorkbenchState {
   groups: GroupInfo[];
   repos: string[];
@@ -443,6 +451,16 @@ export interface ActionMap {
   scan_dir: {
     payload: { dir: string };
     result: { ok: true; dir: string; candidates: { path: string; id: string }[] };
+  };
+  /** Rust 才有：repo 的檔案清單，一次一層（dir 空＝根目錄）。 */
+  repo_tree: {
+    payload: { id: string; dir?: string };
+    result: { ok: true; id: string; root: string; dir: string; entries: TreeEntry[]; more: number };
+  };
+  /** Rust 才有：像 IDE 的 Add Folder to Workspace——沒登記就登記，給 group 就加進那組。 */
+  group_add_folder: {
+    payload: { path: string; group?: string };
+    result: { ok: true; id: string; registered: boolean; group: string | null };
   };
   register_repos: {
     payload: { repos: { path: string; id: string }[]; group?: string };

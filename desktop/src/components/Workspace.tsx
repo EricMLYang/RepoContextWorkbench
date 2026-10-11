@@ -11,6 +11,7 @@ import { useSnapshot, useStore, useUi, type Tab } from "../store/context";
 import { AsyncButton } from "./AsyncButton";
 import { Composer } from "./Composer";
 import { ActivityPane } from "./deep/ActivityPane";
+import { FilesPane } from "./deep/FilesPane";
 import { RelationsPane } from "./deep/RelationsPane";
 import { ReposPane } from "./deep/ReposPane";
 import { InboxPane } from "./inbox/InboxPane";
@@ -18,11 +19,12 @@ import { InboxPane } from "./inbox/InboxPane";
 const TABS: [Tab, string][] = [
   ["inbox", "待處理"],
   ["repos", "Repo"],
+  ["files", "檔案"],
   ["activity", "活動"],
   ["relations", "關係"],
 ];
 
-/** 工作區：標題＋摘要＋開組會話、碰撞台、斷線橫幅、四分頁＋工具列。 */
+/** 工作區：標題＋摘要＋開組會話、碰撞台、斷線橫幅、五分頁＋工具列。 */
 export function Workspace(props: {
   tab: Tab;
   composerOpen: boolean;
@@ -173,6 +175,7 @@ export function Workspace(props: {
         </div>
         <InboxPane query={q} filter={filter} active={tab === "inbox"} />
         <ReposPane query={q} active={tab === "repos"} />
+        <FilesPane query={q} active={tab === "files"} />
         <ActivityPane query={q} active={tab === "activity"} />
         <RelationsPane query={q} active={tab === "relations"} />
       </div>

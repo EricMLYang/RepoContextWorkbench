@@ -35,6 +35,8 @@ export interface Backend {
   /** 卡片按鈕與各表單的寫入動作。失敗一律 reject Error（message 是給人看的中文）。 */
   action<N extends ActionName>(name: N, payload: ActionPayload<N>): Promise<ActionResult<N>>;
   openTerminal(sid: string): TermStream;
+  /** 選配：原生「選擇資料夾」對話框（Tauri 才有）；取消回 null。 */
+  pickFolder?(): Promise<string | null>;
   /**
    * 選配：後端主動通知「資料變了」（Tauri 事件 `workbench://changed`）。
    * 有這個就不用靠 5 秒輪詢才看到變化；回傳取消訂閱。

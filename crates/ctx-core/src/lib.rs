@@ -17,6 +17,7 @@ pub mod crossref;
 pub mod digest;
 pub mod error;
 pub mod exe;
+pub mod filetree;
 pub mod fsutil;
 pub mod health;
 pub mod hooks;

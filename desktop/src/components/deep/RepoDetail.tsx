@@ -4,8 +4,9 @@ import { DetailLayout, useDetail } from "../../dialogs/Modal";
 import { TIERNAME, parseTags } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
+import { RepoRoot } from "./FileTree";
 
-/** Repo 詳情：採集到的狀態、標籤編輯、開 Agent 會話。 */
+/** Repo 詳情：採集到的狀態、檔案清單、標籤編輯、開 Agent 會話、移出工作台。 */
 export function RepoDetail({ id }: { id: string }) {
   const store = useStore();
   const ui = useUi();
@@ -13,6 +14,7 @@ export function RepoDetail({ id }: { id: string }) {
   const { lastStates, state } = useSnapshot();
   const s: Partial<RepoState> = lastStates[id] || { id };
   const [tags, setTags] = useState((state.tags[id] || []).join(", "));
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const rows: [string, string | number | null | undefined][] = [
     ["分支", s.branch],
     ["狀態", (s.tier && TIERNAME[s.tier]) || s.tier],
@@ -28,6 +30,29 @@ export function RepoDetail({ id }: { id: string }) {
     <DetailLayout
       actions={
         <>
+          {confirmRemove ? (
+            <>
+              <button type="button" onClick={() => setConfirmRemove(false)}>
+                取消
+              </button>
+              <AsyncButton
+                className="danger"
+                run={async () => {
+                  await store.action("remove_repo", { id });
+                  close();
+                  await store.refreshState();
+                  await store.rescan();
+                  store.toast("已把 " + id + " 移出工作台（資料夾與檔案沒動）");
+                }}
+              >
+                確定移出
+              </AsyncButton>
+            </>
+          ) : (
+            <button type="button" className="ghost" onClick={() => setConfirmRemove(true)}>
+              移出工作台…
+            </button>
+          )}
           <AsyncButton
             run={async () => {
               const next = parseTags(tags),
@@ -62,6 +87,12 @@ export function RepoDetail({ id }: { id: string }) {
           </div>
         ))}
       </dl>
+      {confirmRemove ? (
+        <p className="detailmeta" role="alert">
+          移出後 {id} 會從所有牌組拿掉、指向它的關係也會刪除；repo 資料夾與檔案不會動，之後可以再加回來。
+        </p>
+      ) : null}
+      <RepoRoot id={id} defaultOpen />
       <label className="field">
         標籤（以逗號分隔）
         <input value={tags} onChange={(e) => setTags(e.target.value)} />

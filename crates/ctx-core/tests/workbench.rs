@@ -1440,3 +1440,84 @@ fn state_carries_health() {
     assert_eq!(s["health"]["days"], 14);
     assert_eq!(s["health"]["loops"]["opened"], 1);
 }
+
+// ── 2026-10-11：加入資料夾＋檔案清單（Rust 才有）──
+
+#[test]
+fn repo_tree_lists_one_level_by_repo_id() {
+    let (_t, d) = spine_with_repos();
+    let r = act(&d, "repo_tree", json!({"id": "repo-a"})).unwrap();
+    let names: Vec<(&str, bool)> = r["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| (e["name"].as_str().unwrap(), e["dir"].as_bool().unwrap()))
+        .collect();
+    assert_eq!(names, vec![("notes", true), ("README.md", false)]);
+    let sub = act(&d, "repo_tree", json!({"id": "repo-a", "dir": "notes"})).unwrap();
+    let e = &sub["entries"][0];
+    assert_eq!(
+        e["path"],
+        json!(Path::new("notes").join("plan.md").to_string_lossy())
+    );
+    let root = registry::get_repo(&d, "repo-a").unwrap().path();
+    assert_eq!(
+        e["abs"],
+        json!(root.join("notes").join("plan.md").to_string_lossy())
+    );
+    assert!(err(&d, "repo_tree", json!({"id": "repo-a", "dir": ".."})).contains("repo 裡"));
+    assert!(act(&d, "repo_tree", json!({"id": "nope"})).is_err());
+}
+
+#[test]
+fn scan_dir_offers_the_folder_itself_when_it_is_a_repo() {
+    let (t, d) = spine_with_repos();
+    let solo = make_git_repo(t.path(), "solo", 1, 0, false);
+    let r = act(&d, "scan_dir", json!({"dir": solo.to_string_lossy()})).unwrap();
+    assert_eq!(r["candidates"][0]["id"], json!("solo"));
+    // 已登記的本身不再列
+    let a = registry::get_repo(&d, "repo-a").unwrap().path();
+    let r = act(&d, "scan_dir", json!({"dir": a.to_string_lossy()})).unwrap();
+    assert_eq!(r["candidates"], json!([]));
+}
+
+#[test]
+fn group_add_folder_registers_once_and_joins_group() {
+    let (t, d) = spine_with_repos();
+    let solo = make_git_repo(t.path(), "solo", 1, 0, false);
+    let path = solo.to_string_lossy().to_string();
+    let r = act(&d, "group_add_folder", json!({"path": path, "group": "g1"})).unwrap();
+    assert_eq!(
+        (r["id"].as_str(), r["registered"].as_bool()),
+        (Some("solo"), Some(true))
+    );
+    assert!(registry::get_group(&d, "g1")
+        .unwrap()
+        .members()
+        .contains(&"solo".to_string()));
+    // 再加一次：不重登記、不重複成員
+    let again = act(&d, "group_add_folder", json!({"path": path, "group": "g1"})).unwrap();
+    assert_eq!(again["registered"], json!(false));
+    let members = registry::get_group(&d, "g1").unwrap().members();
+    assert_eq!(members.iter().filter(|m| *m == "solo").count(), 1);
+    // 不是 git 的資料夾：下一層有 repo 時指向掃描
+    let msg = err(
+        &d,
+        "group_add_folder",
+        json!({"path": t.path().to_string_lossy()}),
+    );
+    assert!(msg.contains("掃描資料夾"), "{msg}");
+}
+
+#[test]
+fn remove_repo_unregisters_but_keeps_files() {
+    let (_t, d) = spine_with_repos();
+    let a = registry::get_repo(&d, "repo-a").unwrap().path();
+    act(&d, "remove_repo", json!({"id": "repo-a"})).unwrap();
+    assert!(registry::get_repo(&d, "repo-a").is_err());
+    assert!(!registry::get_group(&d, "g1")
+        .unwrap()
+        .members()
+        .contains(&"repo-a".to_string()));
+    assert!(a.join("README.md").exists(), "移出工作台不刪檔");
+}

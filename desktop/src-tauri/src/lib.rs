@@ -180,6 +180,18 @@ async fn run_action(app: AppHandle, name: String, payload: Value) -> Result<Valu
     blocking(app, move |st| workbench::run_action(st, &name, &payload)).await
 }
 
+/// 原生「選擇資料夾」（加入資料夾／掃描資料夾用）。取消＝None。只回路徑，不讀也不改任何檔。
+#[tauri::command]
+async fn pick_folder(app: AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog()
+        .file()
+        .set_title("選擇 repo 資料夾")
+        .blocking_pick_folder()
+        .and_then(|f| f.into_path().ok())
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
 pub fn run() {
     env_path::fix_path();
     let args: Vec<String> = std::env::args().collect();
@@ -191,6 +203,8 @@ pub fn run() {
             show_main(app)
         }))
         .plugin(tauri_plugin_notification::init())
+        // 只給 pick_folder 命令在 Rust 端用；前端不開 dialog 權限
+        .plugin(tauri_plugin_dialog::init())
         // 開機自啟：預設關（plugin 只提供開關，沒人呼叫 enable 就不會註冊 LaunchAgent）
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -224,6 +238,7 @@ pub fn run() {
             get_state,
             get_scan,
             run_action,
+            pick_folder,
             terminal::term_open,
             terminal::term_write,
             terminal::term_resize,

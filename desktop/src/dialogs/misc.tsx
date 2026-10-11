@@ -80,9 +80,13 @@ export function DeleteGroup({ group }: { group: GroupInfo }) {
   );
 }
 
-/** 首次使用：輸入資料夾 → 預覽候選 → 勾選 → 命名第一組 → 登記。 */
-export function Onboarding() {
+/**
+ * 首次使用：輸入資料夾 → 預覽候選 → 勾選 → 命名第一組 → 登記。
+ * `mode="add"`（檔案分頁「掃描資料夾…」）：之後隨時加 repo；勾選的逐一加進目前牌組（沒牌組就只登記）。
+ */
+export function Onboarding({ mode = "first" }: { mode?: "first" | "add" }) {
   const store = useStore();
+  const adding = mode === "add";
   const { setError, close } = useDetail();
   const dirRef = useAutoFocus<HTMLInputElement>();
   const [dir, setDir] = useState("");
@@ -115,6 +119,26 @@ export function Onboarding() {
     setError("");
     try {
       const repos = found.filter((c) => picked.has(c.path));
+      if (adding) {
+        const { scope } = store.getSnapshot();
+        const ids: string[] = [];
+        for (const c of repos) {
+          const r = await store.action(
+            "group_add_folder",
+            scope.group ? { path: c.path, group: scope.group } : { path: c.path },
+          );
+          ids.push(r.id);
+        }
+        close();
+        await store.refreshState();
+        if (!scope.group && Array.isArray(scope.repos)) {
+          store.setScope({ group: null, repos: [...new Set([...scope.repos, ...ids])] });
+        } else await store.rescan();
+        store.toast(
+          "已加入 " + ids.length + " 個 repo" + (scope.group ? "到牌組「" + scope.group + "」" : ""),
+        );
+        return;
+      }
       const r = await store.action("register_repos", { repos, group: name.trim() });
       close();
       await store.refreshState();
@@ -134,6 +158,17 @@ export function Onboarding() {
     <DetailLayout
       actions={
         <>
+          {store.backend.pickFolder ? (
+            <button
+              type="button"
+              onClick={async () => {
+                const p = await store.backend.pickFolder?.();
+                if (p) setDir(p);
+              }}
+            >
+              選擇資料夾…
+            </button>
+          ) : null}
           <button type="button" disabled={previewing} onClick={() => void preview()}>
             預覽這個資料夾
           </button>
@@ -143,12 +178,14 @@ export function Onboarding() {
             disabled={creating || !picked.size}
             onClick={() => void create()}
           >
-            登記並建立這一組
+            {adding ? "加入選取的 repo" : "登記並建立這一組"}
           </button>
         </>
       }
     >
-      <p className="detailmeta">工作台只讀這個資料夾下一層有沒有 .git，掃描不會改動任何 repo。</p>
+      <p className="detailmeta">
+        工作台只看這個資料夾本身和下一層有沒有 .git，掃描不會改動任何 repo。
+      </p>
       <label className="field">
         放 repo 的資料夾
         <input
@@ -186,10 +223,10 @@ export function Onboarding() {
             </label>
           ))
         ) : (
-          <p className="emptyline">這個資料夾下一層沒有尚未登記的 git repo。</p>
+          <p className="emptyline">這個資料夾（和下一層）沒有尚未登記的 git repo。</p>
         )}
       </div>
-      <label className="field" hidden={!found?.length}>
+      <label className="field" hidden={adding || !found?.length}>
         第一組的名稱
         <span className="muted small"> 選填，留空只登記 repo</span>
         <input

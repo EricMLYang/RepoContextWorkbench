@@ -28,6 +28,7 @@
 | `term_close` | `{ sid: string, attachId: string }` | `null` | 關掉 WebSocket |
 | `get_spine` | — | `{ spine: string \| null }` | （無；HTTP 版 server 啟動時就綁好 spine） |
 | `set_spine` | `{ path: string }` | `{ spine: string }`（解析後的絕對路徑） | （無） |
+| `pick_folder` | — | `string \| null`（取消＝null） | （無；Rust 端用 `tauri-plugin-dialog` 開原生「選擇資料夾」，前端不開 dialog 權限） |
 
 ### spine 定位（桌面殼才有）
 
@@ -84,6 +85,8 @@ Rust 端簽名建議：
 | `term_create` | `{kind: "agent"\|"shell", agent?, task?, origin?, group?, repos?, repo?, cwd?}` | `sid`, `title` |
 | `term_kill` | `{sid}` | — |
 | `session_result` | `{sid, text}` | `date`, `time` |
+| `repo_tree`（Rust 才有） | `{id, dir?}`（`dir` 相對 repo 根目錄，空＝根） | `root`, `dir`, `entries: [{name, path, abs, dir}]`, `more` |
+| `group_add_folder`（Rust 才有） | `{path, group?}` | `id`, `registered`, `group` |
 
 未知 name → `Err("未知 action: <name>")`。
 

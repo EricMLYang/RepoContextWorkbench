@@ -70,18 +70,34 @@ pub fn scan_dir(
     spine_dir: impl AsRef<Path>,
     base_dir: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, String)>> {
+    scan(spine_dir.as_ref(), base_dir.as_ref(), false)
+}
+
+/// Rust 才有（2026-10-11，App「加入 repo」）：同 [`scan_dir`]，但 base_dir 本身就是未登記的 git repo 時排第一個。
+pub fn scan_dir_with_self(
+    spine_dir: impl AsRef<Path>,
+    base_dir: impl AsRef<Path>,
+) -> Result<Vec<(PathBuf, String)>> {
+    scan(spine_dir.as_ref(), base_dir.as_ref(), true)
+}
+
+fn scan(spine_dir: &Path, base_dir: &Path, with_self: bool) -> Result<Vec<(PathBuf, String)>> {
     let data = load(spine_dir)?;
     let known = known_paths(&data.repos);
     let mut used: HashSet<String> = data.repos.iter().map(|r| r.id()).collect();
-    let base = expanduser(base_dir.as_ref());
+    let base = expanduser(base_dir);
     if !base.is_dir() {
         return Err(Error::invalid(format!(
             "目錄不存在: {}",
-            base_dir.as_ref().display()
+            base_dir.display()
         )));
     }
     let mut out = Vec::new();
-    for child in sorted_children(&base)? {
+    let mut dirs = sorted_children(&base)?;
+    if with_self {
+        dirs.insert(0, base.clone());
+    }
+    for child in dirs {
         if !(child.is_dir() && child.join(".git").exists()) || known.contains(&resolve(&child)) {
             continue;
         }
@@ -113,6 +129,43 @@ pub fn scan_register(
         added.push(cid);
     }
     Ok(added)
+}
+
+/// Rust 才有（2026-10-11，App「加入資料夾」，像 IDE 的 Add Folder to Workspace）：一個 git repo 資料夾 →
+/// 已登記（同一實體路徑）就回它的 id，沒有就以資料夾名登記（撞名加序號）。回 (id, 這次新登記)。
+pub fn add_folder(spine_dir: impl AsRef<Path>, folder: impl AsRef<Path>) -> Result<(String, bool)> {
+    let spine_dir = spine_dir.as_ref();
+    let path = expanduser(folder.as_ref());
+    if !path.is_dir() {
+        return Err(Error::invalid(format!(
+            "資料夾不存在: {}",
+            folder.as_ref().display()
+        )));
+    }
+    let real = resolve(&path);
+    let data = load(spine_dir)?;
+    if let Some(r) = data.repos.iter().find(|r| resolve(&r.path()) == real) {
+        return Ok((r.id(), false));
+    }
+    if !path.join(".git").exists() {
+        let n = scan_dir(spine_dir, &path).map(|v| v.len()).unwrap_or(0);
+        return Err(Error::invalid(if n > 0 {
+            format!("這個資料夾不是 git repo；下一層有 {n} 個未登記的 repo，請改用「掃描資料夾」一次加入")
+        } else {
+            "這個資料夾不是 git repo".to_string()
+        }));
+    }
+    let name = real
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "repo".into());
+    let (mut id, mut n) = (name.clone(), 2);
+    while data.repo(&id).is_some() {
+        id = format!("{name}-{n}");
+        n += 1;
+    }
+    add_repo(spine_dir, &id, &path, AddRepo::default())?;
+    Ok((id, true))
 }
 
 /// 對應 `registry.audit(spine, scan_dirs)`（active_max_days=30、dormant_min_days=7）。

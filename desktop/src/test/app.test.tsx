@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { WorkbenchStore } from "../store/store";
@@ -345,5 +345,106 @@ describe("收件匣分段懶顯示（N-25）", () => {
     const ms = performance.now() - t0;
     expect(document.querySelectorAll("#cards article.card.loop").length).toBe(50);
     console.log(`5000 張卡首次渲染 ${ms.toFixed(0)}ms`);
+  });
+});
+
+describe("檔案分頁（像 IDE 的多根工作區）", () => {
+  const tree = (name: string, dir: string) => {
+    if (dir === "")
+      return {
+        ok: true,
+        id: name,
+        root: "/r/" + name,
+        dir,
+        more: 0,
+        entries: [
+          { name: "docs", path: "docs", abs: "/r/" + name + "/docs", dir: true },
+          { name: "README.md", path: "README.md", abs: "/r/" + name + "/README.md", dir: false },
+        ],
+      };
+    return {
+      ok: true,
+      id: name,
+      root: "/r/" + name,
+      dir,
+      more: 0,
+      entries: [{ name: "plan.md", path: "docs/plan.md", abs: "/r/" + name + "/docs/plan.md", dir: false }],
+    };
+  };
+  const treeBackend = (extra: Partial<Backend> = {}) =>
+    mockBackend({
+      action: vi.fn(async (name: string, p: { id?: string; dir?: string }) => {
+        if (name === "repo_tree") return tree(p.id!, p.dir || "");
+        if (name === "group_add_folder") return { ok: true, id: "new", registered: true, group: "產品開發" };
+        return { ok: true };
+      }) as never,
+      ...extra,
+    });
+
+  async function openFiles(backend: ReturnType<typeof mockBackend>) {
+    const store = new WorkbenchStore(backend, { group: "產品開發", repos: null });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="files"]')!));
+    return store;
+  }
+
+  it("範圍內每個 repo 是一個根；展開才讀下一層，可複製絕對／相對路徑", async () => {
+    const backend = treeBackend();
+    await openFiles(backend);
+    const pane = document.getElementById("tab-files")!;
+    expect(pane.querySelectorAll(".reporoot").length).toBe(2);
+    expect(backend.action).not.toHaveBeenCalledWith("repo_tree", expect.anything());
+
+    await act(async () => fireEvent.click(within(document.getElementById("tab-files")!).getByRole("button", { name: "a" })));
+    expect(backend.action).toHaveBeenCalledWith("repo_tree", { id: "a", dir: "" });
+    await act(async () => fireEvent.click(await screen.findByRole("button", { name: /docs\// })));
+    expect(backend.action).toHaveBeenCalledWith("repo_tree", { id: "a", dir: "docs" });
+
+    const write = vi.fn(async () => {});
+    Object.assign(navigator, { clipboard: { writeText: write } });
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("button", { name: "複製 plan.md 的相對路徑" })),
+    );
+    expect(write).toHaveBeenCalledWith("docs/plan.md");
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "複製 plan.md 的絕對路徑" })),
+    );
+    expect(write).toHaveBeenCalledWith("/r/a/docs/plan.md");
+  });
+
+  it("讀取失敗顯示錯誤", async () => {
+    const backend = mockBackend({
+      action: vi.fn(async () => {
+        throw new Error("repo 路徑不存在：/r/a");
+      }) as never,
+    });
+    await openFiles(backend);
+    await act(async () => fireEvent.click(within(document.getElementById("tab-files")!).getByRole("button", { name: "a" })));
+    expect((await screen.findByRole("alert", { name: "" })).textContent).toContain("repo 路徑不存在");
+  });
+
+  it("加入資料夾：原生選資料夾 → group_add_folder 加進目前牌組", async () => {
+    const pickFolder = vi.fn(async () => "/Users/me/new");
+    const backend = treeBackend({ pickFolder });
+    await openFiles(backend);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "＋ 加入資料夾" })));
+    expect(pickFolder).toHaveBeenCalled();
+    expect(backend.action).toHaveBeenCalledWith("group_add_folder", {
+      path: "/Users/me/new",
+      group: "產品開發",
+    });
+  });
+
+  it("取消選資料夾不做事；從這組移除只改成員", async () => {
+    const backend = treeBackend({ pickFolder: vi.fn(async () => null) });
+    await openFiles(backend);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "＋ 加入資料夾" })));
+    expect(backend.action).not.toHaveBeenCalledWith("group_add_folder", expect.anything());
+    const removes = screen.getAllByRole("button", { name: "從這組移除" });
+    await act(async () => fireEvent.click(removes[0]));
+    expect(backend.action).toHaveBeenCalledWith("update_group", { name: "產品開發", repos: ["b"] });
   });
 });

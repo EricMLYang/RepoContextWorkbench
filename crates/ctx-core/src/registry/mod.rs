@@ -13,7 +13,9 @@ pub mod relations;
 pub mod repos;
 pub mod store;
 
-pub use audit::{audit, audit_with, last_commit_days, scan_dir, scan_register};
+pub use audit::{
+    add_folder, audit, audit_with, last_commit_days, scan_dir, scan_dir_with_self, scan_register,
+};
 pub use groups::{
     add_group, add_group_members, add_group_with_landing, check_group_name, get_group,
     remove_group, remove_group_members, rename_group, resolve_group, set_group_field,

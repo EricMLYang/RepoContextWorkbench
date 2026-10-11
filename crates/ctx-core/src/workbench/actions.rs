@@ -78,6 +78,8 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("session_draft", a_session_draft),
     ("scan_dir", a_scan_dir),
     ("register_repos", a_register_repos),
+    ("repo_tree", a_repo_tree),
+    ("group_add_folder", a_group_add_folder),
     ("brief", a_brief),
     ("term_create", a_term_create),
     ("term_kill", a_term_kill),
@@ -590,12 +592,63 @@ fn a_scan_dir(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     if base.is_empty() {
         return Err(Error::invalid("請填要掃描的資料夾路徑"));
     }
-    let found = registry::scan_dir(d, &base)?;
+    // Rust 才有：選到的資料夾本身就是 repo 時也列進候選（App「加入 repo」可以直接選 repo 資料夾）
+    let found = registry::scan_dir_with_self(d, &base)?;
     let candidates: Vec<Value> = found
         .into_iter()
         .map(|(path, id)| json!({"path": path.to_string_lossy(), "id": id}))
         .collect();
     Ok(json!({"ok": true, "dir": base, "candidates": candidates}))
+}
+
+/// Rust 才有（2026-10-11）：repo 詳情的檔案清單，一次一層（見 [`crate::filetree`]）。
+fn a_repo_tree(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let Some(id) = s(p, "id") else {
+        return Err(Error::invalid("repo_tree 需要 id"));
+    };
+    let dir = raw(p, "dir").unwrap_or_default();
+    let root = registry::get_repo(d, &id)?.path();
+    let l = crate::filetree::list_dir(&root, &dir)?;
+    let entries: Vec<Value> = l
+        .entries
+        .iter()
+        .map(|e| {
+            json!({"name": e.name, "path": e.rel.to_string_lossy(),
+                   "abs": e.abs.to_string_lossy(), "dir": e.dir})
+        })
+        .collect();
+    Ok(
+        json!({"ok": true, "id": id, "root": root.to_string_lossy(), "dir": dir,
+              "entries": entries, "more": l.more}),
+    )
+}
+
+/// Rust 才有（2026-10-11）：像 IDE 的 Add Folder to Workspace——一個 repo 資料夾加進牌組
+/// （沒登記就先登記；`group` 空＝只登記，給臨時組用）。
+fn a_group_add_folder(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let Some(path) = s(p, "path")
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    else {
+        return Err(Error::invalid("請選一個資料夾"));
+    };
+    let group = s(p, "group")
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+    let (id, registered) = registry::add_folder(d, &path)?;
+    if let Some(g) = &group {
+        registry::add_group_members(d, g, &[id.as_str()])?;
+    }
+    if registered || group.is_some() {
+        let tokens: Vec<String> = group.iter().map(|g| format!("group:{g}")).collect();
+        let body = match (&group, registered) {
+            (Some(g), true) => format!("登記 repo {id} 並加入牌組「{g}」（從工作台）"),
+            (Some(g), false) => format!("把 {id} 加入牌組「{g}」（從工作台）"),
+            (None, _) => format!("登記 repo {id}（從工作台）"),
+        };
+        spine::append_event(d, "decision", "monitor", &tokens, &body, None)?;
+    }
+    Ok(json!({"ok": true, "id": id, "registered": registered, "group": group}))
 }
 
 fn a_register_repos(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
