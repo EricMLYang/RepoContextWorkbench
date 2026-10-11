@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import type { TreeEntry } from "../../api/types";
 import { useStore } from "../../store/context";
 
@@ -54,8 +54,17 @@ function CopyButtons({ abs, rel, name }: { abs: string; rel?: string; name: stri
  * 一個 repo 當根的檔案樹（像 IDE 側邊欄）：展開資料夾才向引擎要下一層（action `repo_tree`），
  * 每列可複製絕對／相對路徑。讀失敗保留上次的清單並顯示錯誤。
  */
-export function RepoRoot(props: { id: string; defaultOpen?: boolean; actions?: ReactNode }) {
-  const { id, defaultOpen = false, actions } = props;
+export function RepoRoot(props: {
+  id: string;
+  defaultOpen?: boolean;
+  actions?: ReactNode;
+  /** 只畫樹、不畫根目錄那一列（側邊欄用：標題已經是 repo 名）。 */
+  bare?: boolean;
+  /** 根目錄那一列按右鍵。 */
+  onRootMenu?: (e: MouseEvent) => void;
+}) {
+  const { id, actions, bare = false, onRootMenu } = props;
+  const defaultOpen = bare || !!props.defaultOpen;
   const store = useStore();
   const [root, setRoot] = useState("");
   const [dirs, setDirs] = useState<Record<string, DirState>>({});
@@ -142,9 +151,15 @@ export function RepoRoot(props: { id: string; defaultOpen?: boolean; actions?: R
   };
 
   const rootOpen = open.has("");
+  if (bare)
+    return (
+      <ul role="tree" aria-label={"檔案：" + id} className="tree bare">
+        {rows("", 0)}
+      </ul>
+    );
   return (
     <section className="reporoot" aria-label={"檔案：" + id}>
-      <div className="treerow rootrow">
+      <div className="treerow rootrow" onContextMenu={onRootMenu}>
         <button
           type="button"
           className="ghost treename"

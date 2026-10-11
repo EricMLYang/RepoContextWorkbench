@@ -3,7 +3,6 @@ import type { GroupInfo, RepoState } from "../../api/types";
 import { Icon } from "../../lib/icons";
 import { groupMeta, scopeRepos, type Scope } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
-import { repoDetailSpec } from "../deep/RepoDetail";
 
 interface DeckEntry {
   name: string | null; // null＝所有 repo；"__adhoc__"＝臨時組
@@ -20,8 +19,9 @@ const GroupCard = memo(function GroupCard(props: {
   onEdit: (g: GroupInfo) => void;
   onToggle: (key: string) => void;
   onRepo: (id: string) => void;
+  onRepoMenu: (id: string, x: number, y: number) => void;
 }) {
-  const { entry: g, scope, opened, lastStates, onSelect, onEdit, onToggle, onRepo } = props;
+  const { entry: g, scope, opened, lastStates, onSelect, onEdit, onToggle, onRepo, onRepoMenu } = props;
   const key = g.name || "*";
   const adhoc = g.name === "__adhoc__";
   const on = adhoc ? Array.isArray(scope.repos) : !Array.isArray(scope.repos) && scope.group === g.name;
@@ -67,7 +67,17 @@ const GroupCard = memo(function GroupCard(props: {
       <div className="members" hidden={!opened}>
         {opened
           ? g.members.map((r) => (
-              <button key={r} type="button" className="member ghost" title={r} onClick={() => onRepo(r)}>
+              <button
+                key={r}
+                type="button"
+                className="member ghost"
+                title={r + "（右鍵：更多動作）"}
+                onClick={() => onRepo(r)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  onRepoMenu(r, e.clientX, e.clientY);
+                }}
+              >
                 <Icon name="file" />
                 <span>{r}</span>
               </button>
@@ -102,7 +112,8 @@ export function Deck() {
           }
           onEdit={(grp) => ui.openPicker(grp)}
           onToggle={ui.toggleGroup}
-          onRepo={(id) => ui.openDetail(repoDetailSpec(id))}
+          onRepo={ui.openRepo}
+          onRepoMenu={ui.repoMenu}
         />
       ))}
     </div>

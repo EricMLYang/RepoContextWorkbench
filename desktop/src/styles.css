@@ -1494,3 +1494,123 @@ dialog::backdrop {
     visibility: visible;
   }
 }
+
+/* 右側欄（點 repo 打開）：寬螢幕多一欄，窄螢幕疊在右邊 */
+:root {
+  --panelw: 320px;
+}
+@media (min-width: 1101px) {
+  body.withpanel {
+    grid-template:
+      "top top top" 56px "side main panel" minmax(0, 1fr) "side term panel" var(--termh)
+      "status status status" 26px / var(--sidew) minmax(0, 1fr) var(--panelw);
+  }
+}
+#repopanel {
+  grid-area: panel;
+  background: #1a1e25;
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  min-height: 0;
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+@media (max-width: 1100px) {
+  #repopanel {
+    position: fixed;
+    right: 0;
+    top: 56px;
+    bottom: 26px;
+    width: min(var(--panelw), 92vw);
+    z-index: 30;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
+  }
+}
+.panelhead {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.panelhead h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panelfacts {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.panelfact {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 12px;
+}
+.panelfact dt {
+  color: var(--sub);
+}
+.panelfact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.panelfact.warn dd {
+  color: var(--amber);
+}
+.panelnote {
+  margin: 0;
+}
+.panelactions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.panelsection {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  min-height: 0;
+}
+.panelsection .eyebrow {
+  margin: 0 0 6px;
+}
+.tree.bare .treerow {
+  border-radius: 6px;
+}
+
+/* 右鍵選單 */
+.ctxmenu {
+  position: fixed;
+  z-index: 50;
+  min-width: 190px;
+  padding: 4px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+.ctxtitle {
+  font-size: 11px;
+  color: var(--sub);
+  padding: 4px 10px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ctxmenu button {
+  border: 0;
+  text-align: left;
+  min-height: 30px;
+  border-radius: 6px;
+}
+.ctxmenu button:focus-visible,
+.ctxmenu button:hover {
+  background: #303948;
+}

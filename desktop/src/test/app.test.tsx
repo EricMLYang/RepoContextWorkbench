@@ -4,7 +4,7 @@ import { App } from "../App";
 import { WorkbenchStore } from "../store/store";
 import type { Backend } from "../api";
 import type { StateCard } from "../api/types";
-import { makeState, mockBackend } from "./fixtures";
+import { makeScan, makeState, mockBackend } from "./fixtures";
 
 async function mount(backend = mockBackend()) {
   const store = new WorkbenchStore(backend, { group: null, repos: null });
@@ -446,5 +446,106 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     const removes = screen.getAllByRole("button", { name: "從這組移除" });
     await act(async () => fireEvent.click(removes[0]));
     expect(backend.action).toHaveBeenCalledWith("update_group", { name: "產品開發", repos: ["b"] });
+  });
+});
+
+describe("repo 右側欄與右鍵選單", () => {
+  const repoA = {
+    id: "a",
+    type: "mine",
+    tier: "active",
+    path: "/r/a",
+    exists: true,
+    dirty: 3,
+    dirty_days: 1,
+    last_commit_days: 2.2,
+    ahead: 1,
+    behind: 0,
+    branch: "main",
+    last_subject: "修好登入",
+    worktrees: 1,
+    commits_7d: 4,
+    commits_30d: 9,
+    recent_commits: [],
+    agents: [],
+    note: "",
+  } as const;
+  const backendWithRepo = () =>
+    mockBackend({
+      getScan: vi.fn(async () => makeScan({ states: [{ ...repoA, recent_commits: [], agents: [] }] })),
+      action: vi.fn(async (name: string) =>
+        name === "repo_tree"
+          ? { ok: true, id: "a", root: "/r/a", dir: "", more: 0, entries: [] }
+          : { ok: true },
+      ) as never,
+    });
+
+  async function mountGroup(backend: ReturnType<typeof mockBackend>) {
+    const store = new WorkbenchStore(backend, { group: "產品開發", repos: null });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="repos"]')!));
+    return store;
+  }
+  const repoButton = () =>
+    within(document.getElementById("deeptable")!).getByRole("button", { name: "a" });
+
+  it("點 repo 開右側欄（不跳視窗），只放工作時看的；再點收起", async () => {
+    const backend = backendWithRepo();
+    await mountGroup(backend);
+    await act(async () => fireEvent.click(repoButton()));
+    const panel = document.getElementById("repopanel")!;
+    expect(panel).toBeTruthy();
+    expect(document.getElementById("detaildialog")!.hasAttribute("open")).toBe(false);
+    expect(document.body.classList.contains("withpanel")).toBe(true);
+    expect(panel.textContent).toContain("main");
+    expect(panel.textContent).toContain("3 檔");
+    expect(panel.textContent).toContain("修好登入（2 天前）");
+    expect(backend.action).toHaveBeenCalledWith("repo_tree", { id: "a", dir: "" });
+    await act(async () => fireEvent.click(repoButton()));
+    expect(document.getElementById("repopanel")).toBeNull();
+    expect(document.body.classList.contains("withpanel")).toBe(false);
+  });
+
+  it("右鍵選單：更多細節才跳視窗；從這組移除改成員；Esc 關閉", async () => {
+    const backend = backendWithRepo();
+    await mountGroup(backend);
+    await act(async () => fireEvent.contextMenu(repoButton(), { clientX: 50, clientY: 60 }));
+    const menu = screen.getByRole("menu");
+    const labels = within(menu)
+      .getAllByRole("menuitem")
+      .map((b) => b.textContent);
+    expect(labels).toEqual([
+      "在側邊欄開啟",
+      "更多細節…",
+      "開啟 Agent 會話…",
+      "複製絕對路徑",
+      "從這組移除",
+      "移出工作台…",
+    ]);
+    await act(async () => fireEvent.keyDown(window, { key: "Escape" }));
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    await act(async () => fireEvent.contextMenu(repoButton(), { clientX: 50, clientY: 60 }));
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "更多細節…" })));
+    expect(document.getElementById("detaildialog")!.hasAttribute("open")).toBe(true);
+    expect(document.getElementById("detailtitle")!.textContent).toBe("a");
+
+    await act(async () => fireEvent.contextMenu(repoButton(), { clientX: 50, clientY: 60 }));
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "從這組移除" })));
+    expect(backend.action).toHaveBeenCalledWith("update_group", { name: "產品開發", repos: ["b"] });
+  });
+
+  it("移出工作台…：直接開確認，按確定才呼叫 remove_repo", async () => {
+    const backend = backendWithRepo();
+    await mountGroup(backend);
+    await act(async () => fireEvent.contextMenu(repoButton(), { clientX: 50, clientY: 60 }));
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "移出工作台…" })));
+    expect(document.getElementById("detailtitle")!.textContent).toBe("把 a 移出工作台？");
+    expect(backend.action).not.toHaveBeenCalledWith("remove_repo", expect.anything());
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "確定移出" })));
+    expect(backend.action).toHaveBeenCalledWith("remove_repo", { id: "a" });
   });
 });

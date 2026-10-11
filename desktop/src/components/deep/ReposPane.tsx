@@ -8,7 +8,6 @@ import {
   sortRepos,
 } from "../../lib/view";
 import { useSnapshot, useUi } from "../../store/context";
-import { repoDetailSpec } from "./RepoDetail";
 
 /** Repo 分頁：6 個核心欄位，可加 5 個進階欄位；可排序（aria-sort）、首欄固定。 */
 export function ReposPane({ query, active }: { query: string; active: boolean }) {
@@ -28,7 +27,7 @@ export function ReposPane({ query, active }: { query: string; active: boolean })
       <div className="sectionintro">
         <div>
           <h2>Repo 狀態</h2>
-          <p className="muted small">先看需要關注的變化，選取 repo 查看完整狀態。</p>
+          <p className="muted small">先看需要關注的變化；點 repo 在右側欄看，右鍵看更多動作。</p>
         </div>
         <label className="small muted">
           <input
@@ -80,8 +79,13 @@ export function ReposPane({ query, active }: { query: string; active: boolean })
                         <button
                           type="button"
                           className="ghost"
-                          title={s.id}
-                          onClick={() => ui.openDetail(repoDetailSpec(s.id))}
+                          title={s.id + "（右鍵：更多動作）"}
+                          aria-pressed={ui.panelRepo === s.id}
+                          onClick={() => ui.openRepo(s.id)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            ui.repoMenu(s.id, e.clientX, e.clientY);
+                          }}
                         >
                           {s.id}
                         </button>

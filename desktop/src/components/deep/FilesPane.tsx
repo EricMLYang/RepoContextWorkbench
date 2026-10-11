@@ -3,27 +3,9 @@ import { DetailLayout, useAutoFocus, useDetail } from "../../dialogs/Modal";
 import { Onboarding } from "../../dialogs/misc";
 import { scopeLabel } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
-import type { WorkbenchStore } from "../../store/store";
 import { AsyncButton } from "../AsyncButton";
 import { RepoRoot } from "./FileTree";
-
-/** 加一個資料夾到目前範圍（像 IDE 的 Add Folder to Workspace）：沒登記的先登記。 */
-async function addFolder(store: WorkbenchStore, path: string) {
-  const { scope } = store.getSnapshot();
-  const r = await store.action(
-    "group_add_folder",
-    scope.group ? { path, group: scope.group } : { path },
-  );
-  await store.refreshState();
-  if (!scope.group && Array.isArray(scope.repos) && !scope.repos.includes(r.id)) {
-    store.setScope({ group: null, repos: [...scope.repos, r.id] });
-  } else {
-    await store.rescan();
-  }
-  store.toast(
-    (r.registered ? "已登記 " : "已加入 ") + r.id + (r.group ? "，在牌組「" + r.group + "」" : ""),
-  );
-}
+import { addFolder, removeFromScope } from "./repoActions";
 
 /** 沒有原生選資料夾（瀏覽器版）時：手打路徑。 */
 function AddFolderDialog() {
@@ -67,19 +49,6 @@ export function FilesPane({ query, active }: { query: string; active: boolean })
   const repos = store.scopeRepos.filter((r) => !query || r.toLocaleLowerCase().includes(query));
   const group = scope.group ? state.groups.find((g) => g.name === scope.group) : undefined;
   const adhoc = !scope.group && Array.isArray(scope.repos);
-
-  const removeFromScope = async (id: string) => {
-    if (group) {
-      await store.action("update_group", {
-        name: group.name,
-        repos: group.members.filter((m) => m !== id),
-      });
-      await store.refreshState();
-      store.toast("已從「" + group.name + "」移除 " + id + "（登記保留，檔案不動）");
-    } else if (adhoc) {
-      store.setScope({ group: null, repos: (scope.repos || []).filter((r) => r !== id) });
-    }
-  };
 
   return (
     <section id="tab-files" className={"tabpane" + (active ? " on" : "")} aria-label="檔案">
@@ -143,13 +112,17 @@ export function FilesPane({ query, active }: { query: string; active: boolean })
               key={id}
               id={id}
               defaultOpen={repos.length === 1}
+              onRootMenu={(e) => {
+                e.preventDefault();
+                ui.repoMenu(id, e.clientX, e.clientY);
+              }}
               actions={
                 group || adhoc ? (
                   <AsyncButton
                     className="ghost small"
                     title={"從這組移除 " + id + "（登記保留，檔案不動）"}
                     onError={(m) => store.toast(m)}
-                    run={() => removeFromScope(id)}
+                    run={() => removeFromScope(store, id)}
                   >
                     從這組移除
                   </AsyncButton>

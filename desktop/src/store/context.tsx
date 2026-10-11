@@ -33,6 +33,13 @@ export interface Ui {
   openPicker(group?: GroupInfo | null): void;
   openSession(extra?: Record<string, unknown>): void;
   openOnboarding(): void;
+  /** 右側欄目前顯示的 repo（null＝收起）。 */
+  panelRepo: string | null;
+  /** 點 repo：在右側欄打開（同一個再點＝收起）。 */
+  openRepo(id: string): void;
+  closeRepo(): void;
+  /** repo 的右鍵選單（x、y 是視窗座標）。 */
+  repoMenu(id: string, x: number, y: number): void;
   showComposer(): void;
   draft: string;
   setDraft(v: string): void;

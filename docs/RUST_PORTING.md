@@ -172,9 +172,10 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   對拍 `ctx instructions` 時拿掉這段再比。`ctx todo` 說明補 review／brief。
 - **加入資料夾＋檔案分頁**（2026-10-11；Python 沒有）：App 多「檔案」分頁——目前範圍的每個 repo 是一個根目錄
   （像 IDE 的多根工作區），展開資料夾才讀下一層（action `repo_tree`，新模組 `filetree`：一次一層、不列 `.git` 與
-  `git check-ignore` 忽略的、`dir` 不能跳出 repo、一層最多 2,000 項），每列複製絕對／相對路徑；repo 詳情也有同一棵樹。
+  `git check-ignore` 忽略的、`dir` 不能跳出 repo、一層最多 2,000 項），每列複製絕對／相對路徑。點 repo（側欄牌組、Repo 表）開右側欄（分支、未提交、未推送／落後、最近 commit、檔案樹），
+  右鍵選單（側邊欄開啟、更多細節…、開會話…、複製路徑、從這組移除、移出工作台…）——帶「…」的才跳視窗。
   「＋ 加入資料夾」＝ action `group_add_folder`（registry `add_folder`：同一實體路徑已登記就沿用，否則以資料夾名登記，
-  再加進目前牌組）；「從這組移除」走既有 `update_group`；repo 詳情「移出工作台…」走既有 `remove_repo`（不刪檔）。
+  再加進目前牌組）；「從這組移除」走既有 `update_group`；「移出工作台…」走既有 `remove_repo`（不刪檔）。
   `scan_dir` 動作改用 `scan_dir_with_self`：選到的資料夾本身就是未登記 repo 時排第一個（CLI `registry scan` 不變）。
   殼多命令 `pick_folder`（`tauri-plugin-dialog`，只在 Rust 端用）。macOS：單元／整合測試過，GUI 未實測；Windows：未測。
 - **判斷匯出成 AgDR `ctx decisions export <dir>`**（2026-10-10，ideation F-40；Python 沒有）：範圍內人／agent／回填寫的、

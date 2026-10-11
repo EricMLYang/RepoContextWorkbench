@@ -5,6 +5,8 @@ import { Sidebar } from "./components/Sidebar";
 import { SessionForm } from "./components/sessions/SessionDialogs";
 import { TerminalPanel } from "./components/sessions/TerminalPanel";
 import { Workspace } from "./components/Workspace";
+import { RepoMenu } from "./components/deep/RepoMenu";
+import { RepoPanel } from "./components/deep/RepoPanel";
 import { Onboarding } from "./dialogs/misc";
 import { DetailDialog } from "./dialogs/Modal";
 import { PickerDialog } from "./dialogs/PickerDialog";
@@ -70,6 +72,20 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     });
   }, []);
 
+  // ── 右側欄（點 repo）＋右鍵選單 ──
+  const [panelRepo, setPanelRepo] = useState<string | null>(() => load<string | null>("panelRepo", null));
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const setPanel = useCallback((id: string | null) => {
+    setPanelRepo(id);
+    save("panelRepo", id);
+  }, []);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  // 版面多一欄：body 是 grid（styles.css 的 body.withpanel）
+  useEffect(() => {
+    document.body.classList.toggle("withpanel", !!panelRepo);
+    return () => document.body.classList.remove("withpanel");
+  }, [panelRepo]);
+
   // ── 終端 ──
   const [activeSid, setActiveSid] = useState<string | null>(null);
   const [termCollapsed, setTermCollapsed] = useState(true);
@@ -92,6 +108,10 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       openOnboarding() {
         openDetail({ title: "建立第一個工作範圍", eyebrow: "FIRST RUN", content: <Onboarding /> });
       },
+      panelRepo,
+      openRepo: (id) => setPanel(panelRepo === id ? null : id),
+      closeRepo: () => setPanel(null),
+      repoMenu: (id, x, y) => setMenu({ id, x, y }),
       showComposer,
       draft,
       setDraft,
@@ -121,6 +141,8 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       showComposer,
       draft,
       setDraft,
+      panelRepo,
+      setPanel,
       termCollapsed,
       activeSid,
       openGroups,
@@ -179,9 +201,11 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
           setCollapsed={setTermCollapsed}
           selectSeq={selectSeq}
         />
+        {panelRepo ? <RepoPanel id={panelRepo} /> : null}
         <StatusBar />
         <Toast />
         <PickerDialog open={picker.open} group={picker.group} seq={picker.seq} onClose={closePicker} />
+        {menu ? <RepoMenu id={menu.id} x={menu.x} y={menu.y} onClose={closeMenu} /> : null}
         <DetailDialog spec={detail} error={detailError} setError={setDetailError} onClose={closeDetail} />
       </UiContext.Provider>
     </StoreContext.Provider>

@@ -4,17 +4,19 @@ import { DetailLayout, useDetail } from "../../dialogs/Modal";
 import { TIERNAME, parseTags } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
-import { RepoRoot } from "./FileTree";
 
-/** Repo 詳情：採集到的狀態、檔案清單、標籤編輯、開 Agent 會話、移出工作台。 */
-export function RepoDetail({ id }: { id: string }) {
+/**
+ * Repo 完整資料（右鍵「更多細節…」才開）：採集到的全部狀態、標籤編輯、開 Agent 會話、移出工作台。
+ * 檔案清單在右側欄（RepoPanel），這裡不重複。
+ */
+export function RepoDetail({ id, startConfirm = false }: { id: string; startConfirm?: boolean }) {
   const store = useStore();
   const ui = useUi();
   const { close } = useDetail();
   const { lastStates, state } = useSnapshot();
   const s: Partial<RepoState> = lastStates[id] || { id };
   const [tags, setTags] = useState((state.tags[id] || []).join(", "));
-  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(startConfirm);
   const rows: [string, string | number | null | undefined][] = [
     ["分支", s.branch],
     ["狀態", (s.tier && TIERNAME[s.tier]) || s.tier],
@@ -92,7 +94,6 @@ export function RepoDetail({ id }: { id: string }) {
           移出後 {id} 會從所有牌組拿掉、指向它的關係也會刪除；repo 資料夾與檔案不會動，之後可以再加回來。
         </p>
       ) : null}
-      <RepoRoot id={id} defaultOpen />
       <label className="field">
         標籤（以逗號分隔）
         <input value={tags} onChange={(e) => setTags(e.target.value)} />
@@ -101,6 +102,10 @@ export function RepoDetail({ id }: { id: string }) {
   );
 }
 
-export function repoDetailSpec(id: string) {
-  return { title: id, eyebrow: "REPO DETAILS", content: <RepoDetail id={id} /> };
+export function repoDetailSpec(id: string, opts: { confirmRemove?: boolean } = {}) {
+  return {
+    title: opts.confirmRemove ? "把 " + id + " 移出工作台？" : id,
+    eyebrow: "REPO DETAILS",
+    content: <RepoDetail id={id} startConfirm={!!opts.confirmRemove} />,
+  };
 }
