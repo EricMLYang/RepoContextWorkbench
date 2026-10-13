@@ -898,4 +898,20 @@ mod tests {
             .to_string()
             .contains("不是 git repo"));
     }
+
+    #[test]
+    fn changes_lists_renames_once_by_new_path() {
+        let t = tempfile::tempdir().unwrap();
+        let g = crate::testkit::make_git_repo(t.path(), "g", 1, 0, true);
+        crate::testkit::git(&g, &["mv", "notes/plan.md", "notes/renamed.md"], &[]);
+        let (cs, _) = changes(&g).unwrap();
+        // -z 格式：新路徑在前、原路徑在後；原路徑不另列一筆
+        assert_eq!(
+            cs,
+            vec![Change {
+                rel: "notes/renamed.md".into(),
+                kind: ChangeKind::Renamed
+            }]
+        );
+    }
 }
