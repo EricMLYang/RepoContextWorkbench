@@ -2438,3 +2438,20 @@ body.withpicks #main {
 .gmeta .gneeds {
   color: var(--red);
 }
+.scopechanges {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.scopechanges h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.scopechangerepo + .scopechangerepo {
+  margin-top: 8px;
+}
+.scopechangerepo .eyebrow {
+  margin: 6px 0 2px;
+}

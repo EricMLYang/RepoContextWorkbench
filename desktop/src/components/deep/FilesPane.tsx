@@ -5,6 +5,7 @@ import { scopeLabel } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
 import { RepoRoot } from "./FileTree";
+import { ScopeChanges } from "./RepoChanges";
 import { addFolder, removeFromScope } from "./repoActions";
 
 /** 沒有原生選資料夾（瀏覽器版）時：手打路徑。 */
@@ -97,6 +98,7 @@ export function FilesPane({ query, active }: { query: string; active: boolean })
           </button>
         </div>
       </div>
+      <ScopeChanges active={active} />
       {!repos.length ? (
         <div className="emptyline">
           {!stateReady

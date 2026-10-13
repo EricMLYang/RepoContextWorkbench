@@ -1477,6 +1477,7 @@ fn read_only_actions_leave_spine_untouched() {
         ("repo_profile", json!({"id": "repo-a"})),
         ("palette", json!({"query": "rep"})),
         ("repo_changes", json!({"id": "repo-b"})),
+        ("scope_changes", json!({"group": "g1"})),
         ("file_diff", json!({"id": "repo-b", "path": "wip0.md"})),
         (
             "pick_brief",
@@ -2326,4 +2327,32 @@ fn repo_changes_and_file_diff_via_actions() {
     assert_eq!(df["truncated"], false);
     assert!(act(&d, "repo_changes", json!({"id": "nope"})).is_err());
     assert!(err(&d, "file_diff", json!({"id": "repo-b", "path": "../x"})).contains("repo 裡"));
+}
+
+#[test]
+fn scope_changes_lists_only_repos_with_changes_in_scope_order() {
+    let (_t, d) = spine_with_repos();
+    let r = act(&d, "scope_changes", json!({"group": "g1"})).unwrap();
+    let rows = r["repos"].as_array().unwrap();
+    // repo-a 乾淨、repo-b 有兩個沒追蹤的草稿
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0]["id"], "repo-b");
+    assert_eq!(rows[0]["changes"].as_array().unwrap().len(), 2);
+    let ra = registry::get_repo(&d, "repo-a").unwrap().path();
+    std::fs::write(ra.join("README.md"), "改了\n").unwrap();
+    let r = act(&d, "scope_changes", json!({"repos": ["repo-b", "repo-a"]})).unwrap();
+    let ids: Vec<&str> = r["repos"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["repo-b", "repo-a"]);
+    assert_eq!(r["repos"][1]["changes"][0]["status"], "modified");
+    // 不是 git 的資料夾略過
+    let plain = d.parent().unwrap().join("plainfolder");
+    std::fs::create_dir_all(&plain).unwrap();
+    registry::add_repo(&d, "plain", &plain, registry::AddRepo::default()).unwrap();
+    let r = act(&d, "scope_changes", json!({"repos": ["plain"]})).unwrap();
+    assert!(r["repos"].as_array().unwrap().is_empty());
 }

@@ -95,6 +95,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("reorder", a_reorder),
     ("read_file", a_read_file),
     ("repo_changes", a_repo_changes),
+    ("scope_changes", a_scope_changes),
     ("file_diff", a_file_diff),
     ("write_file", a_write_file),
     ("group_notes", a_group_notes),
@@ -114,6 +115,7 @@ const READ_ONLY: &[&str] = &[
     "repo_tree",
     "read_file",
     "repo_changes",
+    "scope_changes",
     "file_diff",
     "group_notes",
     "repo_profile",
@@ -709,13 +711,12 @@ fn a_palette(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     Ok(json!({"ok": true, "query": query, "repos": repos, "groups": groups, "files": files}))
 }
 
-/// ⌘K 的檔案結果：範圍內每個 repo 用檔名找（各 repo 平行跑 `git ls-files`），合起來照分數排。
-fn palette_files(
+/// 畫面範圍 → (repo id, 路徑)：`repos` 優先；`group`＝組員；都沒有＝所有沒封存的 repo。不在 registry 的略過。
+fn scope_roots(
     data: &registry::RegistryData,
-    q: &str,
     group: Option<&str>,
     scope_repos: Option<&[String]>,
-) -> Vec<Value> {
+) -> Vec<(String, PathBuf)> {
     let ids: Vec<String> = match (scope_repos, group) {
         (Some(r), _) => r.to_vec(),
         (None, Some(g)) => data
@@ -731,10 +732,61 @@ fn palette_files(
             .map(|r| r.id())
             .collect(),
     };
-    let roots: Vec<(String, PathBuf)> = ids
-        .iter()
+    ids.iter()
         .filter_map(|id| data.repo(id).map(|r| (id.clone(), r.path())))
-        .collect();
+        .collect()
+}
+
+/// Rust 才有（2026-10-14）：範圍內每個 repo 還沒 commit 的變更（各 repo 平行跑 git status）——
+/// 多個 agent 同時在不同 repo 改東西時，一眼看出誰動了什麼。只回有變更的 repo（照範圍順序）；
+/// 不是 git repo 的略過，git 失敗的帶 `error`。
+#[derive(serde::Deserialize)]
+struct ScopeArgs {
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default)]
+    repos: Option<Vec<String>>,
+}
+
+fn a_scope_changes(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let ScopeArgs { group, repos } = parse("scope_changes", p)?;
+    let data = registry::load(d)?;
+    let roots = scope_roots(&data, group.as_deref(), repos.as_deref());
+    let rows: Vec<Value> = std::thread::scope(|sc| {
+        let jobs: Vec<_> = roots
+            .iter()
+            .map(|(id, root)| {
+                sc.spawn(move || {
+                    (
+                        id,
+                        root.join(".git")
+                            .exists()
+                            .then(|| crate::filetree::changes(root)),
+                    )
+                })
+            })
+            .collect();
+        jobs.into_iter()
+            .filter_map(|j| j.join().ok())
+            .filter_map(|(id, res)| match res? {
+                Ok((cs, _)) if cs.is_empty() => None,
+                Ok((cs, more)) => Some(json!({"id": id, "more": more, "changes": cs.iter()
+                    .map(|c| json!({"path": c.rel, "status": c.kind})).collect::<Vec<_>>()})),
+                Err(e) => Some(json!({"id": id, "error": e.to_string(), "changes": [], "more": 0})),
+            })
+            .collect()
+    });
+    Ok(json!({"ok": true, "repos": rows}))
+}
+
+/// ⌘K 的檔案結果：範圍內每個 repo 用檔名找（各 repo 平行跑 `git ls-files`），合起來照分數排。
+fn palette_files(
+    data: &registry::RegistryData,
+    q: &str,
+    group: Option<&str>,
+    scope_repos: Option<&[String]>,
+) -> Vec<Value> {
+    let roots = scope_roots(data, group, scope_repos);
     let mut hits: Vec<(String, PathBuf, crate::filetree::FileHit)> = std::thread::scope(|sc| {
         let jobs: Vec<_> = roots
             .iter()

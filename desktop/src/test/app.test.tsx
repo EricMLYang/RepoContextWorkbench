@@ -584,6 +584,35 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     expect(localStorage.getItem("workbench:picks")).toBe("[]");
   });
 
+  it("這組的變更：只列有變更的 repo，查詢帶目前範圍，點了開差異；沒有變更整段不顯示", async () => {
+    let rows: unknown[] = [
+      { id: "b", more: 0, changes: [{ path: "wip0.md", status: "untracked" }] },
+    ];
+    const backend = treeBackend({
+      action: vi.fn(async (name: string, p: { id?: string; dir?: string }) => {
+        if (name === "repo_tree") return tree(p.id!, p.dir || "");
+        if (name === "scope_changes") return { ok: true, repos: rows };
+        if (name === "file_diff")
+          return { ok: true, id: "b", path: "wip0.md", diff: "+草稿", truncated: false };
+        return { ok: true };
+      }) as never,
+    });
+    const store = await openFiles(backend);
+    const sec = await screen.findByRole("region", { name: "這組還沒 commit 的變更" });
+    expect(backend.action).toHaveBeenCalledWith("scope_changes", { group: "產品開發" });
+    expect(sec.textContent).toContain("這組的變更（1 個 repo、1 個檔）");
+    expect(sec.textContent).toContain("b（1）");
+    await act(async () => fireEvent.click(within(sec).getByRole("button", { name: /wip0\.md/ })));
+    expect(backend.action).toHaveBeenCalledWith("file_diff", { id: "b", path: "wip0.md" });
+    rows = [];
+    await act(async () => {
+      await store.refreshState();
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: "這組還沒 commit 的變更" })).toBeNull(),
+    );
+  });
+
   it("讀取失敗顯示錯誤", async () => {
     const backend = mockBackend({
       action: vi.fn(async () => {

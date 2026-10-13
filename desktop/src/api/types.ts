@@ -548,6 +548,14 @@ export interface ActionMap {
     payload: { id: string };
     result: { ok: true; id: string; changes: RepoChange[]; more: number };
   };
+  /** Rust 才有：範圍內每個 repo 還沒 commit 的變更（只回有變更的；git 失敗的帶 error）。 */
+  scope_changes: {
+    payload: ScopePayload;
+    result: {
+      ok: true;
+      repos: { id: string; changes: RepoChange[]; more: number; error?: string }[];
+    };
+  };
   /** Rust 才有：單檔差異（對上一個 commit；還沒追蹤的整份算新增）。沒有差異＝空字串。 */
   file_diff: {
     payload: { id: string; path: string };
