@@ -14,9 +14,6 @@ use crate::app_state::{AppState, MSG_NO_SPINE};
 
 const MSG_EMPTY_SCOPE: &str = "至少選擇一個 repo；空範圍不代表全部";
 
-/// 不寫入任何東西的 action（不發 `workbench://changed`）。
-const READ_ONLY: &[&str] = &["session_draft", "scan_dir"];
-
 fn spine(st: &AppState) -> Result<PathBuf, String> {
     st.spine().ok_or_else(|| MSG_NO_SPINE.to_string())
 }
@@ -75,7 +72,7 @@ pub fn run_action(st: &AppState, name: &str, payload: &Value) -> Result<Value, S
     let sp = spine(st)?;
     let terms = st.terms()?;
     let out = workbench::handle_action(&sp, name, payload, Some(terms.as_ref())).map_err(err)?;
-    if !READ_ONLY.contains(&name) {
+    if !workbench::is_read_only(name) {
         st.notify_changed(name);
     }
     Ok(out)

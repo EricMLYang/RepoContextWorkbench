@@ -107,7 +107,7 @@ Rust 端簽名建議：
 `collide`／`collide_rerun` 的背景判定：找得到 `ctx`（`ctx_core::exe::ctx_exe`：自己→同目錄→PATH）就起 detached 進程（同 Python，關 App 也跑得完），
 沒有就在 App 行程裡開執行緒跑（App 結束前沒跑完 → lint 會報「碰撞無回程」，可按〔重跑判定〕）。
 `register_repos` 部分成功時 Python 回 `{error, added}`；IPC 只回 `Err(error)`（前端不用 `added`）。
-寫入型 action 成功後發 `workbench://changed`（`reason`＝action 名）；唯讀的 `session_draft`／`scan_dir` 不發。
+寫入型 action 成功後發 `workbench://changed`（`reason`＝action 名）；唯讀的（`session_draft`／`scan_dir`／`repo_tree`／`read_file`／`group_notes`，清單在引擎 `workbench::is_read_only`）不發——否則展開資料夾、開檔都會讓前端重抓整份 state。
 
 ## 終端串流（`term_open` 的 Channel）
 

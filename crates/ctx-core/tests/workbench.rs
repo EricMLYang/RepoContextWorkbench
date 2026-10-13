@@ -13,7 +13,8 @@ use ctx_core::spine::{self, Event, EventType, Query};
 use ctx_core::term::{AgentLaunch, TermInfo, TermKind};
 use ctx_core::testkit::{make_git_repo, spine_with_repos, today_at};
 use ctx_core::workbench::{
-    annotate_terms, build_scan, build_state, handle_action, session_draft, StateScope, Terms,
+    annotate_terms, build_scan, build_state, handle_action, is_read_only, session_draft,
+    StateScope, Terms, ACTIONS,
 };
 use serde_json::{json, Value};
 
@@ -1443,6 +1444,47 @@ fn state_carries_health() {
 }
 
 // ── 2026-10-11：加入資料夾＋檔案清單（Rust 才有）──
+
+/// spine 底下每個檔的（相對路徑, 內容）——比對「唯讀 action 沒寫任何東西」。
+fn spine_files(d: &Path) -> Vec<(String, Vec<u8>)> {
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<(String, Vec<u8>)>) {
+        for e in std::fs::read_dir(dir).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                walk(root, &p, out);
+            } else {
+                let rel = p.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+                out.push((rel, std::fs::read(&p).unwrap()));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(d, d, &mut out);
+    out.sort();
+    out
+}
+
+/// 標成唯讀的 action（殼據此不發 changed）真的不寫 spine；名稱都是存在的 action。
+#[test]
+fn read_only_actions_leave_spine_untouched() {
+    let (_t, d) = spine_with_repos();
+    act(&d, "note_add", json!({"group": "g1", "text": "先記一筆"})).unwrap();
+    let names: Vec<&str> = ACTIONS.iter().map(|(n, _)| *n).collect();
+    let calls = [
+        ("repo_tree", json!({"id": "repo-a"})),
+        ("read_file", json!({"id": "repo-a", "path": "README.md"})),
+        ("group_notes", json!({"group": "g1"})),
+        ("scan_dir", json!({"dir": d.parent().unwrap()})),
+    ];
+    let before = spine_files(&d);
+    for (name, payload) in calls {
+        assert!(is_read_only(name), "{name}");
+        assert!(names.contains(&name), "{name}");
+        act(&d, name, payload).unwrap();
+    }
+    assert_eq!(spine_files(&d), before);
+    assert!(!is_read_only("note_add") && !is_read_only("write_file") && !is_read_only("nope"));
+}
 
 #[test]
 fn repo_tree_lists_one_level_by_repo_id() {

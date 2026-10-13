@@ -17,7 +17,7 @@
 pub mod actions;
 pub mod state;
 
-pub use actions::{handle_action, Terms, ACTIONS};
+pub use actions::{handle_action, is_read_only, Terms, ACTIONS};
 pub use state::{
     annotate_terms, api_state, build_cards, build_scan, build_state, event_scopes, normalize_dest,
     relation_task, session_draft, session_report, Prov, StateScope, STATUS_PROMPT,

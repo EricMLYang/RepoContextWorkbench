@@ -99,6 +99,21 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("session_result", a_session_result),
 ];
 
+/// 不寫入任何東西的 action：殼不發 `workbench://changed`（否則展開資料夾、開檔都會讓前端重抓整份 state）。
+/// Rust 才有（2026-10-13，原本寫死在殼、漏了檔案樹與檢視器的讀取）。
+const READ_ONLY: &[&str] = &[
+    "session_draft",
+    "scan_dir",
+    "repo_tree",
+    "read_file",
+    "group_notes",
+];
+
+/// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
+pub fn is_read_only(name: &str) -> bool {
+    READ_ONLY.contains(&name)
+}
+
 /// 全部 action 名稱（給殼列舉）。
 pub fn action_names() -> Vec<&'static str> {
     ACTIONS.iter().map(|(n, _)| *n).collect()
