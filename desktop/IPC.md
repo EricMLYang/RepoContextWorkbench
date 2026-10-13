@@ -28,6 +28,7 @@
 | `term_close` | `{ sid: string, attachId: string }` | `null` | 關掉 WebSocket |
 | `get_spine` | — | `{ spine: string \| null }` | （無；HTTP 版 server 啟動時就綁好 spine） |
 | `set_spine` | `{ path: string }` | `{ spine: string }`（解析後的絕對路徑） | （無） |
+| `create_spine` | `{ path: string }` | `{ spine: string }`（同 `set_spine`） | （無；在新路徑或空資料夾跑 `ctx init` 同一份 scaffold，已是 spine 就直接用） |
 | `pick_folder` | — | `string \| null`（取消＝null） | （無；Rust 端用 `tauri-plugin-dialog` 開原生「選擇資料夾」，前端不開 dialog 權限） |
 | `watch_tree` | `{ repos: { [id]: string[] } }`（每個 repo 展開中的資料夾，`""`＝根；空物件＝全部停） | `null` | （無；查不到的 repo 略過。變動用事件 `repo://changed` 通知） |
 
@@ -36,10 +37,12 @@
 - 啟動時殼用 `ctx_core::config::find_spine`：`--spine <path>` ＞ `REPOENGINE_SPINE` ＞ 使用者設定檔
   `~/.config/repo-context/config.json` 的 `spine`。
 - 前端（`src/main.tsx`）先呼叫 `get_spine`：`spine` 是 null → 顯示首次設定（`SpineSetup`），
-  使用者填路徑 → `set_spine`。殼驗證是 spine（有 `config.yaml` 或 `registry.yaml`）後寫回使用者設定檔
+  使用者填路徑 → 既有的用 `set_spine`、要新建的用 `create_spine`。殼驗證是 spine（有 `config.yaml` 或 `registry.yaml`）後寫回使用者設定檔
   （保留其他鍵）、啟用會話清冊與檔案監看。
 - `set_spine` 錯誤：`"不是 spine 目錄（找不到 config.yaml 或 registry.yaml）：<path>"`；
   已有活著的會話時切換到別的 spine：`"還有會話在跑；先關掉所有會話再切換 spine"`。
+- `create_spine` 錯誤：資料夾已有東西又不是 spine →
+  `"這個資料夾已經有東西、又不是 spine；為了不動到你的檔案，請換一個新路徑或空資料夾：<path>"`（不往既有資料夾塞檔）。
 - spine 未設定時 `get_state`／`get_scan`／`run_action` 回 `"尚未設定 spine：請先選擇 spine 目錄"`。
 
 Rust 端簽名建議：

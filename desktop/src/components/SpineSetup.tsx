@@ -3,18 +3,22 @@ import { AsyncButton } from "./AsyncButton";
 
 /**
  * 首次設定：桌面殼找不到 spine（`--spine`、`REPOENGINE_SPINE`、`~/.config/repo-context/config.json` 都沒有）。
- * 填路徑 → `set_spine`（殼驗證是 spine 後寫進使用者設定檔，下次啟動就記得）。
+ * 填路徑 → 已有的用 `set_spine`、還沒有的用 `create_spine`（只建在新路徑或空資料夾）；殼寫進使用者設定檔，下次啟動就記得。
  */
-export function SpineSetup({ setSpine }: { setSpine: (path: string) => Promise<unknown> }) {
-  const [path, setPath] = useState("");
+export function SpineSetup(props: {
+  setSpine: (path: string) => Promise<unknown>;
+  createSpine: (path: string) => Promise<unknown>;
+}) {
+  const [path, setPath] = useState("~/repo-spine");
   const [error, setError] = useState("");
+  const p = path.trim();
   return (
     <main className="spinesetup">
       <div className="emptystate">
         <h2>選擇 spine 目錄</h2>
         <p>
-          工作台的資料（registry、脊椎事件）放在 spine repo 裡。填入它的路徑——例如
-          <code> ~/spine-repo</code>；還沒有的話先在終端機跑 <code>ctx init &lt;路徑&gt;</code>。
+          spine 是工作台自己的資料 repo：登記了哪些 repo、分組、判斷與交接都存在這裡。
+          工作台只讀你的 repo，不會在裡面寫任何東西。整台電腦一個 spine 就夠了。
         </p>
         <form
           onSubmit={(e) => {
@@ -23,7 +27,7 @@ export function SpineSetup({ setSpine }: { setSpine: (path: string) => Promise<u
         >
           <input
             aria-label="spine 路徑"
-            placeholder="~/spine-repo"
+            placeholder="~/repo-spine"
             value={path}
             autoFocus
             onChange={(e) => {
@@ -33,11 +37,15 @@ export function SpineSetup({ setSpine }: { setSpine: (path: string) => Promise<u
           />
           <AsyncButton
             className="primary"
-            disabled={!path.trim()}
-            run={() => setSpine(path.trim())}
+            disabled={!p}
+            title="在這個路徑建立新的 spine（新路徑或空資料夾）；已經是 spine 就直接用"
+            run={() => props.createSpine(p)}
             onError={setError}
           >
-            使用這個 spine
+            建立新的 spine
+          </AsyncButton>
+          <AsyncButton disabled={!p} run={() => props.setSpine(p)} onError={setError}>
+            使用既有的 spine
           </AsyncButton>
         </form>
         {error && (

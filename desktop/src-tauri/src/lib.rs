@@ -148,6 +148,15 @@ fn set_spine(state: State<'_, AppState>, path: String) -> Result<Value, String> 
     Ok(spine_json(Some(&p)))
 }
 
+/// 首次設定「建立新的 spine」：只在新路徑或空資料夾建（見 `app_state::create_spine`）。
+#[tauri::command]
+fn create_spine(state: State<'_, AppState>, path: String) -> Result<Value, String> {
+    let p = app_state::create_spine(&path)?;
+    state.activate(&p)?;
+    state.notify_changed("spine");
+    Ok(spine_json(Some(&p)))
+}
+
 async fn blocking<T: Send + 'static>(
     app: AppHandle,
     f: impl FnOnce(&AppState) -> Result<T, String> + Send + 'static,
@@ -275,6 +284,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_spine,
             set_spine,
+            create_spine,
             get_state,
             get_scan,
             run_action,

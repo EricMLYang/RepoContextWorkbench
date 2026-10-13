@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
+import { SpineSetup } from "../components/SpineSetup";
 import { WorkbenchStore } from "../store/store";
 import type { Backend } from "../api";
 import type { StateCard } from "../api/types";
@@ -1128,5 +1129,26 @@ describe("牌組筆記", () => {
     );
     await act(async () => fireEvent.click(document.querySelector('[data-tab="notes"]')!));
     expect(document.getElementById("tab-notes")!.textContent).toContain("筆記記在牌組上");
+  });
+});
+
+describe("首次設定：建立或選既有 spine", () => {
+  it("預設建在 ~/repo-spine；錯誤照原句顯示；也能選既有的", async () => {
+    const createSpine = vi.fn(async () => {
+      throw new Error("這個資料夾已經有東西、又不是 spine");
+    });
+    const setSpine = vi.fn(async () => ({ spine: "/s" }));
+    render(<SpineSetup setSpine={setSpine} createSpine={createSpine} />);
+    expect((screen.getByLabelText("spine 路徑") as HTMLInputElement).value).toBe("~/repo-spine");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "建立新的 spine" })));
+    expect(createSpine).toHaveBeenCalledWith("~/repo-spine");
+    expect(screen.getByRole("alert").textContent).toContain("又不是 spine");
+
+    fireEvent.change(screen.getByLabelText("spine 路徑"), { target: { value: " ~/old " } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "使用既有的 spine" })),
+    );
+    expect(setSpine).toHaveBeenCalledWith("~/old");
   });
 });

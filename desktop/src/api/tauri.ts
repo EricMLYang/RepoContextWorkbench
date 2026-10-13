@@ -82,6 +82,8 @@ export function createSpineApi(deps: { invoke?: InvokeFn } = {}) {
   return {
     getSpine: () => run<SpineInfo>("get_spine"),
     setSpine: (path: string) => run<SpineInfo>("set_spine", { path }),
+    /** 在新路徑或空資料夾建 spine 並記住；有東西又不是 spine 的資料夾會被拒絕。 */
+    createSpine: (path: string) => run<SpineInfo>("create_spine", { path }),
   };
 }
 

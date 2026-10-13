@@ -127,3 +127,50 @@ pub fn persist_spine(path: &str) -> Result<PathBuf, String> {
     ctx_core::config::save_user_config(&cfg).map_err(|e| e.to_string())?;
     Ok(p)
 }
+
+/// 對應 `create_spine`：在新路徑或空資料夾建一個 spine（`ctx init` 同一份 scaffold），再照 `set_spine` 記住。
+/// 已經是 spine 就直接用。有東西又不是 spine 的資料夾一律拒絕——工作台不往使用者既有的資料夾（多半是 repo）塞檔。
+pub fn create_spine(path: &str) -> Result<PathBuf, String> {
+    let p = ctx_core::fsutil::expanduser(path.trim());
+    if path.trim().is_empty() {
+        return Err("請填 spine 要建在哪裡".into());
+    }
+    if !ctx_core::config::is_spine(&p) {
+        if p.exists() {
+            let empty = std::fs::read_dir(&p)
+                .map(|mut d| d.next().is_none())
+                .map_err(|e| format!("讀不到這個位置：{}（{e}）", path.trim()))?;
+            if !empty {
+                return Err(format!(
+                    "這個資料夾已經有東西、又不是 spine；為了不動到你的檔案，請換一個新路徑或空資料夾：{}",
+                    path.trim()
+                ));
+            }
+        }
+        ctx_core::init::init_spine(&p).map_err(|e| e.to_string())?;
+    }
+    persist_spine(&p.to_string_lossy())
+}
+
+#[cfg(test)]
+mod create_tests {
+    use super::*;
+
+    /// 只測不碰使用者設定檔的部分：拒絕的情況在寫任何東西之前就回錯。
+    #[test]
+    fn refuses_non_empty_non_spine_folder_and_leaves_it_untouched() {
+        let t = tempfile::tempdir().unwrap();
+        let repo = t.path().join("my-repo");
+        std::fs::create_dir(&repo).unwrap();
+        std::fs::write(repo.join("README.md"), "hi").unwrap();
+        let e = create_spine(&repo.to_string_lossy()).unwrap_err();
+        assert!(e.contains("不是 spine"), "{e}");
+        let names: Vec<_> = std::fs::read_dir(&repo)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name())
+            .collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("README.md")]);
+        assert!(create_spine("  ").unwrap_err().contains("請填"));
+    }
+}

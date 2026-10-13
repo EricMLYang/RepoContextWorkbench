@@ -8,6 +8,27 @@
 >
 > 文件：為什麼做、往哪走 → `docs/VISION.md`｜寫程式的準則 → `docs/DEVELOPMENT.md`｜合約與刻意差異 → `docs/RUST_PORTING.md`。
 
+## 先認識 spine：工作台自己的資料 repo
+
+用之前要先有一個 **spine**——一個專門給工作台用的 git repo，跟你平常工作的 repo 分開。
+整台電腦一個就夠，登記再多 repo 都存在同一個 spine 裡。
+
+```
+~/repo-spine/
+  registry.yaml    登記了哪些 repo（id、路徑、tags、關係）、怎麼分組
+  spine/events/    事件，一則一個 md：判斷、待辦、交接、狀態回報（agent 的 log_decision／add_todo／handoff 寫在這）
+  groups/          各組的筆記與彙整產物
+  config.yaml      工作台設定（可開哪些 agent 等）
+  .state/          可重算的快取：搜尋索引、會話標記、已讀水位（不進 git）
+```
+
+- **工作台只讀你的 repo，不寫進去。** 所有輔助資料（登記、分組、判斷、交接、索引）都在 spine，
+  你的 repo 內容、git 歷史、`.gitignore` 不會因為這個工具多一行。
+- spine 本身是 git repo：會話結束自動 commit，判斷與交接都有歷史可查；要換電腦就把它 clone 過去。
+- 建法二選一：桌面 App 第一次打開時按「建立新的 spine」（只會建在新路徑或空資料夾），
+  或在終端機跑 `ctx init ~/repo-spine`。接著 `ctx setup --claude` 記住位置、掛上 agent 的 MCP 與 hooks。
+- spine 等於程式碼（見下方「信任模型」）：不要直接拿別人的 spine 來用。
+
 ## 架構
 
 ```
@@ -92,7 +113,7 @@ claude mcp get repo-context                    # 確認指令是 <…>/ctx mcp
 
 ```bash
 # 開始用
-ctx init ~/repo-spine                                  # 建 spine repo
+ctx init ~/repo-spine                                  # 建 spine repo（桌面 App 首次打開也能建）
 ctx setup --spine ~/repo-spine --claude --dry-run      # 記住 spine＋掛 MCP（user scope）＋hooks＋skill；先看會改什麼
 ctx registry add my-repo ~/Coding/my-repo              # 登記；registry scan <目錄> --apply 批次登記
 ctx group add 產品 my-repo,my-notes                     # 建組（add-member／remove-member／rename／remove）

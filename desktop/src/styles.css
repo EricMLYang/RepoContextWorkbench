@@ -1468,11 +1468,12 @@ dialog::backdrop {
 }
 .spinesetup form {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 16px;
 }
 .spinesetup input {
-  flex: 1;
+  flex: 1 1 220px;
   min-width: 0;
   padding: 5px 10px;
 }

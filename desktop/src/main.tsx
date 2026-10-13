@@ -17,7 +17,12 @@ function render(needsSpine: boolean) {
 /** 桌面殼：spine 設好之前先顯示首次設定；設好就切到工作台。 */
 function Setup() {
   const [api] = useState(() => createSpineApi());
-  return <SpineSetup setSpine={async (p) => render(!(await api.setSpine(p)).spine)} />;
+  return (
+    <SpineSetup
+      setSpine={async (p) => render(!(await api.setSpine(p)).spine)}
+      createSpine={async (p) => render(!(await api.createSpine(p)).spine)}
+    />
+  );
 }
 
 if (isTauri()) {

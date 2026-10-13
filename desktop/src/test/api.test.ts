@@ -84,9 +84,11 @@ describe("tauriBackend", () => {
     const api = createSpineApi({ invoke });
     expect(await api.getSpine()).toEqual({ spine: null });
     expect(await api.setSpine("~/s")).toEqual({ spine: "/s" });
+    expect(await api.createSpine("~/new")).toEqual({ spine: "/s" });
     expect(invoke.mock.calls).toEqual([
       ["get_spine", undefined],
       ["set_spine", { path: "~/s" }],
+      ["create_spine", { path: "~/new" }],
     ]);
     const bad = createSpineApi({ invoke: vi.fn(async () => Promise.reject("不是 spine 目錄")) });
     await expect(bad.setSpine("/x")).rejects.toThrow("不是 spine 目錄");

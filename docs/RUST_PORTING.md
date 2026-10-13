@@ -194,6 +194,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
     只報這些資料夾裡的變動；檔案樹改成 VS Code 檔案總管風格（攤平列、縮排導引線、檔案圖示、目前檔案反白、
     右鍵複製路徑／相對路徑、方向鍵操作）。
   macOS：單元／整合測試過，GUI 未實測；Windows：未測（ReadDirectoryChangesW 遞迴監看理論上可用）。
+- **App 首次設定可直接建 spine**（2026-10-13；Python 沒有）：殼多命令 `create_spine`（`ctx_core::init::init_spine`，
+  跟 `ctx init` 同一份 scaffold），只建在新路徑或空資料夾，已是 spine 就直接用，有東西又不是 spine 一律拒絕。
+  macOS：單元測試過，GUI 未實測；Windows：未測。
 - **Agent 會話的 Terminal**（2026-10-13；Python 沒有）：`term_create` 的 shell 多收 `of: <sid>`——開在那個會話的
   目錄（`TermSession` 記下 cwd，不輸出到 `TermInfo`），origin 記 `shell-of:<sid>`；未知會話回「未知會話: <sid>」。
   App 的終端標題列在 agent 會話與它的 Terminal 之間切換（同一塊版面、Ctrl+Shift+`），Terminal 不另列在會話列
