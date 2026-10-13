@@ -1,6 +1,14 @@
 import type { FitAddon } from "@xterm/addon-fit";
 import type { Terminal } from "@xterm/xterm";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 import type { TermStream } from "../../api/backend";
 import type { TermInfo } from "../../api/types";
 import { AsyncButton } from "../AsyncButton";
@@ -44,8 +52,10 @@ export function TerminalPanel(props: {
   setCollapsed: (c: boolean) => void;
   /** 每次「選擇會話」遞增：觸發 attach／focus（同一個 sid 再點也要聚焦）。 */
   selectSeq: number;
+  /** 這裡填入「貼到目前會話」：成功回會話標題；沒有連上的會話回 null。 */
+  pasteRef?: MutableRefObject<((text: string) => string | null) | null>;
 }) {
-  const { activeSid, setActiveSid, collapsed, setCollapsed, selectSeq } = props;
+  const { activeSid, setActiveSid, collapsed, setCollapsed, selectSeq, pasteRef } = props;
   const store = useStore();
   const ui = useUi();
   const { state } = useSnapshot();
@@ -122,6 +132,8 @@ export function TerminalPanel(props: {
       const stream = store.backend.openTerminal(sid);
       const rec: TermRec = { t, fit, stream, host };
       recs.current.set(sid, rec);
+      // 先標「還沒連上」再掛監聽：串流若同步就開好，onOpen 的「已連上」不會被蓋掉
+      setConnected(sid, false);
       stream.onData((b) => t.write(b));
       stream.onOpen(() => {
         try {
@@ -140,7 +152,6 @@ export function TerminalPanel(props: {
       t.onData((d) => stream.write(d));
       t.onResize(({ cols, rows }) => stream.resize(cols, rows));
       for (const [id, r] of recs.current) r.host.classList.toggle("on", id === sid);
-      setConnected(sid, false);
     },
     [store, dispose, setConnected],
   );
@@ -245,6 +256,23 @@ export function TerminalPanel(props: {
   }, [ui, store, openShellFor]);
 
   const info: TermInfo | undefined = terms.find((s) => s.sid === activeSid);
+
+  // 貼到目前會話：走 xterm 的 paste（尊重 bracketed paste，換行不會被當成送出），不按 Enter
+  useEffect(() => {
+    if (!pasteRef) return;
+    pasteRef.current = (text) => {
+      const rec = activeSid ? recs.current.get(activeSid) : undefined;
+      if (!rec || !activeSid || !conn[activeSid] || !info?.alive) return null;
+      setCollapsed(false);
+      rec.t.paste(text);
+      rec.t.focus();
+      return info.title;
+    };
+    return () => {
+      pasteRef.current = null;
+    };
+  });
+
   const attached = !!activeSid && activeSid in conn;
   const connected = !!activeSid && conn[activeSid];
   const where = pair ? sessionWhere(pair.agent) : info ? sessionWhere(info) : null;

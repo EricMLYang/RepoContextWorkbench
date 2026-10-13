@@ -544,11 +544,11 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     expect(tray.textContent).toContain("已挑 2 個檔案");
 
     await act(async () =>
-      fireEvent.click(within(tray).getByRole("button", { name: "交給 Agent…" })),
+      fireEvent.click(within(tray).getByRole("button", { name: "交給新會話…" })),
     );
     expect(within(tray).getByRole("alert").textContent).toContain("檔案不存在");
     await act(async () =>
-      fireEvent.click(within(tray).getByRole("button", { name: "交給 Agent…" })),
+      fireEvent.click(within(tray).getByRole("button", { name: "交給新會話…" })),
     );
     expect(backend.action).toHaveBeenLastCalledWith("pick_brief", {
       files: [
@@ -1238,6 +1238,68 @@ describe("會話放進所屬牌組", () => {
     // 再切過去：沿用已開的 Terminal，不再開新的
     await act(async () => fireEvent.click(within(bar).getByRole("button", { name: "Terminal" })));
     expect(action).toHaveBeenCalledTimes(1);
+  });
+
+  it("挑好的檔案貼到目前會話：@路徑以空白分隔、不按 Enter；沒有選會話時不出現按鈕", async () => {
+    const writes: string[] = [];
+    const stream = {
+      onData() {},
+      onOpen(cb: () => void) {
+        cb();
+      },
+      onClose() {},
+      write: (d: string) => writes.push(d),
+      resize() {},
+      close() {},
+      connected: true,
+    };
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({ terms: [term({ home_group: "產品開發" })] as never }),
+      ),
+      openTerminal: vi.fn(() => stream) as never,
+      action: vi.fn(async (name: string) => {
+        if (name === "repo_tree")
+          return {
+            ok: true,
+            id: "a",
+            root: "/r/a",
+            dir: "",
+            more: 0,
+            entries: [{ name: "README.md", path: "README.md", abs: "/r/a/README.md", dir: false }],
+          };
+        if (name === "pick_brief")
+          return {
+            ok: true,
+            text: "…",
+            mentions: "@/r/a/README.md\n@/r/a/docs/x.md",
+            repos: ["a"],
+            count: 2,
+          };
+        return { ok: true };
+      }) as never,
+    });
+    await mount(backend);
+    localStorage.setItem(
+      "workbench:picks",
+      JSON.stringify([{ repo: "a", path: "README.md", name: "README.md" }]),
+    );
+    cleanup();
+    await mount(backend);
+    const tray = document.getElementById("picktray")!;
+    expect(tray.textContent).toContain("已挑 1 個檔案");
+    expect(within(tray).queryByRole("button", { name: "貼到目前會話" })).toBeNull();
+
+    const card = document.querySelector('.gcard[data-key="產品開發"]')!;
+    await act(async () =>
+      fireEvent.click(within(card as HTMLElement).getByRole("button", { name: /claude · a/ })),
+    );
+    await waitFor(() => expect(backend.openTerminal).toHaveBeenCalledWith("t1"));
+    await act(async () =>
+      fireEvent.click(within(tray).getByRole("button", { name: "貼到目前會話" })),
+    );
+    await waitFor(() => expect(writes.join("")).toBe("@/r/a/README.md @/r/a/docs/x.md "));
+    expect(within(tray).queryByRole("alert")).toBeNull();
   });
 
   it("從牌組裡對 repo 開會話：帶上所屬牌組", async () => {

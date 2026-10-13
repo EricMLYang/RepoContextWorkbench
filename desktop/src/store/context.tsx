@@ -45,6 +45,8 @@ export interface Ui {
   openPalette(): void;
   /** 挑檔案給 agent：已挑就移出、沒挑就加入（`name` 只給畫面顯示）。 */
   togglePick(pick: Pick): void;
+  /** 貼進下方終端目前選的會話（不按 Enter）。回會話標題；沒有連上的會話回 null。 */
+  pasteToSession(text: string): string | null;
   clearPicks(): void;
   /** 在主區開一個檔案分頁（已開就切過去）。 */
   openFile(repo: string, path: string): void;

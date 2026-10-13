@@ -115,6 +115,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     });
   }, []);
 
+  const pasteRef = useRef<((text: string) => string | null) | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
   const [panelRepo, setPanelRepo] = useState<string | null>(() =>
@@ -185,6 +186,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
             : [...cur, pick],
         ),
       clearPicks: () => updatePicks(() => []),
+      pasteToSession: (text) => pasteRef.current?.(text) ?? null,
       closeRepo: () => setPanel(() => null),
       repoMenu: (id, x, y) => setMenu({ id, x, y }),
       openFile,
@@ -315,6 +317,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
             collapsed={termCollapsed}
             setCollapsed={setTermCollapsed}
             selectSeq={selectSeq}
+            pasteRef={pasteRef}
           />
           {panelRepo ? <RepoPanel id={panelRepo} /> : null}
           {panelRepo ? <Resizer side="right" /> : null}
