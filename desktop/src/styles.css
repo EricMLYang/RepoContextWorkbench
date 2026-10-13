@@ -2349,3 +2349,9 @@ button.linkish {
   text-decoration: none;
   display: inline-block;
 }
+
+/* 從檔案樹把檔拖進終端 */
+#termpanel.dropping {
+  outline: 2px dashed var(--blue);
+  outline-offset: -3px;
+}

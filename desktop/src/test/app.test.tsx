@@ -5,6 +5,7 @@ import { SpineSetup } from "../components/SpineSetup";
 import { WorkbenchStore } from "../store/store";
 import type { Backend } from "../api";
 import type { StateCard } from "../api/types";
+import { FILE_DRAG_TYPE } from "../lib/view";
 import { makeScan, makeState, mockBackend } from "./fixtures";
 
 async function mount(backend = mockBackend()) {
@@ -1300,6 +1301,50 @@ describe("會話放進所屬牌組", () => {
     );
     await waitFor(() => expect(writes.join("")).toBe("@/r/a/README.md @/r/a/docs/x.md "));
     expect(within(tray).queryByRole("alert")).toBeNull();
+  });
+
+  it("從檔案樹拖檔到終端：agent 會話貼 @路徑；沒選會話時提示", async () => {
+    const writes: string[] = [];
+    const stream = {
+      onData() {},
+      onOpen(cb: () => void) {
+        cb();
+      },
+      onClose() {},
+      write: (d: string) => writes.push(d),
+      resize() {},
+      close() {},
+      connected: true,
+    };
+    const store = (
+      await mount(
+        mockBackend({
+          getState: vi.fn(async () =>
+            makeState({ terms: [term({ home_group: "產品開發" })] as never }),
+          ),
+          openTerminal: vi.fn(() => stream) as never,
+        }),
+      )
+    ).store;
+    const data = (abs: string) => {
+      const m = new Map([[FILE_DRAG_TYPE, JSON.stringify({ repo: "a", path: "x.md", abs })]]);
+      return { types: [...m.keys()], getData: (t: string) => m.get(t) ?? "", dropEffect: "" };
+    };
+    const panel = document.getElementById("termpanel")!;
+    const toast = vi.spyOn(store, "toast");
+    await act(async () => fireEvent.drop(panel, { dataTransfer: data("/r/a/x.md") }));
+    expect(toast).toHaveBeenCalledWith(expect.stringContaining("先在下方終端選一個"));
+
+    const card = document.querySelector('.gcard[data-key="產品開發"]')!;
+    await act(async () =>
+      fireEvent.click(within(card as HTMLElement).getByRole("button", { name: /claude · a/ })),
+    );
+    await waitFor(() => expect(store.backend.openTerminal).toHaveBeenCalledWith("t1"));
+    fireEvent.dragOver(panel, { dataTransfer: data("/r/a/x.md") });
+    expect(panel.classList.contains("dropping")).toBe(true);
+    await act(async () => fireEvent.drop(panel, { dataTransfer: data("/r/a/x.md") }));
+    expect(panel.classList.contains("dropping")).toBe(false);
+    await waitFor(() => expect(writes.join("")).toBe("@/r/a/x.md "));
   });
 
   it("從牌組裡對 repo 開會話：帶上所屬牌組", async () => {

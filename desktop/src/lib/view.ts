@@ -491,3 +491,27 @@ export function parseTags(input: string): string[] {
     ),
   ];
 }
+
+/** 從檔案樹拖出來的檔（dataTransfer 的型別；內容是 `{repo, path, abs}` 的 JSON）。 */
+export const FILE_DRAG_TYPE = "application/x-repo-context-file";
+
+/**
+ * 拖到終端的檔案要貼成什麼：agent 會話＝`@絕對路徑`（agent 會去讀）；shell＝加引號的路徑。
+ * 後面補一個空白，不換行（不會被當成送出）。
+ */
+export function pathForTerminal(abs: string, kind: "agent" | "shell", windows = false): string {
+  if (kind === "agent") return "@" + abs + " ";
+  if (/^[\w@%+=:,./-]+$/.test(abs)) return abs + " ";
+  return (windows ? '"' + abs + '"' : "'" + abs.replace(/'/g, "'\\''") + "'") + " ";
+}
+
+/** 拖曳資料（{@link FILE_DRAG_TYPE}）裡的絕對路徑；不是我們拖的或壞掉＝null。 */
+export function draggedFileAbs(raw: string): string | null {
+  if (!raw) return null;
+  try {
+    const abs = (JSON.parse(raw) as { abs?: unknown }).abs;
+    return typeof abs === "string" && abs ? abs : null;
+  } catch {
+    return null;
+  }
+}

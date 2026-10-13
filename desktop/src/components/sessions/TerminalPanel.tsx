@@ -7,12 +7,20 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent,
   type MutableRefObject,
 } from "react";
 import type { TermStream } from "../../api/backend";
 import type { TermInfo } from "../../api/types";
 import { AsyncButton } from "../AsyncButton";
-import { reportLine, sessionPair, sessionWhere } from "../../lib/view";
+import {
+  draggedFileAbs,
+  FILE_DRAG_TYPE,
+  pathForTerminal,
+  reportLine,
+  sessionPair,
+  sessionWhere,
+} from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { confirmKillSpec, sessionResultSpec } from "./SessionDialogs";
 
@@ -258,20 +266,43 @@ export function TerminalPanel(props: {
   const info: TermInfo | undefined = terms.find((s) => s.sid === activeSid);
 
   // 貼到目前會話：走 xterm 的 paste（尊重 bracketed paste，換行不會被當成送出），不按 Enter
+  const pasteActive = (text: string): string | null => {
+    const rec = activeSid ? recs.current.get(activeSid) : undefined;
+    if (!rec || !activeSid || !conn[activeSid] || !info?.alive) return null;
+    setCollapsed(false);
+    rec.t.paste(text);
+    rec.t.focus();
+    return info.title;
+  };
   useEffect(() => {
     if (!pasteRef) return;
-    pasteRef.current = (text) => {
-      const rec = activeSid ? recs.current.get(activeSid) : undefined;
-      if (!rec || !activeSid || !conn[activeSid] || !info?.alive) return null;
-      setCollapsed(false);
-      rec.t.paste(text);
-      rec.t.focus();
-      return info.title;
-    };
+    pasteRef.current = pasteActive;
     return () => {
       pasteRef.current = null;
     };
   });
+
+  // 從檔案樹拖檔進來：agent 會話貼 @路徑、shell 貼加引號的路徑（不按 Enter）
+  const [dropping, setDropping] = useState(false);
+  const dragProps = {
+    onDragOver: (e: DragEvent) => {
+      if (!e.dataTransfer.types.includes(FILE_DRAG_TYPE)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setDropping(true);
+    },
+    onDragLeave: () => setDropping(false),
+    onDrop: (e: DragEvent) => {
+      setDropping(false);
+      const abs = draggedFileAbs(e.dataTransfer.getData(FILE_DRAG_TYPE));
+      if (!abs) return;
+      e.preventDefault();
+      const kind = info?.kind ?? "shell";
+      const windows = /win/i.test(navigator.platform);
+      if (!pasteActive(pathForTerminal(abs, kind, windows)))
+        store.toast("先在下方終端選一個執行中的會話，再把檔案拖進來");
+    },
+  };
 
   const attached = !!activeSid && activeSid in conn;
   const connected = !!activeSid && conn[activeSid];
@@ -284,7 +315,12 @@ export function TerminalPanel(props: {
     : "尚未選擇會話";
 
   return (
-    <section id="termpanel" aria-label="終端面板">
+    <section
+      id="termpanel"
+      aria-label="終端面板"
+      className={dropping ? "dropping" : undefined}
+      {...dragProps}
+    >
       <div
         id="termdrag"
         ref={dragRef}

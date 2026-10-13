@@ -9,6 +9,7 @@ import {
 import type { TreeEntry } from "../../api/types";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
+import { FILE_DRAG_TYPE } from "../../lib/view";
 import { samePick, useStore, useUi, useUiState, type Pick } from "../../store/context";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 
@@ -321,6 +322,16 @@ export function RepoRoot(props: {
                 setFocusPath(e.path);
                 ui.togglePick(pickOf(e));
               } else activate(e);
+            }}
+            draggable
+            onDragStart={(ev) => {
+              // 拖到下方終端＝貼路徑（TerminalPanel 收）
+              ev.dataTransfer.setData(
+                FILE_DRAG_TYPE,
+                JSON.stringify({ repo: id, path: e.path, abs: e.abs }),
+              );
+              ev.dataTransfer.setData("text/plain", e.abs);
+              ev.dataTransfer.effectAllowed = "copy";
             }}
             onFocus={() => setFocusPath(e.path)}
             onKeyDown={(ev) => onKey(ev, e)}

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { InboxCard, QuestionCard } from "../api/types";
 import {
+  draggedFileAbs,
+  pathForTerminal,
   actionLabel,
   actionToast,
   cardSections,
@@ -130,5 +132,22 @@ describe("開會話 payload", () => {
       group: null,
       repos: null,
     });
+  });
+});
+
+describe("拖檔到終端", () => {
+  it("agent 貼 @路徑；shell 有特殊字元才加引號；後面一個空白、不換行", () => {
+    expect(pathForTerminal("/r/a/README.md", "agent")).toBe("@/r/a/README.md ");
+    expect(pathForTerminal("/r/a/README.md", "shell")).toBe("/r/a/README.md ");
+    expect(pathForTerminal("/r/my notes/it's.md", "shell")).toBe("'/r/my notes/it'\\''s.md' ");
+    expect(pathForTerminal("C:\\r\\my notes\\a.md", "shell", true)).toBe(
+      '"C:\\r\\my notes\\a.md" ',
+    );
+  });
+  it("只認我們拖的資料", () => {
+    expect(draggedFileAbs(JSON.stringify({ repo: "a", path: "x", abs: "/r/a/x" }))).toBe("/r/a/x");
+    expect(draggedFileAbs("")).toBeNull();
+    expect(draggedFileAbs("not json")).toBeNull();
+    expect(draggedFileAbs(JSON.stringify({ abs: 3 }))).toBeNull();
   });
 });
