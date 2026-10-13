@@ -99,11 +99,14 @@ pub fn run_with(
     let now = when.unwrap_or_else(|| Local::now().naive_local());
     let cfg = config::load(spine_dir)?;
     let model = cfg.provider_model("digest");
-    let (_, entries) = registry::resolve_group(spine_dir, group, repos)?;
-    let outdir = spine_dir
-        .join("groups")
-        .join(group.unwrap_or("adhoc"))
-        .join("digests");
+    let (gname, entries) = registry::resolve_group(spine_dir, group, repos)?;
+    // 資料夾用登記的原名（只給組時 resolve_group 回的就是原名）
+    let dir = match group {
+        Some(_) if repos.is_none_or(<[String]>::is_empty) => gname.as_str(),
+        Some(g) => g,
+        None => "adhoc",
+    };
+    let outdir = spine_dir.join("groups").join(dir).join("digests");
     let mut results = Vec::new();
     for e in &entries {
         if e.kind().as_deref() != Some("mine") {

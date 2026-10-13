@@ -110,10 +110,11 @@ fn check_group(spine_dir: &Path, group: &str) -> Result<String> {
             "筆記只能記在已儲存的牌組上；先把這個範圍存成牌組",
         ));
     }
-    if registry::load(spine_dir)?.group(group).is_none() {
-        return Err(Error::invalid(format!("組不存在: {group}")));
+    // 回登記的原名（給的可能是事件標頭裡換寫過的 PM_Group）
+    match registry::load(spine_dir)?.group(group) {
+        Some(g) => Ok(g.name()),
+        None => Err(Error::invalid(format!("組不存在: {group}"))),
     }
-    Ok(group.to_string())
 }
 
 /// 讀檔；沒有檔＝沒有筆記。

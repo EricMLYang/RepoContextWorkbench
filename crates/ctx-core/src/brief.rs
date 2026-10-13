@@ -382,9 +382,15 @@ pub fn run(
     let (gname, entries) = registry::resolve_group(spine_dir, group, repos)?;
     let states = collect::collect_group(&repo_specs(&entries), None);
     let text = build_brief(spine_dir, &gname, &states, Some(now), group)?;
+    // 資料夾用登記的原名（只給組時 resolve_group 回的就是原名）
+    let dir = match group {
+        Some(_) if repos.is_none_or(<[String]>::is_empty) => gname.as_str(),
+        Some(g) => g,
+        None => "adhoc",
+    };
     let out = spine_dir
         .join("groups")
-        .join(group.unwrap_or("adhoc"))
+        .join(dir)
         .join("briefs")
         .join(format!("{}.md", now.format("%Y-%m-%d")));
     if let Some(parent) = out.parent() {
