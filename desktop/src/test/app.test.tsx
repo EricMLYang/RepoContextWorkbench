@@ -362,7 +362,9 @@ describe("健康指標的名片覆蓋（F-57）", () => {
         action: vi.fn(async (name: string) =>
           name === "repo_tree"
             ? { ok: true, id: "a", root: "/r/a", dir: "", more: 0, entries: [] }
-            : { ok: true, id: "a", path: "/r/a" },
+            : name === "profile_draft_brief"
+              ? { ok: true, text: "起草名片", repos: ["a", "b"] }
+              : { ok: true, id: "a", path: "/r/a" },
         ) as never,
       }),
     );
@@ -372,6 +374,13 @@ describe("健康指標的名片覆蓋（F-57）", () => {
     expect(el.textContent).toContain("，另 10 個");
     await act(async () => fireEvent.click(within(el).getByRole("button", { name: "a" })));
     expect(document.getElementById("repopanel")!.getAttribute("aria-label")).toBe("Repo：a");
+    await act(async () =>
+      fireEvent.click(within(el).getByRole("button", { name: "請 Agent 起草…" })),
+    );
+    expect(document.getElementById("detailtitle")!.textContent).toBe("開啟 Agent 會話");
+    expect((document.querySelector("#detaildialog textarea") as HTMLTextAreaElement).value).toBe(
+      "起草名片",
+    );
     cleanup();
     await mount(
       mockBackend({

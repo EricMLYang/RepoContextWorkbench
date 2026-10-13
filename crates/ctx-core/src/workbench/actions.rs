@@ -82,6 +82,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("describe_repo", a_describe_repo),
     ("palette", a_palette),
     ("pick_brief", a_pick_brief),
+    ("profile_draft_brief", a_profile_draft_brief),
     ("save_group", a_save_group),
     ("update_group", a_update_group),
     ("remove_group", a_remove_group),
@@ -114,6 +115,7 @@ const READ_ONLY: &[&str] = &[
     "repo_profile",
     "palette",
     "pick_brief",
+    "profile_draft_brief",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -826,6 +828,79 @@ fn a_pick_brief(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
         json!({"ok": true, "text": text, "mentions": mentions.join("\n"),
               "repos": repos, "count": mentions.len()}),
     )
+}
+
+/// Rust 才有（F-57 P2）：請 agent 批次起草名片的任務文字。`ids` 沒給＝還沒寫介紹、沒封存的 repo（最多
+/// [`DRAFT_MAX`] 個）。任務要求只讀 repo、先列草稿給人確認、確認後才用 `ctx registry describe` 寫——
+/// 名片是人要背書的，agent 只起草。附上已用過的角色，讓新寫的跟既有的用詞一致。
+#[derive(serde::Deserialize)]
+struct DraftArgs {
+    #[serde(default)]
+    ids: Option<Vec<String>>,
+}
+
+/// 一次最多請 agent 起草幾張名片（多了人審不完）。
+const DRAFT_MAX: usize = 10;
+
+fn a_profile_draft_brief(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let DraftArgs { ids } = parse("profile_draft_brief", p)?;
+    let data = registry::load(d)?;
+    let picked: Vec<&registry::Repo> = match ids {
+        Some(ids) => ids
+            .iter()
+            .map(|id| {
+                data.repo(id)
+                    .ok_or_else(|| Error::invalid(format!("repo 不存在: {id}")))
+            })
+            .collect::<Result<_>>()?,
+        None => data
+            .repos
+            .iter()
+            .filter(|r| r.tier() != Some(registry::Tier::Archived) && r.description().is_none())
+            .collect(),
+    };
+    if picked.is_empty() {
+        return Err(Error::invalid("沒有要起草的 repo（都寫了介紹）"));
+    }
+    let picked = &picked[..picked.len().min(DRAFT_MAX)];
+    let mut roles: Vec<String> = Vec::new();
+    for r in &data.repos {
+        if let Some(role) = r.role() {
+            if !roles.contains(&role) {
+                roles.push(role);
+            }
+        }
+    }
+    let mut text = String::from(
+        "替這幾個 repo 起草「名片」（一句話介紹、協作角色、搜尋關鍵字）——repo 多了以後靠它找到、\
+         同組的 agent 開場靠它認得彼此：\n\n",
+    );
+    for r in picked {
+        let card = crate::profile::profile(r);
+        text.push_str(&format!("- {}：{}", card.id, card.path));
+        if let (Some(desc), Some(crate::profile::DescSource::Readme)) =
+            (&card.description, card.description_source)
+        {
+            text.push_str(&format!("（README 第一句：{desc}）"));
+        }
+        text.push('\n');
+    }
+    if !roles.is_empty() {
+        text.push_str(&format!(
+            "\n已經用過的角色（能沿用就沿用，用詞一致才好找）：{}\n",
+            roles.join("、")
+        ));
+    }
+    text.push_str(
+        "\n做法：\n\
+         1. 每個 repo 讀 README／AGENTS.md、目錄結構、最近的 commit。**只讀，不改 repo 裡任何檔。**\n\
+         2. 先把草稿列成表給我看（id｜角色｜介紹｜關鍵字）：介紹一句話，說這個 repo 是什麼、別的 repo 來這裡找什麼；\
+         角色一個短詞；關鍵字 3～6 個。等我確認或修改。\n\
+         3. 我確認後，逐一用 `ctx registry describe <id> --description \"…\" --role \"…\" --keywords \"a,b,c\"` 寫入\
+         （存在 spine 的 registry，不寫進 repo）。\n",
+    );
+    let repos: Vec<String> = picked.iter().map(|r| r.id()).collect();
+    Ok(json!({"ok": true, "text": text, "repos": repos}))
 }
 
 fn a_save_group(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {

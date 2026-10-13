@@ -544,6 +544,11 @@ export interface ActionMap {
   /** Rust 才有（F-57）：repo 名片（唯讀）與編輯——三欄送完整內容，引擎只寫有變的欄位。 */
   repo_profile: { payload: { id: string }; result: RepoProfile };
   palette: { payload: { query: string } & ScanParams; result: PaletteResult };
+  /** Rust 才有（F-57）：請 agent 起草名片的任務（ids 沒給＝還沒寫介紹的，最多 10 個）。 */
+  profile_draft_brief: {
+    payload: { ids?: string[] };
+    result: { ok: true; text: string; repos: string[] };
+  };
   /** Rust 才有：挑好的檔案 → 會話任務文字（依 repo 分段、附名片）＋`@絕對路徑`（一行一個）。 */
   pick_brief: {
     payload: { files: { id: string; path: string }[] };

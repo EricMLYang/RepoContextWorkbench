@@ -2355,3 +2355,6 @@ button.linkish {
   outline: 2px dashed var(--blue);
   outline-offset: -3px;
 }
+.healthprofiles > button:not(.linkish) {
+  margin-left: 8px;
+}

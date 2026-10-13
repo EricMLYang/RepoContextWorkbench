@@ -2104,3 +2104,48 @@ fn pick_brief_groups_by_repo_with_profile_and_rejects_escapes() {
         .collect();
     assert!(err(&d, "pick_brief", json!({ "files": many })).contains("最多 50"));
 }
+
+#[test]
+fn profile_draft_brief_lists_undescribed_and_known_roles() {
+    let (_t, d) = spine_with_repos();
+    act(
+        &d,
+        "describe_repo",
+        json!({"id": "repo-a", "description": "讀書筆記", "role": "知識庫"}),
+    )
+    .unwrap();
+    let r = act(&d, "profile_draft_brief", json!({})).unwrap();
+    assert_eq!(r["repos"], json!(["repo-b"]));
+    let text = r["text"].as_str().unwrap();
+    let rb = registry::get_repo(&d, "repo-b").unwrap().path();
+    assert!(
+        text.contains(&format!("- repo-b：{}", rb.to_string_lossy())),
+        "{text}"
+    );
+    assert!(
+        text.contains("README 第一句：這個 repo 談 widget 快取設計。"),
+        "{text}"
+    );
+    assert!(
+        text.contains("已經用過的角色（能沿用就沿用，用詞一致才好找）：知識庫"),
+        "{text}"
+    );
+    assert!(text.contains("只讀，不改 repo 裡任何檔"), "{text}");
+    assert!(
+        text.contains("ctx registry describe <id> --description \"…\""),
+        "{text}"
+    );
+    assert!(!text.contains("- repo-a："), "{text}");
+
+    // 指定 id（就算寫過也照起草）；不存在的拒絕；都寫了就說沒有
+    let one = act(&d, "profile_draft_brief", json!({"ids": ["repo-a"]})).unwrap();
+    assert_eq!(one["repos"], json!(["repo-a"]));
+    assert!(err(&d, "profile_draft_brief", json!({"ids": ["nope"]})).contains("nope"));
+    act(
+        &d,
+        "describe_repo",
+        json!({"id": "repo-b", "description": "快取"}),
+    )
+    .unwrap();
+    assert!(err(&d, "profile_draft_brief", json!({})).contains("都寫了介紹"));
+}

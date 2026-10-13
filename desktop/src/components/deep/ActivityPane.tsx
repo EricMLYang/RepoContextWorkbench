@@ -1,7 +1,8 @@
 import type { RecentEvent } from "../../api/types";
 import { fullTextSpec } from "../../dialogs/FullText";
 import { matchesSearch } from "../../lib/view";
-import { useSnapshot, useUi } from "../../store/context";
+import { useSnapshot, useStore, useUi } from "../../store/context";
+import { AsyncButton } from "../AsyncButton";
 
 function RecordRow(props: { title: string; meta: string; time: string; onClick: () => void }) {
   return (
@@ -47,6 +48,7 @@ const pct = (x: number | null) => (x === null ? "—" : Math.round(x * 100) + "%
 /** 健康指標（同 `ctx health`，引擎算好；這裡只排版）：真用一陣子後看行為有沒有改變。 */
 function HealthLine() {
   const { state } = useSnapshot();
+  const store = useStore();
   const ui = useUi();
   const h = state.health;
   if (!h) return null;
@@ -79,6 +81,22 @@ function HealthLine() {
                   </button>
                 ))}
                 {p.undescribed_more ? `，另 ${p.undescribed_more} 個` : null}
+                <AsyncButton
+                  className="ghost small"
+                  title="開一個 Agent 會話：讀這些 repo、列草稿給你確認後才寫進 registry"
+                  onError={(m) => store.toast(m)}
+                  run={async () => {
+                    const r = await store.action("profile_draft_brief", {});
+                    ui.openSession({
+                      group: null,
+                      repos: r.repos,
+                      task: r.text,
+                      origin: "profile-draft",
+                    });
+                  }}
+                >
+                  請 Agent 起草…
+                </AsyncButton>
               </>
             ) : null}
           </p>
