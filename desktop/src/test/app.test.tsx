@@ -1224,3 +1224,116 @@ describe("首次設定：建立或選既有 spine", () => {
     expect(setSpine).toHaveBeenCalledWith("~/old");
   });
 });
+
+describe("⌘K 找 repo／牌組", () => {
+  const result = (query: string) => ({
+    ok: true,
+    query,
+    repos: query.includes("zz")
+      ? []
+      : [
+          {
+            repo: "a",
+            score: 50,
+            why: ["名稱開頭"],
+            role: "知識庫",
+            description: "書摘與卡片",
+            groups: ["產品開發"],
+          },
+          { repo: "b", score: 2, why: ["介紹命中"], groups: [] },
+        ],
+    groups: query ? [] : [{ name: "產品開發", members: 2, goal: "把登入做完" }],
+  });
+  const backendWithPalette = () =>
+    mockBackend({
+      action: vi.fn(async (name: string, p: { query?: string }) => {
+        if (name === "palette") return result(p.query ?? "");
+        if (name === "repo_tree")
+          return { ok: true, id: "a", root: "/r/a", dir: "", more: 0, entries: [] };
+        if (name === "repo_profile") return { ok: true, id: "a", path: "/r/a" };
+        return { ok: true };
+      }) as never,
+    });
+  async function mount(backend: ReturnType<typeof mockBackend>) {
+    const store = new WorkbenchStore(backend, { group: null, repos: null });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    return store;
+  }
+  const box = () => screen.getByRole("combobox", { name: "找 repo 或牌組" });
+  const opts = () => within(screen.getByRole("listbox", { name: "結果" })).getAllByRole("option");
+  const noBox = () => screen.queryByRole("combobox", { name: "找 repo 或牌組" });
+
+  it("⌘K 開；空查詢列出 repo 與牌組；打字問引擎；Enter 在側欄開 repo；Esc 關", async () => {
+    const backend = backendWithPalette();
+    await mount(backend);
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    await waitFor(() => expect(opts()).toHaveLength(3));
+    expect(backend.action).toHaveBeenCalledWith("palette", { query: "" });
+    const first = opts();
+    expect(first[0].textContent).toContain("知識庫");
+    expect(first[0].textContent).toContain("書摘與卡片");
+    expect(first[2].textContent).toContain("目標：把登入做完");
+    expect(first[0].getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.change(box(), { target: { value: "zz" } });
+    await waitFor(() => expect(screen.getByText(/沒有符合「zz」/)).toBeTruthy());
+    expect(backend.action).toHaveBeenCalledWith("palette", { query: "zz" });
+
+    fireEvent.change(box(), { target: { value: "a" } });
+    await waitFor(() => expect(opts()).toHaveLength(2));
+    fireEvent.keyDown(box(), { key: "ArrowDown" });
+    expect(opts()[1].getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(box(), { key: "ArrowUp" });
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter" }));
+    expect(noBox()).toBeNull();
+    expect(document.getElementById("repopanel")!.getAttribute("aria-label")).toBe("Repo：a");
+
+    // 再選同一個不會把側欄收起（showRepo 不是 toggle）
+    await act(async () => fireEvent.keyDown(window, { key: "k", ctrlKey: true }));
+    await waitFor(() => expect(opts()).toHaveLength(3));
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter" }));
+    expect(document.getElementById("repopanel")).toBeTruthy();
+
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    await act(async () => fireEvent.keyDown(box(), { key: "Escape" }));
+    expect(noBox()).toBeNull();
+  });
+
+  it("選牌組切範圍；⌘Enter 對 repo 開會話對話框；失敗保留清單並顯示原因", async () => {
+    const backend = backendWithPalette();
+    const store = await mount(backend);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: /找 repo/ })));
+    await waitFor(() => expect(opts()).toHaveLength(3));
+    await act(async () => fireEvent.click(opts()[2]));
+    expect(store.getSnapshot().scope.group).toBe("產品開發");
+
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    await waitFor(() => expect(opts()).toHaveLength(3));
+    (backend.action as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+      throw new Error("registry 讀不到");
+    });
+    fireEvent.change(box(), { target: { value: "x" } });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("registry 讀不到"));
+    expect(opts()).toHaveLength(3);
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter", metaKey: true }));
+    expect(document.getElementById("detaildialog")!.hasAttribute("open")).toBe(true);
+    expect(document.getElementById("detailtitle")!.textContent).toBe("開啟 Agent 會話");
+  });
+
+  it("焦點在終端裡時 Ctrl+K 留給 shell", async () => {
+    await mount(backendWithPalette());
+    const term = document.createElement("div");
+    term.className = "xterm";
+    const ta = document.createElement("textarea");
+    term.appendChild(ta);
+    document.body.appendChild(term);
+    await act(async () => fireEvent.keyDown(ta, { key: "k", ctrlKey: true }));
+    expect(noBox()).toBeNull();
+    await act(async () => fireEvent.keyDown(ta, { key: "k", metaKey: true }));
+    expect(box()).toBeTruthy();
+    term.remove();
+  });
+});

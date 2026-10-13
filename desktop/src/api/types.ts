@@ -259,6 +259,23 @@ export interface GroupNotes {
   notes: GroupNote[];
 }
 
+/** Rust 才有：⌘K 的結果（排名在引擎）。repos 依分數排，空查詢＝registry 順序。 */
+export interface PaletteResult {
+  ok: true;
+  query: string;
+  repos: {
+    repo: string;
+    score: number;
+    /** 為什麼中（例：名稱開頭、角色命中） */
+    why: string[];
+    role?: string;
+    description?: string;
+    /** 在哪些牌組 */
+    groups: string[];
+  }[];
+  groups: { name: string; members: number; goal: string }[];
+}
+
 /** Rust 才有（F-57）：repo 名片。存在 spine 的 registry，不寫進 repo。 */
 export interface RepoProfile {
   ok: true;
@@ -515,6 +532,7 @@ export interface ActionMap {
   };
   /** Rust 才有（F-57）：repo 名片（唯讀）與編輯——三欄送完整內容，引擎只寫有變的欄位。 */
   repo_profile: { payload: { id: string }; result: RepoProfile };
+  palette: { payload: { query: string }; result: PaletteResult };
   describe_repo: {
     payload: { id: string; description: string; role: string; keywords: string };
     result: RepoProfile & { changed: boolean };

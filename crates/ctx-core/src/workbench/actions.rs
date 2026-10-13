@@ -80,6 +80,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("tag", a_tag),
     ("repo_profile", a_repo_profile),
     ("describe_repo", a_describe_repo),
+    ("palette", a_palette),
     ("save_group", a_save_group),
     ("update_group", a_update_group),
     ("remove_group", a_remove_group),
@@ -110,6 +111,7 @@ const READ_ONLY: &[&str] = &[
     "read_file",
     "group_notes",
     "repo_profile",
+    "palette",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -634,6 +636,51 @@ fn a_describe_repo(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value>
     args.insert("id".into(), json!(a.id));
     ops::call(d, "registry_describe", Value::Object(args), Via::Ui)?;
     profile_json(&registry::get_repo(d, &a.id)?, Some(true))
+}
+
+/// Rust 才有（2026-10-13）：App 的 ⌘K——打字找 repo（名稱部分字串、縮寫、名片內容）與牌組（名稱、目標）。
+/// 排名在 [`crate::profile::quick_find`]；前端只畫。repo 多帶它在哪些牌組。
+#[derive(serde::Deserialize)]
+struct PaletteArgs {
+    #[serde(default)]
+    query: String,
+}
+
+/// ⌘K 一次最多列幾個 repo（打字會再縮小範圍）。
+const PALETTE_LIMIT: usize = 30;
+
+fn a_palette(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let PaletteArgs { query } = parse("palette", p)?;
+    let data = registry::load(d)?;
+    let profiles: Vec<_> = data.repos.iter().map(crate::profile::profile).collect();
+    let q = query.trim().to_lowercase();
+    let repos: Vec<Value> = crate::profile::quick_find(&profiles, &q, PALETTE_LIMIT)
+        .into_iter()
+        .map(|h| {
+            let groups: Vec<String> = data
+                .groups
+                .iter()
+                .filter(|g| g.members().contains(&h.repo))
+                .map(|g| g.name())
+                .collect();
+            let mut v = serde_json::to_value(&h)?;
+            v["groups"] = json!(groups);
+            Ok(v)
+        })
+        .collect::<Result<_>>()?;
+    let groups: Vec<Value> = data
+        .groups
+        .iter()
+        .filter(|g| {
+            let goal = g.get_str("goal").unwrap_or_default();
+            q.is_empty() || g.name().to_lowercase().contains(&q) || goal.to_lowercase().contains(&q)
+        })
+        .map(|g| {
+            json!({"name": g.name(), "members": g.members().len(),
+                   "goal": g.get_str("goal").unwrap_or_default()})
+        })
+        .collect();
+    Ok(json!({"ok": true, "query": query, "repos": repos, "groups": groups}))
 }
 
 fn a_save_group(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {

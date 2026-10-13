@@ -8,6 +8,7 @@ import { TerminalPanel } from "./components/sessions/TerminalPanel";
 import { Workspace } from "./components/Workspace";
 import { RepoMenu } from "./components/deep/RepoMenu";
 import { RepoPanel } from "./components/deep/RepoPanel";
+import { Palette } from "./components/Palette";
 import { FileTabs } from "./components/viewer/FileTabs";
 import { FileViewer, fileKey } from "./components/viewer/FileViewer";
 import { useFileTabs } from "./components/viewer/useFileTabs";
@@ -90,6 +91,8 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
   useSavedWidths();
 
   // ── 右側欄（點 repo）＋右鍵選單 ──
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const closePalette = useCallback(() => setPaletteOpen(false), []);
   const [panelRepo, setPanelRepo] = useState<string | null>(() =>
     load<string | null>("panelRepo", null),
   );
@@ -149,6 +152,8 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
         openDetail({ title: "建立第一個工作範圍", eyebrow: "FIRST RUN", content: <Onboarding /> });
       },
       openRepo: (id) => setPanel((cur) => (cur === id ? null : id)),
+      showRepo: (id) => setPanel(() => id),
+      openPalette: () => setPaletteOpen(true),
       closeRepo: () => setPanel(() => null),
       repoMenu: (id, x, y) => setMenu({ id, x, y }),
       openFile,
@@ -203,12 +208,23 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     };
   }, [store, autoStart, openPicker]);
 
-  // Ctrl+` 收合／展開終端（有對話框開著時不動）
+  // Ctrl+` 收合／展開終端（有對話框開著時不動）；⌘K（Ctrl+K）找 repo——
+  // 焦點在終端裡時 Ctrl+K 留給 shell（刪到行尾），⌘K 照常
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.shiftKey && e.key === "`" && !document.querySelector("dialog[open]")) {
+      if (document.querySelector("dialog[open]")) return;
+      if (e.ctrlKey && !e.shiftKey && e.key === "`") {
         e.preventDefault();
         setTermCollapsed((c) => !c);
+      } else if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === "k" &&
+        !(e.ctrlKey && !e.metaKey && (e.target as Element | null)?.closest?.(".xterm"))
+      ) {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -270,6 +286,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
             seq={picker.seq}
             onClose={closePicker}
           />
+          {paletteOpen ? <Palette onClose={closePalette} /> : null}
           {menu ? <RepoMenu id={menu.id} x={menu.x} y={menu.y} onClose={closeMenu} /> : null}
           <DetailDialog
             spec={detail}

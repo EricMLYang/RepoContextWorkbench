@@ -38,7 +38,11 @@ export interface Ui {
   openOnboarding(): void;
   /** 點 repo：在右側欄打開（同一個再點＝收起）。 */
   openRepo(id: string): void;
+  /** 在右側欄打開這個 repo（已開著就不動；不像 openRepo 會收起）。 */
+  showRepo(id: string): void;
   closeRepo(): void;
+  /** ⌘K：找 repo 或牌組。 */
+  openPalette(): void;
   /** 在主區開一個檔案分頁（已開就切過去）。 */
   openFile(repo: string, path: string): void;
   /** repo 的右鍵選單（x、y 是視窗座標）。 */

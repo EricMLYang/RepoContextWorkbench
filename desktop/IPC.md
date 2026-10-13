@@ -96,6 +96,7 @@ Rust 端簽名建議：
 | `write_file`（Rust 才有） | `{id, path, text, base}`（`base`＝讀檔時的 `version`） | 寫成功：同 `read_file` 的結果（新 `version`）；讀檔之後磁碟上已被改過：`{ok: false, conflict: true, id, path}`（沒有寫）。只改既有的 UTF-8 文字檔（≤1MB、不新增不刪除），先寫暫存檔再改名，保留原檔 CRLF／BOM；不記 spine 事件 |
 | `repo_profile`（Rust 才有，唯讀） | `{id}` | 名片：`id`, `path`, `role?`, `description?`, `description_source?: "registry"\|"readme"`（沒填介紹時從 README 截的推測）, `keywords?`, `tags?` |
 | `describe_repo`（Rust 才有） | `{id, description, role, keywords}`（表單三欄的完整內容；`keywords` 是一串字，逗號、頓號、全形逗號或換行分隔） | 同 `repo_profile` ＋ `changed`。只寫跟 registry 不同的欄位（走 `registry_describe`，同 CLI／MCP 的留痕）；都沒變＝不寫、`changed: false` |
+| `palette`（Rust 才有，唯讀） | `{query}`（空＝全部） | `query`, `repos: [{repo, score, why, role?, description?, groups}]`（名稱完全相同＞開頭＞包含＞詞首縮寫，加上名片欄位包含整串查詢、名片詞命中；最多 30 個）, `groups: [{name, members, goal}]`（名稱或目標包含查詢）。App 的 ⌘K；排名在 `profile::quick_find` |
 | `group_notes`（Rust 才有） | `{group}`（已儲存的牌組） | `group`, `path`（`<spine>/groups/<組>/notes.md`）, `notes: [{at, text}]`（新的在前） |
 | `note_add`（Rust 才有） | `{group, text}` | 同 `group_notes` |
 | `note_remove`（Rust 才有） | `{group, at, text}`（兩個都要對得上，檔案被改過就拒絕） | 同 `group_notes` |
@@ -109,7 +110,7 @@ Rust 端簽名建議：
 `collide`／`collide_rerun` 的背景判定：找得到 `ctx`（`ctx_core::exe::ctx_exe`：自己→同目錄→PATH）就起 detached 進程（同 Python，關 App 也跑得完），
 沒有就在 App 行程裡開執行緒跑（App 結束前沒跑完 → lint 會報「碰撞無回程」，可按〔重跑判定〕）。
 `register_repos` 部分成功時 Python 回 `{error, added}`；IPC 只回 `Err(error)`（前端不用 `added`）。
-寫入型 action 成功後發 `workbench://changed`（`reason`＝action 名）；唯讀的（`session_draft`／`scan_dir`／`repo_tree`／`read_file`／`group_notes`／`repo_profile`，清單在引擎 `workbench::is_read_only`）不發——否則展開資料夾、開檔都會讓前端重抓整份 state。
+寫入型 action 成功後發 `workbench://changed`（`reason`＝action 名）；唯讀的（`session_draft`／`scan_dir`／`repo_tree`／`read_file`／`group_notes`／`repo_profile`／`palette`，清單在引擎 `workbench::is_read_only`）不發——否則展開資料夾、開檔都會讓前端重抓整份 state。
 
 ## 終端串流（`term_open` 的 Channel）
 

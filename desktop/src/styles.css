@@ -2187,3 +2187,92 @@ button.filetab.home {
 .notebody .markdown > :last-child {
   margin-bottom: 0;
 }
+
+/* ⌘K 找 repo／牌組 */
+.palettebtn kbd {
+  margin-left: 4px;
+  font: inherit;
+  font-size: 11px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--sub);
+}
+.palettebackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+.palette {
+  width: min(620px, calc(100vw - 32px));
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.palette > input {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 12px 14px;
+  font-size: 15px;
+  background: transparent;
+}
+.palette > .error {
+  margin: 8px 14px 0;
+}
+.palettelist {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.palettelist li {
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.palettelist li.on {
+  background: var(--panel);
+  outline: 1px solid var(--line);
+}
+.paletterow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.palettename {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palettedesc,
+.palettewhy {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.paletteempty {
+  margin: 10px 14px;
+}
+.palettehint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 7px 14px;
+  border-top: 1px solid var(--line);
+}

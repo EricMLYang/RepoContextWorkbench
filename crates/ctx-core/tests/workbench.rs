@@ -1475,6 +1475,7 @@ fn read_only_actions_leave_spine_untouched() {
         ("read_file", json!({"id": "repo-a", "path": "README.md"})),
         ("group_notes", json!({"group": "g1"})),
         ("repo_profile", json!({"id": "repo-a"})),
+        ("palette", json!({"query": "rep"})),
         ("scan_dir", json!({"dir": d.parent().unwrap()})),
     ];
     let before = spine_files(&d);
@@ -1964,4 +1965,39 @@ fn repo_profile_falls_back_to_readme_and_describe_writes_only_changes() {
     .unwrap();
     assert_eq!(back["description_source"], "readme");
     assert!(err(&d, "describe_repo", json!({"id": "nope", "role": "x"})).contains("nope"));
+}
+
+#[test]
+fn palette_finds_repos_by_partial_name_and_profile_and_groups() {
+    let (_t, d) = spine_with_repos();
+    act(
+        &d,
+        "describe_repo",
+        json!({"id": "repo-b", "description": "書摘與卡片", "role": "知識庫", "keywords": ""}),
+    )
+    .unwrap();
+    act(&d, "set_goal", json!({"group": "g1", "text": "把登入做完"})).unwrap();
+    let ids = |q: &str| -> Vec<String> {
+        act(&d, "palette", json!({"query": q})).unwrap()["repos"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h["repo"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert_eq!(ids(""), ["repo-a", "repo-b"]);
+    assert_eq!(ids("rep"), ["repo-a", "repo-b"]);
+    assert_eq!(ids("知識"), ["repo-b"]);
+    assert_eq!(ids("-b"), ["repo-b"]);
+    let r = act(&d, "palette", json!({"query": "知識"})).unwrap();
+    assert_eq!(r["repos"][0]["groups"], json!(["g1"]));
+    assert_eq!(r["repos"][0]["role"], "知識庫");
+    assert!(r["groups"].as_array().unwrap().is_empty());
+    let g = act(&d, "palette", json!({"query": "登入"})).unwrap();
+    assert_eq!(g["groups"][0]["name"], "g1");
+    assert_eq!(g["groups"][0]["members"], 2);
+    assert_eq!(
+        act(&d, "palette", json!({})).unwrap()["groups"][0]["name"],
+        "g1"
+    );
 }

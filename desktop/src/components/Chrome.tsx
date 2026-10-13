@@ -1,10 +1,11 @@
 /** 頂列、頁尾、toast——外框元件。 */
 import { useEffect, useState } from "react";
 import { connectionText, scopeLabel } from "../lib/view";
-import { useSnapshot, useStore } from "../store/context";
+import { useSnapshot, useStore, useUi } from "../store/context";
 
 export function TopBar({ onHome }: { onHome: () => void }) {
   const store = useStore();
+  const ui = useUi();
   const snap = useSnapshot();
   const err = snap.stateError || snap.scanError;
   return (
@@ -26,6 +27,14 @@ export function TopBar({ onHome }: { onHome: () => void }) {
       <span className="top-divider" />
       <span className="muted">個人工作空間</span>
       <span className="spacer" />
+      <button
+        type="button"
+        className="ghost palettebtn"
+        title="找 repo 或牌組（名稱、角色、介紹、關鍵字）"
+        onClick={ui.openPalette}
+      >
+        找 repo <kbd>⌘K</kbd>
+      </button>
       <span id="connection" role="status" className={err ? "offline" : ""}>
         {connectionText(snap)}
       </span>

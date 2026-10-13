@@ -239,6 +239,110 @@ pub fn rank(profiles: &[RepoProfile], query: &str, limit: usize) -> Vec<ProfileH
 }
 
 /// 組員名冊的一列：名片＋現在有幾個 agent 會話開在這個 repo（Claude Code hooks 記的開場標記）。
+/// 名稱裡每個詞的第一個字（小寫）：開頭、`-`／`_`／`.`／空白之後、小寫接大寫（camelCase）。
+/// `RepoContextWorkbench` → `rcw`、`card_notes` → `cn`。
+fn initials(id: &str) -> String {
+    let mut out = String::new();
+    let mut prev: Option<char> = None;
+    for c in id.chars() {
+        let start = match prev {
+            None => true,
+            Some(p) => matches!(p, '-' | '_' | '.' | ' ') || (p.is_lowercase() && c.is_uppercase()),
+        };
+        if start && c.is_alphanumeric() {
+            out.extend(c.to_lowercase());
+        }
+        prev = Some(c);
+    }
+    out
+}
+
+/// 名稱的吻合程度（不分大小寫）：完全相同＞開頭＞包含＞詞首縮寫（`rcw` → RepoContextWorkbench；
+/// 至少兩個字、照順序對上每個詞的第一個字——任意字母依序出現太鬆，`rep` 會中一堆不相干的）。
+fn name_match(id: &str, q: &str) -> Option<(f64, &'static str)> {
+    let lower = id.to_lowercase();
+    if lower == q {
+        Some((100.0, "名稱相同"))
+    } else if lower.starts_with(q) {
+        Some((50.0, "名稱開頭"))
+    } else if lower.contains(q) {
+        Some((30.0, "名稱包含"))
+    } else {
+        let ini = initials(id);
+        let mut rest = ini.chars();
+        (q.chars().count() >= 2 && q.chars().all(|c| rest.any(|x| x == c)))
+            .then_some((10.0, "名稱縮寫"))
+    }
+}
+
+/// 打字找 repo（App 的 ⌘K）：邊打邊找，所以名稱的「部分字串」也要中——[`rank`] 只比整個詞，
+/// 打到一半的 `rep` 找不到 `repo-context`。分數＝名稱吻合＋名片欄位包含整串查詢＋[`rank`] 的詞命中；
+/// 同分照 `profiles` 的順序（registry 順序）。空查詢＝全部照順序。
+pub fn quick_find(profiles: &[RepoProfile], query: &str, limit: usize) -> Vec<ProfileHit> {
+    let q = query.trim().to_lowercase();
+    let ranked: HashMap<String, ProfileHit> = rank(profiles, &q, profiles.len())
+        .into_iter()
+        .map(|h| (h.repo.clone(), h))
+        .collect();
+    let mut hits: Vec<ProfileHit> = profiles
+        .iter()
+        .filter_map(|p| {
+            let mut score = 0.0;
+            let mut why: Vec<String> = Vec::new();
+            if !q.is_empty() {
+                if let Some((s, w)) = name_match(&p.id, &q) {
+                    score += s;
+                    why.push(w.to_string());
+                }
+                let guessed = p.description_source == Some(DescSource::Readme);
+                let texts = [
+                    ("角色", 8.0, p.role.clone().unwrap_or_default()),
+                    ("關鍵字", 8.0, p.keywords.join("\n")),
+                    ("標籤", 6.0, p.tags.join("\n")),
+                    (
+                        if guessed {
+                            "介紹（推測）"
+                        } else {
+                            "介紹"
+                        },
+                        if guessed { 2.0 } else { 4.0 },
+                        p.description.clone().unwrap_or_default(),
+                    ),
+                ];
+                for (label, w, text) in texts {
+                    if text.to_lowercase().contains(&q) {
+                        score += w;
+                        why.push(format!("{label}命中"));
+                    }
+                }
+                let named = !why.is_empty();
+                if let Some(h) = ranked.get(&p.id) {
+                    score += h.score;
+                    for w in &h.why {
+                        // 名稱已經用更精確的方式說過了
+                        if !why.contains(w) && !(named && w == "名稱命中") {
+                            why.push(w.clone());
+                        }
+                    }
+                }
+                if score <= 0.0 {
+                    return None;
+                }
+            }
+            Some(ProfileHit {
+                repo: p.id.clone(),
+                score: round2(score),
+                why,
+                role: p.role.clone(),
+                description: p.description.clone(),
+            })
+        })
+        .collect();
+    hits.sort_by(|a, b| b.score.total_cmp(&a.score));
+    hits.truncate(limit);
+    hits
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RosterEntry {
     #[serde(flatten)]
@@ -269,6 +373,56 @@ pub fn roster(spine_dir: &Path, entries: &[Repo], here: Option<&str>) -> Vec<Ros
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn card(id: &str, role: Option<&str>, desc: Option<&str>, kw: &[&str]) -> RepoProfile {
+        RepoProfile {
+            id: id.into(),
+            path: format!("/r/{id}"),
+            role: role.map(str::to_string),
+            description: desc.map(str::to_string),
+            description_source: desc.map(|_| DescSource::Registry),
+            keywords: kw.iter().map(|s| s.to_string()).collect(),
+            tags: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn quick_find_matches_partial_names_and_profile_text() {
+        let ps = vec![
+            card("notes", Some("知識庫"), Some("書摘與讀書卡片"), &["閱讀"]),
+            card(
+                "RepoContextWorkbench",
+                Some("實作"),
+                Some("多 repo 工作台"),
+                &[],
+            ),
+            card("repo-tools", None, None, &["git"]),
+        ];
+        let ids = |q: &str| -> Vec<String> {
+            quick_find(&ps, q, 10).into_iter().map(|h| h.repo).collect()
+        };
+        // 打到一半：開頭吻合的兩個都中，照 registry 順序
+        assert_eq!(ids("rep"), ["RepoContextWorkbench", "repo-tools"]);
+        // 詞首縮寫；任意字母依序出現不算
+        assert_eq!(ids("rcw"), ["RepoContextWorkbench"]);
+        assert_eq!(ids("rt"), ["repo-tools"]);
+        assert!(ids("rpo").is_empty());
+        assert_eq!(initials("RepoContextWorkbench"), "rcw");
+        assert_eq!(initials("card_notes"), "cn");
+        assert_eq!(initials("AWS_StudyGroup"), "asg");
+        assert_eq!(initials("department-agent-engineering"), "dae");
+        // 名片內容（中文打兩個字）
+        assert_eq!(ids("書摘"), ["notes"]);
+        assert_eq!(ids("知識"), ["notes"]);
+        assert_eq!(ids("GIT"), ["repo-tools"]);
+        // 名稱完全相同排第一
+        assert_eq!(ids("notes")[0], "notes");
+        // 空查詢＝全部照順序；沒中＝空
+        assert_eq!(ids("  ").len(), 3);
+        assert!(ids("zzz").is_empty());
+        let h = &quick_find(&ps, "知識", 10)[0];
+        assert!(h.why.contains(&"角色命中".to_string()), "{:?}", h.why);
+    }
 
     #[test]
     fn first_sentence_skips_markup_and_cleans() {
