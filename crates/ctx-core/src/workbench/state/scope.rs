@@ -40,7 +40,8 @@ impl Prov {
 
 pub(super) struct ScopeResolver<'a> {
     events: &'a [Event],
-    groups: HashMap<String, Vec<String>>,
+    /// 組名（原名與換寫過的寫法都當 key）→ (原名, 成員)
+    groups: HashMap<String, (String, Vec<String>)>,
     openings: HashMap<String, usize>,
     refs: HashMap<String, Vec<usize>>,
     cache: Vec<Option<Prov>>,
@@ -64,11 +65,13 @@ impl ScopeResolver<'_> {
                 repos: vec![rid.to_string()],
             }
         } else if let Some(group) = e.kv("group").filter(|g| !g.is_empty()) {
+            // 標頭裡的組名可能換寫過（PM_Group）：標籤用登記的原名
+            let known = self.groups.get(group);
             let members = adhoc_members(group)
-                .unwrap_or_else(|| self.groups.get(group).cloned().unwrap_or_default());
+                .unwrap_or_else(|| known.map(|k| k.1.clone()).unwrap_or_default());
             Prov {
                 kind: "group",
-                label: group.to_string(),
+                label: known.map_or_else(|| group.to_string(), |k| k.0.clone()),
                 repos: members,
             }
         } else {
@@ -115,8 +118,21 @@ impl ScopeResolver<'_> {
 ///
 /// 碰撞回程繼承 opened 的範圍；決定（chosen）繼承它 ref 到的事件；認不出來的放「未分類」。
 pub fn event_scopes(events: &[Event], reg: &RegistryData) -> Vec<Prov> {
-    let groups: HashMap<String, Vec<String>> =
-        reg.groups.iter().map(|g| (g.name(), g.members())).collect();
+    // 事件標頭裡的組名可能是換寫過的（「PM_Group」，見 spine::token_value）：兩種寫法都認
+    let groups: HashMap<String, (String, Vec<String>)> = reg
+        .groups
+        .iter()
+        .flat_map(|g| {
+            let (name, members) = (g.name(), g.members());
+            [
+                (
+                    crate::spine::token_value(&name),
+                    (name.clone(), members.clone()),
+                ),
+                (name.clone(), (name, members)),
+            ]
+        })
+        .collect();
     let mut openings = HashMap::new();
     let mut refs: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, e) in events.iter().enumerate() {

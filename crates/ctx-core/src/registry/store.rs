@@ -233,14 +233,25 @@ pub struct RegistryData {
 }
 
 impl RegistryData {
+    /// 找 repo：id 完全相同優先；找不到再認事件標頭裡換寫過的 id（見 [`crate::spine::token_value`]）。
     pub fn repo(&self, id: &str) -> Option<&Repo> {
-        self.repos.iter().find(|r| r.id() == id)
+        self.repos.iter().find(|r| r.id() == id).or_else(|| {
+            self.repos
+                .iter()
+                .find(|r| crate::spine::same_token(id, &r.id()))
+        })
     }
     pub fn repo_mut(&mut self, id: &str) -> Option<&mut Repo> {
         self.repos.iter_mut().find(|r| r.id() == id)
     }
+    /// 找組：名稱完全相同優先；找不到再認事件標頭裡換寫過的名字（「PM_Group」→「PM Group」，見
+    /// [`crate::spine::token_value`]）。改資料用 [`RegistryData::group_mut`]（只認完全相同的名字）。
     pub fn group(&self, name: &str) -> Option<&Group> {
-        self.groups.iter().find(|g| g.name() == name)
+        self.groups.iter().find(|g| g.name() == name).or_else(|| {
+            self.groups
+                .iter()
+                .find(|g| crate::spine::same_token(name, &g.name()))
+        })
     }
     pub fn group_mut(&mut self, name: &str) -> Option<&mut Group> {
         self.groups.iter_mut().find(|g| g.name() == name)

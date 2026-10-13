@@ -2379,3 +2379,33 @@ fn review_brief_lists_changes_and_forbids_editing() {
     // 乾淨的 repo：沒得審
     assert!(err(&d, "review_brief", json!({"id": "repo-a"})).contains("沒有還沒 commit 的變更"));
 }
+
+/// 組名有空白：事件標頭寫成 group:PM_Group，App 選「PM Group」時照樣算在範圍內。
+#[test]
+fn group_name_with_space_events_stay_in_scope_lane() {
+    let (_t, d) = spine_with_repos();
+    registry::add_group(&d, "PM Group", &["repo-b"]).unwrap();
+    ev(
+        &d,
+        "decision",
+        "agent",
+        &["group:PM Group"],
+        "組層級的判斷",
+        ago(2),
+    );
+    let s = st_in(&d, Some("PM Group"), None);
+    let rec = s["recent"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| {
+            e["body"]
+                .as_str()
+                .is_some_and(|t| t.contains("組層級的判斷"))
+        })
+        .cloned()
+        .unwrap_or_else(|| panic!("{}", s["recent"]));
+    assert_eq!(rec["lane"], "scope", "{rec}");
+    // 標籤用登記的原名
+    assert_eq!(rec["scope_label"], "PM Group", "{rec}");
+}

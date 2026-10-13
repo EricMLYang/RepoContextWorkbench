@@ -230,6 +230,32 @@ fn now_or(when: Option<NaiveDateTime>) -> NaiveDateTime {
     when.unwrap_or_else(|| Local::now().naive_local())
 }
 
+/// 組名／repo id 寫進事件標頭時的樣子：空白換成 `_`（標頭的 token 用空白分隔，「PM Group」整個會變成
+/// 不合法的 token，寫入直接失敗——2026-10-14 實測 PM Group 的 agent 交接、判斷、待辦全寫不進去）。
+/// 沒有空白的名字原樣不變（既有事件與 Python 版照舊）。Rust 才有。
+pub fn token_value(name: &str) -> String {
+    if name.contains(char::is_whitespace) {
+        name.split_whitespace().collect::<Vec<_>>().join("_")
+    } else {
+        name.to_string()
+    }
+}
+
+/// 事件標頭裡的值（`group:`／`repo:`）是不是這個組名／repo id（考慮 [`token_value`] 的換寫）。
+pub fn same_token(value: &str, name: &str) -> bool {
+    value == name || value == token_value(name)
+}
+
+/// `group:`／`repo:` 的值有空白就換寫（見 [`token_value`]），其他 token 原樣。
+fn normalize_token(t: &str) -> String {
+    for key in ["group:", "repo:"] {
+        if let Some(v) = t.strip_prefix(key) {
+            return format!("{key}{}", token_value(v));
+        }
+    }
+    t.to_string()
+}
+
 fn build_header<S: AsRef<str>>(
     now: NaiveDateTime,
     etype: &str,
@@ -242,7 +268,7 @@ fn build_header<S: AsRef<str>>(
         header.push_str(
             &tokens
                 .iter()
-                .map(AsRef::as_ref)
+                .map(|t| normalize_token(t.as_ref()))
                 .collect::<Vec<_>>()
                 .join(" "),
         );
@@ -406,7 +432,7 @@ fn matches_query(ev: &Event, q: &Query) -> bool {
     }
     if q.group
         .as_deref()
-        .is_some_and(|g| !g.is_empty() && ev.kv("group") != Some(g))
+        .is_some_and(|g| !g.is_empty() && !ev.kv("group").is_some_and(|v| same_token(v, g)))
     {
         return false;
     }
@@ -428,11 +454,13 @@ pub fn in_scope<S: AsRef<str>>(ev: &Event, group: Option<&str>, ids: &[S]) -> bo
     if group.is_none() && ids.is_empty() {
         return true;
     }
-    if group.is_some() && ev.kv("group") == group {
-        return true;
+    if let (Some(g), Some(v)) = (group, ev.kv("group")) {
+        if same_token(v, g) {
+            return true;
+        }
     }
     match ev.kv("repo") {
-        Some(rid) if !rid.is_empty() => ids.iter().any(|i| i.as_ref() == rid),
+        Some(rid) if !rid.is_empty() => ids.iter().any(|i| same_token(rid, i.as_ref())),
         _ => false,
     }
 }

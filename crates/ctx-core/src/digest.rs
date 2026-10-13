@@ -40,7 +40,11 @@ pub fn watermark(spine_dir: impl AsRef<Path>, rid: &str) -> Result<Option<String
         .iter()
         .rev()
         .find(|ev| {
-            ev.etype == EventType::Suggestion && ev.source == "digest" && ev.kv("repo") == Some(rid)
+            ev.etype == EventType::Suggestion
+                && ev.source == "digest"
+                && ev
+                    .kv("repo")
+                    .is_some_and(|v| crate::spine::same_token(v, rid))
         })
         .map(|ev| ev.stamp()))
 }

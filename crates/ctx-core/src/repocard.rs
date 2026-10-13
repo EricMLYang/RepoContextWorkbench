@@ -438,7 +438,10 @@ pub struct Unhanded {
 fn last_agent(spine_dir: &Path, repo_id: &str) -> Result<(Option<Handoff>, Option<Unhanded>)> {
     let (mut handoff, mut unhanded) = (None, None);
     for ev in spine::iter_events(spine_dir)? {
-        if ev.kv("repo") != Some(repo_id) {
+        if !ev
+            .kv("repo")
+            .is_some_and(|v| crate::spine::same_token(v, repo_id))
+        {
             continue;
         }
         let first = ev.first_line().to_string();

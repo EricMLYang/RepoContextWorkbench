@@ -1340,8 +1340,8 @@ pub fn close_todo(
         if !cross_scope_ok {
             let g = cur.kv("group").filter(|x| !x.is_empty());
             let r = cur.kv("repo").filter(|x| !x.is_empty());
-            let ok = g.is_some_and(|g| w.groups.iter().any(|x| x == g))
-                || r.is_some_and(|r| home.contains(r));
+            let ok = g.is_some_and(|g| w.groups.iter().any(|x| spine::same_token(g, x)))
+                || r.is_some_and(|r| home.iter().any(|h| spine::same_token(r, h)));
             if !ok {
                 return Err(agent_error(
                     crate::RejectCode::CrossScope,

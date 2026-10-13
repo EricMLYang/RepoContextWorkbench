@@ -1281,3 +1281,52 @@ fn test_roster_shows_uncommitted_files_of_members_with_running_sessions() {
         "{out}"
     );
 }
+
+// ---- 組名有空白（2026-10-14 實測 PM Group 的寫入全部失敗）----
+
+/// 「PM Group」這種有空白的組名：留痕照常寫得進去（標頭寫成 group:PM_Group），讀回來也算這組的。
+#[test]
+fn test_group_name_with_space_can_log_handoff_and_close() {
+    let (t, sp) = spine();
+    let vms = make_git_repo(t.path(), "vms", 0, 0, true);
+    let head = make_git_repo(t.path(), "head", 0, 0, true);
+    registry::add_repo(&sp, "VMS PM", &vms, AddRepo::default()).unwrap();
+    registry::add_repo(&sp, "head", &head, AddRepo::default()).unwrap();
+    registry::add_group(&sp, "PM Group", &["VMS PM", "head"]).unwrap();
+    let here = at(&vms);
+
+    let d = v(api::log_decision(&sp, "採用 A 方案\n依據：x", &here, None, false, "agent").unwrap());
+    assert_eq!(d["ok"], true, "{d}");
+    let todo = v(api::add_todo(&sp, "補測試", None, &here, false, "agent").unwrap());
+    let num = todo["id"].as_str().unwrap().to_string();
+    let h = api::handoff(
+        &sp,
+        "做完 A",
+        "接著做 B",
+        &[] as &[&str],
+        &here,
+        false,
+        "agent",
+    );
+    assert!(h.is_ok(), "{h:?}");
+
+    // 標頭裡沒有空白的 token
+    let evs = spine_mod::iter_events(&sp).unwrap();
+    let last = evs.last().unwrap();
+    assert_eq!(last.kv("group"), Some("PM_Group"));
+    assert_eq!(last.kv("repo"), Some("VMS_PM"));
+
+    // 讀回來：同組的另一個 repo 看得到交接與未結
+    let ctx = api::context_for(&sp, &at(&head), false).unwrap();
+    assert_eq!(ctx["last_handoff"]["next_step"], "接著做 B");
+    assert!(ctx["open_loops"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|l| l["id"] == num.as_str()));
+    // 關掉（主場檢查要認得換寫過的組名）
+    assert!(api::close_todo(&sp, &num, None, Some(&vms), false, "agent").is_ok());
+    // 任務包照樣找得到組
+    let ctx = api::context_for(&sp, &at(&vms), false).unwrap();
+    assert!(ctx["recent_events"].as_array().unwrap().len() >= 3);
+}
