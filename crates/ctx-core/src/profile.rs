@@ -352,18 +352,30 @@ pub struct RosterEntry {
     /// 呼叫者所在的 repo。
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub you: bool,
+    /// 別的會話正在跑的組員：還沒 commit 的檔數（別的 agent 可能正在改這裡；不是 git 或讀不到＝不給）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uncommitted: Option<usize>,
 }
 
 /// 範圍內每個 repo 一列（照 registry 順序）。`here`＝呼叫者所在 repo id。
+/// 有別的會話在跑的組員（不含自己）另外查還沒 commit 的檔數（2026-10-14）——多個 agent 同組工作時，
+/// 開場就知道哪個鄰居正在被改，先別動或先問；只查這幾個（git status，不拿 index.lock），開場不變慢。
 pub fn roster(spine_dir: &Path, entries: &[Repo], here: Option<&str>) -> Vec<RosterEntry> {
     let open = crate::hooks::open_sessions_by_repo(spine_dir);
     entries
         .iter()
         .map(|r| {
             let profile = profile(r);
+            let sessions = open.get(&profile.id).copied().unwrap_or(0);
+            let you = here == Some(profile.id.as_str());
+            let uncommitted = (sessions > 0 && !you)
+                .then(|| crate::filetree::changes(&r.path()).ok())
+                .flatten()
+                .map(|(cs, more)| cs.len() + more);
             RosterEntry {
-                sessions: open.get(&profile.id).copied().unwrap_or(0),
-                you: here == Some(profile.id.as_str()),
+                sessions,
+                you,
+                uncommitted,
                 profile,
             }
         })

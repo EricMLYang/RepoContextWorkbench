@@ -42,6 +42,7 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 ## 同組成員與 repo 名片（Rust 版）
 
 - 開場注入的「## 同組成員」＝這組有誰：角色、絕對路徑、一句話介紹、有沒有會話在跑（MCP `context_for` 的 `roster`）。
+  寫著「N 個檔還沒 commit（可能正在被改）」的組員＝別的 agent 正在那裡工作：要改那裡的檔先問使用者。
   要別人的東西先看這裡判斷找誰；只看一眼可以直接讀路徑，要寫進結論或複製就用 `read_from`（會留引用）。
 - 開場的「組筆記（N 則…）」＝使用者在 App 隨手記的組層級的事（MCP `context_for` 的 `notes`，最新 5 則）；跟手上的事有關就讀全文。
 - `search_knowledge` 的 `repo_profiles` 段先回答「是哪個 repo」（依介紹／角色／關鍵字／tag／名稱排），再看 `files`。

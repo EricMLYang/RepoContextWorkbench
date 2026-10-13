@@ -36,7 +36,7 @@ const NOTE_LINE_CHARS: usize = 60;
 /// 開場名冊最多列幾個成員。
 const ROSTER_LINES: usize = 20;
 
-/// 名冊一列：`- **id**（你在這）｜角色｜路徑 — 介紹（推測）｜N 個會話在跑`。
+/// 名冊一列：`- **id**（你在這）｜角色｜路徑 — 介紹（推測）｜N 個會話在跑，K 個檔還沒 commit`。
 fn roster_line(r: &Value) -> String {
     let mut line = format!("- **{}**", s(r, "id"));
     if r["you"] == true {
@@ -55,6 +55,11 @@ fn roster_line(r: &Value) -> String {
     let n = r["sessions"].as_u64().unwrap_or(0);
     if n > 0 && r["you"] != true {
         line.push_str(&format!("｜{n} 個會話在跑"));
+        // 別的 agent 可能正在改：先別動、要改先問
+        match r["uncommitted"].as_u64() {
+            Some(0) | None => {}
+            Some(k) => line.push_str(&format!("，{k} 個檔還沒 commit（可能正在被改）")),
+        }
     }
     line
 }

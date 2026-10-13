@@ -1251,3 +1251,33 @@ fn test_group_notes_reach_context_for_and_session_start() {
     assert!(line.contains("…——全文："), "{line}");
     assert!(line.contains("notes.md"), "{line}");
 }
+
+/// 2026-10-14：組員有別的會話在跑時，名冊多「還沒 commit 的檔數」（別的 agent 可能正在改）。
+#[test]
+fn test_roster_shows_uncommitted_files_of_members_with_running_sessions() {
+    let w = two_groups();
+    // plan 有一個會話在跑，而且改了一個檔還沒 commit
+    hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "other", "cwd": w.plan.to_string_lossy()}),
+        None,
+    );
+    std::fs::write(w.plan.join("draft.md"), "寫到一半\n").unwrap();
+    let c = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
+    let roster = c["roster"].as_array().unwrap();
+    let plan = roster.iter().find(|r| r["id"] == "plan").unwrap();
+    assert_eq!(plan["sessions"], 1);
+    assert_eq!(plan["uncommitted"], 1);
+    // 自己所在的 repo、沒有會話的組員不查
+    let me = roster.iter().find(|r| r["id"] == "impl").unwrap();
+    assert!(me.get("uncommitted").is_none());
+    let out = hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "me", "cwd": w.impl_.to_string_lossy()}),
+        None,
+    );
+    assert!(
+        out.contains("1 個會話在跑，1 個檔還沒 commit（可能正在被改）"),
+        "{out}"
+    );
+}

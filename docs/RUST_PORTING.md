@@ -200,7 +200,7 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   - `profile` 模組：沒填介紹時從 repo 的 README（或 AGENTS.md）截第一句當推測（`description_source: "readme"`），
     只讀不存；依名片（名稱／角色／關鍵字／tag／介紹）排 repo。
   - `context_for` 多 `roster` 鍵（範圍有兩個以上 repo 才給）：每個成員的 id、絕對路徑、名片、`sessions`
-    （開場 hook 標記數）、`you`；開場注入多「## 同組成員」段。`search_knowledge` 多 `repo_profiles` 鍵（有命中才給）。
+    （開場 hook 標記數）、`you`、`uncommitted`（2026-10-14：有別的會話在跑的組員才查，還沒 commit 的檔數）；開場注入多「## 同組成員」段。`search_knowledge` 多 `repo_profiles` 鍵（有命中才給）。
   - MCP 工作層多 `describe_repo`（只能改主場：所在 repo＋同組成員，跨組要 `cross_scope_ok`）。
   - 對拍：`scripts/parity.py` 比對前拿掉 `roster`／`repo_profiles`／同組成員段／這兩個工具／skill 的名片段。
 - **牌組筆記給 agent**（2026-10-14；Python 沒有）：`context_for` 在組範圍、組有筆記時多 `notes` 鍵
