@@ -89,7 +89,8 @@ Rust 端簽名建議：
 | `repo_tree`（Rust 才有） | `{id, dir?}`（`dir` 相對 repo 根目錄，空＝根） | `root`, `dir`, `entries: [{name, path, abs, dir}]`, `more` |
 | `group_add_folder`（Rust 才有） | `{path, group?}` | `id`, `registered`, `group` |
 | `reorder`（Rust 才有） | `{kind: "groups"\|"members"\|"repos", order, group?}`（只換順序，不是同一批就拒絕） | — |
-| `read_file`（Rust 才有） | `{id, path}` | `path`, `abs`, `size`, `kind: "text"\|"image"\|"binary"\|"too_large"`（text 帶 `text`、`truncated`；image 帶 `mime`、`base64`） |
+| `read_file`（Rust 才有） | `{id, path}` | `path`, `abs`, `size`, `kind: "text"\|"image"\|"binary"\|"too_large"`（text 帶 `text`、`truncated`、`editable`（沒截斷且是合法 UTF-8）、`version`（內容版本，存檔時帶回）；image 帶 `mime`、`base64`） |
+| `write_file`（Rust 才有） | `{id, path, text, base}`（`base`＝讀檔時的 `version`） | 寫成功：同 `read_file` 的結果（新 `version`）；讀檔之後磁碟上已被改過：`{ok: false, conflict: true, id, path}`（沒有寫）。只改既有的 UTF-8 文字檔（≤1MB、不新增不刪除），先寫暫存檔再改名，保留原檔 CRLF／BOM；不記 spine 事件 |
 | `group_notes`（Rust 才有） | `{group}`（已儲存的牌組） | `group`, `path`（`<spine>/groups/<組>/notes.md`）, `notes: [{at, text}]`（新的在前） |
 | `note_add`（Rust 才有） | `{group, text}` | 同 `group_notes` |
 | `note_remove`（Rust 才有） | `{group, at, text}`（兩個都要對得上，檔案被改過就拒絕） | 同 `group_notes` |
@@ -129,7 +130,7 @@ Rust 端簽名建議：
 | 事件名 | payload | 何時發 |
 |---|---|---|
 | `workbench://changed` | `{ reason?: string }`（前端不讀內容） | 引擎寫入脊椎事件、registry、組、會話清冊有變（含 agent 從 MCP 寫入、會話程序結束）時。前端收到就呼叫 `get_state`（不會觸發 `get_scan`）。 |
-| `repo://changed` | `{ id: string, paths: string[] }`（相對 repo 根目錄） | `watch_tree` 登記的資料夾裡有檔案新增／刪除／改名／改內容（合併 300ms）。父資料夾沒登記的、`.git/` 裡的不報。前端重讀受影響的那一層、開著的檔案重讀。實作：`src-tauri/src/tree_watch.rs`（遞迴 OS 檔案事件，沒有樹開著就不監看任何 repo）。 |
+| `repo://changed` | `{ id: string, paths: string[], rescan: boolean }`（相對 repo 根目錄） | `watch_tree` 登記的資料夾裡有檔案新增／刪除／改名／改內容（合併 300ms）。父資料夾沒登記的、`.git/` 裡的不報。前端重讀受影響的那一層、開著的檔案重讀（有未存修改的檔不重讀，改成提示）。`rescan: true`＝OS 漏了事件（溢出或監看錯誤）：`paths` 是這個 repo 所有登記中的資料夾，前端全部重讀。實作：`src-tauri/src/tree_watch.rs`（遞迴 OS 檔案事件，沒有樹開著就不監看任何 repo）。 |
 
 殼的實作（`src-tauri/src/watch.rs`）：用 `notify` crate 監看 `<spine>/registry.yaml`、`<spine>/config.yaml`、
 `<spine>/spine/events/*.md`、`<spine>/.state/last_seen.txt`（未讀；CLI `ack` 也會改）、

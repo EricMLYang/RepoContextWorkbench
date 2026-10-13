@@ -670,8 +670,9 @@ describe("側欄排序與寬度", () => {
 
 describe("檔案樹跟著磁碟變", () => {
   it("展開的資料夾登記給殼監看；有變動就重讀那一層，開著的檔案也重讀", async () => {
-    const subs = new Set<(id: string, paths: string[]) => void>();
-    const changed = (id: string, paths: string[]) => subs.forEach((cb) => cb(id, paths));
+    const subs = new Set<(id: string, paths: string[], rescan: boolean) => void>();
+    const changed = (id: string, paths: string[], rescan = false) =>
+      subs.forEach((cb) => cb(id, paths, rescan));
     const watchTree = vi.fn(async () => {});
     let round = 0;
     const backend = mockBackend({
@@ -719,6 +720,139 @@ describe("檔案樹跟著磁碟變", () => {
     const calls = (backend.action as ReturnType<typeof vi.fn>).mock.calls.length;
     await act(async () => changed("a", ["src/x.rs"]));
     expect((backend.action as ReturnType<typeof vi.fn>).mock.calls.length).toBe(calls);
+    // OS 漏了事件（rescan）：樹跟開著的檔都重讀
+    round = 2;
+    await act(async () => changed("a", [""], true));
+    expect(await screen.findByText("v2")).toBeTruthy();
+  });
+
+  it("同一層連續重讀：先送出、晚回來的舊清單不蓋掉新的", async () => {
+    const subs = new Set<(id: string, paths: string[], rescan: boolean) => void>();
+    const resolvers: ((v: unknown) => void)[] = [];
+    const listing = (names: string[]) => ({
+      ok: true,
+      id: "a",
+      root: "/r/a",
+      dir: "",
+      more: 0,
+      entries: names.map((n) => ({ name: n, path: n, abs: "/r/a/" + n, dir: false })),
+    });
+    let first = true;
+    const backend = mockBackend({
+      watchTree: vi.fn(async () => {}),
+      onRepoChanged: (cb) => {
+        subs.add(cb);
+        return () => subs.delete(cb);
+      },
+      action: vi.fn(async (name: string) => {
+        if (name !== "repo_tree") return { ok: true };
+        if (first) {
+          first = false;
+          return listing(["README.md"]);
+        }
+        return new Promise((res) => resolvers.push(res));
+      }) as never,
+    });
+    const store = new WorkbenchStore(backend, { group: null, repos: ["a"] });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="files"]')!));
+    await screen.findByRole("treeitem", { name: "README.md" });
+    await act(async () => subs.forEach((cb) => cb("a", ["old.txt"], false)));
+    await act(async () => subs.forEach((cb) => cb("a", ["new.txt"], false)));
+    expect(resolvers.length).toBe(2);
+    await act(async () => resolvers[1](listing(["README.md", "new.txt"])));
+    await act(async () => resolvers[0](listing(["README.md", "old.txt"])));
+    expect(screen.getByRole("treeitem", { name: "new.txt" })).toBeTruthy();
+    expect(screen.queryByRole("treeitem", { name: "old.txt" })).toBeNull();
+  });
+});
+
+describe("檔案簡單編輯", () => {
+  function editBackend() {
+    const subs = new Set<(id: string, paths: string[], rescan: boolean) => void>();
+    const disk = { text: "原本\n", v: 1 };
+    const backend = mockBackend({
+      watchTree: vi.fn(async () => {}),
+      onRepoChanged: (cb) => {
+        subs.add(cb);
+        return () => subs.delete(cb);
+      },
+      action: vi.fn(async (name: string, p: { id?: string; path?: string; text?: string; base?: string }) => {
+        const file = () => ({
+          ok: true, id: "a", path: "a.md", abs: "/r/a/a.md", size: disk.text.length,
+          kind: "text", text: disk.text, truncated: false, editable: true, version: "v" + disk.v,
+        });
+        if (name === "repo_tree")
+          return { ok: true, id: "a", root: "/r/a", dir: "", more: 0,
+                   entries: [{ name: "a.md", path: "a.md", abs: "/r/a/a.md", dir: false }] };
+        if (name === "read_file") return file();
+        if (name === "write_file") {
+          if (p.base !== "v" + disk.v) return { ok: false, conflict: true, id: "a", path: "a.md" };
+          disk.text = p.text!;
+          disk.v += 1;
+          return file();
+        }
+        return { ok: true };
+      }) as never,
+    });
+    const agentWrites = (text: string) => {
+      disk.text = text;
+      disk.v += 1;
+      subs.forEach((cb) => cb("a", ["a.md"], false));
+    };
+    return { backend, disk, agentWrites };
+  }
+
+  async function openEditor(backend: ReturnType<typeof mockBackend>) {
+    const store = new WorkbenchStore(backend, { group: null, repos: ["a"] });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="files"]')!));
+    await act(async () => fireEvent.click(await screen.findByRole("treeitem", { name: "a.md" })));
+    await act(async () => fireEvent.click(await screen.findByRole("button", { name: "編輯" })));
+    return screen.getByRole("textbox", { name: "編輯 a.md" }) as HTMLTextAreaElement;
+  }
+
+  it("編輯後 ⌘S 存檔，帶讀檔時的 version；沒改東西時 agent 改檔會直接換上新內容", async () => {
+    const { backend, disk, agentWrites } = editBackend();
+    const box = await openEditor(backend);
+    expect(box.value).toBe("原本\n");
+    await act(async () => agentWrites("agent 改的\n"));
+    await waitFor(() => expect(box.value).toBe("agent 改的\n"));
+
+    await act(async () => fireEvent.change(box, { target: { value: "我改的\n" } }));
+    expect(document.querySelector(".filetab .dirtymark")).toBeTruthy();
+    await act(async () => fireEvent.keyDown(box, { key: "s", metaKey: true }));
+    expect(backend.action).toHaveBeenCalledWith("write_file", {
+      id: "a", path: "a.md", text: "我改的\n", base: "v2",
+    });
+    expect(disk.text).toBe("我改的\n");
+    expect(document.querySelector(".filetab .dirtymark")).toBeNull();
+  });
+
+  it("有未存修改時 agent 改了檔：不洗掉輸入，提示後可以覆蓋；分頁關閉要按兩次", async () => {
+    const { backend, disk, agentWrites } = editBackend();
+    const box = await openEditor(backend);
+    await act(async () => fireEvent.change(box, { target: { value: "我的版本\n" } }));
+    await act(async () => agentWrites("agent 的版本\n"));
+    await screen.findByText(/磁碟上的檔在你編輯時被改了/);
+    expect(box.value).toBe("我的版本\n");
+
+    // 直接存＝衝突，磁碟不動
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "儲存" })));
+    expect(disk.text).toBe("agent 的版本\n");
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "關閉 a.md" })));
+    expect(document.querySelector(".viewer:not([hidden])")).toBeTruthy();
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "用我的版本覆蓋" })));
+    expect(disk.text).toBe("我的版本\n");
+    expect(screen.queryByText(/磁碟上的檔在你編輯時被改了/)).toBeNull();
   });
 });
 

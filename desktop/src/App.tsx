@@ -92,23 +92,52 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     return () => document.body.classList.remove("withpanel");
   }, [panelRepo]);
 
-  // ── 唯讀檔案分頁（主區）：null＝看工作區 ──
+  // ── 檔案分頁（主區）：null＝看工作區 ──
   const [files, setFiles] = useState<OpenFile[]>(() => load<OpenFile[]>("openFiles", []));
   const [activeFile, setActiveFile] = useState<string | null>(() => load<string | null>("activeFile", null));
   useEffect(() => save("openFiles", files), [files]);
   useEffect(() => save("activeFile", activeFile), [activeFile]);
+  // 有未儲存修改的分頁：關掉要按兩次、不會被擠掉
+  const [dirtyFiles, setDirtyFiles] = useState<ReadonlySet<string>>(() => new Set());
+  const dirtyRef = useRef(dirtyFiles);
+  useEffect(() => {
+    dirtyRef.current = dirtyFiles;
+  }, [dirtyFiles]);
+  const [armedClose, setArmedClose] = useState<string | null>(null);
+  const setFileDirty = useCallback((k: string, dirty: boolean) => {
+    setDirtyFiles((prev) => {
+      if (prev.has(k) === dirty) return prev;
+      const next = new Set(prev);
+      if (dirty) next.add(k);
+      else next.delete(k);
+      return next;
+    });
+  }, []);
   const openFile = useCallback((repo: string, path: string) => {
     const f = { repo, path };
     const k = fileKey(f);
     setFiles((prev) => {
       if (prev.some((x) => fileKey(x) === k)) return prev;
-      // 最多 12 個分頁：擠掉最舊的
-      return [...prev, f].slice(-12);
+      // 最多 12 個分頁：擠掉最舊的（有未儲存修改的不擠）
+      const next = [...prev, f];
+      while (next.length > 12) {
+        const i = next.findIndex((x) => !dirtyRef.current.has(fileKey(x)));
+        if (i < 0 || i === next.length - 1) break;
+        next.splice(i, 1);
+      }
+      return next;
     });
     setActiveFile(k);
   }, []);
   const closeFile = useCallback(
     (k: string) => {
+      if (dirtyFiles.has(k) && armedClose !== k) {
+        setArmedClose(k);
+        const f = files.find((x) => fileKey(x) === k);
+        store.toast("「" + (f?.path ?? "") + "」有未儲存的修改；再按一次 × 放棄修改並關閉");
+        return;
+      }
+      setArmedClose(null);
       const i = files.findIndex((x) => fileKey(x) === k);
       const next = files.filter((x) => fileKey(x) !== k);
       setFiles(next);
@@ -116,7 +145,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
         cur !== k ? cur : next.length ? fileKey(next[Math.min(i, next.length - 1)]) : null,
       );
     },
-    [files],
+    [files, dirtyFiles, armedClose, store],
   );
   const shownFile = files.some((f) => fileKey(f) === activeFile) ? activeFile : null;
   const shownFileObj = useMemo(
@@ -246,7 +275,13 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
         <Resizer side="left" />
         <main id="main" className={files.length ? "withtabs" : undefined}>
           {files.length ? (
-            <FileTabs files={files} active={shownFile} onSelect={setActiveFile} onClose={closeFile} />
+            <FileTabs
+              files={files}
+              active={shownFile}
+              dirty={dirtyFiles}
+              onSelect={setActiveFile}
+              onClose={closeFile}
+            />
           ) : null}
           <Workspace
             tab={tab}
@@ -256,7 +291,12 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
             hidden={!!shownFile}
           />
           {files.map((f) => (
-            <FileViewer key={fileKey(f)} file={f} hidden={fileKey(f) !== shownFile} />
+            <FileViewer
+              key={fileKey(f)}
+              file={f}
+              hidden={fileKey(f) !== shownFile}
+              onDirty={(d) => setFileDirty(fileKey(f), d)}
+            />
           ))}
         </main>
         <TerminalPanel

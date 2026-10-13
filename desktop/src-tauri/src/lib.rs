@@ -25,7 +25,7 @@ use app_state::{persist_spine, spine_json, AppState, Notifier};
 
 /// 前端監聽的事件名（IPC.md「事件」）。
 pub const EVENT_CHANGED: &str = "workbench://changed";
-/// 檔案樹展開中的資料夾有變動（`{id, paths}`，見 `tree_watch`）。
+/// 檔案樹展開中的資料夾有變動（`{id, paths, rescan}`，見 `tree_watch`）。
 pub const EVENT_REPO_CHANGED: &str = "repo://changed";
 const MAIN: &str = "main";
 const TRAY_ID: &str = "main";
@@ -251,10 +251,10 @@ pub fn run() {
             app.manage(state);
             let h2 = handle.clone();
             // 監看起不來不擋啟動：檔案樹還有手動 ⟳
-            if let Ok(tw) = tree_watch::TreeWatcher::start(move |id, paths| {
+            if let Ok(tw) = tree_watch::TreeWatcher::start(move |id, paths, rescan| {
                 let _ = h2.emit(
                     EVENT_REPO_CHANGED,
-                    serde_json::json!({ "id": id, "paths": paths }),
+                    serde_json::json!({ "id": id, "paths": paths, "rescan": rescan }),
                 );
             }) {
                 app.manage(tw);

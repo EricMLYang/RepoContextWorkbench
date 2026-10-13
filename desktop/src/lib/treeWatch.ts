@@ -63,16 +63,20 @@ export function useWatchDirs(backend: Backend, id: string, dirs: string[]) {
   }, [backend, id, key, token]);
 }
 
-/** repo `id` 展開中的資料夾裡有東西變了（相對路徑們）。 */
-export function useRepoChanged(backend: Backend, id: string, cb: (paths: string[]) => void) {
+/** repo `id` 展開中的資料夾裡有東西變了（相對路徑們；`rescan`＝不知道哪裡變了，全部重讀）。 */
+export function useRepoChanged(
+  backend: Backend,
+  id: string,
+  cb: (paths: string[], rescan: boolean) => void,
+) {
   const ref = useRef(cb);
   useEffect(() => {
     ref.current = cb;
   });
   useEffect(() => {
     if (!backend.onRepoChanged) return;
-    return backend.onRepoChanged((rid, paths) => {
-      if (rid === id) ref.current(paths);
+    return backend.onRepoChanged((rid, paths, rescan) => {
+      if (rid === id) ref.current(paths, !!rescan);
     });
   }, [backend, id]);
 }

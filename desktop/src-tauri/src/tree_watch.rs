@@ -4,6 +4,10 @@
 //! OS 檔案事件（遞迴，FSEvents／ReadDirectoryChangesW），只回報父資料夾在展開清單裡的路徑——
 //! `target/`、`node_modules/` 這類沒展開的大目錄怎麼寫都不會吵到前端。沒有樹開著＝不監看任何 repo。
 //! 一波寫入合併成一次通知（[`DEBOUNCE`]）；閒置不輪詢。
+//!
+//! Agent 一次改很多檔（git checkout、格式化整個專案）時，OS 可能來不及逐檔回報、只說「這裡要重掃」
+//! （FSEvents MustScanSubDirs、ReadDirectoryChangesW 緩衝滿）或直接回錯誤。這時不能丟掉——
+//! 改成通知每個監看中的 repo「全部重讀」（`rescan`），否則樹會停在舊狀態直到手動 ⟳。
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
@@ -24,6 +28,50 @@ struct Watched {
 }
 
 type Table = Arc<Mutex<HashMap<String, Watched>>>;
+
+/// 監看執行緒收到的東西。
+#[derive(Debug)]
+enum Msg {
+    Path(PathBuf),
+    /// OS 漏了事件（溢出或錯誤）：不知道哪裡變了。
+    Rescan,
+}
+
+/// 一次通知：(repo id, 相對路徑們, 是否全部重讀)。全部重讀時路徑＝所有展開中的資料夾。
+type Notice = (String, Vec<String>, bool);
+
+/// 一批訊息 → 每個 repo 一則通知。
+fn collect(table: &HashMap<String, Watched>, batch: &[Msg]) -> Vec<Notice> {
+    if batch.iter().any(|m| matches!(m, Msg::Rescan)) {
+        let mut out: Vec<Notice> = table
+            .iter()
+            .map(|(id, w)| {
+                let mut dirs: Vec<String> = w
+                    .dirs
+                    .iter()
+                    .map(|d| d.to_string_lossy().into_owned())
+                    .collect();
+                dirs.sort();
+                (id.clone(), dirs, true)
+            })
+            .collect();
+        out.sort();
+        return out;
+    }
+    let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for m in batch {
+        if let Msg::Path(p) = m {
+            if let Some((id, rel)) = route(table, p) {
+                out.entry(id)
+                    .or_default()
+                    .insert(rel.to_string_lossy().into_owned());
+            }
+        }
+    }
+    out.into_iter()
+        .map(|(id, paths)| (id, paths.into_iter().collect(), false))
+        .collect()
+}
 
 /// 事件路徑 → 要通知的（repo id, 相對路徑）。`.git` 裡的變動不算；父資料夾沒展開也不算。
 fn route(table: &HashMap<String, Watched>, p: &Path) -> Option<(String, PathBuf)> {
@@ -52,19 +100,23 @@ pub struct TreeWatcher {
 }
 
 impl TreeWatcher {
-    /// `on_change(id, 相對路徑們)`：合併後每個 repo 呼叫一次。
+    /// `on_change(id, 相對路徑們, 全部重讀)`：合併後每個 repo 呼叫一次。
     pub fn start(
-        on_change: impl Fn(&str, &[String]) + Send + 'static,
+        on_change: impl Fn(&str, &[String], bool) + Send + 'static,
     ) -> notify::Result<TreeWatcher> {
         let table: Table = Arc::default();
-        let (tx, rx) = mpsc::channel::<PathBuf>();
-        let watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-            if let Ok(ev) = res {
-                for p in ev.paths {
-                    let _ = tx.send(p);
+        let (tx, rx) = mpsc::channel::<Msg>();
+        let watcher =
+            notify::recommended_watcher(move |res: notify::Result<notify::Event>| match res {
+                Ok(ev) if !ev.need_rescan() => {
+                    for p in ev.paths {
+                        let _ = tx.send(Msg::Path(p));
+                    }
                 }
-            }
-        })?;
+                _ => {
+                    let _ = tx.send(Msg::Rescan);
+                }
+            })?;
         let t2 = table.clone();
         std::thread::Builder::new()
             .name("tree-watch".into())
@@ -73,19 +125,12 @@ impl TreeWatcher {
                     std::thread::sleep(DEBOUNCE);
                     let mut batch = vec![first];
                     batch.extend(rx.try_iter());
-                    let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-                    {
+                    let notices = {
                         let table = t2.lock().unwrap_or_else(|e| e.into_inner());
-                        for p in &batch {
-                            if let Some((id, rel)) = route(&table, p) {
-                                out.entry(id)
-                                    .or_default()
-                                    .insert(rel.to_string_lossy().into_owned());
-                            }
-                        }
-                    }
-                    for (id, paths) in out {
-                        on_change(&id, &paths.into_iter().collect::<Vec<_>>());
+                        collect(&table, &batch)
+                    };
+                    for (id, paths, rescan) in notices {
+                        on_change(&id, &paths, rescan);
                     }
                 }
             })
@@ -154,12 +199,27 @@ mod tests {
     }
 
     #[test]
+    fn rescan_reloads_every_watched_dir() {
+        let t = table(&["", "src"]);
+        let batch = [Msg::Path(PathBuf::from("/r/a/README.md")), Msg::Rescan];
+        assert_eq!(
+            collect(&t, &batch),
+            vec![("a".into(), vec!["".into(), "src".into()], true)]
+        );
+        let batch = [Msg::Path(PathBuf::from("/r/a/src/x.rs"))];
+        assert_eq!(
+            collect(&t, &batch),
+            vec![("a".into(), vec!["src/x.rs".into()], false)]
+        );
+    }
+
+    #[test]
     fn file_event_reaches_callback() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().canonicalize().unwrap();
         let hits = Arc::new(Mutex::new(Vec::<(String, Vec<String>)>::new()));
         let h2 = hits.clone();
-        let w = TreeWatcher::start(move |id, paths| {
+        let w = TreeWatcher::start(move |id, paths, _rescan| {
             h2.lock().unwrap().push((id.to_string(), paths.to_vec()))
         })
         .unwrap();

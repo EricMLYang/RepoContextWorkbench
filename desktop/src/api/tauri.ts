@@ -108,7 +108,9 @@ export function createTauriBackend(
     onRepoChanged(cb) {
       let stop: (() => void) | null = null;
       let cancelled = false;
-      listen<{ id: string; paths: string[] }>("repo://changed", (e) => cb(e.payload.id, e.payload.paths))
+      listen<{ id: string; paths: string[]; rescan?: boolean }>("repo://changed", (e) =>
+        cb(e.payload.id, e.payload.paths, !!e.payload.rescan),
+      )
         .then((un) => (cancelled ? un() : (stop = un)))
         .catch(() => {});
       return () => {

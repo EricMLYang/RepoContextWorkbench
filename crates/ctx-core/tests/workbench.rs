@@ -1606,6 +1606,51 @@ fn read_file_action_returns_text_and_guards_paths() {
     assert!(act(&d, "read_file", json!({"id": "repo-a"})).is_err());
 }
 
+#[test]
+fn write_file_action_saves_and_reports_conflict() {
+    let (_t, d) = spine_with_repos();
+    let read = |d: &std::path::Path| {
+        act(
+            d,
+            "read_file",
+            json!({"id": "repo-a", "path": "notes/plan.md"}),
+        )
+        .unwrap()
+    };
+    let r = read(&d);
+    assert_eq!(r["editable"], json!(true));
+    let v1 = r["version"].clone();
+    let w = act(
+        &d,
+        "write_file",
+        json!({"id": "repo-a", "path": "notes/plan.md", "text": "改過了\n", "base": v1}),
+    )
+    .unwrap();
+    assert_eq!(w["ok"], json!(true));
+    assert_eq!(w["text"], json!("改過了\n"));
+    assert_ne!(w["version"], v1);
+    // 拿舊 version 再存＝別人改過了：不寫、回 conflict（不是錯誤）
+    let c = act(
+        &d,
+        "write_file",
+        json!({"id": "repo-a", "path": "notes/plan.md", "text": "蓋掉\n", "base": v1}),
+    )
+    .unwrap();
+    assert_eq!(c["conflict"], json!(true));
+    assert_eq!(read(&d)["text"], json!("改過了\n"));
+    // 不記 spine 事件
+    assert!(!spine::iter_events(&d)
+        .unwrap()
+        .iter()
+        .any(|e| e.body.contains("plan.md")));
+    assert!(act(
+        &d,
+        "write_file",
+        json!({"id": "repo-a", "path": "notes/plan.md"})
+    )
+    .is_err());
+}
+
 // ── 2026-10-12：牌組筆記（Rust 才有）──
 
 #[test]

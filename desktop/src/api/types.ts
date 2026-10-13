@@ -261,9 +261,12 @@ export interface GroupNotes {
   notes: GroupNote[];
 }
 
-/** read_file 的結果：文字、圖片（base64）、其他二進位或太大只有大小。 */
+/**
+ * read_file 的結果：文字、圖片（base64）、其他二進位或太大只有大小。
+ * 文字的 `editable`＝能在 App 裡編輯（沒截斷、合法 UTF-8）；`version`＝存檔時帶回去判斷有沒有被別人改過。
+ */
 export type FileContent = { ok: true; id: string; path: string; abs: string; size: number } & (
-  | { kind: "text"; text: string; truncated: boolean }
+  | { kind: "text"; text: string; truncated: boolean; editable?: boolean; version?: string }
   | { kind: "image"; mime: string; base64: string }
   | { kind: "binary" }
   | { kind: "too_large" }
@@ -493,6 +496,10 @@ export interface ActionMap {
   };
   /** Rust 才有：唯讀檢視器讀一個檔。 */
   read_file: { payload: { id: string; path: string }; result: FileContent };
+  write_file: {
+    payload: { id: string; path: string; text: string; base: string };
+    result: FileContent | { ok: false; conflict: true; id: string; path: string };
+  };
   /** Rust 才有：牌組筆記（spine 的 groups/<組>/notes.md；新的在前）。 */
   group_notes: { payload: { group: string }; result: GroupNotes };
   note_add: { payload: { group: string; text: string }; result: GroupNotes };

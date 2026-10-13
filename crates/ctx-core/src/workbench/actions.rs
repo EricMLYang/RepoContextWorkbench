@@ -82,6 +82,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("group_add_folder", a_group_add_folder),
     ("reorder", a_reorder),
     ("read_file", a_read_file),
+    ("write_file", a_write_file),
     ("group_notes", a_group_notes),
     ("note_add", a_note_add),
     ("note_remove", a_note_remove),
@@ -652,12 +653,21 @@ fn a_read_file(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
         return Err(Error::invalid("read_file 需要 id 與 path"));
     };
     let root = registry::get_repo(d, &id)?.path();
-    let f = crate::filetree::read_file(&root, &path)?;
+    Ok(file_json(&id, crate::filetree::read_file(&root, &path)?))
+}
+
+fn file_json(id: &str, f: crate::filetree::FileRead) -> Value {
     let mut out = json!({"ok": true, "id": id, "path": f.rel.to_string_lossy(),
                          "abs": f.abs.to_string_lossy(), "size": f.size});
     let extra = match f.view {
-        crate::filetree::FileView::Text { text, truncated } => {
-            json!({"kind": "text", "text": text, "truncated": truncated})
+        crate::filetree::FileView::Text {
+            text,
+            truncated,
+            editable,
+            version,
+        } => {
+            json!({"kind": "text", "text": text, "truncated": truncated,
+                   "editable": editable, "version": version})
         }
         crate::filetree::FileView::Image { mime, base64 } => {
             json!({"kind": "image", "mime": mime, "base64": base64})
@@ -668,7 +678,26 @@ fn a_read_file(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     if let (Value::Object(o), Value::Object(e)) = (&mut out, extra) {
         o.extend(e);
     }
-    Ok(out)
+    out
+}
+
+/// Rust 才有（2026-10-13）：檢視器簡單編輯（見 [`crate::filetree::write_file`]）。
+/// 不記 spine 事件——改檔的痕跡在 git。磁碟上已被改過回 `{ok: false, conflict: true}`。
+fn a_write_file(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let (Some(id), Some(path), Some(text), Some(base)) =
+        (s(p, "id"), s(p, "path"), raw(p, "text"), s(p, "base"))
+    else {
+        return Err(Error::invalid("write_file 需要 id、path、text、base"));
+    };
+    let root = registry::get_repo(d, &id)?.path();
+    Ok(
+        match crate::filetree::write_file(&root, &path, &text, &base)? {
+            crate::filetree::WriteOutcome::Saved(f) => file_json(&id, f),
+            crate::filetree::WriteOutcome::Conflict => {
+                json!({"ok": false, "conflict": true, "id": id, "path": path})
+            }
+        },
+    )
 }
 
 fn notes_json(d: &Path, group: &str, notes: &[crate::notes::Note]) -> Value {

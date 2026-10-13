@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FileContent } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
@@ -110,8 +110,25 @@ function CodeView({ text, wrap }: { text: string; wrap: boolean }) {
   );
 }
 
-/** 唯讀檢視器（一個分頁一個檔）：md 預設預覽、可切原始碼；程式碼有行號；圖片直接顯示。 */
-export function FileViewer({ file, hidden }: { file: OpenFile; hidden: boolean }) {
+/** textarea 只會給 LF；比對「有沒有改」也用 LF（存檔時引擎會還原原檔的 CRLF／BOM）。 */
+const lf = (t: string) => t.replace(/\r\n/g, "\n").replace(/^\uFEFF/, "");
+
+/**
+ * 檢視器（一個分頁一個檔）：md 預設預覽、可切原始碼；程式碼有行號；圖片直接顯示。
+ * 文字檔可以簡單編輯（textarea，⌘S 存）。agent 改檔很快，所以：
+ * - 沒改東西時，磁碟一變就重讀（編輯中也跟著換成新內容）；
+ * - 有未存的修改時不重讀（不洗掉使用者打的字），改成提示「磁碟上的檔變了」，讓人選載入或覆蓋；
+ * - 存檔帶讀檔時的 version，引擎發現被改過就不寫（conflict）。
+ */
+export function FileViewer({
+  file,
+  hidden,
+  onDirty,
+}: {
+  file: OpenFile;
+  hidden: boolean;
+  onDirty?: (dirty: boolean) => void;
+}) {
   const store = useStore();
   const ui = useUi();
   const { repo, path } = file;
@@ -121,6 +138,35 @@ export function FileViewer({ file, hidden }: { file: OpenFile; hidden: boolean }
   const [nonce, setNonce] = useState(0);
   const [source, setSource] = useState(false);
   const [wrap, setWrap] = useState(isProse(path));
+  // 編輯：draft＝null 表示沒在編輯；editBase＝這份草稿是從哪個內容開始改的（LF）
+  const [draft, setDraft] = useState<string | null>(null);
+  const [editBase, setEditBase] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [diskChanged, setDiskChanged] = useState(false);
+  const [armDiscard, setArmDiscard] = useState(false);
+  const dirty = draft !== null && draft !== editBase;
+  // 給非同步回呼（讀檔回來、磁碟事件）看最新值
+  const dirtyRef = useRef(dirty);
+  const contentRef = useRef(content);
+  const onDirtyRef = useRef(onDirty);
+  useEffect(() => {
+    dirtyRef.current = dirty;
+    contentRef.current = content;
+    onDirtyRef.current = onDirty;
+  });
+  useEffect(() => {
+    onDirtyRef.current?.(dirty);
+  }, [dirty]);
+  useEffect(() => () => onDirtyRef.current?.(false), []);
+
+  /** 換上新讀到的內容；編輯中但沒改東西就讓草稿跟著換。 */
+  const accept = (r: FileContent) => {
+    setContent(r);
+    if (r.kind === "text" && !dirtyRef.current) {
+      setEditBase(lf(r.text));
+      setDraft((d) => (d === null ? null : lf(r.text)));
+    }
+  };
 
   // 讀檔（換檔或按 ⟳ 重讀）；讀失敗保留上次的內容並顯示錯誤
   useEffect(() => {
@@ -129,7 +175,7 @@ export function FileViewer({ file, hidden }: { file: OpenFile; hidden: boolean }
       .action("read_file", { id: repo, path })
       .then((r) => {
         if (!live) return;
-        setContent(r);
+        accept(r);
         setError("");
       })
       .catch((e: Error) => live && setError(e.message))
@@ -143,11 +189,75 @@ export function FileViewer({ file, hidden }: { file: OpenFile; hidden: boolean }
     setError("");
     setNonce((n) => n + 1);
   };
-  // 檔案在磁碟上被改了（agent 在寫、git 切分支…）就自己重讀
+  // 檔案在磁碟上被改了（agent 在寫、git 切分支…）就自己重讀；有未存的修改時只提示
   useWatchDirs(store.backend, repo, [parentDir(path)]);
-  useRepoChanged(store.backend, repo, (paths) => {
-    if (paths.includes(path)) reload();
+  useRepoChanged(store.backend, repo, (paths, rescan) => {
+    if (!rescan && !paths.includes(path)) return;
+    if (!dirtyRef.current) {
+      reload();
+      return;
+    }
+    // 可能只是自己剛存檔的回音：版本一樣就不吵
+    store
+      .action("read_file", { id: repo, path })
+      .then((r) => {
+        const cur = contentRef.current;
+        const v = (c: FileContent | null) => (c?.kind === "text" ? c.version : undefined);
+        if (v(r) !== v(cur)) setDiskChanged(true);
+      })
+      .catch(() => setDiskChanged(true));
   });
+
+  const startEdit = () => {
+    if (content?.kind !== "text") return;
+    setEditBase(lf(content.text));
+    setDraft(lf(content.text));
+    setArmDiscard(false);
+  };
+  const stopEdit = () => {
+    if (dirty && !armDiscard) {
+      setArmDiscard(true);
+      return;
+    }
+    setDraft(null);
+    setArmDiscard(false);
+    setDiskChanged(false);
+  };
+  /** 存檔；`overwrite`＝磁碟上已經變了也照樣用我的版本蓋過去。 */
+  const save = async (overwrite = false) => {
+    if (draft === null || saving || content?.kind !== "text") return;
+    const sent = draft;
+    setSaving(true);
+    setError("");
+    try {
+      let base = content.version ?? "";
+      if (overwrite) {
+        const cur = await store.action("read_file", { id: repo, path });
+        if (cur.kind !== "text" || !cur.editable) throw new Error("磁碟上的檔已經不能編輯了（變成二進位或太大）");
+        base = cur.version ?? "";
+      }
+      const r = await store.action("write_file", { id: repo, path, text: sent, base });
+      if (!r.ok) {
+        setDiskChanged(true);
+        return;
+      }
+      setContent(r);
+      setEditBase(sent);
+      setDiskChanged(false);
+      setArmDiscard(false);
+      store.toast("已儲存 " + path);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const loadDisk = () => {
+    setDraft(null);
+    setDiskChanged(false);
+    setArmDiscard(false);
+    reload();
+  };
 
   const hooks: MdHooks = {
     onLink(href) {
@@ -173,6 +283,7 @@ export function FileViewer({ file, hidden }: { file: OpenFile; hidden: boolean }
   };
 
   const md = isMarkdown(path);
+  const editing = draft !== null;
   const crumbs = path.replace(/\\/g, "/").split("/");
   return (
     <section className="viewer" hidden={hidden} aria-label={"檢視：" + repo + "/" + path}>
@@ -189,9 +300,40 @@ export function FileViewer({ file, hidden }: { file: OpenFile; hidden: boolean }
             </span>
           ))}
           {content ? <span className="muted small"> · {fmtSize(content.size)}</span> : null}
+          {dirty ? <span className="dirtymark"> · 未儲存</span> : null}
         </div>
         <div className="vieweractions">
-          {md && content?.kind === "text" ? (
+          {editing ? (
+            <>
+              <button
+                type="button"
+                className="small primary"
+                disabled={!dirty || saving}
+                title="⌘S"
+                onClick={() => void save(false)}
+              >
+                {saving ? "儲存中…" : "儲存"}
+              </button>
+              <button type="button" className={"small ghost" + (armDiscard ? " danger" : "")} disabled={saving} onClick={stopEdit}>
+                {!dirty ? "完成" : armDiscard ? "再按一次放棄修改" : "放棄修改"}
+              </button>
+            </>
+          ) : content?.kind === "text" ? (
+            <button
+              type="button"
+              className="small ghost"
+              disabled={!content.editable}
+              title={
+                content.editable
+                  ? "直接改這個檔（⌘S 存）"
+                  : "檔案超過 1 MB 或不是 UTF-8，不能在 App 裡編輯"
+              }
+              onClick={startEdit}
+            >
+              編輯
+            </button>
+          ) : null}
+          {!editing && md && content?.kind === "text" ? (
             <button
               type="button"
               className="small ghost"
@@ -201,7 +343,7 @@ export function FileViewer({ file, hidden }: { file: OpenFile; hidden: boolean }
               {source ? "預覽" : "原始碼"}
             </button>
           ) : null}
-          {content?.kind === "text" && (!md || source) ? (
+          {!editing && content?.kind === "text" && (!md || source) ? (
             <button
               type="button"
               className="small ghost"
@@ -230,14 +372,25 @@ export function FileViewer({ file, hidden }: { file: OpenFile; hidden: boolean }
             type="button"
             className="small ghost"
             aria-label="重新讀取"
-            title="重新讀取"
-            disabled={loading}
+            title={dirty ? "有未儲存的修改" : "重新讀取"}
+            disabled={loading || dirty}
             onClick={reload}
           >
             ⟳
           </button>
         </div>
       </div>
+      {diskChanged ? (
+        <div className="viewerconflict" role="alert">
+          <span>磁碟上的檔在你編輯時被改了（可能是 agent）。</span>
+          <button type="button" className="small" disabled={saving} onClick={loadDisk}>
+            載入磁碟版本（放棄我的修改）
+          </button>
+          <button type="button" className="small danger" disabled={saving} onClick={() => void save(true)}>
+            用我的版本覆蓋
+          </button>
+        </div>
+      ) : null}
       {error ? (
         <p className="error viewererror" role="alert">
           {error}
@@ -249,16 +402,36 @@ export function FileViewer({ file, hidden }: { file: OpenFile; hidden: boolean }
             <p className="muted">讀取中…</p>
           ) : null
         ) : content.kind === "text" ? (
-          <>
-            {content.truncated ? (
-              <p className="viewernote">檔案有 {fmtSize(content.size)}，只顯示前 1 MB。</p>
-            ) : null}
-            {md && !source ? (
-              <Markdown text={content.text} hooks={hooks} />
-            ) : (
-              <CodeView text={content.text} wrap={wrap} />
-            )}
-          </>
+          editing ? (
+            <textarea
+              className="vieweredit"
+              aria-label={"編輯 " + path}
+              spellCheck={false}
+              value={draft}
+              readOnly={saving}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                setArmDiscard(false);
+              }}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+                  e.preventDefault();
+                  if (dirty) void save(false);
+                }
+              }}
+            />
+          ) : (
+            <>
+              {content.truncated ? (
+                <p className="viewernote">檔案有 {fmtSize(content.size)}，只顯示前 1 MB。</p>
+              ) : null}
+              {md && !source ? (
+                <Markdown text={content.text} hooks={hooks} />
+              ) : (
+                <CodeView text={content.text} wrap={wrap} />
+              )}
+            </>
+          )
         ) : content.kind === "image" ? (
           <div className="viewerimage">
             <img src={"data:" + content.mime + ";base64," + content.base64} alt={path} />

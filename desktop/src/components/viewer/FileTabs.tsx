@@ -1,13 +1,14 @@
 import { fileKey, type OpenFile } from "./FileViewer";
 
-/** 主區最上方的分頁列：「工作區」＋開著的檔（中鍵或 × 關閉）。 */
+/** 主區最上方的分頁列：「工作區」＋開著的檔（中鍵或 × 關閉；有未儲存修改的標 ●）。 */
 export function FileTabs(props: {
   files: OpenFile[];
   active: string | null;
+  dirty?: ReadonlySet<string>;
   onSelect: (key: string | null) => void;
   onClose: (key: string) => void;
 }) {
-  const { files, active, onSelect, onClose } = props;
+  const { files, active, dirty, onSelect, onClose } = props;
   return (
     <nav className="filetabs" aria-label="主區分頁">
       <button
@@ -38,6 +39,12 @@ export function FileTabs(props: {
             >
               {name}
               <span className="muted small"> · {f.repo}</span>
+              {dirty?.has(k) ? (
+                <span className="dirtymark" aria-label="未儲存">
+                  {" "}
+                  ●
+                </span>
+              ) : null}
             </button>
             <button
               type="button"

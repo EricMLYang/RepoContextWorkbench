@@ -194,6 +194,13 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
     只報這些資料夾裡的變動；檔案樹改成 VS Code 檔案總管風格（攤平列、縮排導引線、檔案圖示、目前檔案反白、
     右鍵複製路徑／相對路徑、方向鍵操作）。
   macOS：單元／整合測試過，GUI 未實測；Windows：未測（ReadDirectoryChangesW 遞迴監看理論上可用）。
+- **檢視器簡單編輯＋即時更新補強**（2026-10-13；Python 沒有）：action `write_file`（`filetree::write_file`）——只改既有的
+  UTF-8 文字檔（≤1MB），帶讀檔時的 `version`（大小＋雜湊），磁碟上已被改過就不寫、回 `conflict`（`WriteOutcome` 型別），
+  先寫暫存檔再改名、保留原檔 CRLF／BOM，不記 spine 事件（痕跡在 git）。`read_file` 的文字多 `editable`、`version`。
+  前端：textarea、⌘S 存；沒改東西時磁碟一變就換上新內容，有未存修改時不重讀、提示「載入磁碟版本／用我的版本覆蓋」；
+  未存的分頁標 ●、關閉要按兩次、不會被 12 個上限擠掉。即時更新：`tree_watch` 遇到 OS 漏事件（need_rescan 或錯誤）
+  不再丟掉，改發 `rescan` 讓前端全部重讀；檔案樹同一層連續重讀時丟棄晚回來的舊結果。
+  macOS：單元／整合測試過，GUI 未實測；Windows：未測（CRLF 還原有單元測試）。
 - **判斷匯出成 AgDR `ctx decisions export <dir>`**（2026-10-10，ideation F-40；Python 沒有）：範圍內人／agent／回填寫的、
   有 id、不是交接的判斷寫成 `<dir>/AgDR-<id>.md`（frontmatter：id、timestamp、agent、status executed／superseded、
   supersedes、superseded_by、group／repo；內文：判斷、何時重看、結果）。沒變的檔不重寫；只寫指定目錄。

@@ -6,8 +6,12 @@
 //!   不是 git 的資料夾全列。
 //! - 只讀，不改任何檔；`dir` 必須在 repo 裡（擋 `..`、絕對路徑、符號連結跳出 repo）。
 //!
-//! [`read_file`]：App 的唯讀檢視器讀一個檔——文字（UTF-8，壞位元組換成 �）、圖片（base64 給 `<img>`）、
+//! [`read_file`]：App 的檢視器讀一個檔——文字（UTF-8，壞位元組換成 �）、圖片（base64 給 `<img>`）、
 //! 其他二進位只回大小。文字超過 [`TEXT_MAX`] 只給前段並標 `truncated`。
+//!
+//! [`write_file`]（2026-10-13）：檢視器的簡單編輯。只改既有的文字檔（不新增、刪除、改名）；
+//! 帶讀檔時的 `version`，磁碟上已經被改過（agent 寫得很快）就不寫、回 [`WriteOutcome::Conflict`]；
+//! 先寫暫存檔再改名；保留原檔的 CRLF 與 BOM（textarea 會把 CRLF 變 LF）。
 
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -157,6 +161,10 @@ pub enum FileView {
     Text {
         text: String,
         truncated: bool,
+        /// 能不能在 App 裡編輯：完整讀到（沒截斷）而且是合法 UTF-8（壞位元組存回去會變 �）。
+        editable: bool,
+        /// 內容版本（大小＋雜湊）；[`write_file`] 用它判斷讀檔之後有沒有被別人改過。
+        version: String,
     },
     Image {
         mime: &'static str,
@@ -210,7 +218,15 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
-/// 讀 `root/rel` 一個檔（唯讀）。
+/// 內容版本：只在同一個執行檔裡比對（讀檔和存檔都經過引擎），不寫進任何檔案。
+fn version_of(bytes: &[u8]) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut h);
+    format!("{}-{:016x}", bytes.len(), h.finish())
+}
+
+/// 讀 `root/rel` 一個檔。
 pub fn read_file(root: &Path, rel: &str) -> Result<FileRead> {
     use std::io::Read;
     let (rel_p, _root_real, target) = resolve_in(root, rel, "檔案")?;
@@ -237,9 +253,17 @@ pub fn read_file(root: &Path, rel: &str) -> Result<FileRead> {
         if buf.iter().take(8000).any(|b| *b == 0) {
             FileView::Binary
         } else {
+            let truncated = size > TEXT_MAX;
+            let version = version_of(&buf);
+            let (text, valid) = match String::from_utf8(buf) {
+                Ok(t) => (t, true),
+                Err(e) => (String::from_utf8_lossy(e.as_bytes()).into_owned(), false),
+            };
             FileView::Text {
-                text: String::from_utf8_lossy(&buf).into_owned(),
-                truncated: size > TEXT_MAX,
+                text,
+                truncated,
+                editable: valid && !truncated,
+                version,
             }
         }
     };
@@ -249,6 +273,70 @@ pub fn read_file(root: &Path, rel: &str) -> Result<FileRead> {
         size,
         view,
     })
+}
+
+/// [`write_file`] 的結果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WriteOutcome {
+    /// 寫好了；附上寫完重讀的內容（含新 `version`）。
+    Saved(FileRead),
+    /// 讀檔之後磁碟上的檔已經變了，沒有寫。
+    Conflict,
+}
+
+/// 把 `text` 寫回 `root/rel`（既有的文字檔）。`base`＝讀檔時的 `version`。
+pub fn write_file(root: &Path, rel: &str, text: &str, base: &str) -> Result<WriteOutcome> {
+    let (_rel_p, _root_real, target) = resolve_in(root, rel, "檔案")?;
+    if !target.is_file() {
+        return Err(Error::invalid(format!("不是檔案：{rel}")));
+    }
+    if image_mime(&target).is_some() {
+        return Err(Error::invalid(format!("圖片不能在 App 裡編輯：{rel}")));
+    }
+    let meta = std::fs::metadata(&target)?;
+    if meta.len() > TEXT_MAX {
+        return Err(Error::invalid(format!(
+            "檔案超過 1 MB，不能在 App 裡編輯：{rel}"
+        )));
+    }
+    let cur = std::fs::read(&target)?;
+    if cur.iter().take(8000).any(|b| *b == 0) || std::str::from_utf8(&cur).is_err() {
+        return Err(Error::invalid(format!(
+            "不是 UTF-8 文字檔，不能在 App 裡編輯：{rel}"
+        )));
+    }
+    if version_of(&cur) != base {
+        return Ok(WriteOutcome::Conflict);
+    }
+
+    const BOM: &str = "\u{feff}";
+    let crlf = cur.windows(2).any(|w| w == b"\r\n");
+    let mut out = text.strip_prefix(BOM).unwrap_or(text).replace("\r\n", "\n");
+    if crlf {
+        out = out.replace('\n', "\r\n");
+    }
+    if cur.starts_with(BOM.as_bytes()) {
+        out.insert_str(0, BOM);
+    }
+
+    // 暫存檔放同一個資料夾，改名才是原子的；寫到符號連結指向的實體檔，連結本身不動
+    let dir = target
+        .parent()
+        .ok_or_else(|| Error::invalid(format!("找不到上層資料夾：{rel}")))?;
+    let name = target.file_name().unwrap_or_default().to_string_lossy();
+    let tmp = dir.join(format!(".{name}.ctx-save-{}", std::process::id()));
+    let res = (|| -> std::io::Result<()> {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(out.as_bytes())?;
+        f.sync_all()?;
+        std::fs::set_permissions(&tmp, meta.permissions())?;
+        std::fs::rename(&tmp, &target)
+    })();
+    if let Err(e) = res {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e.into());
+    }
+    Ok(WriteOutcome::Saved(read_file(root, rel)?))
 }
 
 #[cfg(test)]
@@ -347,13 +435,10 @@ mod tests {
         std::fs::write(t.path().join("secret.txt"), "x").unwrap();
 
         let f = read_file(&r, "docs/a.md").unwrap();
-        assert_eq!(
-            f.view,
-            FileView::Text {
-                text: "# 標題\n內容\n".into(),
-                truncated: false
-            }
-        );
+        assert!(matches!(
+            &f.view,
+            FileView::Text { text, truncated: false, editable: true, .. } if text == "# 標題\n內容\n"
+        ));
         assert_eq!(f.abs, r.join("docs").join("a.md"));
         assert!(matches!(
             read_file(&r, "logo.png").unwrap().view,
@@ -380,11 +465,97 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         let big = "a".repeat(TEXT_MAX as usize + 10);
         std::fs::write(t.path().join("big.txt"), &big).unwrap();
-        let FileView::Text { text, truncated } = read_file(t.path(), "big.txt").unwrap().view
+        let FileView::Text {
+            text,
+            truncated,
+            editable,
+            ..
+        } = read_file(t.path(), "big.txt").unwrap().view
         else {
             panic!("要是文字");
         };
         assert!(truncated);
+        assert!(!editable, "截斷的檔存回去會掉後半段");
         assert_eq!(text.len(), TEXT_MAX as usize);
+        assert!(write_file(t.path(), "big.txt", "x", "whatever").is_err());
+    }
+
+    fn version(root: &Path, rel: &str) -> String {
+        match read_file(root, rel).unwrap().view {
+            FileView::Text { version, .. } => version,
+            v => panic!("要是文字：{v:?}"),
+        }
+    }
+
+    #[test]
+    fn write_file_saves_and_detects_conflict() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path();
+        std::fs::write(r.join("a.md"), "舊\n").unwrap();
+        let v1 = version(r, "a.md");
+
+        let WriteOutcome::Saved(f) = write_file(r, "a.md", "新\n", &v1).unwrap() else {
+            panic!("要寫成功");
+        };
+        assert_eq!(std::fs::read_to_string(r.join("a.md")).unwrap(), "新\n");
+        let FileView::Text { version: v2, .. } = f.view else {
+            panic!("要是文字");
+        };
+        assert_ne!(v1, v2);
+
+        // agent 在使用者編輯時改了檔：拿舊 version 存＝衝突，不寫
+        std::fs::write(r.join("a.md"), "agent 寫的\n").unwrap();
+        assert_eq!(
+            write_file(r, "a.md", "我的\n", &v2).unwrap(),
+            WriteOutcome::Conflict
+        );
+        assert_eq!(
+            std::fs::read_to_string(r.join("a.md")).unwrap(),
+            "agent 寫的\n"
+        );
+        // 沒留下暫存檔
+        let names: Vec<_> = std::fs::read_dir(r)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(names.len(), 1, "{names:?}");
+    }
+
+    #[test]
+    fn write_file_keeps_crlf_and_bom() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path();
+        std::fs::write(r.join("w.txt"), "\u{feff}a\r\nb\r\n").unwrap();
+        let v = version(r, "w.txt");
+        // textarea 送回來是 LF、可能沒有 BOM
+        write_file(r, "w.txt", "a\nb\nc\n", &v).unwrap();
+        assert_eq!(
+            std::fs::read(r.join("w.txt")).unwrap(),
+            "\u{feff}a\r\nb\r\nc\r\n".as_bytes()
+        );
+    }
+
+    #[test]
+    fn write_file_guards() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path().join("repo");
+        std::fs::create_dir_all(&r).unwrap();
+        std::fs::write(t.path().join("secret.txt"), "x").unwrap();
+        std::fs::write(r.join("bad.txt"), [b'a', 0xff, b'b']).unwrap();
+        std::fs::write(r.join("logo.png"), [0x89u8, b'P']).unwrap();
+
+        assert!(write_file(&r, "../secret.txt", "y", "").is_err());
+        assert!(write_file(&r, "new.txt", "y", "").is_err(), "不新增檔案");
+        assert!(write_file(&r, "logo.png", "y", "").is_err());
+        let FileView::Text { editable, .. } = read_file(&r, "bad.txt").unwrap().view else {
+            panic!("要是文字");
+        };
+        assert!(!editable, "壞 UTF-8 存回去會變 �");
+        let v = version(&r, "bad.txt");
+        assert!(write_file(&r, "bad.txt", "y", &v).is_err());
+        assert_eq!(
+            std::fs::read_to_string(t.path().join("secret.txt")).unwrap(),
+            "x"
+        );
     }
 }

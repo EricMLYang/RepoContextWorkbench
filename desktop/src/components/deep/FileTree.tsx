@@ -119,13 +119,20 @@ export function RepoRoot(props: {
     savePref(prefKey, [...next]);
   };
 
+  // agent 改檔很快：同一層可能同時有好幾次重讀在路上，晚送出的才算數（先回來的舊清單不能蓋掉新的）
+  const seq = useRef(new Map<string, number>());
   const load = async (dir: string) => {
+    const n = (seq.current.get(dir) ?? 0) + 1;
+    seq.current.set(dir, n);
+    const latest = () => seq.current.get(dir) === n;
     setDirs((d) => ({ ...d, [dir]: { ...d[dir], loading: true, error: "" } }));
     try {
       const r = await store.action("repo_tree", { id, dir });
+      if (!latest()) return;
       setRoot(r.root);
       setDirs((d) => ({ ...d, [dir]: { entries: r.entries, more: r.more } }));
     } catch (e) {
+      if (!latest()) return;
       setDirs((d) => ({ ...d, [dir]: { ...d[dir], loading: false, error: (e as Error).message } }));
     }
   };

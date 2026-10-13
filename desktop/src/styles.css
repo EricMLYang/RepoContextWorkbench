@@ -1870,6 +1870,44 @@ button.filetab.home {
 .viewererror {
   margin: 10px 0 0;
 }
+.dirtymark {
+  color: var(--amber);
+}
+.viewerconflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--amber);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.viewerconflict span {
+  flex: 1;
+  min-width: 200px;
+}
+.vieweredit {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(100vh - 220px);
+  padding: 12px;
+  resize: vertical;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  tab-size: 4;
+}
+.vieweredit:focus {
+  outline: none;
+  border-color: var(--blue);
+}
 .viewerimage {
   text-align: center;
 }
