@@ -7,6 +7,7 @@
 //! - 判斷結果記錄率：滿回顧天數的判斷，有幾成記了結果（outcome）
 //! - 未結：期間開了幾項、關了幾項、現在逾期幾項
 //! - 工具用量：MCP 每次呼叫記在 `.state/metrics.jsonl`（[`record_call`]），算次數、平均毫秒、失敗數
+//! - 名片覆蓋（F-57）：沒封存的 repo 有幾個寫了介紹／角色、還沒寫的是哪些（只看 registry，不讀 README）
 //!
 //! 全部只讀檔，不改任何東西。
 
@@ -44,6 +45,9 @@ pub fn record_call(spine_dir: &Path, tool: &str, ms: u128, ok: bool) {
         let _ = writeln!(f, "{line}");
     }
 }
+
+/// 「還沒寫介紹」最多列幾個 id（其餘只給數字）。
+const UNDESCRIBED_SHOWN: usize = 10;
 
 fn ratio(n: usize, d: usize) -> Value {
     if d == 0 {
@@ -149,8 +153,26 @@ pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result
         .map(|(t, (n, ms, err))| json!({"tool": t, "calls": n, "avg_ms": ms / (*n as u64).max(1), "errors": err}))
         .collect();
 
+    // 名片覆蓋：repo 多了以後靠名片找、agent 開場靠名冊認組員；沒寫的列出來（給行動出口）
+    let data = crate::registry::load(spine_dir)?;
+    let live: Vec<&crate::registry::Repo> = data
+        .repos
+        .iter()
+        .filter(|r| r.tier() != Some(crate::registry::Tier::Archived))
+        .collect();
+    let undescribed: Vec<String> = live
+        .iter()
+        .filter(|r| r.description().is_none())
+        .map(|r| r.id())
+        .collect();
+    let with_role = live.iter().filter(|r| r.role().is_some()).count();
+
     Ok(json!({
         "ok": true, "days": days, "since": since,
+        "profiles": {"repos": live.len(), "described": live.len() - undescribed.len(),
+                     "with_role": with_role,
+                     "undescribed": undescribed.iter().take(UNDESCRIBED_SHOWN).collect::<Vec<_>>(),
+                     "undescribed_more": undescribed.len().saturating_sub(UNDESCRIBED_SHOWN)},
         "handoff": {"handoffs": handoffs, "missed": missed, "rate": ratio(handoffs, handoffs + missed)},
         "fresh": {"found": links.len(), "used": used, "dismissed": dismissed, "hit_rate": ratio(used, links.len())},
         "decisions": {"with_outcome": with_outcome, "awaiting_retro": due,

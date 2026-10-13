@@ -47,8 +47,10 @@ const pct = (x: number | null) => (x === null ? "—" : Math.round(x * 100) + "%
 /** 健康指標（同 `ctx health`，引擎算好；這裡只排版）：真用一陣子後看行為有沒有改變。 */
 function HealthLine() {
   const { state } = useSnapshot();
+  const ui = useUi();
   const h = state.health;
   if (!h) return null;
+  const p = h.profiles;
   return (
     <div id="health" className="sectionintro">
       <div>
@@ -59,6 +61,28 @@ function HealthLine() {
             `判斷有結果 ${pct(h.decisions.outcome_rate)}（待回顧 ${h.decisions.awaiting_retro}）· ` +
             `未結 開 ${h.loops.opened}／關 ${h.loops.closed}，逾期 ${h.loops.overdue}`}
         </p>
+        {p && p.repos ? (
+          <p className="small muted healthprofiles">
+            {`名片 ${p.described}/${p.repos} 寫了介紹`}
+            {p.undescribed.length ? (
+              <>
+                {"；還沒寫："}
+                {p.undescribed.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className="linkish"
+                    title={"在右側欄打開 " + id + "，寫一句介紹"}
+                    onClick={() => ui.showRepo(id)}
+                  >
+                    {id}
+                  </button>
+                ))}
+                {p.undescribed_more ? `，另 ${p.undescribed_more} 個` : null}
+              </>
+            ) : null}
+          </p>
+        ) : null}
       </div>
     </div>
   );

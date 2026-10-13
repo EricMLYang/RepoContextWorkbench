@@ -1313,6 +1313,26 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
             s(l, "open_now"),
             s(l, "overdue")
         ));
+        let p = &r["profiles"];
+        let undescribed: Vec<&str> = arr(p, "undescribed")
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        let mut line = format!(
+            "- 名片：{} 個 repo（不含封存），寫了介紹 {}、有角色 {}",
+            s(p, "repos"),
+            s(p, "described"),
+            s(p, "with_role")
+        );
+        if !undescribed.is_empty() {
+            let more = p["undescribed_more"].as_u64().unwrap_or(0);
+            line.push_str(&format!(
+                "；還沒寫介紹：{}{}（`ctx registry describe <id> --description …`，或在 App 右側欄寫）",
+                undescribed.join("、"),
+                if more > 0 { format!("，另 {more} 個") } else { String::new() }
+            ));
+        }
+        out.push(line);
         let tools = arr(r, "tools");
         if tools.is_empty() {
             out.push("- 工具用量：還沒有紀錄（MCP 呼叫才會記，`.state/metrics.jsonl`）".into());

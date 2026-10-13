@@ -81,3 +81,37 @@ fn health_counts_handoffs_loops_outcomes_and_tools() {
         1
     );
 }
+
+/// 名片覆蓋：只算沒封存的 repo；沒寫介紹的列出來（README 推測不算寫了）。
+#[test]
+fn health_reports_profile_coverage() {
+    use ctx_core::registry::{describe_repo, set_field, Describe};
+    let (_t, d) = ctx_core::testkit::spine_with_repos();
+    let h = health(&d, 14, None).unwrap();
+    assert_eq!(h["profiles"]["repos"], 2);
+    assert_eq!(h["profiles"]["described"], 0);
+    assert_eq!(
+        h["profiles"]["undescribed"],
+        serde_json::json!(["repo-a", "repo-b"])
+    );
+    describe_repo(
+        &d,
+        "repo-a",
+        &Describe {
+            description: Some("讀書筆記".into()),
+            role: Some("知識庫".into()),
+            keywords: None,
+        },
+    )
+    .unwrap();
+    set_field(&d, "repo-b", "tier", "archived").unwrap();
+    let h = health(&d, 14, None).unwrap();
+    let p = &h["profiles"];
+    assert_eq!(
+        (p["repos"].as_u64(), p["described"].as_u64()),
+        (Some(1), Some(1))
+    );
+    assert_eq!(p["with_role"], 1);
+    assert_eq!(p["undescribed"], serde_json::json!([]));
+    assert_eq!(p["undescribed_more"], 0);
+}

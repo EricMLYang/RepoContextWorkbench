@@ -2331,3 +2331,21 @@ button.filetab.home {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 文字裡的按鈕（看起來像連結，例：健康指標裡還沒寫名片的 repo） */
+button.linkish {
+  border: 0;
+  background: none;
+  padding: 0;
+  min-height: 0;
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.healthprofiles button.linkish + button.linkish::before {
+  content: "、";
+  color: var(--sub);
+  text-decoration: none;
+  display: inline-block;
+}

@@ -235,6 +235,15 @@ export interface Health {
   fresh: { found: number; used: number; dismissed: number; hit_rate: number | null };
   decisions: { with_outcome: number; awaiting_retro: number; outcome_rate: number | null };
   loops: { opened: number; closed: number; open_now: number; overdue: number };
+  /** 名片覆蓋（不含封存）；舊引擎沒有這個鍵。 */
+  profiles?: {
+    repos: number;
+    described: number;
+    with_role: number;
+    /** 還沒寫介紹的（最多 10 個） */
+    undescribed: string[];
+    undescribed_more: number;
+  };
 }
 
 /** 檔案清單的一列（path＝相對 repo 根目錄，abs＝絕對路徑；都由引擎給，前端不拼路徑）。 */

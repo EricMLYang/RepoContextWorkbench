@@ -339,6 +339,57 @@ describe("健康指標（F-50）", () => {
   });
 });
 
+describe("健康指標的名片覆蓋（F-57）", () => {
+  it("列出還沒寫介紹的 repo，點了在右側欄打開；全寫了只顯示比例", async () => {
+    const base = {
+      days: 14,
+      handoff: { handoffs: 1, missed: 0, rate: 1 },
+      fresh: { found: 0, used: 0, dismissed: 0, hit_rate: null },
+      decisions: { with_outcome: 0, awaiting_retro: 0, outcome_rate: null },
+      loops: { opened: 0, closed: 0, open_now: 0, overdue: 0 },
+    };
+    const profiles = {
+      repos: 14,
+      described: 2,
+      with_role: 1,
+      undescribed: ["a", "b"],
+      undescribed_more: 10,
+    };
+    await mount(
+      mockBackend({
+        getState: vi.fn(async () => makeState({ health: { ...base, profiles } })),
+        action: vi.fn(async (name: string) =>
+          name === "repo_tree"
+            ? { ok: true, id: "a", root: "/r/a", dir: "", more: 0, entries: [] }
+            : { ok: true, id: "a", path: "/r/a" },
+        ) as never,
+      }),
+    );
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="activity"]')!));
+    const el = document.getElementById("health")!;
+    expect(el.textContent).toContain("名片 2/14 寫了介紹；還沒寫：");
+    expect(el.textContent).toContain("，另 10 個");
+    await act(async () => fireEvent.click(within(el).getByRole("button", { name: "a" })));
+    expect(document.getElementById("repopanel")!.getAttribute("aria-label")).toBe("Repo：a");
+    cleanup();
+    await mount(
+      mockBackend({
+        getState: vi.fn(async () =>
+          makeState({
+            health: {
+              ...base,
+              profiles: { ...profiles, described: 14, undescribed: [], undescribed_more: 0 },
+            },
+          }),
+        ),
+      }),
+    );
+    await act(async () => fireEvent.click(document.querySelector('[data-tab="activity"]')!));
+    expect(document.getElementById("health")!.textContent).toContain("名片 14/14 寫了介紹");
+    expect(document.getElementById("health")!.textContent).not.toContain("還沒寫");
+  });
+});
+
 describe("收件匣分段懶顯示（N-25）", () => {
   const many = async (n: number) => {
     const { loopCard } = await import("./fixtures");
