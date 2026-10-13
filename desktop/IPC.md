@@ -99,6 +99,8 @@ Rust 端簽名建議：
 | `palette`（Rust 才有，唯讀） | `{query, group?, repos?}`（query 空＝全部；group／repos＝找檔案的範圍，都沒有＝所有沒封存的 repo） | `query`, `repos: [{repo, score, why, role?, description?, groups}]`（名稱完全相同＞開頭＞包含＞詞首縮寫，加上名片欄位包含整串查詢、名片詞命中；最多 30 個）, `groups: [{name, members, goal}]`（名稱或目標包含查詢）, `files: [{repo, path, name, abs}]`（兩個字以上才找；git repo 用 `git ls-files`（含沒被忽略的未追蹤檔），否則往下走；檔名相同＞開頭＞包含＞路徑包含；最多 20 個）。App 的 ⌘K；排名在 `profile::quick_find`、`filetree::find_files` |
 | `pick_brief`（Rust 才有，唯讀） | `{files: [{id, path}]}`（從檔案樹挑的，最多 50 個） | `text`（會話任務：依 repo 分段、段落標題帶名片）, `mentions`（`@絕對路徑` 一行一個）, `repos`, `count`。每個路徑都要在它的 repo 裡（同 `read_file` 的檢查），重複的只算一次 |
 | `profile_draft_brief`（Rust 才有，唯讀） | `{ids?}`（沒給＝還沒寫介紹、沒封存的 repo，最多 10 個） | `text`（請 agent 起草名片的任務：只讀 repo、先列草稿給人確認、確認後才 `ctx registry describe`；附已用過的角色）, `repos`。都寫了＝錯誤「沒有要起草的 repo（都寫了介紹）」 |
+| `repo_changes`（Rust 才有，唯讀） | `{id}` | `id`, `changes: [{path, status: "modified"\|"added"\|"deleted"\|"renamed"\|"untracked"\|"conflicted"}]`, `more`（超過 500 個沒列的數量）。`git --no-optional-locks status --porcelain=v1 -z --untracked-files=all`（不拿 index.lock、不回寫 index）；不是 git repo＝錯誤「不是 git repo：<path>」 |
+| `file_diff`（Rust 才有，唯讀） | `{id, path}`（相對 repo，只能往下走；檔案可以已刪除） | `id`, `path`, `diff`（`git diff HEAD`；還沒追蹤的跟空檔比；repo 還沒 commit 就對暫存區；沒有差異＝空字串）, `truncated`（超過 512 KB） |
 | `group_notes`（Rust 才有） | `{group}`（已儲存的牌組） | `group`, `path`（`<spine>/groups/<組>/notes.md`）, `notes: [{at, text}]`（新的在前） |
 | `note_add`（Rust 才有） | `{group, text}` | 同 `group_notes` |
 | `note_remove`（Rust 才有） | `{group, at, text}`（兩個都要對得上，檔案被改過就拒絕） | 同 `group_notes` |
@@ -112,7 +114,7 @@ Rust 端簽名建議：
 `collide`／`collide_rerun` 的背景判定：找得到 `ctx`（`ctx_core::exe::ctx_exe`：自己→同目錄→PATH）就起 detached 進程（同 Python，關 App 也跑得完），
 沒有就在 App 行程裡開執行緒跑（App 結束前沒跑完 → lint 會報「碰撞無回程」，可按〔重跑判定〕）。
 `register_repos` 部分成功時 Python 回 `{error, added}`；IPC 只回 `Err(error)`（前端不用 `added`）。
-寫入型 action 成功後發 `workbench://changed`（`reason`＝action 名）；唯讀的（`session_draft`／`scan_dir`／`repo_tree`／`read_file`／`group_notes`／`repo_profile`／`palette`／`pick_brief`／`profile_draft_brief`，清單在引擎 `workbench::is_read_only`）不發——否則展開資料夾、開檔都會讓前端重抓整份 state。
+寫入型 action 成功後發 `workbench://changed`（`reason`＝action 名）；唯讀的（`session_draft`／`scan_dir`／`repo_tree`／`read_file`／`group_notes`／`repo_changes`／`file_diff`／`repo_profile`／`palette`／`pick_brief`／`profile_draft_brief`，清單在引擎 `workbench::is_read_only`）不發——否則展開資料夾、開檔都會讓前端重抓整份 state。
 
 ## 終端串流（`term_open` 的 Channel）
 

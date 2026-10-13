@@ -49,7 +49,7 @@ export interface Ui {
   pasteToSession(text: string): string | null;
   clearPicks(): void;
   /** 在主區開一個檔案分頁（已開就切過去）。 */
-  openFile(repo: string, path: string): void;
+  openFile(repo: string, path: string, opts?: { diff?: boolean }): void;
   /** repo 的右鍵選單（x、y 是視窗座標）。 */
   repoMenu(id: string, x: number, y: number): void;
   showComposer(): void;

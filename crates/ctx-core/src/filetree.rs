@@ -13,6 +13,8 @@
 //! 帶讀檔時的 `version`，磁碟上已經被改過（agent 寫得很快）就不寫、回 [`WriteOutcome::Conflict`]；
 //! 先寫暫存檔再改名；保留原檔的 CRLF 與 BOM（textarea 會把 CRLF 變 LF）。
 //!
+//! [`changes`]／[`diff`]（2026-10-14）：還沒 commit 的變更與單檔差異（看 agent 改了什麼）。只讀，交給 git。
+//!
 //! [`find_files`]（2026-10-14）：⌘K 用檔名找檔。git repo 用 `git ls-files`（追蹤中＋沒被忽略的未追蹤檔，
 //! 規則跟 git 一致）；不是 git 的往下走（略過隱藏資料夾、node_modules、target），每個 repo 最多看 [`FIND_SCAN_MAX`] 個。
 
@@ -332,6 +334,128 @@ pub fn write_file(root: &Path, rel: &str, text: &str, base: &str) -> Result<Writ
     // 寫到符號連結指向的實體檔（target 已 canonicalize），連結本身不動；暫存檔與權限見 write_atomic
     crate::fsutil::write_atomic(&target, out.as_bytes())?;
     Ok(WriteOutcome::Saved(read_file(root, rel)?))
+}
+
+/// 變更清單最多列幾個檔（其餘只給數量）。
+pub const CHANGES_MAX: usize = 500;
+/// 單檔差異最多給多少位元組（再多只給前段，標 `truncated`）。
+pub const DIFF_MAX: usize = 512 * 1024;
+/// git status／diff 最多等多久。
+const GIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// 一個還沒 commit 的變更。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Change {
+    /// 相對 repo 根目錄（`/` 分隔，git 給的樣子）。
+    pub rel: String,
+    pub kind: ChangeKind,
+}
+
+/// 變更的種類（看 git status 的兩欄：暫存區與工作區，有一邊變就算）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChangeKind {
+    Modified,
+    Added,
+    Deleted,
+    Renamed,
+    Untracked,
+    Conflicted,
+}
+
+impl ChangeKind {
+    fn from_xy(x: char, y: char) -> ChangeKind {
+        match (x, y) {
+            ('?', '?') => ChangeKind::Untracked,
+            ('U', _) | (_, 'U') | ('A', 'A') | ('D', 'D') => ChangeKind::Conflicted,
+            ('R', _) | ('C', _) => ChangeKind::Renamed,
+            ('A', _) => ChangeKind::Added,
+            ('D', _) | (_, 'D') => ChangeKind::Deleted,
+            _ => ChangeKind::Modified,
+        }
+    }
+}
+
+/// 還沒 commit 的變更（`git status --porcelain=v1 -z --untracked-files=all`，git 的忽略規則照算）。
+/// 回 (變更, 超過 [`CHANGES_MAX`] 沒列的數量)。不是 git repo、或 git 跑不起來＝錯誤。
+pub fn changes(root: &Path) -> Result<(Vec<Change>, usize)> {
+    if !root.join(".git").exists() {
+        return Err(Error::invalid(format!("不是 git repo：{}", root.display())));
+    }
+    let (code, out) = crate::crossref::git(
+        root,
+        &[
+            "--no-optional-locks",
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+        ],
+        GIT_TIMEOUT,
+    );
+    if code != 0 {
+        return Err(Error::invalid(format!(
+            "git status 失敗：{}",
+            root.display()
+        )));
+    }
+    let mut all = Vec::new();
+    let mut it = out.split('\0').filter(|s| !s.is_empty());
+    while let Some(rec) = it.next() {
+        let mut cs = rec.chars();
+        let (Some(x), Some(y)) = (cs.next(), cs.next()) else {
+            continue;
+        };
+        let rel = rec.get(3..).unwrap_or("").to_string();
+        if x == 'R' || x == 'C' {
+            it.next(); // 改名：下一筆是原本的路徑
+        }
+        all.push(Change {
+            rel,
+            kind: ChangeKind::from_xy(x, y),
+        });
+    }
+    let more = all.len().saturating_sub(CHANGES_MAX);
+    all.truncate(CHANGES_MAX);
+    Ok((all, more))
+}
+
+/// 單檔的差異：工作區對上一個 commit（`git diff HEAD`）；還沒追蹤的檔整份算新增；repo 還沒有任何 commit
+/// 就對暫存區。回 (差異文字, 有沒有截斷)。沒有差異＝空字串。`rel` 只能往下走（檔案可能已刪，所以不要求存在）。
+pub fn diff(root: &Path, rel: &str) -> Result<(String, bool)> {
+    let rel_p = checked_rel(rel, "檔案")?;
+    if rel_p.as_os_str().is_empty() {
+        return Err(Error::invalid("要給一個檔案"));
+    }
+    if !root.join(".git").exists() {
+        return Err(Error::invalid(format!("不是 git repo：{}", root.display())));
+    }
+    let rel_s = rel_p.to_string_lossy().replace('\\', "/");
+    let git = |args: &[&str]| crate::crossref::git(root, args, GIT_TIMEOUT);
+    let base = ["diff", "--no-color", "--no-ext-diff"];
+    let (code, mut text) = git(&[&base[..], &["HEAD", "--", &rel_s]].concat());
+    if code != 0 {
+        // 還沒有任何 commit：對暫存區
+        let (_, t) = git(&[&base[..], &["--", &rel_s]].concat());
+        text = t;
+    }
+    if text.is_empty() {
+        let (_, tracked) = git(&["ls-files", "--", &rel_s]);
+        if tracked.is_empty() && root.join(&rel_p).is_file() {
+            // 還沒追蹤：跟空檔比（--no-index 有差異時 exit 1，照樣拿 stdout）
+            let (_, t) = git(&[&base[..], &["--no-index", "--", "/dev/null", &rel_s]].concat());
+            text = t;
+        }
+    }
+    let truncated = text.len() > DIFF_MAX;
+    if truncated {
+        let mut cut = DIFF_MAX;
+        while !text.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        text.truncate(cut);
+    }
+    Ok((text, truncated))
 }
 
 /// ⌘K 找檔時每個 repo 最多看幾個路徑（超大 repo 也不會卡住）。
@@ -731,5 +855,47 @@ mod tests {
             (hits[0].rel.as_str(), hits[0].name.as_str()),
             ("sub/Plan.txt", "Plan.txt")
         );
+    }
+
+    #[test]
+    fn changes_and_diff_show_what_was_touched() {
+        let t = tempfile::tempdir().unwrap();
+        let g = crate::testkit::make_git_repo(t.path(), "g", 1, 0, true);
+        std::fs::write(g.join("README.md"), "# g\n改過的一行\n").unwrap();
+        std::fs::write(g.join("new.md"), "新檔第一行\n").unwrap();
+        std::fs::remove_file(g.join("notes").join("plan.md")).unwrap();
+        let (cs, more) = changes(&g).unwrap();
+        assert_eq!(more, 0);
+        let mut got: Vec<(String, ChangeKind)> = cs.into_iter().map(|c| (c.rel, c.kind)).collect();
+        got.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            got,
+            vec![
+                ("README.md".into(), ChangeKind::Modified),
+                ("new.md".into(), ChangeKind::Untracked),
+                ("notes/plan.md".into(), ChangeKind::Deleted),
+            ]
+        );
+        let (d, cut) = diff(&g, "README.md").unwrap();
+        assert!(!cut);
+        assert!(
+            d.contains("-這個 repo 談 widget 快取設計。") && d.contains("+改過的一行"),
+            "{d}"
+        );
+        let (d, _) = diff(&g, "new.md").unwrap();
+        assert!(d.contains("+新檔第一行"), "{d}");
+        let (d, _) = diff(&g, "notes/plan.md").unwrap();
+        assert!(d.contains("-## 計劃"), "{d}");
+        // 沒改的檔：空字串
+        std::fs::write(g.join("README.md"), "# g\n這個 repo 談 widget 快取設計。\n").unwrap();
+        assert_eq!(diff(&g, "README.md").unwrap().0, "");
+        assert!(diff(&g, "../x").is_err());
+        assert!(diff(&g, "").is_err());
+        let plain = t.path().join("plain");
+        std::fs::create_dir_all(&plain).unwrap();
+        assert!(changes(&plain)
+            .unwrap_err()
+            .to_string()
+            .contains("不是 git repo"));
     }
 }

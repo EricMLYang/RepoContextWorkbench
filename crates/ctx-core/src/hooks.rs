@@ -470,7 +470,7 @@ fn session_end_inner(
             ],
         ),
     };
-    let dirty = git_lines(repo_path, &["status", "--porcelain"]);
+    let dirty = git_lines(repo_path, &["--no-optional-locks", "status", "--porcelain"]);
     if commits.is_empty() && dirty.is_empty() && traces == 0 {
         return Ok(None); // 無事不報：什麼都沒發生的會話不留痕
     }

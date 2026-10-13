@@ -141,8 +141,10 @@ pub fn collect_repo(entry: &RepoSpec) -> RepoState {
         st.note = "external：上游查詢待 P4".into();
         return st;
     }
-    // status 不 trim 整份輸出：porcelain 第一行開頭的空白（" M file"）是欄位的一部分
-    let (ok, out) = git_raw(&p, &["status", "--porcelain"]);
+    // status 不 trim 整份輸出：porcelain 第一行開頭的空白（" M file"）是欄位的一部分。
+    // --no-optional-locks：背景採集不拿 index.lock、不回寫 index（只讀不寫使用者 repo；
+    // agent 同時在 commit 也不會撞到「index.lock exists」）
+    let (ok, out) = git_raw(&p, &["--no-optional-locks", "status", "--porcelain"]);
     if !ok {
         st.note = "非 git repo".into();
         return st;

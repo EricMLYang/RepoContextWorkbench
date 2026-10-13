@@ -2361,3 +2361,77 @@ button.linkish {
 body.withpicks #main {
   padding-bottom: 72px;
 }
+
+/* 右側欄「變更」與檢視器的差異模式 */
+.changelist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.changelist button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 22px;
+  padding: 1px 4px;
+  border: 0;
+  text-align: left;
+  font-size: 12px;
+}
+.changelist button.on {
+  background: var(--panel2);
+}
+.chmark {
+  flex: none;
+  width: 14px;
+  font-weight: 700;
+  font-size: 11px;
+  text-align: center;
+}
+.chmark.modified {
+  color: var(--amber);
+}
+.chmark.added,
+.chmark.untracked {
+  color: var(--green);
+}
+.chmark.deleted,
+.chmark.conflicted {
+  color: var(--red);
+}
+.chmark.renamed {
+  color: var(--blue);
+}
+.chpath {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diffview {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+.diffview .dl {
+  white-space: pre;
+  padding: 0 8px;
+}
+.diffview .dl.add {
+  background: rgba(140, 203, 178, 0.12);
+  color: var(--green);
+}
+.diffview .dl.del {
+  background: rgba(242, 148, 153, 0.12);
+  color: var(--red);
+}
+.diffview .dl.hunk {
+  color: var(--blue);
+}
+.diffview .dl.meta {
+  color: var(--sub);
+}

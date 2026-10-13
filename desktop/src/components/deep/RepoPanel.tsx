@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { RepoRoot } from "./FileTree";
+import { RepoChanges } from "./RepoChanges";
 import { RepoProfileCard } from "./RepoProfileCard";
 
 /** 一行狀態：有才顯示，沒採集到寫「—」。 */
@@ -14,7 +15,7 @@ function Fact({ label, value, warn }: { label: string; value: string; warn?: boo
 }
 
 /**
- * 右側欄：點 repo 打開，只放邊工作邊會看的（分支、未提交、未推送／落後、最近 commit、Agent、路徑、名片、檔案）。
+ * 右側欄：點 repo 打開，只放邊工作邊會看的（分支、未提交、未推送／落後、最近 commit、Agent、路徑、變更、名片、檔案）。
  * 更多細節、標籤、移出工作台都在右鍵選單（或標題列「⋯」）裡，需要才跳視窗。
  */
 export function RepoPanel({ id }: { id: string }) {
@@ -107,6 +108,7 @@ export function RepoPanel({ id }: { id: string }) {
           開啟 Agent 會話
         </button>
       </div>
+      <RepoChanges id={id} />
       <RepoProfileCard id={id} />
       <div className="panelsection">
         <RepoRoot key={id} id={id} bare />

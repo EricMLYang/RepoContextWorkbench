@@ -33,11 +33,13 @@ export function useFileTabs(toast: (msg: string) => void) {
     });
   }, []);
 
-  const openFile = useCallback((repo: string, path: string) => {
-    const f = { repo, path };
+  // opts.diff：開在「差異」模式（從變更清單點的）；已經開著就換成那個模式
+  const openFile = useCallback((repo: string, path: string, opts?: { diff?: boolean }) => {
+    const f: OpenFile = opts?.diff ? { repo, path, diff: true } : { repo, path };
     const k = fileKey(f);
     setFiles((prev) => {
-      if (prev.some((x) => fileKey(x) === k)) return prev;
+      if (prev.some((x) => fileKey(x) === k))
+        return opts?.diff ? prev.map((x) => (fileKey(x) === k ? f : x)) : prev;
       const next = [...prev, f];
       while (next.length > MAX_TABS) {
         const i = next.findIndex((x) => !dirtyRef.current.has(fileKey(x)));

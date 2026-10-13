@@ -787,6 +787,54 @@ describe("repo 右側欄與右鍵選單", () => {
     expect(within(card).getByRole("list", { name: "關鍵字" }).textContent).toBe("登入OAuth");
   });
 
+  it("變更：列出還沒 commit 的檔，點了在主區開差異；差異模式不顯示讀檔錯誤", async () => {
+    const diff = "diff --git a/src/a.ts b/src/a.ts\n@@ -1 +1 @@\n-old\n+new";
+    const backend = mockBackend({
+      getScan: vi.fn(async () =>
+        makeScan({ states: [{ ...repoA, recent_commits: [], agents: [] }] }),
+      ),
+      action: vi.fn(async (name: string) => {
+        if (name === "repo_tree")
+          return { ok: true, id: "a", root: "/r/a", dir: "", more: 0, entries: [] };
+        if (name === "repo_changes") {
+          return {
+            ok: true,
+            id: "a",
+            more: 0,
+            changes: [
+              { path: "src/a.ts", status: "modified" },
+              { path: "new.md", status: "untracked" },
+            ],
+          };
+        }
+        if (name === "file_diff")
+          return { ok: true, id: "a", path: "src/a.ts", diff, truncated: false };
+        if (name === "read_file") throw new Error("檔案不存在：src/a.ts");
+        return { ok: true, id: "a", path: "/r/a" };
+      }) as never,
+    });
+    await mountGroup(backend);
+    await act(async () => fireEvent.click(repoButton()));
+    const sec = within(document.getElementById("repopanel")!).getByRole("region", {
+      name: "a 還沒 commit 的變更",
+    });
+    await waitFor(() => expect(sec.textContent).toContain("變更（2）"));
+    expect(within(sec).getByLabelText("修改").textContent).toBe("M");
+    await act(async () => fireEvent.click(within(sec).getByRole("button", { name: /src\/a\.ts/ })));
+    expect(backend.action).toHaveBeenCalledWith("file_diff", { id: "a", path: "src/a.ts" });
+    const view = await screen.findByRole("region", { name: "檢視：a/src/a.ts" });
+    expect(within(view).getByRole("button", { name: "差異" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    const lines = [...view.querySelectorAll(".diffview .dl")].map((l) => l.className);
+    expect(lines).toEqual(["dl meta", "dl hunk", "dl del", "dl add"]);
+    // 差異模式不顯示讀檔錯誤（刪掉的檔讀不到，但差異看得到）
+    expect(within(view).queryByText(/檔案不存在/)).toBeNull();
+    // 切回內容：才看得到讀檔錯誤
+    await act(async () => fireEvent.click(within(view).getByRole("button", { name: "差異" })));
+    expect(within(view).getByRole("alert").textContent).toContain("檔案不存在");
+  });
+
   it("移出工作台…：直接開確認，按確定才呼叫 remove_repo", async () => {
     const backend = backendWithRepo();
     await mountGroup(backend);

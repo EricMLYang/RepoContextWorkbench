@@ -1476,6 +1476,8 @@ fn read_only_actions_leave_spine_untouched() {
         ("group_notes", json!({"group": "g1"})),
         ("repo_profile", json!({"id": "repo-a"})),
         ("palette", json!({"query": "rep"})),
+        ("repo_changes", json!({"id": "repo-b"})),
+        ("file_diff", json!({"id": "repo-b", "path": "wip0.md"})),
         (
             "pick_brief",
             json!({"files": [{"id": "repo-a", "path": "README.md"}]}),
@@ -2306,4 +2308,22 @@ fn sessions_asking_permission_lists_only_hook_permission_requests() {
     assert_eq!(asks[0]["sid"], "t1");
     assert_eq!(asks[0]["title"], "claude · t1");
     assert_eq!(asks[0]["text"], "Claude needs your permission to use Bash");
+}
+
+#[test]
+fn repo_changes_and_file_diff_via_actions() {
+    let (_t, d) = spine_with_repos();
+    let r = act(&d, "repo_changes", json!({"id": "repo-b"})).unwrap();
+    let paths: Vec<(&str, &str)> = r["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| (c["path"].as_str().unwrap(), c["status"].as_str().unwrap()))
+        .collect();
+    assert_eq!(paths, [("wip0.md", "untracked"), ("wip1.md", "untracked")]);
+    let df = act(&d, "file_diff", json!({"id": "repo-b", "path": "wip0.md"})).unwrap();
+    assert!(df["diff"].as_str().unwrap().contains("+"), "{df}");
+    assert_eq!(df["truncated"], false);
+    assert!(act(&d, "repo_changes", json!({"id": "nope"})).is_err());
+    assert!(err(&d, "file_diff", json!({"id": "repo-b", "path": "../x"})).contains("repo 裡"));
 }

@@ -94,6 +94,8 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("group_add_folder", a_group_add_folder),
     ("reorder", a_reorder),
     ("read_file", a_read_file),
+    ("repo_changes", a_repo_changes),
+    ("file_diff", a_file_diff),
     ("write_file", a_write_file),
     ("group_notes", a_group_notes),
     ("note_add", a_note_add),
@@ -111,6 +113,8 @@ const READ_ONLY: &[&str] = &[
     "scan_dir",
     "repo_tree",
     "read_file",
+    "repo_changes",
+    "file_diff",
     "group_notes",
     "repo_profile",
     "palette",
@@ -1043,6 +1047,26 @@ fn a_read_file(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     let ReadFileArgs { id, path } = parse("read_file", p)?;
     let root = registry::get_repo(d, &id)?.path();
     Ok(file_json(&id, crate::filetree::read_file(&root, &path)?))
+}
+
+/// Rust 才有（2026-10-14）：還沒 commit 的變更（看 agent 改了什麼；見 [`crate::filetree::changes`]）。
+fn a_repo_changes(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let ProfileArgs { id } = parse("repo_changes", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let (cs, more) = crate::filetree::changes(&root)?;
+    let changes: Vec<Value> = cs
+        .iter()
+        .map(|c| json!({"path": c.rel, "status": c.kind}))
+        .collect();
+    Ok(json!({"ok": true, "id": id, "changes": changes, "more": more}))
+}
+
+/// Rust 才有（2026-10-14）：單檔差異（見 [`crate::filetree::diff`]）。
+fn a_file_diff(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let ReadFileArgs { id, path } = parse("file_diff", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let (diff, truncated) = crate::filetree::diff(&root, &path)?;
+    Ok(json!({"ok": true, "id": id, "path": path, "diff": diff, "truncated": truncated}))
 }
 
 fn file_json(id: &str, f: crate::filetree::FileRead) -> Value {

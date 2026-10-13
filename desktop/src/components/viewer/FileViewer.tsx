@@ -7,6 +7,8 @@ import { useStore, useUi } from "../../store/context";
 export interface OpenFile {
   repo: string;
   path: string;
+  /** 開在「差異」模式（從變更清單點的）。 */
+  diff?: boolean;
 }
 
 export const fileKey = (f: OpenFile) => f.repo + "\u0000" + f.path;
@@ -120,6 +122,42 @@ const lf = (t: string) => t.replace(/\r\n/g, "\n").replace(/^\uFEFF/, "");
  * - 有未存的修改時不重讀（不洗掉使用者打的字），改成提示「磁碟上的檔變了」，讓人選載入或覆蓋；
  * - 存檔帶讀檔時的 version，引擎發現被改過就不寫（conflict）。
  */
+/** 差異的一行屬於哪種（上色用）。 */
+function diffLineKind(l: string): string {
+  if (l.startsWith("+++") || l.startsWith("---")) return "meta";
+  if (l.startsWith("+")) return "add";
+  if (l.startsWith("-")) return "del";
+  if (l.startsWith("@@")) return "hunk";
+  if (/^(diff |index |new file|deleted file|similarity|rename |old mode|new mode)/.test(l))
+    return "meta";
+  return "ctx";
+}
+
+/** 差異（git diff 的文字）：加的綠、刪的紅、段落標頭藍；太長先畫前 LINE_CAP 行。 */
+function DiffView({ text, truncated }: { text: string; truncated: boolean }) {
+  const [all, setAll] = useState(false);
+  if (!text) return <p className="viewernote">這個檔沒有還沒 commit 的變更。</p>;
+  const lines = text.split("\n");
+  const shown = all ? lines : lines.slice(0, LINE_CAP);
+  return (
+    <>
+      {truncated ? <p className="viewernote">差異太長，只顯示前 512 KB。</p> : null}
+      <pre className="diffview" aria-label="差異">
+        {shown.map((l, i) => (
+          <div key={i} className={"dl " + diffLineKind(l)}>
+            {l || " "}
+          </div>
+        ))}
+      </pre>
+      {lines.length > shown.length ? (
+        <button type="button" className="small" onClick={() => setAll(true)}>
+          顯示全部 {lines.length} 行
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 export function FileViewer({
   file,
   hidden,
@@ -144,6 +182,16 @@ export function FileViewer({
   const [saving, setSaving] = useState(false);
   const [diskChanged, setDiskChanged] = useState(false);
   const [armDiscard, setArmDiscard] = useState(false);
+  // 差異模式：看這個檔跟上一個 commit 差在哪（agent 改了什麼）
+  const [showDiff, setShowDiff] = useState(!!file.diff);
+  const [diff, setDiff] = useState<{ text: string; truncated: boolean } | null>(null);
+  const [diffError, setDiffError] = useState("");
+  // 從變更清單再點一次（已開著的分頁）：切到差異
+  const [askedDiff, setAskedDiff] = useState(file.diff);
+  if (askedDiff !== file.diff) {
+    setAskedDiff(file.diff);
+    if (file.diff) setShowDiff(true);
+  }
   const dirty = draft !== null && draft !== editBase;
   // 給非同步回呼（讀檔回來、磁碟事件）看最新值
   const dirtyRef = useRef(dirty);
@@ -189,6 +237,22 @@ export function FileViewer({
     setError("");
     setNonce((n) => n + 1);
   };
+  // 差異：切到差異模式、或檔案重讀（磁碟變了）時重算；失敗保留上次的並顯示錯誤
+  useEffect(() => {
+    if (!showDiff) return;
+    let live = true;
+    store
+      .action("file_diff", { id: repo, path })
+      .then((r) => {
+        if (!live) return;
+        setDiff({ text: r.diff ?? "", truncated: !!r.truncated });
+        setDiffError("");
+      })
+      .catch((e: Error) => live && setDiffError(e.message));
+    return () => {
+      live = false;
+    };
+  }, [store, repo, path, nonce, showDiff]);
   // 檔案在磁碟上被改了（agent 在寫、git 切分支…）就自己重讀；有未存的修改時只提示
   useWatchDirs(store.backend, repo, [parentDir(path)]);
   useRepoChanged(store.backend, repo, (paths, rescan) => {
@@ -359,6 +423,17 @@ export function FileViewer({
               換行
             </button>
           ) : null}
+          {!editing ? (
+            <button
+              type="button"
+              className="small ghost"
+              aria-pressed={showDiff}
+              title="跟上一個 commit 比（看 agent 改了什麼）"
+              onClick={() => setShowDiff(!showDiff)}
+            >
+              差異
+            </button>
+          ) : null}
           <button
             type="button"
             className="small ghost"
@@ -402,13 +477,23 @@ export function FileViewer({
           </button>
         </div>
       ) : null}
-      {error ? (
+      {showDiff && !editing ? null : error ? (
         <p className="error viewererror" role="alert">
           {error}
         </p>
       ) : null}
       <div className="viewerbody">
-        {!content ? (
+        {showDiff && !editing ? (
+          diffError ? (
+            <p className="error viewererror" role="alert">
+              {diffError}
+            </p>
+          ) : diff ? (
+            <DiffView text={diff.text} truncated={diff.truncated} />
+          ) : (
+            <p className="muted">讀取差異中…</p>
+          )
+        ) : !content ? (
           loading ? (
             <p className="muted">讀取中…</p>
           ) : null

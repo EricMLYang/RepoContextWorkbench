@@ -256,6 +256,12 @@ export interface TreeEntry {
   dir: boolean;
 }
 
+/** 一個還沒 commit 的變更（path 相對 repo 根目錄）。 */
+export interface RepoChange {
+  path: string;
+  status: "modified" | "added" | "deleted" | "renamed" | "untracked" | "conflicted";
+}
+
 export interface GroupNote {
   /** YYYY-MM-DD HH:MM */
   at: string;
@@ -536,6 +542,16 @@ export interface ActionMap {
   reorder: {
     payload: { kind: "groups" | "members" | "repos"; order: string[]; group?: string };
     result: { ok: true };
+  };
+  /** Rust 才有：還沒 commit 的變更（git status）；不是 git repo 會失敗。 */
+  repo_changes: {
+    payload: { id: string };
+    result: { ok: true; id: string; changes: RepoChange[]; more: number };
+  };
+  /** Rust 才有：單檔差異（對上一個 commit；還沒追蹤的整份算新增）。沒有差異＝空字串。 */
+  file_diff: {
+    payload: { id: string; path: string };
+    result: { ok: true; id: string; path: string; diff: string; truncated: boolean };
   };
   /** Rust 才有：唯讀檢視器讀一個檔。 */
   read_file: { payload: { id: string; path: string }; result: FileContent };
