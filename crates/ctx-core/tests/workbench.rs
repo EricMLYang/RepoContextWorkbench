@@ -1750,6 +1750,63 @@ fn term_create_infers_home_group_for_single_repo() {
     );
 }
 
+/// 記下 create_shell 收到的 (cwd, origin)；只有 t1 知道目錄。
+struct CwdTerms(std::sync::Mutex<Vec<(Option<std::path::PathBuf>, Option<String>)>>);
+
+impl Terms for CwdTerms {
+    fn info(&self, _: &str) -> Option<TermInfo> {
+        None
+    }
+    fn create_shell(
+        &self,
+        cwd: Option<&Path>,
+        origin: Option<String>,
+    ) -> ctx_core::Result<(String, String)> {
+        self.0
+            .lock()
+            .unwrap()
+            .push((cwd.map(Path::to_path_buf), origin));
+        Ok(("t9".into(), "shell".into()))
+    }
+    fn create_agent(&self, _: AgentLaunch) -> ctx_core::Result<(String, String)> {
+        Ok(("t8".into(), "agent".into()))
+    }
+    fn kill(&self, _: &str) -> bool {
+        false
+    }
+    fn cwd(&self, sid: &str) -> Option<std::path::PathBuf> {
+        (sid == "t1").then(|| "/work/repo-a".into())
+    }
+}
+
+/// 某個會話的 Terminal：沿用它的目錄、origin 記 `shell-of:<sid>`；未知會話拒絕。
+#[test]
+fn term_create_shell_of_session_uses_its_cwd() {
+    let (_t, d) = spine_with_repos();
+    let terms = CwdTerms(Default::default());
+    let r = handle_action(
+        &d,
+        "term_create",
+        &json!({"kind": "shell", "of": "t1"}),
+        Some(&terms),
+    )
+    .unwrap();
+    assert_eq!(r["sid"], "t9");
+    assert_eq!(
+        *terms.0.lock().unwrap(),
+        vec![(Some("/work/repo-a".into()), Some("shell-of:t1".into()))]
+    );
+    let e = handle_action(
+        &d,
+        "term_create",
+        &json!({"kind": "shell", "of": "t7"}),
+        Some(&terms),
+    )
+    .unwrap_err()
+    .to_string();
+    assert_eq!(e, "未知會話: t7");
+}
+
 #[test]
 fn state_marks_primary_action_and_gone_scope() {
     let (_t, d) = spine_with_repos();

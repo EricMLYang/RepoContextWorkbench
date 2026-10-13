@@ -1,6 +1,6 @@
 import type { TermInfo } from "../../api/types";
-import { sessionDot, sessionMeta, sessionTooltip, sessionWhere } from "../../lib/view";
-import { useUi, useUiState } from "../../store/context";
+import { sessionDot, sessionMeta, sessionTooltip, sessionWhere, shellOwner } from "../../lib/view";
+import { useSnapshot, useUi, useUiState } from "../../store/context";
 
 /**
  * 會話一列：小圓點（綠＝有留痕、琥珀＝執行中尚無回報、紅＝等你／卡住、灰＝已結束）＋標題＋狀態。
@@ -9,7 +9,10 @@ import { useUi, useUiState } from "../../store/context";
 export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: boolean }) {
   const ui = useUi();
   const view = useUiState();
-  const on = view.activeSid === s.sid;
+  const { state } = useSnapshot();
+  // 正在看它的 Terminal 也算選著這列
+  const active = state.terms?.find((t) => t.sid === view.activeSid);
+  const on = view.activeSid === s.sid || (!!active && shellOwner(active) === s.sid);
   const where = sessionWhere(s);
   return (
     <div className={"session" + (on ? " on" : "") + (inGroup ? " ingroup" : "")}>

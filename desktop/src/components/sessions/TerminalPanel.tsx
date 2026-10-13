@@ -3,7 +3,8 @@ import type { Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TermStream } from "../../api/backend";
 import type { TermInfo } from "../../api/types";
-import { reportLine, sessionWhere } from "../../lib/view";
+import { AsyncButton } from "../AsyncButton";
+import { reportLine, sessionPair, sessionWhere } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { confirmKillSpec, sessionResultSpec } from "./SessionDialogs";
 
@@ -207,10 +208,46 @@ export function TerminalPanel(props: {
     };
   }, [dispose]);
 
+  const openShellFor = useCallback(
+    async (agentSid: string) => {
+      const r = await store.action("term_create", { kind: "shell", of: agentSid });
+      await store.refreshState();
+      ui.selectTerm(r.sid);
+    },
+    [store, ui],
+  );
+
+  // Ctrl+Shift+` 在 Agent 和它的 Terminal 之間切換（Terminal 還沒開就開一個）
+  // agent 會話和它的 Terminal 共用這塊版面：標題列切換，位置標籤跟著 agent
+  const pair = sessionPair(terms, activeSid);
+  const pairRef = useRef(pair);
+  useEffect(() => {
+    pairRef.current = pair;
+  });
+  const opening = useRef(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey && e.shiftKey && (e.key === "`" || e.key === "~"))) return;
+      const p = pairRef.current;
+      if (!p || document.querySelector("dialog[open]")) return;
+      e.preventDefault();
+      if (p.onShell) ui.selectTerm(p.agent.sid);
+      else if (p.shell?.alive) ui.selectTerm(p.shell.sid);
+      else if (!opening.current) {
+        opening.current = true;
+        openShellFor(p.agent.sid)
+          .catch((err: unknown) => store.toast(err instanceof Error ? err.message : String(err)))
+          .finally(() => (opening.current = false));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ui, store, openShellFor]);
+
   const info: TermInfo | undefined = terms.find((s) => s.sid === activeSid);
   const attached = !!activeSid && activeSid in conn;
   const connected = !!activeSid && conn[activeSid];
-  const where = info ? sessionWhere(info) : null;
+  const where = pair ? sessionWhere(pair.agent) : info ? sessionWhere(info) : null;
   const title = info
     ? info.title +
       " · " +
@@ -248,7 +285,41 @@ export function TerminalPanel(props: {
         }}
       />
       <div id="termbar">
-        <span className="termlabel">終端</span>
+        {pair ? (
+          <span className="termswitch" role="group" aria-label="切換 Agent／Terminal">
+            <button
+              type="button"
+              className={"ghost small" + (pair.onShell ? "" : " on")}
+              aria-pressed={!pair.onShell}
+              title="回到 Agent 對話（Ctrl+Shift+`）"
+              onClick={() => ui.selectTerm(pair.agent.sid)}
+            >
+              Agent
+            </button>
+            {pair.shell?.alive ? (
+              <button
+                type="button"
+                className={"ghost small" + (pair.onShell ? " on" : "")}
+                aria-pressed={pair.onShell}
+                title="切到這個會話目錄下的 Terminal（Ctrl+Shift+`）"
+                onClick={() => pair.shell && ui.selectTerm(pair.shell.sid)}
+              >
+                Terminal
+              </button>
+            ) : (
+              <AsyncButton
+                className="ghost small"
+                title="在這個會話的目錄開一個 Terminal（Ctrl+Shift+`）"
+                onError={(m) => store.toast(m)}
+                run={() => openShellFor(pair.agent.sid)}
+              >
+                Terminal
+              </AsyncButton>
+            )}
+          </span>
+        ) : (
+          <span className="termlabel">終端</span>
+        )}
         {where ? (
           <span id="termwhere" className="termwhere" title={"這個會話屬於：" + where.label}>
             {where.group ? <strong>{where.group}</strong> : null}

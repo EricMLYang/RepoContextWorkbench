@@ -194,6 +194,10 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
     只報這些資料夾裡的變動；檔案樹改成 VS Code 檔案總管風格（攤平列、縮排導引線、檔案圖示、目前檔案反白、
     右鍵複製路徑／相對路徑、方向鍵操作）。
   macOS：單元／整合測試過，GUI 未實測；Windows：未測（ReadDirectoryChangesW 遞迴監看理論上可用）。
+- **Agent 會話的 Terminal**（2026-10-13；Python 沒有）：`term_create` 的 shell 多收 `of: <sid>`——開在那個會話的
+  目錄（`TermSession` 記下 cwd，不輸出到 `TermInfo`），origin 記 `shell-of:<sid>`；未知會話回「未知會話: <sid>」。
+  App 的終端標題列在 agent 會話與它的 Terminal 之間切換（同一塊版面、Ctrl+Shift+`），Terminal 不另列在會話列
+  （agent 不在了才出來）。macOS：單元／整合測試過，GUI 未實測；Windows：未測。
 - **重構（2026-10-13）**：合約不變（CLI 對拍 153/153、state 對拍全同）。
   - 拆模組：`crossref/`（mod＝名字→路徑與鄰居、`read` 讀取與引用、`code` 程式碼定位、`ask` 委派、`drift` 變動與建議、
     `doclint` 文件路徑）、`workbench/state/`（mod＝get_state／get_scan、`scope` 範圍歸屬、`cards` 收件匣卡片、`sessions` 會話）、

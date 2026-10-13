@@ -999,6 +999,55 @@ describe("會話放進所屬牌組", () => {
     expect(document.getElementById("termwhere")!.textContent).toBe("產品開發 › a");
   });
 
+  it("agent 會話的終端標題能切到同目錄的 Terminal 再切回來；Terminal 不另列在會話列", async () => {
+    let terms = [term({ home_group: "產品開發" })];
+    const action = vi.fn(async (name: string) => {
+      if (name === "term_create")
+        terms = [
+          ...terms,
+          term({
+            sid: "t9",
+            title: "shell",
+            kind: "shell",
+            origin: "shell-of:t1",
+            scope: null,
+            scope_repos: null,
+          }),
+        ];
+      return { ok: true, sid: "t9", title: "shell" };
+    });
+    const backend = mockBackend({
+      getState: vi.fn(async () => makeState({ terms: terms as never })),
+      action: action as never,
+    });
+    await mount(backend);
+    const card = document.querySelector('.gcard[data-key="產品開發"]')!;
+    await act(async () =>
+      fireEvent.click(within(card as HTMLElement).getByRole("button", { name: /claude · a/ })),
+    );
+    const bar = document.getElementById("termbar")!;
+    expect(within(bar).getByRole("button", { name: "Agent" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+
+    await act(async () => fireEvent.click(within(bar).getByRole("button", { name: "Terminal" })));
+    expect(action).toHaveBeenCalledWith("term_create", { kind: "shell", of: "t1" });
+    expect(within(bar).getByRole("button", { name: "Terminal" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    // 位置標籤跟著 agent；Terminal 不出現在會話列
+    expect(document.getElementById("termwhere")!.textContent).toBe("產品開發 › a");
+    expect(document.getElementById("sessions")!.textContent).not.toContain("shell");
+
+    await act(async () => fireEvent.click(within(bar).getByRole("button", { name: "Agent" })));
+    expect(within(bar).getByRole("button", { name: "Agent" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    // 再切過去：沿用已開的 Terminal，不再開新的
+    await act(async () => fireEvent.click(within(bar).getByRole("button", { name: "Terminal" })));
+    expect(action).toHaveBeenCalledTimes(1);
+  });
+
   it("從牌組裡對 repo 開會話：帶上所屬牌組", async () => {
     const store = new WorkbenchStore(mockBackend(), { group: "產品開發", repos: null });
     render(<App store={store} autoStart={false} />);

@@ -7,7 +7,7 @@
 //! （桌面殼把它轉成 IPC 的 `Err(String)`）。會話相關 action 透過 [`Terms`] 拿會話清冊——
 //! 引擎不依賴 Tauri，殼把 `TermManager` 傳進來即可（測試可給假清冊）。
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::{Duration, Local};
 use serde_json::{json, Map, Value};
@@ -30,6 +30,10 @@ pub trait Terms {
     fn create_agent(&self, launch: AgentLaunch) -> Result<(String, String)>;
     /// 對應 `TermManager.kill`：未知 sid 回 false。
     fn kill(&self, sid: &str) -> bool;
+    /// 會話開在哪個目錄（Rust 才有；給「這個會話的 Terminal」沿用）。未知 sid 回 None。
+    fn cwd(&self, _sid: &str) -> Option<PathBuf> {
+        None
+    }
 }
 
 impl Terms for TermManager {
@@ -46,6 +50,9 @@ impl Terms for TermManager {
     }
     fn kill(&self, sid: &str) -> bool {
         TermManager::kill(self, sid)
+    }
+    fn cwd(&self, sid: &str) -> Option<PathBuf> {
+        self.get(sid).and_then(|s| s.cwd().map(Path::to_path_buf))
     }
 }
 
@@ -913,8 +920,14 @@ fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
             origin: s(p, "origin"),
             home_group: home,
         })?
+    } else if let Some(of) = s(p, "of") {
+        // 某個會話的 Terminal：開在同一個目錄，origin 記 `shell-of:<sid>`，畫面據此配對切換
+        let cwd = terms
+            .cwd(&of)
+            .ok_or_else(|| Error::invalid(format!("未知會話: {of}")))?;
+        terms.create_shell(Some(&cwd), Some(format!("shell-of:{of}")))?
     } else {
-        let cwd = s(p, "cwd").map(std::path::PathBuf::from);
+        let cwd = s(p, "cwd").map(PathBuf::from);
         terms.create_shell(cwd.as_deref(), s(p, "origin"))?
     };
     Ok(json!({"ok": true, "sid": sid, "title": title}))

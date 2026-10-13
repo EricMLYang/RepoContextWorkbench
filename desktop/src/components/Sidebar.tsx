@@ -1,4 +1,4 @@
-import { sessionInGroup } from "../lib/view";
+import { sessionInGroup, shellOwner } from "../lib/view";
 import { useSnapshot, useStore, useUi } from "../store/context";
 import { AsyncButton } from "./AsyncButton";
 import { Deck } from "./deck/Deck";
@@ -9,7 +9,10 @@ function SessionList() {
   const { state } = useSnapshot();
   const groups = state.groups.map((g) => g.name);
   const all = state.terms || [];
-  const list = all.filter((s) => !groups.some((g) => sessionInGroup(s, g)));
+  // 某個 agent 的 Terminal 從 agent 那列的終端標題切過去，這裡不另列（agent 不在了才出來）
+  const list = all.filter(
+    (s) => !groups.some((g) => sessionInGroup(s, g)) && !all.some((a) => a.sid === shellOwner(s)),
+  );
   return (
     <>
       <div id="sessions" className="sessions">

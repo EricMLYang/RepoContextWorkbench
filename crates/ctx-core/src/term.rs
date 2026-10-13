@@ -159,6 +159,8 @@ pub struct TermSession {
     sid: String,
     meta: TermMeta,
     started: String,
+    /// 開在哪個目錄（給「這個會話的 Terminal」沿用；不輸出到 `TermInfo`）。
+    cwd: Option<PathBuf>,
     pid: Option<u32>,
     alive: AtomicBool,
     shared: Mutex<Shared>,
@@ -244,6 +246,7 @@ impl TermSession {
             meta: TermMeta { title, ..meta },
             // 開始時間＝之後判斷「這個會話期間有沒有留痕」的起點（2026-09-12 檢討 §5）
             started: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
+            cwd: spec.cwd.clone(),
             pid,
             alive: AtomicBool::new(true),
             shared: Mutex::new(Shared {
@@ -330,6 +333,10 @@ impl TermSession {
 
     pub fn started(&self) -> &str {
         &self.started
+    }
+
+    pub fn cwd(&self) -> Option<&Path> {
+        self.cwd.as_deref()
     }
 
     pub fn alive(&self) -> bool {

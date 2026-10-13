@@ -515,6 +515,8 @@ export interface ActionMap {
       origin?: string;
       repo?: string;
       cwd?: string;
+      /** shell 才用：開成這個會話的 Terminal（沿用它的目錄，origin＝`shell-of:<sid>`）。 */
+      of?: string;
       /** 所屬牌組（只給畫面歸類）。 */
       home_group?: string;
     } & ScopePayload;

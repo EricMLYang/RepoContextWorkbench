@@ -206,7 +206,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
   // Ctrl+` 收合／展開終端（有對話框開著時不動）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === "`" && !document.querySelector("dialog[open]")) {
+      if (e.ctrlKey && !e.shiftKey && e.key === "`" && !document.querySelector("dialog[open]")) {
         e.preventDefault();
         setTermCollapsed((c) => !c);
       }

@@ -987,6 +987,24 @@ td button {
 .termwhere strong {
   font-weight: 650;
 }
+/* agent 會話和它的 Terminal 共用終端版面：標題列的切換鈕 */
+.termswitch {
+  display: inline-flex;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  overflow: hidden;
+}
+#termbar .termswitch button {
+  min-height: 26px;
+  border: 0;
+  border-radius: 0;
+  font-size: 12px;
+}
+.termswitch button.on {
+  background: #253047;
+  color: #d6e5ff;
+}
 #termtitle {
   overflow: hidden;
   text-overflow: ellipsis;

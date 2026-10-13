@@ -390,6 +390,32 @@ export function sessionInGroup(s: TermInfo, group: string): boolean {
   return s.home_group ? s.home_group === group : s.scope === group;
 }
 
+/** 「某會話的 Terminal」（`term_create` 帶 `of` 開的 shell）：回它所屬的會話 sid，不是就 null。 */
+export function shellOwner(s: TermInfo): string | null {
+  return s.kind === "shell" && s.origin?.startsWith("shell-of:")
+    ? s.origin.slice("shell-of:".length)
+    : null;
+}
+
+/**
+ * 目前選的會話所在的「Agent／Terminal」一對：選 agent 或它的 Terminal 都回同一對；
+ * 選的是一般 shell（或配對的 agent 已不在）就回 null。
+ */
+export function sessionPair(
+  terms: TermInfo[],
+  sid: string | null,
+): { agent: TermInfo; shell: TermInfo | null; onShell: boolean } | null {
+  const cur = terms.find((s) => s.sid === sid);
+  if (!cur) return null;
+  const ownerSid = cur.kind === "agent" ? cur.sid : shellOwner(cur);
+  const agent = terms.find((s) => s.sid === ownerSid && s.kind === "agent");
+  if (!agent) return null;
+  // 同一個 agent 可能留著已結束的舊 Terminal：優先挑還活著的、最新開的
+  const shells = terms.filter((s) => shellOwner(s) === agent.sid);
+  const shell = cur.kind === "shell" ? cur : (shells.findLast((s) => s.alive) ?? null);
+  return { agent, shell, onShell: cur.kind === "shell" };
+}
+
 export function sessionMeta(s: TermInfo): string {
   const proc = s.alive ? "程序執行中" : "程序已結束";
   const work =
