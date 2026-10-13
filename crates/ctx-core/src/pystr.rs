@@ -126,6 +126,16 @@ pub fn take_chars(s: &str, n: usize) -> &str {
     }
 }
 
+/// 最多 `n` 個字元；截掉了就補「…」（讓讀的人知道不是全文）。Rust 才有。
+pub fn clip(s: &str, n: usize) -> String {
+    let head = take_chars(s, n);
+    if head.len() < s.len() {
+        format!("{head}…")
+    } else {
+        head.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

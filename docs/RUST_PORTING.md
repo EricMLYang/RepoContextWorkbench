@@ -203,6 +203,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
     （開場 hook 標記數）、`you`；開場注入多「## 同組成員」段。`search_knowledge` 多 `repo_profiles` 鍵（有命中才給）。
   - MCP 工作層多 `describe_repo`（只能改主場：所在 repo＋同組成員，跨組要 `cross_scope_ok`）。
   - 對拍：`scripts/parity.py` 比對前拿掉 `roster`／`repo_profiles`／同組成員段／這兩個工具／skill 的名片段。
+- **牌組筆記給 agent**（2026-10-14；Python 沒有）：`context_for` 在組範圍、組有筆記時多 `notes` 鍵
+  `{path, total, items:[{at,text}]}`（最新 5 則、每則截 300 字元並補「…」）；開場注入多一行「組筆記（N 則，最新 …）：…——全文：<path>」。
+  沒有筆記就不給鍵、不印（對拍的 fixture 沒有筆記，不用另外拿掉）；skill 的這一行在名片段裡，跟著一起拿掉。
 - **App 首次設定可直接建 spine**（2026-10-13；Python 沒有）：殼多命令 `create_spine`（`ctx_core::init::init_spine`，
   跟 `ctx init` 同一份 scaffold），只建在新路徑或空資料夾，已是 spine 就直接用，有東西又不是 spine 一律拒絕。
   macOS：單元測試過，GUI 未實測；Windows：未測。

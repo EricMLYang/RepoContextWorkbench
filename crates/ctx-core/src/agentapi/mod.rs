@@ -566,6 +566,21 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
     if !roster.is_empty() {
         out["roster"] = serde_json::to_value(&roster)?;
     }
+    // Rust 才有（2026-10-14）：牌組筆記（人在 App 隨手記的、不屬於任何 repo 的事）——agent 開場也要看得到；
+    // 沒有筆記就不給這個鍵。只給最新幾則、每則截短，全文在 path
+    if let Some(g) = s.group.as_deref() {
+        if let Ok(notes) = crate::notes::list(spine_dir, g) {
+            if !notes.is_empty() {
+                out["notes"] = json!({
+                    "path": crate::notes::path(spine_dir, g).to_string_lossy(),
+                    "total": notes.len(),
+                    "items": notes.iter().take(CONTEXT_NOTES_CAP).map(|n| json!({
+                        "at": n.at, "text": crate::pystr::clip(n.text.trim(), CONTEXT_NOTE_CHARS)
+                    })).collect::<Vec<_>>(),
+                });
+            }
+        }
+    }
     // Rust 才有（N-26）：未結太多時只給最該處理的 CONTEXT_LOOP_CAP 項（逾期 → 到期近 → 沒期限），
     // 其餘只給數量——規模大時 context_for 曾到 51KB（約 1.5 萬 token），agent 每次開工都要吞
     cap_open_loops(&mut out);
@@ -1483,6 +1498,9 @@ pub(crate) fn tokens_of(
     tokens_for(&s, repo_id)
 }
 
+/// context_for 給幾則牌組筆記（新的在前）、每則最多幾個字元。
+const CONTEXT_NOTES_CAP: usize = 5;
+const CONTEXT_NOTE_CHARS: usize = 300;
 /// `context_for` 一次最多給幾項未結（N-26）。
 pub const CONTEXT_LOOP_CAP: usize = 30;
 

@@ -1207,3 +1207,47 @@ fn test_describe_repo_is_scoped_and_feeds_roster_search_and_hook() {
     assert!(ctx.contains("- **impl**（你在這）") && ctx.contains("（推測自 README）"));
     assert!(ctx.contains("describe_repo"));
 }
+
+// ---- 牌組筆記給 agent（2026-10-14，Rust 才有）----
+
+#[test]
+fn test_group_notes_reach_context_for_and_session_start() {
+    let w = two_groups();
+    // 沒有筆記：不給鍵、開場不印
+    let c = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
+    assert!(c.get("notes").is_none());
+    let long = "跟 AMSC 窗口約好週五看 demo".to_string() + &"細節".repeat(200);
+    ctx_core::notes::add(&w.sp, "產品", "先記：登入要支援 SSO", None).unwrap();
+    ctx_core::notes::add(&w.sp, "產品", &long, None).unwrap();
+    let c = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
+    let n = &c["notes"];
+    assert_eq!(n["total"], 2);
+    assert_eq!(
+        n["path"],
+        w.sp.join("groups/產品/notes.md").to_string_lossy().as_ref()
+    );
+    let items = n["items"].as_array().unwrap();
+    assert!(items[0]["text"]
+        .as_str()
+        .unwrap()
+        .starts_with("跟 AMSC 窗口約好週五看 demo"));
+    assert!(items[0]["text"].as_str().unwrap().ends_with('…'));
+    assert_eq!(items[0]["text"].as_str().unwrap().chars().count(), 301);
+    assert_eq!(items[1]["text"], "先記：登入要支援 SSO");
+    // 別組（研究）看不到產品的筆記
+    let other = api::context_for(&w.sp, &at(&w.notes), false).unwrap();
+    assert!(other.get("notes").is_none());
+    // 開場注入：只一行
+    let out = hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "notes", "cwd": w.impl_.to_string_lossy()}),
+        None,
+    );
+    let line = out
+        .lines()
+        .find(|l| l.contains("組筆記（2 則"))
+        .unwrap_or_else(|| panic!("{out}"));
+    assert!(line.contains("跟 AMSC 窗口約好週五看 demo"), "{line}");
+    assert!(line.contains("…——全文："), "{line}");
+    assert!(line.contains("notes.md"), "{line}");
+}

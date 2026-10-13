@@ -31,6 +31,8 @@ use crate::{crossref, ruminate, Result};
 pub const TOOLS_LINE: &str = "context_for／next_work／log_decision／add_todo／close_todo／\
 report_status／handoff／search_knowledge／read_from／ask_repo／repo_status";
 
+/// 開場注入的組筆記那一行，最新那則最多印幾個字元。
+const NOTE_LINE_CHARS: usize = 60;
 /// 開場名冊最多列幾個成員。
 const ROSTER_LINES: usize = 20;
 
@@ -212,6 +214,21 @@ pub fn render_start(c: &ContextFor) -> String {
             s(st, "status"),
             py_str(&st["at"]),
             st.get("text").map(py_str).unwrap_or_default()
+        ));
+    }
+    // Rust 才有（2026-10-14）：牌組筆記——只一行（最新那則的開頭＋檔案位置），要看全文自己讀
+    if let Some(n) = ctx["notes"]["items"].as_array().and_then(|a| a.first()) {
+        let first = crate::pystr::splitlines(s(n, "text"))
+            .first()
+            .copied()
+            .unwrap_or("")
+            .to_string();
+        out.push(format!(
+            "組筆記（{} 則，最新 {}）：{}——全文：{}",
+            py_str(&ctx["notes"]["total"]),
+            s(n, "at"),
+            crate::pystr::clip(&first, NOTE_LINE_CHARS),
+            s(&ctx["notes"], "path")
         ));
     }
     // Rust 才有（2026-10-13）：組員名冊（context_for 的 roster）
