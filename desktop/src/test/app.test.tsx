@@ -957,6 +957,27 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     );
   }
 
+  it("檢視器「加入挑選」：挑起來、按鈕變「已挑」，再按取消", async () => {
+    const backend = viewerBackend();
+    await openTree(backend);
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" })),
+    );
+    const viewer = () => document.querySelector(".viewer:not([hidden])") as HTMLElement;
+    await act(async () =>
+      fireEvent.click(within(viewer()).getByRole("button", { name: "加入挑選" })),
+    );
+    expect(
+      within(viewer()).getByRole("button", { name: "已挑" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(document.getElementById("picktray")!.textContent).toContain("已挑 1 個檔案");
+    expect(JSON.parse(localStorage.getItem("workbench:picks")!)).toEqual([
+      { repo: "a", path: "README.md", name: "README.md" },
+    ]);
+    await act(async () => fireEvent.click(within(viewer()).getByRole("button", { name: "已挑" })));
+    expect(document.getElementById("picktray")).toBeNull();
+  });
+
   it("點檔案開分頁：md 預設預覽、可切原始碼；相對連結開新分頁；關掉回到工作區", async () => {
     const backend = viewerBackend();
     await openTree(backend);

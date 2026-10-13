@@ -336,6 +336,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
                 file={f}
                 hidden={fileKey(f) !== shownFile}
                 onDirty={(d) => setFileDirty(fileKey(f), d)}
+                picked={picks.some((p) => p.repo === f.repo && p.path === f.path)}
               />
             ))}
           </main>

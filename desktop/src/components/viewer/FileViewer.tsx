@@ -162,10 +162,13 @@ export function FileViewer({
   file,
   hidden,
   onDirty,
+  picked = false,
 }: {
   file: OpenFile;
   hidden: boolean;
   onDirty?: (dirty: boolean) => void;
+  /** 這個檔已經挑起來了（App 給；不訂閱整個 UiState，免得打字時每個分頁都重畫）。 */
+  picked?: boolean;
 }) {
   const store = useStore();
   const ui = useUi();
@@ -423,6 +426,15 @@ export function FileViewer({
               換行
             </button>
           ) : null}
+          <button
+            type="button"
+            className="small ghost"
+            aria-pressed={picked}
+            title="挑起來，跟其他檔一起交給 Agent（主區下緣的挑選列）"
+            onClick={() => ui.togglePick({ repo, path, name: crumbs[crumbs.length - 1] })}
+          >
+            {picked ? "已挑" : "加入挑選"}
+          </button>
           {!editing ? (
             <button
               type="button"
