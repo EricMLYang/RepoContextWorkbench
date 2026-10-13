@@ -145,6 +145,8 @@ Rust 端簽名建議：
 `<spine>/.state/agent_status/*.json`（agent 經 MCP 回報的階段，會話清冊顯示）、`<spine>/.state/session_status/*.json`（App 開的 Claude Code 會話由 hook 自動寫的「做完等你／處理中」，見下）——OS 檔案事件，不輪詢，
 250ms 內的一波寫入合併成一次；誰寫的都算（工作台、CLI、MCP）。每次發事件時殼也重算選單列的未讀數
 （`notify.pending` 的 count；`get_state` 回來時也以 `unread.length` 更新），視窗藏起來時選單列照樣是新的。
+選單列也顯示在等你的會話數（活著、階段 waiting／blocked；標題如「3 · 等你 2」，選單「等你的會話：N」）：
+事件來時由引擎 `workbench::sessions_needing_you` 算（只讀階段檔），`get_state` 回來時從 `terms[].agent_status` 數。
 另外 `run_action` 成功（`reason` = action 名）、`set_spine`（`spine`）、會話程序結束（`term-exit`）也會發。
 
 ## 型別摘要（細節見 `src/api/types.ts`）

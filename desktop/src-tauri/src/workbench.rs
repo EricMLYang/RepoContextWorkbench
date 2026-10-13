@@ -44,6 +44,31 @@ pub fn unread_count(state: &Value) -> usize {
     state["unread"].as_array().map_or(0, Vec::len)
 }
 
+/// 在等你的會話數（選單列用）：`get_state` 的 `terms` 裡活著、階段是 waiting／blocked 的（階段由引擎標好）。
+pub fn needs_you_count(state: &Value) -> usize {
+    state["terms"].as_array().map_or(0, |ts| {
+        ts.iter()
+            .filter(|t| t["alive"] == true)
+            .filter(|t| {
+                matches!(
+                    t["agent_status"]["status"].as_str(),
+                    Some("waiting" | "blocked")
+                )
+            })
+            .count()
+    })
+}
+
+/// 視窗藏起來時（沒有 `get_state`）也要算在等你的會話數：直接問引擎（只讀階段檔）。
+pub fn needs_you_now(st: &AppState) -> Option<usize> {
+    let sp = st.spine()?;
+    let terms: Vec<Value> = st
+        .terms_opt()
+        .map(|t| t.list().iter().map(workbench::term_value).collect())
+        .unwrap_or_default();
+    workbench::sessions_needing_you(&sp, &terms).ok()
+}
+
 /// `GET /api/scan`。`repos` 優先於 `group`；空陣列一律拒絕。
 pub fn get_scan(
     st: &AppState,
@@ -142,6 +167,19 @@ mod tests {
             run_action(&st, "collide", &json!({"idea": " "})).unwrap_err(),
             "想法不可為空"
         );
+    }
+
+    #[test]
+    fn needs_you_counts_live_waiting_or_blocked() {
+        let st = json!({"terms": [
+            {"alive": true, "agent_status": {"status": "waiting"}},
+            {"alive": true, "agent_status": {"status": "blocked"}},
+            {"alive": true, "agent_status": {"status": "working"}},
+            {"alive": false, "agent_status": {"status": "waiting"}},
+            {"alive": true, "agent_status": null},
+        ]});
+        assert_eq!(needs_you_count(&st), 2);
+        assert_eq!(needs_you_count(&json!({})), 0);
     }
 
     /// 寫入動作成功才發 changed；唯讀的不發；失敗的不發。

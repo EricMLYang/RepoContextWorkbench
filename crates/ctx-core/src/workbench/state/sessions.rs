@@ -93,26 +93,8 @@ pub(super) fn annotate_terms_with(
                     "report".into(),
                     session_report(t, events, data).unwrap_or(Value::Null),
                 );
-                // agent 自己回報的階段（report_status）——只認會話開始後的，舊的不算
-                let started = tget(t, "started").unwrap_or("~");
-                let at = |s: &Value| {
-                    s.get("at")
-                        .and_then(Value::as_str)
-                        .unwrap_or("")
-                        .to_string()
-                };
-                let reported = status::get_status(spine_dir, group.as_deref(), ids.as_deref())
-                    .filter(|s| s.as_object().is_some_and(|o| !o.is_empty()))
-                    .filter(|s| at(s).as_str() >= started);
-                // Rust 才有（2026-10-14）：Claude Code hook 依會話自動寫的（做完等你／處理中）。
-                // 兩個都有取新的；同一分鐘取 agent 自己回報的（文字比較具體）
-                let own = tget(t, "sid")
-                    .and_then(|sid| crate::session_status::read(spine_dir, sid))
-                    .filter(|s| at(s).as_str() >= started);
-                let st = match (reported, own) {
-                    (Some(r), Some(o)) => Some(if at(&o) > at(&r) { o } else { r }),
-                    (r, o) => r.or(o),
-                };
+                // agent 自己回報的（MCP）或 Claude Code hook 自動寫的，只認會話開始後的
+                let st = agent_status_of(spine_dir, t, group.as_deref(), ids.as_deref());
                 rec.insert("agent_status".into(), st.unwrap_or(Value::Null));
                 // 依據要說得出口：範圍認得出來就講範圍，認不出來就說沒再過濾
                 let basis = match (&group, &ids) {
@@ -129,6 +111,54 @@ pub(super) fn annotate_terms_with(
             Value::Object(rec)
         })
         .collect()
+}
+
+/// 會話現在的階段：agent 經 MCP 回報的（依範圍存）與 Claude Code hook 依會話自動寫的（Rust 才有，2026-10-14），
+/// 都只認會話開始後的；兩個都有取新的，同一分鐘取 agent 自己回報的（文字比較具體）。
+fn agent_status_of(
+    spine_dir: &Path,
+    t: &Value,
+    group: Option<&str>,
+    ids: Option<&[String]>,
+) -> Option<Value> {
+    let started = tget(t, "started").unwrap_or("~");
+    let at = |s: &Value| {
+        s.get("at")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
+    let reported = status::get_status(spine_dir, group, ids)
+        .filter(|s| s.as_object().is_some_and(|o| !o.is_empty()))
+        .filter(|s| at(s).as_str() >= started);
+    let own = tget(t, "sid")
+        .and_then(|sid| crate::session_status::read(spine_dir, sid))
+        .filter(|s| at(s).as_str() >= started);
+    match (reported, own) {
+        (Some(r), Some(o)) => Some(if at(&o) > at(&r) { o } else { r }),
+        (r, o) => r.or(o),
+    }
+}
+
+/// 活著的 agent 會話裡，現在在等你（waiting／blocked）的有幾個——選單列用（Rust 才有）。
+/// 只讀階段檔與 registry，不讀事件（每次 spine 有變動都會算）。
+pub fn sessions_needing_you(spine_dir: impl AsRef<Path>, terms: &[Value]) -> Result<usize> {
+    let spine_dir = spine_dir.as_ref();
+    let data = registry::load(spine_dir)?;
+    Ok(terms
+        .iter()
+        .filter(|t| t.get("kind").and_then(Value::as_str) == Some("agent"))
+        .filter(|t| t.get("alive").and_then(Value::as_bool) == Some(true))
+        .filter(|t| {
+            let (group, ids) = session_scope(t, &data);
+            agent_status_of(spine_dir, t, group.as_deref(), ids.as_deref()).is_some_and(|s| {
+                matches!(
+                    s.get("status").and_then(Value::as_str),
+                    Some("waiting" | "blocked")
+                )
+            })
+        })
+        .count())
 }
 
 /// [`TermInfo`] → 給 [`annotate_terms`]／[`session_draft`] 的物件（欄位同 Python `TermManager.list()`）。

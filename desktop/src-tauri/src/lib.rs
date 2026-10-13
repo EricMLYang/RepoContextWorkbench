@@ -76,17 +76,27 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-/// 選單列「未讀：N」那一行（set_unread 更新它的文字）。
+/// 選單列「未讀：N」那一行（set_tray 更新它的文字）。
 struct UnreadItem(MenuItem<tauri::Wry>);
+/// 選單列「等你的會話：N」那一行。
+struct WaitingItem(MenuItem<tauri::Wry>);
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "開啟工作台", true, None::<&str>)?;
     let unread = MenuItem::with_id(app, "unread", "未讀：—", false, None::<&str>)?;
     app.manage(UnreadItem(unread.clone()));
+    let waiting = MenuItem::with_id(app, "waiting", "等你的會話：—", false, None::<&str>)?;
+    app.manage(WaitingItem(waiting.clone()));
     let quit = MenuItem::with_id(app, "quit", "結束", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
-        &[&open, &unread, &PredefinedMenuItem::separator(app)?, &quit],
+        &[
+            &open,
+            &unread,
+            &waiting,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
     )?;
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("Repo Context 工作台")
@@ -107,29 +117,46 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// 選單列的未讀數：tray 標題（0＝不顯示）＋選單「未讀：N」。`None`＝不知道（spine 未設定）。
-pub fn set_unread(app: &AppHandle, n: Option<usize>) {
-    if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_title(n.filter(|n| *n > 0).map(|n| n.to_string()));
-    }
-    if let Some(item) = app.try_state::<UnreadItem>() {
-        let _ = item.0.set_text(match n {
-            Some(n) => format!("未讀：{n}"),
-            None => "未讀：—".into(),
-        });
+/// 選單列標題：未讀數，加上在等你的會話數（餘光看得到哪個 agent 卡在你這裡）。都是 0＝不顯示。
+fn tray_title(unread: Option<usize>, waiting: Option<usize>) -> Option<String> {
+    match (unread.unwrap_or(0), waiting.unwrap_or(0)) {
+        (0, 0) => None,
+        (u, 0) => Some(u.to_string()),
+        (0, w) => Some(format!("等你 {w}")),
+        (u, w) => Some(format!("{u} · 等你 {w}")),
     }
 }
 
-/// 重算未讀數（`notify.pending` 的 count——跟 `get_state` 的 `unread` 同一份）並更新選單列。背景執行緒跑。
+/// 選單列：標題（[`tray_title`]）＋選單「未讀：N」「等你的會話：N」。`None`＝不知道（spine 未設定）。
+pub fn set_tray(app: &AppHandle, unread: Option<usize>, waiting: Option<usize>) {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_title(tray_title(unread, waiting));
+    }
+    let line = |label: &str, n: Option<usize>| match n {
+        Some(n) => format!("{label}：{n}"),
+        None => format!("{label}：—"),
+    };
+    if let Some(item) = app.try_state::<UnreadItem>() {
+        let _ = item.0.set_text(line("未讀", unread));
+    }
+    if let Some(item) = app.try_state::<WaitingItem>() {
+        let _ = item.0.set_text(line("等你的會話", waiting));
+    }
+}
+
+/// 重算未讀數（`notify.pending` 的 count——跟 `get_state` 的 `unread` 同一份）與在等你的會話數，
+/// 更新選單列。背景執行緒跑。
 fn refresh_unread(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let n = app
-            .try_state::<AppState>()
+        let st = app.try_state::<AppState>();
+        let n = st
+            .as_ref()
             .and_then(|s| s.spine())
             .and_then(|sp| ctx_core::notify::pending(&sp).ok())
             .map(|p| p.count);
-        set_unread(&app, n);
+        let waiting = st.as_ref().and_then(|s| workbench::needs_you_now(s));
+        set_tray(&app, n, waiting);
     });
 }
 
@@ -174,7 +201,11 @@ async fn get_state(
 ) -> Result<Value, String> {
     let handle = app.clone();
     let st = blocking(app, move |st| workbench::get_state(st, group, repos)).await?;
-    set_unread(&handle, Some(workbench::unread_count(&st)));
+    set_tray(
+        &handle,
+        Some(workbench::unread_count(&st)),
+        Some(workbench::needs_you_count(&st)),
+    );
     Ok(st)
 }
 
@@ -325,5 +356,14 @@ mod tests {
         assert_eq!(spine_arg(&v(&["app", "--spine=/t"])).as_deref(), Some("/t"));
         assert_eq!(spine_arg(&v(&["app"])), None);
         assert_eq!(spine_arg(&v(&["app", "--spine"])), None);
+    }
+
+    #[test]
+    fn tray_title_shows_unread_and_waiting() {
+        assert_eq!(tray_title(None, None), None);
+        assert_eq!(tray_title(Some(0), Some(0)), None);
+        assert_eq!(tray_title(Some(3), Some(0)).as_deref(), Some("3"));
+        assert_eq!(tray_title(Some(0), Some(2)).as_deref(), Some("等你 2"));
+        assert_eq!(tray_title(Some(3), Some(2)).as_deref(), Some("3 · 等你 2"));
     }
 }

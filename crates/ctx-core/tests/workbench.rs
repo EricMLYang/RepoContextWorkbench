@@ -2246,3 +2246,35 @@ fn session_hook_status_shows_on_its_own_session_and_newer_wins() {
                      "started": (now + Duration::minutes(10)).format("%Y-%m-%d %H:%M").to_string()});
     assert!(status_of(&old).is_null());
 }
+
+#[test]
+fn sessions_needing_you_counts_only_live_agents_waiting_or_blocked() {
+    use ctx_core::session_status::{path_for, record_hook};
+    use ctx_core::workbench::sessions_needing_you;
+    let (_t, d) = spine_with_repos();
+    let started = (Local::now() - Duration::minutes(5))
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    let t = |sid: &str, alive: bool, kind: &str| {
+        json!({"sid": sid, "kind": kind, "alive": alive, "scope": "repo-a",
+               "scope_repos": ["repo-a"], "started": started})
+    };
+    let now = Some(Local::now().naive_local());
+    for (sid, ev) in [
+        ("t1", "stop"),
+        ("t2", "prompt"),
+        ("t3", "notification"),
+        ("t4", "stop"),
+    ] {
+        let p = path_for(&d, sid).to_string_lossy().into_owned();
+        assert!(record_hook(ev, "{}", Some(&p), now));
+    }
+    let terms = [
+        t("t1", true, "agent"),  // 等你
+        t("t2", true, "agent"),  // 處理中
+        t("t3", true, "agent"),  // 要你允許
+        t("t4", false, "agent"), // 已結束
+        t("t5", true, "shell"),
+    ];
+    assert_eq!(sessions_needing_you(&d, &terms).unwrap(), 2);
+}
