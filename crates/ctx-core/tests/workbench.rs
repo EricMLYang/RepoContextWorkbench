@@ -2149,3 +2149,100 @@ fn profile_draft_brief_lists_undescribed_and_known_roles() {
     .unwrap();
     assert!(err(&d, "profile_draft_brief", json!({})).contains("都寫了介紹"));
 }
+
+// ── 2026-10-14：會話狀態由 Claude Code hook 自動寫（Rust 才有）──
+
+struct ArgvTerms(std::sync::Mutex<Vec<Vec<String>>>);
+
+impl Terms for ArgvTerms {
+    fn info(&self, _: &str) -> Option<TermInfo> {
+        None
+    }
+    fn create_shell(
+        &self,
+        _: Option<&Path>,
+        _: Option<String>,
+    ) -> ctx_core::Result<(String, String)> {
+        Ok(("t9".into(), "shell".into()))
+    }
+    fn create_agent(&self, l: AgentLaunch) -> ctx_core::Result<(String, String)> {
+        self.0.lock().unwrap().push(l.argv);
+        Ok(("t8".into(), "agent".into()))
+    }
+    fn kill(&self, _: &str) -> bool {
+        false
+    }
+}
+
+#[test]
+fn term_create_gives_claude_code_the_session_hooks() {
+    let (_t, d) = spine_with_repos();
+    let terms = ArgvTerms(Default::default());
+    handle_action(
+        &d,
+        "term_create",
+        &json!({"kind": "agent", "repo": "repo-a"}),
+        Some(&terms),
+    )
+    .unwrap();
+    let argv = terms.0.lock().unwrap()[0].clone();
+    let settings = d.join(".state").join("session_hooks.json");
+    assert_eq!(argv[0], "claude");
+    assert_eq!(
+        argv[1],
+        format!("--settings={}", settings.display()),
+        "{argv:?}"
+    );
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(settings).unwrap()).unwrap();
+    assert!(v["hooks"]["Stop"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .ends_with("hook stop"));
+}
+
+#[test]
+fn session_hook_status_shows_on_its_own_session_and_newer_wins() {
+    use ctx_core::session_status::{path_for, record_hook};
+    use ctx_core::status::{save_status, StatusRecord};
+    let (_t, d) = spine_with_repos();
+    let started = (Local::now() - Duration::minutes(5))
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    let t1 = json!({"sid": "t1", "kind": "agent", "scope": "g1", "started": started});
+    let t2 = json!({"sid": "t2", "kind": "agent", "scope": "g1", "started": started});
+    let status_of =
+        |t: &Value| annotate_terms(&d, std::slice::from_ref(t)).unwrap()[0]["agent_status"].clone();
+    let target = path_for(&d, "t1").to_string_lossy().into_owned();
+    let now = Local::now().naive_local();
+    assert!(record_hook("stop", "{}", Some(&target), Some(now)));
+    // 只掛在自己的會話上（同範圍的另一個會話看不到）
+    assert_eq!(status_of(&t1)["status"], "waiting");
+    assert_eq!(status_of(&t1)["text"], "這一輪做完了，等你回覆");
+    assert!(status_of(&t2).is_null());
+    // agent 自己回報、時間較早：hook 的比較新就用 hook 的
+    let rec = |at: String| StatusRecord {
+        status: "blocked".into(),
+        text: "缺 API key".into(),
+        at,
+        scope: "g1".into(),
+        group: Some("g1".into()),
+        repos: None,
+        repo: None,
+    };
+    save_status(
+        &d,
+        &rec((now - Duration::minutes(2))
+            .format("%Y-%m-%d %H:%M")
+            .to_string()),
+    )
+    .unwrap();
+    assert_eq!(status_of(&t1)["status"], "waiting");
+    assert_eq!(status_of(&t2)["status"], "blocked");
+    // 同一分鐘：取 agent 自己回報的
+    save_status(&d, &rec(now.format("%Y-%m-%d %H:%M").to_string())).unwrap();
+    assert_eq!(status_of(&t1)["status"], "blocked");
+    // 會話開始前的 hook 狀態不算
+    let old = json!({"sid": "t1", "kind": "agent", "scope": "repo-b",
+                     "started": (now + Duration::minutes(10)).format("%Y-%m-%d %H:%M").to_string()});
+    assert!(status_of(&old).is_null());
+}

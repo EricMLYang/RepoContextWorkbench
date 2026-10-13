@@ -195,3 +195,31 @@ fn todo_review_trims_by_default() {
     assert_eq!(all["items"].as_array().unwrap().len(), 2);
     assert!(all.get("active").is_none());
 }
+
+/// Rust 才有（2026-10-14）：App 開的 Claude Code 會話，Stop／Notification／UserPromptSubmit hook 照環境變數給的
+/// 路徑寫會話狀態；不是 App 開的（沒有環境變數）什麼都不做；永遠 exit 0、不印東西（不干擾 agent）。
+#[test]
+fn test_session_status_hooks_write_only_with_app_env() {
+    let t = tempfile::tempdir().unwrap();
+    let target = t
+        .path()
+        .join(".state")
+        .join("session_status")
+        .join("t2.json");
+    let plain = || ctx(t.path()).cwd(t.path());
+    let app = || plain().env("REPO_CONTEXT_SESSION_STATUS", &target);
+    let r = plain().stdin("{}").run(&["hook", "stop"]);
+    assert_eq!((r.code, r.stdout.as_str()), (0, ""));
+    assert!(!target.exists());
+    let r = app()
+        .stdin(r#"{"hook_event_name":"Notification","message":"Claude needs your permission to use Bash"}"#)
+        .run(&["hook", "notification"]);
+    assert_eq!((r.code, r.stdout.as_str()), (0, ""));
+    let read =
+        || -> Value { serde_json::from_str(&std::fs::read_to_string(&target).unwrap()).unwrap() };
+    assert_eq!(read()["status"], "waiting");
+    assert_eq!(read()["text"], "Claude needs your permission to use Bash");
+    let r = app().stdin("").run(&["hook", "prompt"]);
+    assert_eq!(r.code, 0);
+    assert_eq!(read()["status"], "working");
+}

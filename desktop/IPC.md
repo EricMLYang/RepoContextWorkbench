@@ -142,7 +142,7 @@ Rust 端簽名建議：
 
 殼的實作（`src-tauri/src/watch.rs`）：用 `notify` crate 監看 `<spine>/registry.yaml`、`<spine>/config.yaml`、
 `<spine>/spine/events/*.md`、`<spine>/.state/last_seen.txt`（未讀；CLI `ack` 也會改）、
-`<spine>/.state/agent_status/*.json`（agent 經 MCP 回報的階段，會話清冊顯示）——OS 檔案事件，不輪詢，
+`<spine>/.state/agent_status/*.json`（agent 經 MCP 回報的階段，會話清冊顯示）、`<spine>/.state/session_status/*.json`（App 開的 Claude Code 會話由 hook 自動寫的「做完等你／處理中」，見下）——OS 檔案事件，不輪詢，
 250ms 內的一波寫入合併成一次；誰寫的都算（工作台、CLI、MCP）。每次發事件時殼也重算選單列的未讀數
 （`notify.pending` 的 count；`get_state` 回來時也以 `unread.length` 更新），視窗藏起來時選單列照樣是新的。
 另外 `run_action` 成功（`reason` = action 名）、`set_spine`（`spine`）、會話程序結束（`term-exit`）也會發。
@@ -153,6 +153,11 @@ Rust 端簽名建議：
 - 卡片 `cards[]`：共同欄位 `key, kind, title, lines, actions[{label, action, payload, primary?}]（`primary: true`＝主按鈕，一張卡最多一個，Rust 才有）, date, time, scope_kind, scope_label, scope_repos, lane`；`collision` 多 `cid, verdict, judgement{}`；`interrupt/event` 多 `etype, source`；`pending` 多 `cid`；`loop` 多 `num, due`。
 - `lane`（卡片與 `recent[]` 事件）：`scope`＝屬於目前範圍、`global`＝全域與未分類（卡片另含：範圍外的打斷）、`other`＝不顯示。前端照它分欄，不自己判斷範圍。
 - `terms[]`：`sid, title, alive, kind, origin, scope, scope_repos, started, task, report{text,type,source,at}|null, report_basis`，agent 會話另有 `agent_status{status,text,at,…}|null`。
+  Rust 才有（2026-10-14）：`agent_status` 也可能來自 Claude Code hook——`term_create` 開 Claude Code（config `mcp: mcp-config`）時多帶
+  `--settings=<spine>/.state/session_hooks.json`（只掛 `Stop`／`Notification`／`UserPromptSubmit` → `ctx hook stop|notification|prompt`，
+  不動使用者的 `~/.claude/settings.json`）與環境變數 `REPO_CONTEXT_SESSION_STATUS=<spine>/.state/session_status/<sid>.json`；
+  hook 照這個路徑寫 `{status, text, at, event}`（做完＝waiting、要你允許＝waiting＋訊息、你送出＝working）。這種的多一個 `event` 鍵。
+  跟 agent 經 MCP 回報的取新的（同一分鐘取 MCP 的）；會話結束刪檔、App 重開清空（sid 從 t1 重編）。
 - `ScanResult`：`group, states[RepoState], summary(WorkSummary), pulse, recent_commits[{repo,date,hash,subject}], question_cards[]（含 provenance：scope_kind="repo"）, questions[], quiet, session_tasks[{label,text}], audit[]`。
 - `RepoState`（`collect.collect_repo`）：`id, type, tier, path, exists, dirty, dirty_days, last_commit_days, ahead, behind, branch, last_subject, worktrees, commits_7d, commits_30d, recent_commits[], agents[], note`。
 - `WorkSummary`（`summary.build_summary`）：`group, saved_group, repos, at, goal, goal_gap, progress, progress_gap, since, changes[], changes_window, next, next_gap, changes_gap, gaps[], resume_task`；每個 fact 是 `{text, source, at}`。

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { InboxCard, QuestionCard } from "../api/types";
 import {
   draggedFileAbs,
+  reportLine,
+  sessionNeedsYou,
   pathForTerminal,
   actionLabel,
   actionToast,
@@ -149,5 +151,37 @@ describe("拖檔到終端", () => {
     expect(draggedFileAbs("")).toBeNull();
     expect(draggedFileAbs("not json")).toBeNull();
     expect(draggedFileAbs(JSON.stringify({ abs: 3 }))).toBeNull();
+  });
+});
+
+describe("會話在等你（Claude Code hook 自動寫）", () => {
+  const term = (agent_status: unknown, alive = true) =>
+    ({
+      sid: "t1",
+      title: "claude · a",
+      alive,
+      kind: "agent",
+      origin: null,
+      scope: "a",
+      scope_repos: ["a"],
+      started: "2026-10-14 01:00",
+      task: null,
+      report: null,
+      report_basis: "",
+      agent_status,
+    }) as never;
+  it("hook 寫的標 Claude Code、agent 自己回報的標 Agent 回報；結束的會話不算在等你", () => {
+    const hook = {
+      status: "waiting",
+      text: "這一輪做完了，等你回覆",
+      at: "2026-10-14 01:02",
+      event: "stop",
+    };
+    expect(reportLine(term(hook))).toBe("Claude Code「等你回應」01:02：這一輪做完了，等你回覆");
+    expect(reportLine(term({ ...hook, event: undefined }))).toContain("Agent 回報「等你回應」");
+    expect(sessionNeedsYou(term(hook))).toBe(true);
+    expect(sessionNeedsYou(term({ ...hook, status: "working" }))).toBe(false);
+    expect(sessionNeedsYou(term(hook, false))).toBe(false);
+    expect(sessionNeedsYou(term(null))).toBe(false);
   });
 });

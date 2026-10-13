@@ -144,6 +144,8 @@ export interface AgentStatus {
   group?: string | null;
   repos?: string[] | null;
   repo?: string | null;
+  /** Rust 才有：Claude Code hook 自動寫的（stop／notification／prompt）；agent 經 MCP 回報的沒有這個鍵。 */
+  event?: string;
 }
 
 export interface SessionReport {

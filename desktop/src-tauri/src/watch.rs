@@ -2,7 +2,8 @@
 //!
 //! 監看 spine 目錄（非遞迴：`registry.yaml`、`config.yaml`）、`spine/events/`（每日事件檔），
 //! 以及 `.state/` 裡前端會顯示的兩樣：`last_seen.txt`（未讀；CLI `ack` 也會改）與
-//! `agent_status/*.json`（agent 經 MCP `report_status` 回報的階段，會話清冊顯示）。
+//! `agent_status/*.json`（agent 經 MCP `report_status` 回報的階段，會話清冊顯示）、
+//! `session_status/*.json`（App 開的 Claude Code 會話由 hook 自動寫的「做完等你／處理中」）。
 //! 用 OS 檔案事件不輪詢；一波寫入（append＋鎖檔＋rename）合併成一次通知（[`DEBOUNCE`]）。
 //! 不論誰寫的——工作台自己、CLI、MCP 裡的 agent——前端都會收到。
 
@@ -30,7 +31,9 @@ pub fn is_relevant(spine: &Path, p: &Path) -> bool {
         (Some("registry.yaml" | "config.yaml"), None, _, _) => true,
         (Some("spine"), Some("events"), Some(name), None) => name.ends_with(".md"),
         (Some(".state"), Some("last_seen.txt"), None, _) => true,
-        (Some(".state"), Some("agent_status"), Some(name), None) => name.ends_with(".json"),
+        (Some(".state"), Some("agent_status" | "session_status"), Some(name), None) => {
+            name.ends_with(".json")
+        }
         _ => false,
     }
 }
@@ -68,7 +71,10 @@ impl SpineWatcher {
         // agent_status/ 可能還沒有人寫過——先建好才看得到第一次回報（.state 本來就是引擎的狀態目錄）
         let status = spine.join(".state").join("agent_status");
         let _ = std::fs::create_dir_all(&status);
-        for d in [spine.join(".state"), status] {
+        // session_status/：Claude Code hook 依會話寫的「做完等你／處理中」（Rust 才有，2026-10-14）
+        let session = ctx_core::session_status::dir(&spine);
+        let _ = std::fs::create_dir_all(&session);
+        for d in [spine.join(".state"), status, session] {
             if d.is_dir() {
                 watcher.watch(&d, RecursiveMode::NonRecursive)?;
             }
@@ -108,6 +114,15 @@ mod tests {
         ));
         assert!(is_relevant(s, Path::new("/sp/.state/last_seen.txt")));
         assert!(is_relevant(s, Path::new("/sp/.state/agent_status/g1.json")));
+        assert!(is_relevant(
+            s,
+            Path::new("/sp/.state/session_status/t1.json")
+        ));
+        assert!(!is_relevant(
+            s,
+            Path::new("/sp/.state/session_status/t1.json.tmp42")
+        ));
+        assert!(!is_relevant(s, Path::new("/sp/.state/session_hooks.json")));
         assert!(!is_relevant(
             s,
             Path::new("/sp/.state/agent_status/sub/g1.json")

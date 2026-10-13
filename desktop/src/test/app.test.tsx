@@ -1178,7 +1178,15 @@ describe("會話放進所屬牌組", () => {
       getState: vi.fn(async () =>
         makeState({
           terms: [
-            term({ home_group: "產品開發" }),
+            term({
+              home_group: "產品開發",
+              agent_status: {
+                status: "waiting",
+                text: "這一輪做完了，等你回覆",
+                at: "2026-10-12 09:30",
+                event: "stop",
+              },
+            }),
             term({ sid: "t2", title: "shell", kind: "shell", scope: null, scope_repos: null }),
             term({ sid: "t3", title: "整組", scope: "產品開發", scope_repos: null }),
           ] as never,
@@ -1189,6 +1197,8 @@ describe("會話放進所屬牌組", () => {
     const card = document.querySelector('.gcard[data-key="產品開發"]')!;
     const inCard = card.querySelector(".gsessions")!;
     expect(inCard.textContent).toContain("claude · a");
+    // 牌組裡的會話列：在等你的寫出來（Claude Code hook 自動寫的狀態）
+    expect(inCard.textContent).toContain("等你回應 · a");
     expect(inCard.textContent).toContain("整組");
     expect(card.querySelector(".gmeta")!.textContent).toContain("2 個會話");
     const others = document.getElementById("sessions")!;

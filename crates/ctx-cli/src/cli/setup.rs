@@ -12,6 +12,12 @@ use super::common::{fail, CmdResult, Ctx, Exit, EXIT_FINDINGS, EXIT_NO_SPINE};
 pub enum HookEvent {
     SessionStart,
     SessionEnd,
+    /// Rust 才有：App 開的會話這一輪做完（Claude Code `Stop`）→ 會話狀態「等你」
+    Stop,
+    /// Rust 才有：要你允許工具或閒著等輸入（Claude Code `Notification`）→「等你」＋訊息
+    Notification,
+    /// Rust 才有：你送出訊息（Claude Code `UserPromptSubmit`）→「處理中」
+    Prompt,
 }
 
 impl HookEvent {
@@ -19,6 +25,9 @@ impl HookEvent {
         match self {
             HookEvent::SessionStart => "session-start",
             HookEvent::SessionEnd => "session-end",
+            HookEvent::Stop => "stop",
+            HookEvent::Notification => "notification",
+            HookEvent::Prompt => "prompt",
         }
     }
 }
@@ -28,6 +37,15 @@ pub fn cmd_hook(ctx: &Ctx, event: HookEvent) -> CmdResult {
     let mut buf = Vec::new();
     let _ = std::io::stdin().read_to_end(&mut buf);
     let stdin = String::from_utf8_lossy(&buf);
+    if matches!(
+        event,
+        HookEvent::Stop | HookEvent::Notification | HookEvent::Prompt
+    ) {
+        // 會話狀態：照 App 給的路徑寫，不找 spine、不印任何東西（不是 App 開的會話就什麼都不做）
+        let target = std::env::var(ctx_core::session_status::ENV).ok();
+        ctx_core::session_status::record_hook(event.as_str(), &stdin, target.as_deref(), None);
+        return Ok(());
+    }
     let Some(d) = config::find_spine(ctx.spine.as_deref()) else {
         return Ok(());
     };

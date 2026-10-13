@@ -544,9 +544,13 @@ pub struct TermManager {
 }
 
 impl TermManager {
+    /// 新的會話清冊。sid 從 t1 重新編，所以前一次（App 上次開著時）留下的會話狀態檔一併清掉，
+    /// 免得新的 t1 撿到舊的「等你」。
     pub fn new(spine_dir: impl Into<PathBuf>) -> Self {
+        let spine_dir = spine_dir.into();
+        crate::session_status::clear_all(&spine_dir);
         TermManager {
-            spine_dir: spine_dir.into(),
+            spine_dir,
             sessions: Mutex::new(Vec::new()),
             ids: AtomicU64::new(1),
             on_exit: Mutex::new(None),
@@ -573,6 +577,7 @@ impl TermManager {
         Box::new(move || {
             if unmark_agent {
                 agentmark::unmark(&spine, &sid);
+                crate::session_status::clear(&spine, &sid);
             }
             if let Some(l) = listener {
                 l(&sid);
@@ -621,10 +626,18 @@ impl TermManager {
         } else {
             launch.agent.clone()
         };
+        // 會話狀態（Rust 才有）：Claude Code 的 hook 照這個路徑寫「做完了等你／處理中」
+        let mut env = launch.env.clone();
+        env.push((
+            crate::session_status::ENV.to_string(),
+            crate::session_status::path_for(&self.spine_dir, &sid)
+                .to_string_lossy()
+                .into_owned(),
+        ));
         let spec = SpawnSpec {
             argv: login_shell_wrap(&launch.argv),
             cwd: Some(launch.cwd.clone()),
-            env: launch.env.clone(),
+            env,
             cols: DEFAULT_COLS,
             rows: DEFAULT_ROWS,
         };

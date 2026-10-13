@@ -342,7 +342,7 @@ export function reportLine(s: TermInfo): string {
   if (s.kind !== "agent") return "本機 Shell，不回報";
   if (s.agent_status)
     return (
-      "Agent 回報「" +
+      (s.agent_status.event ? "Claude Code「" : "Agent 回報「") +
       (STATUS_TXT[s.agent_status.status] || s.agent_status.status) +
       "」" +
       s.agent_status.at.slice(11) +
@@ -441,6 +441,11 @@ export function sessionTooltip(s: TermInfo): string {
     "\n依據：" +
     (s.report_basis || "—")
   );
+}
+
+/** 會話在等你（agent 回報等你／卡住，或 Claude Code 這一輪做完、要你允許）。 */
+export function sessionNeedsYou(s: TermInfo): boolean {
+  return !!s.alive && !!s.agent_status && ["waiting", "blocked"].includes(s.agent_status.status);
 }
 
 export type DotState = "dead" | "silent" | "needs" | "ok";

@@ -1,5 +1,13 @@
 import type { TermInfo } from "../../api/types";
-import { sessionDot, sessionMeta, sessionTooltip, sessionWhere, shellOwner } from "../../lib/view";
+import {
+  STATUS_TXT,
+  sessionDot,
+  sessionMeta,
+  sessionNeedsYou,
+  sessionTooltip,
+  sessionWhere,
+  shellOwner,
+} from "../../lib/view";
 import { useSnapshot, useUi, useUiState } from "../../store/context";
 
 /**
@@ -28,7 +36,9 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
           <span className="sessiontitle">{s.title}</span>
           <span className="sessionmeta">
             {inGroup
-              ? (s.alive ? "" : "已結束 · ") + (where.repo ? where.repo : "整組")
+              ? (s.alive ? "" : "已結束 · ") +
+                (sessionNeedsYou(s) ? STATUS_TXT[s.agent_status!.status] + " · " : "") +
+                (where.repo ? where.repo : "整組")
               : sessionMeta(s)}
           </span>
         </span>

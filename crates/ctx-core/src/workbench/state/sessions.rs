@@ -95,9 +95,24 @@ pub(super) fn annotate_terms_with(
                 );
                 // agent 自己回報的階段（report_status）——只認會話開始後的，舊的不算
                 let started = tget(t, "started").unwrap_or("~");
-                let st = status::get_status(spine_dir, group.as_deref(), ids.as_deref())
+                let at = |s: &Value| {
+                    s.get("at")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string()
+                };
+                let reported = status::get_status(spine_dir, group.as_deref(), ids.as_deref())
                     .filter(|s| s.as_object().is_some_and(|o| !o.is_empty()))
-                    .filter(|s| s.get("at").and_then(Value::as_str).unwrap_or("") >= started);
+                    .filter(|s| at(s).as_str() >= started);
+                // Rust 才有（2026-10-14）：Claude Code hook 依會話自動寫的（做完等你／處理中）。
+                // 兩個都有取新的；同一分鐘取 agent 自己回報的（文字比較具體）
+                let own = tget(t, "sid")
+                    .and_then(|sid| crate::session_status::read(spine_dir, sid))
+                    .filter(|s| at(s).as_str() >= started);
+                let st = match (reported, own) {
+                    (Some(r), Some(o)) => Some(if at(&o) > at(&r) { o } else { r }),
+                    (r, o) => r.or(o),
+                };
                 rec.insert("agent_status".into(), st.unwrap_or(Value::Null));
                 // 依據要說得出口：範圍認得出來就講範圍，認不出來就說沒再過濾
                 let basis = match (&group, &ids) {

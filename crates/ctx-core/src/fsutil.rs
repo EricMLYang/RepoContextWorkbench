@@ -84,6 +84,17 @@ pub fn mtime_secs(p: &Path) -> std::io::Result<f64> {
     })
 }
 
+/// 先寫同目錄的暫存檔（檔名帶行程 id，同時寫不互踩）再改名：讀的人不會看到寫一半的檔。
+pub fn write_atomic(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut tmp = p.as_os_str().to_owned();
+    tmp.push(format!(".tmp{}", std::process::id()));
+    let tmp = std::path::PathBuf::from(tmp);
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, p).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
+}
+
 /// 現在的 Unix 秒數（浮點）——對應 `time.time()`。
 pub fn now_secs() -> f64 {
     std::time::SystemTime::now()

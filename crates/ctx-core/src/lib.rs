@@ -37,6 +37,7 @@ pub mod repocard;
 pub mod route;
 pub mod ruminate;
 pub mod session;
+pub mod session_status;
 pub mod spawn;
 pub mod spine;
 pub mod status;
