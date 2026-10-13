@@ -20,9 +20,14 @@ pub fn route(
     let now = when.unwrap_or_else(|| Local::now().naive_local());
     let fname = format!("{}_{title}.md", now.format("%Y%m%d-%H%M%S"));
     let target = if let Some(g) = dest.strip_prefix("group:") {
+        // 事件標頭裡的組名可能換寫過（PM_Group）：資料夾用登記的原名，跟筆記放在同一個組資料夾
+        let name = registry::load(spine_dir)
+            .ok()
+            .and_then(|d| d.group(g).map(|x| x.name()))
+            .unwrap_or_else(|| g.to_string());
         spine_dir
             .join("groups")
-            .join(g)
+            .join(name)
             .join("materials")
             .join(&fname)
     } else if let Some(id) = dest.strip_prefix("repo:") {

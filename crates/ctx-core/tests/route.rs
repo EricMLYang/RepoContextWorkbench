@@ -25,3 +25,15 @@ fn test_route_to_incubator_and_group() {
     );
     assert!(route(&d, "z", "nowhere:abc", "idea", None).is_err());
 }
+
+/// 組名有空白（2026-10-14）：落點寫成換寫過的 group:PM_Group 時，檔案放進登記原名的組資料夾。
+#[test]
+fn test_route_to_group_with_space_uses_registered_folder() {
+    let (_t, d) = spine_with_repos();
+    ctx_core::registry::add_group(&d, "PM Group", &["repo-a"]).unwrap();
+    let p = route(&d, "結論", "group:PM_Group", "idea", None).unwrap();
+    assert!(
+        p.starts_with(d.join("groups").join("PM Group").join("materials")),
+        "{p:?}"
+    );
+}
