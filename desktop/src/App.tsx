@@ -94,7 +94,6 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
   // 側欄寬度（拖曳把手調的，存在本機偏好）
   useSavedWidths();
 
-  // ── 右側欄（點 repo）＋右鍵選單 ──
   // ── 挑檔案給 agent（記在這台電腦；檔案不見了交出去時引擎會擋）──
   const [picks, setPicks] = useState<Pick[]>(() => {
     const v = load<unknown>("picks", []);
@@ -108,17 +107,15 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
         )
       : [];
   });
-  const updatePicks = useCallback((f: (cur: Pick[]) => Pick[]) => {
-    setPicks((cur) => {
-      const next = f(cur);
-      save("picks", next);
-      return next;
-    });
-  }, []);
+  useEffect(() => save("picks", picks), [picks]);
+  const updatePicks = useCallback((f: (cur: Pick[]) => Pick[]) => setPicks(f), []);
 
+  // ── 貼到目前會話（TerminalPanel 填入）、⌘K ──
   const pasteRef = useRef<((text: string) => string | null) | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
+
+  // ── 右側欄（點 repo）＋右鍵選單 ──
   const [panelRepo, setPanelRepo] = useState<string | null>(() =>
     load<string | null>("panelRepo", null),
   );
