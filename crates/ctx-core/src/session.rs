@@ -74,6 +74,9 @@ pub struct SessionPlan {
     pub pack_path: PathBuf,
     /// 這個 agent 是 Claude Code（config 的 `mcp: mcp-config`）：吃 `--settings`，App 據此掛會話狀態 hook。
     pub claude_code: bool,
+    /// `cmd` 裡 agent 指令本身佔幾個元素（config 的 `cmd`，例 `["claude"]` 或 `["npx", "claude"]`）：
+    /// 要另外加旗標就插在這個位置，不會插進包裝指令中間。
+    pub flags_at: usize,
 }
 
 /// 對應 `session.build`：組會話——打包＋掛載＋指令。
@@ -174,6 +177,7 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
         cmd,
         pack_path: out,
         claude_code: spec.mcp == "mcp-config",
+        flags_at: spec.cmd.len(),
     })
 }
 

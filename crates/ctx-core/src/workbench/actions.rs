@@ -1392,11 +1392,12 @@ fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
         // 會話狀態（Rust 才有）：Claude Code 多帶一份只有三個 hook 的設定（做完／要你允許／你送出），
         // 不動使用者的 ~/.claude/settings.json；寫不出設定檔就照舊開（只是看不到「等你」）
         let mut argv = plan.cmd;
-        if plan.claude_code && !argv.is_empty() {
+        if plan.claude_code && plan.flags_at <= argv.len() {
             let file =
                 crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
             if let Ok(f) = file {
-                argv.insert(1, format!("--settings={}", f.display()));
+                // 插在 agent 指令之後（config 可能是 ["npx", "claude"] 這種包裝）
+                argv.insert(plan.flags_at, format!("--settings={}", f.display()));
             }
         }
         terms.create_agent(AgentLaunch {

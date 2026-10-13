@@ -2409,3 +2409,27 @@ fn group_name_with_space_events_stay_in_scope_lane() {
     // 標籤用登記的原名
     assert_eq!(rec["scope_label"], "PM Group", "{rec}");
 }
+
+/// config 的 claude 是包裝指令（["npx", "claude"]）：--settings 插在整個指令之後，不插進中間。
+#[test]
+fn term_create_inserts_settings_after_wrapped_agent_command() {
+    let (_t, d) = spine_with_repos();
+    let cfg = d.join("config.yaml");
+    let text = std::fs::read_to_string(&cfg).unwrap();
+    std::fs::write(
+        &cfg,
+        format!("{text}\nagents:\n  claude:\n    cmd: [npx, claude]\n    mcp: mcp-config\n    prompt_flag: []\n"),
+    )
+    .unwrap();
+    let terms = ArgvTerms(Default::default());
+    handle_action(
+        &d,
+        "term_create",
+        &json!({"kind": "agent", "repo": "repo-a"}),
+        Some(&terms),
+    )
+    .unwrap();
+    let argv = terms.0.lock().unwrap()[0].clone();
+    assert_eq!(&argv[..2], ["npx", "claude"], "{argv:?}");
+    assert!(argv[2].starts_with("--settings="), "{argv:?}");
+}
