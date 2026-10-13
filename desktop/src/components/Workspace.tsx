@@ -26,6 +26,8 @@ export function Workspace(props: {
   tab: Tab;
   composerOpen: boolean;
   composerFocusSeq: number;
+  /** 每次「記一筆」（選單列）遞增：筆記分頁把游標放進輸入框。 */
+  notesFocusSeq?: number;
   closeComposer: () => void;
   /** 主區正在看檔案分頁時藏起來（不卸載，搜尋與篩選保留）。 */
   hidden?: boolean;
@@ -185,7 +187,7 @@ export function Workspace(props: {
         </button>
       </div>
       <InboxPane query={q} filter={filter} active={tab === "inbox"} />
-      <NotesPane query={q} active={tab === "notes"} />
+      <NotesPane query={q} active={tab === "notes"} focusSeq={props.notesFocusSeq ?? 0} />
       <ReposPane query={q} active={tab === "repos"} />
       <FilesPane query={q} active={tab === "files"} />
       <ActivityPane query={q} active={tab === "activity"} />

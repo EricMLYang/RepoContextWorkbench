@@ -44,7 +44,7 @@
 | F-34 | 跨 repo | Incubator 主題一鍵轉 repo（建立＋登記＋關係＋初始脈絡）；R09：R09：痛點 1「Incubator 主題轉 repo」至今沒有任何迭代碰到，排在 F-22 之後；R10：R10：spawn --from-incubator 已有；spine incubator 目前是空的，邊際價值低 | 脈絡 | — | P2 | 延後 | R01 | R10 |
 | F-35 | 觀測 | 脈絡命中率：開場注入的內容 agent 實際用了幾成 | 脈絡 | — | P1 | 併入 N-03 | R01 | R01 |
 | F-36 | 觀測 | 健康指標：未交接率、跨組被拒次數；R17：`ctx health`：使用者真用幾天後，用數字判斷 15 個迭代有沒有用——交接率（會話有沒有交接）、推薦命中率、判斷結果記錄率、未結關閉速度、工具用量（MCP 呼叫紀錄）；**迭代 16 完成**：`ctx health`；使用前基準：交接率 76%、推薦命中率 0%（45 筆）、未結開 46 關 6| 留痕 | — | P2 | 完成 | R01 | R17 |
-| F-37 | 入口 | 選單列隨手捕捉一句想法或判斷，直接寫進 spine | 留痕、同介面 | — | P2 | 構想 | R01 | R01 |
+| F-37 | 入口 | 選單列隨手捕捉一句想法或判斷，直接寫進 spine；R29：第一步「記一筆…」（選單列 → 叫出視窗、筆記分頁游標就位，記到目前牌組的 notes.md）**2026-10-14 完成**（GUI 未實測）；全域快捷鍵要加 global-shortcut plugin，等真用說需要再加 | 留痕、同介面 | — | P2 | 部分完成 | R01 | R29 |
 | F-38 | 入口 | 外部收件匣：ClickUp／Gmail connector 拉進或推出；R02：Paseo 做了跨裝置控制層，可參考 | 同介面 | — | P2 | 構想 | R01 | R02 |
 | F-39 | 入口 | Windows／VDI 入口 | 同介面 | — | P2 | 併入 N-10 | R01 | R01 |
 | F-40 | 判斷品味 | decision 可匯出成 AgDR 相容格式（Y 句型、考慮過的選項、agent／model 中繼資料），讓別的工具也讀得到；R22：Claude Code Projects 9/23 起可在本機跑 thread；不掛 ctx MCP 的 agent 也一定讀得到 repo 檔——`ctx decisions export --agdr <dir>` 把判斷（含取代、重看、結果）寫成 AgDR md，是最通用的介面；**迭代 21 完成**：`ctx decisions export <dir>`；真資料副本工作台 12 份| 留痕、同介面 | AgDR | P2 | 完成 | R02 | R22 |

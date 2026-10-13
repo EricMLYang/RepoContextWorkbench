@@ -131,6 +131,17 @@ export function createTauriBackend(
         stop?.();
       };
     },
+    onCapture(cb) {
+      let stop: (() => void) | null = null;
+      let cancelled = false;
+      listen("ui://capture", () => cb())
+        .then((un) => (cancelled ? un() : (stop = un)))
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+        stop?.();
+      };
+    },
     openTerminal(sid): TermStream {
       const dataCbs: ((b: Uint8Array) => void)[] = [];
       const openCbs: (() => void)[] = [];

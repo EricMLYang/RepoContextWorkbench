@@ -64,6 +64,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
   const draftRef = useRef(draft);
   const [composerOpen, setComposerOpen] = useState(() => !!draft);
   const [composerFocusSeq, setComposerFocusSeq] = useState(0);
+  const [notesFocusSeq, setNotesFocusSeq] = useState(0);
   const setDraft = useCallback((v: string) => {
     draftRef.current = v;
     setDraftState(v);
@@ -257,6 +258,17 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     };
   }, [store, autoStart, openPicker]);
 
+  // 選單列「記一筆…」：回到工作區的筆記分頁、游標放進輸入框（沒選牌組時筆記分頁會說要先選）
+  useEffect(
+    () =>
+      store.backend.onCapture?.(() => {
+        setActiveFile(null);
+        setTab("notes");
+        setNotesFocusSeq((n) => n + 1);
+      }),
+    [store, setActiveFile],
+  );
+
   // Ctrl+` 收合／展開終端（有對話框開著時不動）；⌘K（Ctrl+K）找 repo——
   // 焦點在終端裡時 Ctrl+K 留給 shell（刪到行尾），⌘K 照常
   useEffect(() => {
@@ -306,6 +318,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
               tab={tab}
               composerOpen={composerOpen}
               composerFocusSeq={composerFocusSeq}
+              notesFocusSeq={notesFocusSeq}
               closeComposer={() => setComposerOpen(false)}
               hidden={!!shownFile}
             />

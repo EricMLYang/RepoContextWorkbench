@@ -52,6 +52,8 @@ export interface Backend {
    * 有這個就不用靠 5 秒輪詢才看到變化；回傳取消訂閱。
    */
   onChanged?(cb: () => void): () => void;
+  /** 選配（Tauri 才有）：選單列「記一筆…」——前端切到筆記分頁、游標放進輸入框。回傳取消訂閱。 */
+  onCapture?(cb: () => void): () => void;
 }
 
 /** 給人看的連線錯誤訊息（兩個實作共用，與 Python 版前端逐字一致）。 */

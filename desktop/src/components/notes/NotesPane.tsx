@@ -91,7 +91,16 @@ function NoteItem(props: {
  * 筆記分頁：快速記下「屬於這個組、不屬於任何 repo」的事。存在 spine 的 `groups/<組>/notes.md`
  * （普通 Markdown，人跟 agent 都能直接讀）。草稿存本機；送出失敗保留草稿並顯示原因。
  */
-export function NotesPane({ query, active }: { query: string; active: boolean }) {
+export function NotesPane({
+  query,
+  active,
+  focusSeq = 0,
+}: {
+  query: string;
+  active: boolean;
+  /** 每次遞增就把游標放進輸入框（選單列「記一筆…」）。 */
+  focusSeq?: number;
+}) {
   const store = useStore();
   const { scope, state, stateReady } = useSnapshot();
   const group =
@@ -136,10 +145,10 @@ export function NotesPane({ query, active }: { query: string; active: boolean })
     };
   }, [store, active, group]);
 
-  // 切到這個分頁就把游標放進輸入框（「＋ 記一筆」）
+  // 切到這個分頁、或選單列「記一筆…」，就把游標放進輸入框
   useEffect(() => {
     if (active && group) box.current?.focus();
-  }, [active, group]);
+  }, [active, group, focusSeq]);
 
   async function submit() {
     const text = draft.trim();

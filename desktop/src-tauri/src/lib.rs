@@ -29,6 +29,8 @@ pub const EVENT_CHANGED: &str = "workbench://changed";
 pub const EVENT_REPO_CHANGED: &str = "repo://changed";
 const MAIN: &str = "main";
 const TRAY_ID: &str = "main";
+/// 選單列「記一筆…」→ 前端（desktop/IPC.md 事件表）。
+const EVENT_CAPTURE: &str = "ui://capture";
 
 struct TauriNotifier {
     app: AppHandle,
@@ -86,6 +88,7 @@ struct NotifiedAsks(std::sync::Mutex<std::collections::HashMap<String, String>>)
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "開啟工作台", true, None::<&str>)?;
+    let capture = MenuItem::with_id(app, "capture", "記一筆…", true, None::<&str>)?;
     let unread = MenuItem::with_id(app, "unread", "未讀：—", false, None::<&str>)?;
     app.manage(UnreadItem(unread.clone()));
     let waiting = MenuItem::with_id(app, "waiting", "等你的會話：—", false, None::<&str>)?;
@@ -95,6 +98,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         app,
         &[
             &open,
+            &capture,
             &unread,
             &waiting,
             &PredefinedMenuItem::separator(app)?,
@@ -107,6 +111,11 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(true)
         .on_menu_event(|app, ev| match ev.id.as_ref() {
             "open" => show_main(app),
+            // 隨手記一筆到目前牌組的筆記（F-37 第一步）：叫出視窗，前端切到筆記分頁、游標放進輸入框
+            "capture" => {
+                show_main(app);
+                let _ = app.emit(EVENT_CAPTURE, ());
+            }
             "quit" => {
                 app.state::<AppState>().shutdown();
                 app.exit(0);

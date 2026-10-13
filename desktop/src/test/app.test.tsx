@@ -1499,6 +1499,31 @@ describe("牌組筆記", () => {
     });
   };
 
+  it("選單列「記一筆…」：切到筆記分頁、游標在輸入框；已在筆記分頁再按也回到輸入框", async () => {
+    let capture: (() => void) | null = null;
+    const backend = Object.assign(notesBackend(), {
+      onCapture: (cb: () => void) => {
+        capture = cb;
+        return () => {
+          capture = null;
+        };
+      },
+    });
+    const store = new WorkbenchStore(backend, { group: "產品開發", repos: null });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    expect(capture).not.toBeNull();
+    await act(async () => capture!());
+    await waitFor(() => expect(document.activeElement?.id).toBe("notebox"));
+    expect(document.getElementById("tab-notes")!.classList.contains("on")).toBe(true);
+    // 再按一次（已經在筆記分頁）：游標回到輸入框
+    (document.activeElement as HTMLElement).blur();
+    await act(async () => capture!());
+    await waitFor(() => expect(document.activeElement?.id).toBe("notebox"));
+  });
+
   it("「＋ 記一筆」打開筆記分頁；⌘Enter 記下、刪除要按兩次", async () => {
     const backend = notesBackend();
     const store = new WorkbenchStore(backend, { group: "產品開發", repos: null });

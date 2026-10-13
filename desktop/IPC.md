@@ -141,6 +141,7 @@ Rust 端簽名建議：
 | 事件名 | payload | 何時發 |
 |---|---|---|
 | `workbench://changed` | `{ reason?: string }`（前端不讀內容） | 引擎寫入脊椎事件、registry、組、會話清冊有變（含 agent 從 MCP 寫入、會話程序結束）時。前端收到就呼叫 `get_state`（不會觸發 `get_scan`）。 |
+| `ui://capture` | `null` | 選單列「記一筆…」（Rust 才有，2026-10-14）：殼先叫出視窗，前端切到工作區的筆記分頁、游標放進輸入框（記到目前牌組的 `notes.md`；沒選牌組時筆記分頁會說要先選）。 |
 | `repo://changed` | `{ id: string, paths: string[], rescan: boolean }`（相對 repo 根目錄） | `watch_tree` 登記的資料夾裡有檔案新增／刪除／改名／改內容（合併 300ms）。父資料夾沒登記的、`.git/` 裡的不報。前端重讀受影響的那一層、開著的檔案重讀（有未存修改的檔不重讀，改成提示）。`rescan: true`＝OS 漏了事件（溢出或監看錯誤）：`paths` 是這個 repo 所有登記中的資料夾，前端全部重讀。實作：`src-tauri/src/tree_watch.rs`（遞迴 OS 檔案事件，沒有樹開著就不監看任何 repo）。 |
 
 殼的實作（`src-tauri/src/watch.rs`）：用 `notify` crate 監看 `<spine>/registry.yaml`、`<spine>/config.yaml`、
