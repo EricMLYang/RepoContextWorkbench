@@ -586,6 +586,78 @@ describe("repo 右側欄與右鍵選單", () => {
     expect(backend.action).toHaveBeenCalledWith("update_group", { name: "產品開發", repos: ["b"] });
   });
 
+  it("名片：顯示 README 推測；寫名片送三欄，存好換成新的；失敗顯示原因且不關表單", async () => {
+    let fail = true;
+    const backend = mockBackend({
+      getScan: vi.fn(async () =>
+        makeScan({ states: [{ ...repoA, recent_commits: [], agents: [] }] }),
+      ),
+      action: vi.fn(async (name: string, p: Record<string, string>) => {
+        if (name === "repo_tree")
+          return { ok: true, id: "a", root: "/r/a", dir: "", more: 0, entries: [] };
+        if (name === "repo_profile")
+          return {
+            ok: true,
+            id: "a",
+            path: "/r/a",
+            description: "登入服務。",
+            description_source: "readme",
+          };
+        if (name === "describe_repo") {
+          if (fail) {
+            fail = false;
+            throw new Error("寫不進 registry");
+          }
+          return {
+            ok: true,
+            id: "a",
+            path: "/r/a",
+            description: p.description,
+            description_source: "registry",
+            role: p.role,
+            keywords: ["登入", "OAuth"],
+            changed: true,
+          };
+        }
+        return { ok: true };
+      }) as never,
+    });
+    await mountGroup(backend);
+    await act(async () => fireEvent.click(repoButton()));
+    const card = within(document.getElementById("repopanel")!).getByRole("region", {
+      name: "a 的名片",
+    });
+    expect(backend.action).toHaveBeenCalledWith("repo_profile", { id: "a" });
+    expect(card.textContent).toContain("登入服務。");
+    expect(card.textContent).toContain("從 README 推測");
+
+    await act(async () => fireEvent.click(within(card).getByRole("button", { name: "寫名片" })));
+    const desc = within(card).getByLabelText("介紹") as HTMLTextAreaElement;
+    expect(desc.value).toBe("");
+    expect(desc.placeholder).toBe("推測：登入服務。");
+    await act(async () =>
+      fireEvent.click(within(card).getByRole("button", { name: "用推測的介紹改" })),
+    );
+    expect(desc.value).toBe("登入服務。");
+    fireEvent.change(within(card).getByLabelText(/角色/), { target: { value: "實作" } });
+    fireEvent.change(within(card).getByLabelText(/關鍵字/), { target: { value: "登入、OAuth" } });
+    await act(async () => fireEvent.click(within(card).getByRole("button", { name: "儲存名片" })));
+    expect(within(card).getByRole("alert").textContent).toContain("寫不進 registry");
+    expect(within(card).getByLabelText("介紹")).toBeTruthy();
+
+    await act(async () => fireEvent.click(within(card).getByRole("button", { name: "儲存名片" })));
+    expect(backend.action).toHaveBeenLastCalledWith("describe_repo", {
+      id: "a",
+      description: "登入服務。",
+      role: "實作",
+      keywords: "登入、OAuth",
+    });
+    expect(within(card).queryByLabelText("介紹")).toBeNull();
+    expect(card.textContent).not.toContain("從 README 推測");
+    expect(card.textContent).toContain("實作");
+    expect(within(card).getByRole("list", { name: "關鍵字" }).textContent).toBe("登入OAuth");
+  });
+
   it("移出工作台…：直接開確認，按確定才呼叫 remove_repo", async () => {
     const backend = backendWithRepo();
     await mountGroup(backend);

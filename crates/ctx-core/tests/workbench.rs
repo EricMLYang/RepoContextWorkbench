@@ -1474,6 +1474,7 @@ fn read_only_actions_leave_spine_untouched() {
         ("repo_tree", json!({"id": "repo-a"})),
         ("read_file", json!({"id": "repo-a", "path": "README.md"})),
         ("group_notes", json!({"group": "g1"})),
+        ("repo_profile", json!({"id": "repo-a"})),
         ("scan_dir", json!({"dir": d.parent().unwrap()})),
     ];
     let before = spine_files(&d);
@@ -1896,4 +1897,71 @@ fn actions_that_change_scan_say_rescan() {
     assert_eq!(r["rescan"], json!(true));
     let r = act(&d, "group_notes", json!({"group": "g1"})).unwrap();
     assert!(r.get("rescan").is_none());
+}
+
+// ── F-57：App 看與改名片（Rust 才有）──
+
+#[test]
+fn repo_profile_falls_back_to_readme_and_describe_writes_only_changes() {
+    let (_t, d) = spine_with_repos();
+    let root = registry::get_repo(&d, "repo-a").unwrap().path();
+    std::fs::write(root.join("README.md"), "# A\n\n讀書筆記與卡片的知識庫。\n").unwrap();
+    let p = act(&d, "repo_profile", json!({"id": "repo-a"})).unwrap();
+    assert_eq!(p["description"], "讀書筆記與卡片的知識庫。");
+    assert_eq!(p["description_source"], "readme");
+    assert!(p.get("role").is_none());
+    assert!(act(&d, "repo_profile", json!({"id": "nope"})).is_err());
+
+    let audits = || of_type(&d, EventType::Decision).len();
+    let n0 = audits();
+    let r = act(
+        &d,
+        "describe_repo",
+        json!({"id": "repo-a", "description": " 知識庫：書摘與卡片 ", "role": "知識庫",
+               "keywords": "書摘、卡片，閱讀, 書摘\n筆記"}),
+    )
+    .unwrap();
+    assert_eq!(r["changed"], true);
+    assert_eq!(r["description"], "知識庫：書摘與卡片");
+    assert_eq!(r["description_source"], "registry");
+    assert_eq!(r["role"], "知識庫");
+    assert_eq!(r["keywords"], json!(["書摘", "卡片", "閱讀", "筆記"]));
+    let n1 = audits();
+    assert_eq!(n1, n0 + 1, "名片改動要留痕");
+
+    // 原樣再存＝不寫、不記
+    let same = act(
+        &d,
+        "describe_repo",
+        json!({"id": "repo-a", "description": "知識庫：書摘與卡片", "role": "知識庫",
+               "keywords": "書摘, 卡片, 閱讀, 筆記"}),
+    )
+    .unwrap();
+    assert_eq!(same["changed"], false);
+    assert_eq!(audits(), n1);
+
+    // 只改角色：事件只寫角色；清空關鍵字
+    act(
+        &d,
+        "describe_repo",
+        json!({"id": "repo-a", "description": "知識庫：書摘與卡片", "role": "規格來源", "keywords": ""}),
+    )
+    .unwrap();
+    let last = of_type(&d, EventType::Decision).pop().unwrap();
+    assert!(last.body.contains("角色＝規格來源"), "{}", last.body);
+    assert!(!last.body.contains("介紹＝"), "{}", last.body);
+    assert!(registry::get_repo(&d, "repo-a")
+        .unwrap()
+        .keywords()
+        .is_empty());
+
+    // 清掉介紹 → 回到 README 推測
+    let back = act(
+        &d,
+        "describe_repo",
+        json!({"id": "repo-a", "description": ""}),
+    )
+    .unwrap();
+    assert_eq!(back["description_source"], "readme");
+    assert!(err(&d, "describe_repo", json!({"id": "nope", "role": "x"})).contains("nope"));
 }

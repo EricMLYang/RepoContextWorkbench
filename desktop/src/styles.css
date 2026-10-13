@@ -1724,6 +1724,50 @@ dialog::backdrop {
 .panelsection .eyebrow {
   margin: 0 0 6px;
 }
+.profilehead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.profilehead .eyebrow {
+  margin: 0;
+}
+.profiledesc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.profiledesc.guessed {
+  color: var(--sub);
+}
+.profiledesc .muted {
+  margin-left: 4px;
+}
+.profilekw {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.profilekw li {
+  font-size: 11px;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--sub);
+}
+.profileform .field {
+  margin: 8px 0;
+  font-size: 12px;
+}
+.profileform textarea {
+  width: 100%;
+  resize: vertical;
+}
 
 /* 右鍵選單 */
 .ctxmenu {
