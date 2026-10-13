@@ -2435,3 +2435,6 @@ body.withpicks #main {
 .diffview .dl.meta {
   color: var(--sub);
 }
+.gmeta .gneeds {
+  color: var(--red);
+}

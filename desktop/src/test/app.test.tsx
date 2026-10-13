@@ -1248,7 +1248,7 @@ describe("會話放進所屬牌組", () => {
     // 牌組裡的會話列：在等你的寫出來（Claude Code hook 自動寫的狀態）
     expect(inCard.textContent).toContain("等你回應 · a");
     expect(inCard.textContent).toContain("整組");
-    expect(card.querySelector(".gmeta")!.textContent).toContain("2 個會話");
+    expect(card.querySelector(".gmeta")!.textContent).toContain("2 個會話 · 1 個等你");
     const others = document.getElementById("sessions")!;
     expect(others.textContent).toContain("shell");
     expect(others.textContent).not.toContain("claude · a");

@@ -1,7 +1,7 @@
 import { memo, type HTMLAttributes, type Ref } from "react";
 import type { GroupInfo, RepoState, TermInfo } from "../../api/types";
 import { Icon } from "../../lib/icons";
-import { groupMeta, sessionInGroup, type Scope } from "../../lib/view";
+import { groupMeta, sessionInGroup, sessionNeedsYou, type Scope } from "../../lib/view";
 import { useSortable } from "../../lib/useSortable";
 import { useSnapshot, useStore, useUi, useUiState } from "../../store/context";
 import { SessionRow } from "../sessions/SessionRow";
@@ -50,6 +50,7 @@ const GroupCard = memo(function GroupCard(props: {
   const title = adhoc ? "臨時工作組" : g.name || "所有 repo";
   const sessions = props.sessions || [];
   const live = sessions.filter((s) => s.alive);
+  const needs = live.filter(sessionNeedsYou).length;
   const shownSessions = opened ? sessions : live;
   return (
     <div
@@ -72,6 +73,7 @@ const GroupCard = memo(function GroupCard(props: {
             <span className="gmeta">
               {groupMeta(g.members, lastStates)}
               {live.length ? " · " + live.length + " 個會話" : ""}
+              {needs ? <span className="gneeds">{" · " + needs + " 個等你"}</span> : null}
             </span>
           </span>
         </button>
