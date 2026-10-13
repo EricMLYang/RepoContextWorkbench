@@ -4,6 +4,7 @@
 
 pub mod cli;
 pub mod mcp;
+pub mod text;
 pub use ctx_core::pyjson;
 
 pub use ctx_core::pystr::truthy;

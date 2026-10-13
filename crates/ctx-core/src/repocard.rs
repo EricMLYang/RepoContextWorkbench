@@ -19,9 +19,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use chrono::{Local, NaiveDateTime, TimeZone};
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 
 use crate::collect::{self, RepoSpec};
 use crate::crossref::{self, git, BrokenRef, Drift, GIT_TIMEOUT};
@@ -517,7 +517,7 @@ pub struct Card {
     pub detail: Option<CardDetail>,
 }
 
-static DAYS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+d$").expect("寫死的 regex"));
+static DAYS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d+d$").expect("寫死的 regex"));
 
 /// 程序偵測的注入點（測試給假資料；None＝現場偵測）。
 #[derive(Debug, Clone, Default)]

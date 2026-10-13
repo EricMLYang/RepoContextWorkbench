@@ -9,7 +9,8 @@ import { Workspace } from "./components/Workspace";
 import { RepoMenu } from "./components/deep/RepoMenu";
 import { RepoPanel } from "./components/deep/RepoPanel";
 import { FileTabs } from "./components/viewer/FileTabs";
-import { FileViewer, fileKey, type OpenFile } from "./components/viewer/FileViewer";
+import { FileViewer, fileKey } from "./components/viewer/FileViewer";
+import { useFileTabs } from "./components/viewer/useFileTabs";
 import { Onboarding } from "./dialogs/misc";
 import { DetailDialog } from "./dialogs/Modal";
 import { PickerDialog } from "./dialogs/PickerDialog";
@@ -79,7 +80,9 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
   useSavedWidths();
 
   // ── 右側欄（點 repo）＋右鍵選單 ──
-  const [panelRepo, setPanelRepo] = useState<string | null>(() => load<string | null>("panelRepo", null));
+  const [panelRepo, setPanelRepo] = useState<string | null>(() =>
+    load<string | null>("panelRepo", null),
+  );
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const setPanel = useCallback((id: string | null) => {
     setPanelRepo(id);
@@ -93,65 +96,17 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
   }, [panelRepo]);
 
   // ── 檔案分頁（主區）：null＝看工作區 ──
-  const [files, setFiles] = useState<OpenFile[]>(() => load<OpenFile[]>("openFiles", []));
-  const [activeFile, setActiveFile] = useState<string | null>(() => load<string | null>("activeFile", null));
-  useEffect(() => save("openFiles", files), [files]);
-  useEffect(() => save("activeFile", activeFile), [activeFile]);
-  // 有未儲存修改的分頁：關掉要按兩次、不會被擠掉
-  const [dirtyFiles, setDirtyFiles] = useState<ReadonlySet<string>>(() => new Set());
-  const dirtyRef = useRef(dirtyFiles);
-  useEffect(() => {
-    dirtyRef.current = dirtyFiles;
-  }, [dirtyFiles]);
-  const [armedClose, setArmedClose] = useState<string | null>(null);
-  const setFileDirty = useCallback((k: string, dirty: boolean) => {
-    setDirtyFiles((prev) => {
-      if (prev.has(k) === dirty) return prev;
-      const next = new Set(prev);
-      if (dirty) next.add(k);
-      else next.delete(k);
-      return next;
-    });
-  }, []);
-  const openFile = useCallback((repo: string, path: string) => {
-    const f = { repo, path };
-    const k = fileKey(f);
-    setFiles((prev) => {
-      if (prev.some((x) => fileKey(x) === k)) return prev;
-      // 最多 12 個分頁：擠掉最舊的（有未儲存修改的不擠）
-      const next = [...prev, f];
-      while (next.length > 12) {
-        const i = next.findIndex((x) => !dirtyRef.current.has(fileKey(x)));
-        if (i < 0 || i === next.length - 1) break;
-        next.splice(i, 1);
-      }
-      return next;
-    });
-    setActiveFile(k);
-  }, []);
-  const closeFile = useCallback(
-    (k: string) => {
-      if (dirtyFiles.has(k) && armedClose !== k) {
-        setArmedClose(k);
-        const f = files.find((x) => fileKey(x) === k);
-        store.toast("「" + (f?.path ?? "") + "」有未儲存的修改；再按一次 × 放棄修改並關閉");
-        return;
-      }
-      setArmedClose(null);
-      const i = files.findIndex((x) => fileKey(x) === k);
-      const next = files.filter((x) => fileKey(x) !== k);
-      setFiles(next);
-      setActiveFile((cur) =>
-        cur !== k ? cur : next.length ? fileKey(next[Math.min(i, next.length - 1)]) : null,
-      );
-    },
-    [files, dirtyFiles, armedClose, store],
-  );
-  const shownFile = files.some((f) => fileKey(f) === activeFile) ? activeFile : null;
-  const shownFileObj = useMemo(
-    () => files.find((f) => fileKey(f) === shownFile) ?? null,
-    [files, shownFile],
-  );
+  const toast = useCallback((msg: string) => store.toast(msg), [store]);
+  const {
+    files,
+    shownFile,
+    shownFileObj,
+    dirtyFiles,
+    openFile,
+    closeFile,
+    setActiveFile,
+    setFileDirty,
+  } = useFileTabs(toast);
 
   // ── 終端 ──
   const [activeSid, setActiveSid] = useState<string | null>(null);
@@ -166,19 +121,10 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       openPicker,
       openSession(extra = {}) {
         const payload = sessionPayload(store.scopePayload, extra);
-        // 對單一 repo 開：記下它屬於哪個牌組（目前選的組有它就是這組；不然只有一個組有它才算）
-        const repo = typeof payload.repo === "string" ? payload.repo : "";
-        if (repo && !payload.group) {
-          const { scope, state } = store.getSnapshot();
-          const owners = state.groups.filter((g) => g.members.includes(repo)).map((g) => g.name);
-          const home =
-            scope.group && owners.includes(scope.group)
-              ? scope.group
-              : owners.length === 1
-                ? owners[0]
-                : null;
-          if (home) payload.home_group = home;
-        }
+        // 對單一 repo 開：把目前選的組當提示，屬於哪個牌組由引擎判斷（term_create 的 home_group_for）
+        const { scope } = store.getSnapshot();
+        if (typeof payload.repo === "string" && !payload.group && scope.group)
+          payload.home_group = scope.group;
         openDetail({
           title: "開啟 Agent 會話",
           eyebrow: "NEW SESSION",
@@ -310,9 +256,19 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
         {panelRepo ? <Resizer side="right" /> : null}
         <StatusBar />
         <Toast />
-        <PickerDialog open={picker.open} group={picker.group} seq={picker.seq} onClose={closePicker} />
+        <PickerDialog
+          open={picker.open}
+          group={picker.group}
+          seq={picker.seq}
+          onClose={closePicker}
+        />
         {menu ? <RepoMenu id={menu.id} x={menu.x} y={menu.y} onClose={closeMenu} /> : null}
-        <DetailDialog spec={detail} error={detailError} setError={setDetailError} onClose={closeDetail} />
+        <DetailDialog
+          spec={detail}
+          error={detailError}
+          setError={setDetailError}
+          onClose={closeDetail}
+        />
       </UiContext.Provider>
     </StoreContext.Provider>
   );

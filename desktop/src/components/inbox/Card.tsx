@@ -34,13 +34,19 @@ export const Card = memo(function Card(props: {
     <article className={"card " + c.kind} data-key={c.key}>
       <div className="cardhead">
         <span className="cardicon">
-          {c.kind === "pending" ? <span className="spin" /> : <Icon name={ICON[c.kind] || "file"} />}
+          {c.kind === "pending" ? (
+            <span className="spin" />
+          ) : (
+            <Icon name={ICON[c.kind] || "file"} />
+          )}
         </span>
         <div className="cardcopy">
           <h3 className="ttl">{c.title}</h3>
           <div className="meta">
             {verdict ? (
-              <span className={"pill " + (verdict === "真增量" ? "green" : "amber")}>{verdict}</span>
+              <span className={"pill " + (verdict === "真增量" ? "green" : "amber")}>
+                {verdict}
+              </span>
             ) : null}
             <span>{c.scope_label || ("repo" in c ? c.repo : "") || "未分類"}</span>
             {c.time ? <time>{(c.date ? c.date + " " : "") + c.time}</time> : null}
@@ -62,7 +68,12 @@ export const Card = memo(function Card(props: {
             </button>
           ) : null}
           {c.kind !== "pending" ? (
-            <button type="button" className="ghost" disabled={busy} onClick={() => onDetail(c, false)}>
+            <button
+              type="button"
+              className="ghost"
+              disabled={busy}
+              onClick={() => onDetail(c, false)}
+            >
               查看詳情
             </button>
           ) : null}

@@ -31,7 +31,9 @@ function EventList({ list }: { list: RecentEvent[] }) {
             meta={`${e.scope_label} · ${e.type} · ${e.source}`}
             time={e.date + " " + e.time}
             onClick={() =>
-              ui.openDetail(fullTextSpec(title, e.body, e.date + " " + e.time + " · " + e.scope_label))
+              ui.openDetail(
+                fullTextSpec(title, e.body, e.date + " " + e.time + " · " + e.scope_label),
+              )
             }
           />
         );
@@ -94,7 +96,9 @@ export function ActivityPane({ query, active }: { query: string; active: boolean
               meta={c.repo + " · " + c.hash}
               time={c.date}
               onClick={() =>
-                ui.openDetail(fullTextSpec(c.subject, c.subject, c.repo + " · " + c.hash + " · " + c.date))
+                ui.openDetail(
+                  fullTextSpec(c.subject, c.subject, c.repo + " · " + c.hash + " · " + c.date),
+                )
               }
             />
           ))

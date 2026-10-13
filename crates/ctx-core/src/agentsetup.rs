@@ -19,9 +19,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{json, Map, Value};
+use std::sync::LazyLock;
 
 use crate::{config, Error, Result};
 
@@ -30,7 +30,7 @@ pub const MCP_NAME: &str = "repo-context";
 pub const HOOK_MARK: &str = "repo_context hook";
 
 /// Rust 版 hook 指令（`…/ctx hook <event>`，路徑可能帶引號）。
-static CTX_HOOK_RE: Lazy<Regex> = Lazy::new(|| {
+static CTX_HOOK_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?:^|[/\\'"\s])ctx(?:\.exe)?['"]?\s+hook(?:\s|$)"#).expect("固定 regex")
 });
 

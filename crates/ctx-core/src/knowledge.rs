@@ -19,20 +19,20 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::SystemTime;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use serde_json::{json, Value};
+use std::sync::LazyLock;
 
 use crate::fsutil::{expanduser, mtime_secs, now_secs, read_text_lossy, resolve};
 use crate::pack::{self, RepoRef};
 use crate::pystr::{splitlines, take_chars};
 
-static WORD_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[a-z0-9][a-z0-9_\-\.]*[a-z0-9]|[a-z0-9]").expect("寫死的 regex"));
-static CJK_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[\x{3400}-\x{9FFF}\x{F900}-\x{FAFF}]+").expect("寫死的 regex"));
+static WORD_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[a-z0-9][a-z0-9_\-\.]*[a-z0-9]|[a-z0-9]").expect("寫死的 regex"));
+static CJK_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[\x{3400}-\x{9FFF}\x{F900}-\x{FAFF}]+").expect("寫死的 regex"));
 const K1: f64 = 1.5;
 const B: f64 = 0.75;
 /// 單檔上限：超大檔只索引前段（避免一本書的全文拖垮查詢）。
@@ -129,7 +129,7 @@ struct Memo {
     cache: Cache,
 }
 
-static MEMO: Lazy<Mutex<Option<Memo>>> = Lazy::new(|| Mutex::new(None));
+static MEMO: LazyLock<Mutex<Option<Memo>>> = LazyLock::new(|| Mutex::new(None));
 
 fn file_stamp(p: &Path) -> Option<(SystemTime, u64)> {
     let m = std::fs::metadata(p).ok()?;

@@ -41,6 +41,8 @@ export interface CardAction {
   label: string;
   action: ActionName | "route_pick" | "collide_prefill" | "brief_session";
   payload: Record<string, unknown>;
+  /** 畫面上的主按鈕（引擎標；一張卡最多一個）。 */
+  primary?: boolean;
 }
 
 // ── 收件匣卡片（state.build_cards ＋ brief.build_question_cards）────
@@ -127,13 +129,7 @@ export interface RetroCard extends CardBase, Provenance {
 }
 
 export type StateCard =
-  | CollisionCard
-  | EventCard
-  | PendingCard
-  | LoopCard
-  | FreshCard
-  | ReopenCard
-  | RetroCard;
+  CollisionCard | EventCard | PendingCard | LoopCard | FreshCard | ReopenCard | RetroCard;
 export type InboxCard = StateCard | QuestionCard;
 
 // ── 會話清冊（term.TermManager.list ＋ state.annotate_terms）────────
@@ -228,6 +224,8 @@ export interface StateScope {
   group: string | null;
   repos: string[] | null;
   members: string[];
+  /** 範圍已不存在（組被刪或改名、臨時組合的 repo 全被移除）。 */
+  gone?: boolean;
 }
 
 /** 健康指標（Rust 引擎 F-36／F-50；同 `ctx health`）。比率是 0–1，沒有分母時是 null。 */

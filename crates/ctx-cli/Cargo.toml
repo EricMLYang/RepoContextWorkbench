@@ -19,7 +19,6 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 chrono.workspace = true
-once_cell.workspace = true
 # CLI 解析：derive 寫法，子命令／旗標一對一照 argparse（AGENTS.md 點名的主流 crate）
 clap = { version = "4", features = ["derive"] }
 # `ctx timer` 前景跑時接 Ctrl+C：跨平台（macOS＋Windows VDI 都要），比 signal-hook 少寫一層

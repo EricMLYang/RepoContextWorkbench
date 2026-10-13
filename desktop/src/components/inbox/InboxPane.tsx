@@ -46,7 +46,11 @@ function Section({
         ))}
       </div>
       {rest > 0 ? (
-        <button type="button" className="ghost small showmore" onClick={() => setLimit(limit + PAGE)}>
+        <button
+          type="button"
+          className="ghost small showmore"
+          onClick={() => setLimit(limit + PAGE)}
+        >
           {`再顯示 ${Math.min(rest, PAGE)} 則（還有 ${rest} 則）`}
         </button>
       ) : null}
@@ -66,7 +70,15 @@ function Section({
 }
 
 /** 待處理分頁：工作摘要＋分段卡片＋空狀態＋靜默行。 */
-export function InboxPane({ query, filter, active }: { query: string; filter: string; active: boolean }) {
+export function InboxPane({
+  query,
+  filter,
+  active,
+}: {
+  query: string;
+  filter: string;
+  active: boolean;
+}) {
   const snap = useSnapshot();
   const ui = useUi();
   const run = useRunAction();

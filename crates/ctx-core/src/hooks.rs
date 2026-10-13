@@ -16,9 +16,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use chrono::{Local, NaiveDateTime};
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{json, Value};
+use std::sync::LazyLock;
 
 use crate::agentapi::{self, ContextFor, Target};
 use crate::fsutil::expanduser;
@@ -35,10 +35,10 @@ fn marker_dir(spine_dir: &Path) -> PathBuf {
     spine_dir.join(".state").join("hook_sessions")
 }
 
-static BACKFILL_TAIL: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\s*[（(]回填自[^）)]*[）)]").expect("固定 regex"));
+static BACKFILL_TAIL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\s*[（(]回填自[^）)]*[）)]").expect("固定 regex"));
 
-static SAFE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^\w\-]").expect("固定 regex"));
+static SAFE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[^\w\-]").expect("固定 regex"));
 
 /// 對應 `hooks._safe`：session_id → 檔名（非字元換 `_`，最多 80 字）。空／缺＝`unknown`。
 fn safe(sid: Option<&Value>) -> String {

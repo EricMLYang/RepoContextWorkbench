@@ -19,8 +19,8 @@ use std::path::Path;
 use std::str::FromStr;
 
 use chrono::Local;
-use once_cell::sync::Lazy;
 use serde_json::{json, Map, Value};
+use std::sync::LazyLock;
 
 use crate::pystr::py_str;
 use crate::registry::{self, AddRepo, GroupUpdate};
@@ -423,7 +423,7 @@ fn group_goal(d: &Path, a: &Args) -> Result<Value> {
     Ok(json!({"group": name, "goal": text}))
 }
 
-static OPS: Lazy<Vec<Op>> = Lazy::new(|| {
+static OPS: LazyLock<Vec<Op>> = LazyLock::new(|| {
     vec![
         Op {
             name: "registry_add",

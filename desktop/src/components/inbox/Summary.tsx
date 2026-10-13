@@ -4,7 +4,15 @@ import { AsyncButton } from "../AsyncButton";
 import { DetailLayout, useAutoFocus, useDetail } from "../../dialogs/Modal";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 
-function SumItem({ label, item, fallback }: { label: string; item: Fact | null; fallback?: string | null }) {
+function SumItem({
+  label,
+  item,
+  fallback,
+}: {
+  label: string;
+  item: Fact | null;
+  fallback?: string | null;
+}) {
   return (
     <div className="sumrow">
       <div className="sumlabel">{label}</div>
@@ -54,7 +62,9 @@ export function Summary() {
   } else if (!s || !scanReady || scanError) {
     body = (
       <p className="small muted">
-        {scanError ? "工作摘要需要一次成功的更新才顯示；目前無法確認現況。" : "正在整理本組工作摘要…"}
+        {scanError
+          ? "工作摘要需要一次成功的更新才顯示；目前無法確認現況。"
+          : "正在整理本組工作摘要…"}
       </p>
     );
   } else {
@@ -76,7 +86,10 @@ export function Summary() {
             type="button"
             className="primary"
             onClick={() =>
-              ui.openSession({ task: s.resume_task, origin: "resume:" + (s.saved_group || s.group) })
+              ui.openSession({
+                task: s.resume_task,
+                origin: "resume:" + (s.saved_group || s.group),
+              })
             }
           >
             接續上次工作

@@ -61,7 +61,8 @@ export function DeleteGroup({ group }: { group: GroupInfo }) {
             className="danger"
             run={async () => {
               await store.action("remove_group", { name });
-              if (store.getSnapshot().scope.group === name) store.setScope({ group: null, repos: null });
+              if (store.getSnapshot().scope.group === name)
+                store.setScope({ group: null, repos: null });
               ui.forgetOpenGroup(name);
               close();
               await store.refreshState();
@@ -135,7 +136,10 @@ export function Onboarding({ mode = "first" }: { mode?: "first" | "add" }) {
           store.setScope({ group: null, repos: [...new Set([...scope.repos, ...ids])] });
         } else await store.rescan();
         store.toast(
-          "已加入 " + ids.length + " 個 repo" + (scope.group ? "到牌組「" + scope.group + "」" : ""),
+          "已加入 " +
+            ids.length +
+            " 個 repo" +
+            (scope.group ? "到牌組「" + scope.group + "」" : ""),
         );
         return;
       }
@@ -145,7 +149,10 @@ export function Onboarding({ mode = "first" }: { mode?: "first" | "add" }) {
       if (r.group) store.setScope({ group: r.group, repos: null });
       else await store.rescan();
       store.toast(
-        "已登記 " + r.added.length + " 個 repo" + (r.group ? "，並建立牌組「" + r.group + "」" : ""),
+        "已登記 " +
+          r.added.length +
+          " 個 repo" +
+          (r.group ? "，並建立牌組「" + r.group + "」" : ""),
       );
     } catch (e) {
       setError((e as Error).message);

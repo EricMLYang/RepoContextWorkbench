@@ -13,7 +13,7 @@
 - 回傳值是 `serde_json::Value`（或等價 struct），欄位名與 Python 版完全相同。
 - 錯誤：`Err(String)`，字串＝Python 版回的 `{"error": "..."}` 那句話（給人看的中文，**逐字照抄**）。前端把它當 `Error.message` 顯示在卡片／對話框／橫幅上。
 - 範圍驗證：任何參數裡 `repos` 是**空陣列**一律拒絕：`"至少選擇一個 repo；空範圍不代表全部"`（`get_scan` 與 `run_action` 都要）。
-- 不輪詢原則（AGENTS.md「閒置不吃 CPU」）：引擎寫入脊椎／registry 後發 `workbench://changed` 事件，前端收到就重抓 `get_state`。前端仍保留 5 秒輪詢當保險（視窗隱藏時停）。
+- 不輪詢原則（AGENTS.md「閒置不吃 CPU」）：引擎寫入脊椎／registry、agent 回報狀態、會話結束時發 `workbench://changed` 事件，前端收到就重抓 `get_state`；有這個事件就**不輪詢 state**，只在視窗回到前景時補抓一次（2026-10-13）。沒有事件的 HTTP 後端才每 5 秒輪詢。`get_scan`（打 git）照舊在視窗可見時每 2 分鐘一次。
 
 ## 命令
 
@@ -83,7 +83,7 @@ Rust 端簽名建議：
 | `scan_dir` | `{dir}` | `dir`, `candidates: [{path, id}]` |
 | `register_repos` | `{repos: [{path, id}], group?}` | `added`, `group` |
 | `brief` | `{group?, repos?}` | `text`, `file` |
-| `term_create` | `{kind: "agent"\|"shell", agent?, task?, origin?, group?, repos?, repo?, cwd?, home_group?}`（`home_group` Rust 才有：所屬牌組，只給畫面歸類；沒給用 `group`；`state.terms[]` 有它才多一個 `home_group` 鍵） | `sid`, `title` |
+| `term_create` | `{kind: "agent"\|"shell", agent?, task?, origin?, group?, repos?, repo?, cwd?, home_group?}`（`home_group` Rust 才有：所屬牌組，只給畫面歸類——前端只送目前選的組當提示，對單一 repo 開時由引擎判斷（提示的組有這個 repo 就用它，否則只有一個組有它才算）；沒給用 `group`；`state.terms[]` 有它才多一個 `home_group` 鍵） | `sid`, `title` |
 | `term_kill` | `{sid}` | — |
 | `session_result` | `{sid, text}` | `date`, `time` |
 | `repo_tree`（Rust 才有） | `{id, dir?}`（`dir` 相對 repo 根目錄，空＝根） | `root`, `dir`, `entries: [{name, path, abs, dir}]`, `more` |
@@ -141,8 +141,8 @@ Rust 端簽名建議：
 
 ## 型別摘要（細節見 `src/api/types.ts`）
 
-- `WorkbenchState`：`groups[{name, members, goal, goal_at}]`、`repos[]`、`tiers{}`、`tags{}`、`tag_vocab[]`、`relations[{from,to,kind,note?,exports?,in_scope,task}]`、`rel_kinds{kind:{forward,inverse,symmetric?}}`、`unread[]`、`loops[]`、`cards[]`、`recent[]`（事件＋`scope_kind/scope_label/scope_repos`＋`lane`，依事件時間新→舊，最多 200）、`stats{collisions, collisions_with_outcome, hit_rate, spawned, alive, survival_rate}`、`scope{group, repos, members}`（這份 state 是照哪個範圍算的）、`terms[]`、`agents[]`。
-- 卡片 `cards[]`：共同欄位 `key, kind, title, lines, actions[{label, action, payload}], date, time, scope_kind, scope_label, scope_repos, lane`；`collision` 多 `cid, verdict, judgement{}`；`interrupt/event` 多 `etype, source`；`pending` 多 `cid`；`loop` 多 `num, due`。
+- `WorkbenchState`：`groups[{name, members, goal, goal_at}]`、`repos[]`、`tiers{}`、`tags{}`、`tag_vocab[]`、`relations[{from,to,kind,note?,exports?,in_scope,task}]`、`rel_kinds{kind:{forward,inverse,symmetric?}}`、`unread[]`、`loops[]`、`cards[]`、`recent[]`（事件＋`scope_kind/scope_label/scope_repos`＋`lane`，依事件時間新→舊，最多 200）、`stats{collisions, collisions_with_outcome, hit_rate, spawned, alive, survival_rate}`、`scope{group, repos, members, gone}`（這份 state 是照哪個範圍算的；`gone`＝範圍已不存在，Rust 才有）、`terms[]`、`agents[]`。
+- 卡片 `cards[]`：共同欄位 `key, kind, title, lines, actions[{label, action, payload, primary?}]（`primary: true`＝主按鈕，一張卡最多一個，Rust 才有）, date, time, scope_kind, scope_label, scope_repos, lane`；`collision` 多 `cid, verdict, judgement{}`；`interrupt/event` 多 `etype, source`；`pending` 多 `cid`；`loop` 多 `num, due`。
 - `lane`（卡片與 `recent[]` 事件）：`scope`＝屬於目前範圍、`global`＝全域與未分類（卡片另含：範圍外的打斷）、`other`＝不顯示。前端照它分欄，不自己判斷範圍。
 - `terms[]`：`sid, title, alive, kind, origin, scope, scope_repos, started, task, report{text,type,source,at}|null, report_basis`，agent 會話另有 `agent_status{status,text,at,…}|null`。
 - `ScanResult`：`group, states[RepoState], summary(WorkSummary), pulse, recent_commits[{repo,date,hash,subject}], question_cards[]（含 provenance：scope_kind="repo"）, questions[], quiet, session_tasks[{label,text}], audit[]`。
@@ -161,6 +161,10 @@ Python `webui/state.py` 同步加了同樣欄位，兩邊 JSON 仍一致，`scri
 | `matchesScope`／`isUnscoped`：卡片、事件依範圍篩選 | `get_state({group, repos})` 的 `cards[].lane`、`recent[].lane` |
 | 關係依範圍篩選（from 或 to 在範圍內） | `relations[].in_scope` |
 | 問句卡以 repo 補 provenance | `question_cards[]` 直接帶 `scope_kind/scope_label/scope_repos` |
+| `primaryAction()`：哪個是主按鈕（2026-10-13） | `actions[].primary`（`state` 的 `mark_primary`） |
+| 範圍已不存在（組被刪或改名）（2026-10-13） | `scope.gone` |
+| 單一 repo 會話屬於哪個牌組（2026-10-13） | `term_create` 照 `home_group` 提示＋registry 判斷（`home_group_for`） |
+| 哪些 action 之後要重新採集（2026-10-13） | action 結果帶 `rescan: true`（`tier`、`defer`、`remove_repo`） |
 
-前端仍保留的只有顯示層：搜尋（`matchesSearch`）、類型篩選、分段標題、範圍名稱（`scopeLabel`）、
-組成 action payload 時查組員（`scopeRepos`）。
+前端仍保留的只有顯示層：搜尋（`matchesSearch`，只比對看得到的文字）、類型篩選、分段標題與順序、範圍名稱（`scopeLabel`）、
+牌組卡的 commit 加總（`groupMeta`）；組員用 `state.scope.members`，只有剛換範圍、state 還沒回來時才先用本地推算頂著。

@@ -1,5 +1,5 @@
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
+import type { FitAddon } from "@xterm/addon-fit";
+import type { Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TermStream } from "../../api/backend";
 import type { TermInfo } from "../../api/types";
@@ -12,6 +12,17 @@ interface TermRec {
   fit: FitAddon;
   stream: TermStream;
   host: HTMLDivElement;
+}
+
+/** xterm（主程式包一半大小）等第一次開終端才載入；之後共用同一份。 */
+let xtermModules: Promise<{ Terminal: typeof Terminal; FitAddon: typeof FitAddon }> | null = null;
+function loadXterm() {
+  xtermModules ??= Promise.all([
+    import("@xterm/xterm"),
+    import("@xterm/addon-fit"),
+    import("@xterm/xterm/css/xterm.css"),
+  ]).then(([x, f]) => ({ Terminal: x.Terminal, FitAddon: f.FitAddon }));
+  return xtermModules;
 }
 
 const COLLAPSED_H = 44;
@@ -55,6 +66,7 @@ export function TerminalPanel(props: {
   );
   const [height, setHeight] = useState(260);
   const dragging = useRef(false);
+  const attachGen = useRef(new Map<string, number>());
 
   const fitAll = useCallback(() => {
     for (const r of recs.current.values()) {
@@ -66,20 +78,27 @@ export function TerminalPanel(props: {
     }
   }, []);
 
-  const dispose = useCallback((sid: string) => {
-    const r = recs.current.get(sid);
-    if (!r) return;
-    r.stream.close();
-    r.t.dispose();
-    r.host.remove();
-    recs.current.delete(sid);
-    setConnected(sid, null);
-  }, [setConnected]);
+  const dispose = useCallback(
+    (sid: string) => {
+      const r = recs.current.get(sid);
+      if (!r) return;
+      r.stream.close();
+      r.t.dispose();
+      r.host.remove();
+      recs.current.delete(sid);
+      setConnected(sid, null);
+    },
+    [setConnected],
+  );
 
   const attach = useCallback(
-    (sid: string) => {
+    async (sid: string) => {
+      // 等 xterm 載入期間又按了一次（重新連線）：只有最後一次算數
+      const gen = (attachGen.current.get(sid) ?? 0) + 1;
+      attachGen.current.set(sid, gen);
+      const { Terminal, FitAddon } = await loadXterm();
       const body = bodyRef.current;
-      if (!body) return;
+      if (!body || attachGen.current.get(sid) !== gen) return;
       dispose(sid);
       const host = document.createElement("div");
       host.className = "termhost on";
@@ -141,7 +160,7 @@ export function TerminalPanel(props: {
     if (!terms.some((s) => s.sid === activeSid)) return;
     const rec = recs.current.get(activeSid);
     for (const [id, r] of recs.current) r.host.classList.toggle("on", id === activeSid);
-    if (!rec) attach(activeSid);
+    if (!rec) void attach(activeSid);
     else {
       try {
         rec.fit.fit();
@@ -156,7 +175,10 @@ export function TerminalPanel(props: {
 
   // 高度＝CSS 變數 --termh（body grid 的 term 列）
   useLayoutEffect(() => {
-    document.documentElement.style.setProperty("--termh", collapsed ? COLLAPSED_H + "px" : height + "px");
+    document.documentElement.style.setProperty(
+      "--termh",
+      collapsed ? COLLAPSED_H + "px" : height + "px",
+    );
     fitAll();
   }, [collapsed, height, fitAll]);
 
@@ -244,7 +266,7 @@ export function TerminalPanel(props: {
           id="termreconnect"
           className="ghost small"
           hidden={!attached || connected}
-          onClick={() => activeSid && attach(activeSid)}
+          onClick={() => activeSid && void attach(activeSid)}
         >
           重新連線
         </button>

@@ -10,10 +10,10 @@
 
 use std::path::{Path, PathBuf};
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::LazyLock;
 
 use crate::{Error, Result};
 
@@ -73,8 +73,8 @@ pub fn status_dir(spine_dir: impl AsRef<Path>) -> PathBuf {
     spine_dir.as_ref().join(".state").join("agent_status")
 }
 
-static KEY_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[^\w\-\x{3400}-\x{9FFF}]+").expect("固定的 regex"));
+static KEY_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[^\w\-\x{3400}-\x{9FFF}]+").expect("固定的 regex"));
 
 /// 對應 `agentapi._status_key`：組名優先，否則 repo id 以逗號串，都沒有＝「全部」；非字元換 `_`。
 pub fn status_key<S: AsRef<str>>(group: Option<&str>, repos: Option<&[S]>) -> String {
@@ -146,7 +146,7 @@ pub fn all_statuses(spine_dir: impl AsRef<Path>) -> Vec<Value> {
 pub fn parse_status(status: &str) -> Result<AgentStatus> {
     AgentStatus::parse(status).ok_or_else(|| {
         Error::rejected(
-            "bad_request",
+            crate::RejectCode::BadRequest,
             format!(
                 "status 需為 {}：{}",
                 STATUSES.join("／"),

@@ -1700,3 +1700,101 @@ fn group_notes_add_list_remove_and_follow_rename() {
     assert_eq!(r["notes"], json!([]));
     assert!(err(&d, "note_add", json!({"group": "", "text": "x"})).contains("牌組"));
 }
+
+// ── 2026-10-13：原本前端算的判斷搬回引擎 ──
+
+/// 記下 create_agent 收到的 home_group。
+struct HomeTerms(std::sync::Mutex<Vec<Option<String>>>);
+
+impl Terms for HomeTerms {
+    fn info(&self, _: &str) -> Option<TermInfo> {
+        None
+    }
+    fn create_shell(
+        &self,
+        _: Option<&Path>,
+        _: Option<String>,
+    ) -> ctx_core::Result<(String, String)> {
+        Ok(("t9".into(), "shell".into()))
+    }
+    fn create_agent(&self, l: AgentLaunch) -> ctx_core::Result<(String, String)> {
+        self.0.lock().unwrap().push(l.home_group);
+        Ok(("t8".into(), "agent".into()))
+    }
+    fn kill(&self, _: &str) -> bool {
+        false
+    }
+}
+
+#[test]
+fn term_create_infers_home_group_for_single_repo() {
+    let (_t, d) = spine_with_repos();
+    let terms = HomeTerms(Default::default());
+    let open = |p: Value| handle_action(&d, "term_create", &p, Some(&terms)).unwrap();
+    // 只有 g1 有 repo-a：沒給提示也歸 g1
+    open(json!({"kind": "agent", "repo": "repo-a"}));
+    // 提示的組沒有這個 repo：不採用，照唯一擁有者
+    open(json!({"kind": "agent", "repo": "repo-a", "home_group": "沒有這組"}));
+    ctx_core::registry::add_group(&d, "g2", &["repo-a"]).unwrap();
+    // 兩組都有：照提示；沒提示就不歸類
+    open(json!({"kind": "agent", "repo": "repo-a", "home_group": "g2"}));
+    open(json!({"kind": "agent", "repo": "repo-a"}));
+    assert_eq!(
+        *terms.0.lock().unwrap(),
+        vec![
+            Some("g1".into()),
+            Some("g1".into()),
+            Some("g2".into()),
+            None
+        ]
+    );
+}
+
+#[test]
+fn state_marks_primary_action_and_gone_scope() {
+    let (_t, d) = spine_with_repos();
+    ev(
+        &d,
+        "open-loop",
+        "agent",
+        &["#1", "group:g1"],
+        "確認部署條件",
+        ago(5),
+    );
+    ev(
+        &d,
+        "collision",
+        "engine",
+        &["id:x1"],
+        "判定失敗（system-unsure，准打斷）：boom",
+        ago(4),
+    );
+    let s = st(&d);
+    assert!(s["cards"].as_array().unwrap().len() >= 2);
+    for c in s["cards"].as_array().unwrap() {
+        let acts = c["actions"].as_array().unwrap();
+        let n = acts.iter().filter(|a| a["primary"] == json!(true)).count();
+        assert!(n <= 1, "一張卡最多一個主要動作：{c}");
+        if acts.iter().any(|a| {
+            !["ignore", "defer", "route_pick"].contains(&a["action"].as_str().unwrap_or(""))
+        }) {
+            assert_eq!(n, 1, "{c}");
+        }
+    }
+    assert_eq!(st_in(&d, Some("g1"), None)["scope"]["gone"], json!(false));
+    assert_eq!(
+        st_in(&d, Some("刪掉的組"), None)["scope"]["gone"],
+        json!(true)
+    );
+    let gone = ["不存在".to_string()];
+    assert_eq!(st_in(&d, None, Some(&gone))["scope"]["gone"], json!(true));
+}
+
+#[test]
+fn actions_that_change_scan_say_rescan() {
+    let (_t, d) = spine_with_repos();
+    let r = act(&d, "tier", json!({"id": "repo-a", "tier": "dormant"})).unwrap();
+    assert_eq!(r["rescan"], json!(true));
+    let r = act(&d, "group_notes", json!({"group": "g1"})).unwrap();
+    assert!(r.get("rescan").is_none());
+}

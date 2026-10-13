@@ -210,28 +210,44 @@ pub fn list2cmdline(args: &[String]) -> String {
     out.join(" ")
 }
 
-/// 對應 `session.open_terminal`：開原生終端視窗跑 cmd（best-effort；打不開就把指令印出來讓人自己跑）。
-pub fn open_terminal(cwd: &Path, cmd: &[String]) -> bool {
-    let spawned = if cfg!(windows) {
-        Command::new("cmd")
-            .args(["/c", "start", "cmd", "/k", &list2cmdline(cmd)])
-            .current_dir(cwd)
-            .spawn()
-            .is_ok()
-    } else if cfg!(target_os = "macos") {
-        let quoted = cmd
-            .iter()
-            .map(|c| format!("'{c}'"))
+/// macOS Terminal 的 AppleScript：先把 cwd 和每個參數用 shell 規則跳脫（含單引號），
+/// 整串再跳脫成 AppleScript 字串。task 文字、repo 路徑裡有 `'`、`"`、`$`、`;` 都不會跳出引號。
+fn osascript_for(cwd: &Path, cmd: &[String]) -> String {
+    use crate::term::shlex_quote;
+    let line = format!(
+        "cd {} && {}",
+        shlex_quote(&cwd.to_string_lossy()),
+        cmd.iter()
+            .map(|c| shlex_quote(c))
             .collect::<Vec<_>>()
             .join(" ")
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"");
-        let script = format!(
-            "tell app \"Terminal\" to do script \"cd '{}' && {quoted}\"",
-            cwd.display()
-        );
+    );
+    format!(
+        "tell app \"Terminal\" to do script \"{}\"",
+        line.replace('\\', "\\\\").replace('"', "\\\"")
+    )
+}
+
+/// Windows `cmd /k` 會自己解析 `& | < > ^ % !`，`list2cmdline` 的引號擋不住（`\"` 會讓 cmd 的引號狀態錯位）。
+/// 有這些字元就不開視窗、改印出指令讓人自己跑。
+fn cmd_unsafe(cmd: &[String]) -> bool {
+    cmd.iter()
+        .any(|a| a.contains(['&', '|', '<', '>', '^', '%', '!', '"', '\n', '\r']))
+}
+
+/// 對應 `session.open_terminal`：開原生終端視窗跑 cmd（best-effort；打不開就把指令印出來讓人自己跑）。
+/// 刻意差異（2026-10-13）：Python 版沒跳脫參數裡的引號，task 文字可以注入指令；這裡修掉。
+pub fn open_terminal(cwd: &Path, cmd: &[String]) -> bool {
+    let spawned = if cfg!(windows) {
+        !cmd_unsafe(cmd)
+            && Command::new("cmd")
+                .args(["/c", "start", "cmd", "/k", &list2cmdline(cmd)])
+                .current_dir(cwd)
+                .spawn()
+                .is_ok()
+    } else if cfg!(target_os = "macos") {
         Command::new("osascript")
-            .args(["-e", &script])
+            .args(["-e", &osascript_for(cwd, cmd)])
             .spawn()
             .is_ok()
     } else {
@@ -245,4 +261,37 @@ pub fn open_terminal(cwd: &Path, cmd: &[String]) -> bool {
         );
     }
     spawned
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn osascript_quotes_cannot_break_out() {
+        let cmd = vec![
+            "claude".to_string(),
+            "it's'; rm -rf ~; echo '\"$(x)\"".to_string(),
+        ];
+        let s = osascript_for(Path::new("/tmp/a'b"), &cmd);
+        // AppleScript 字串只有頭尾兩個未跳脫的 "
+        let inner = s
+            .strip_prefix("tell app \"Terminal\" to do script \"")
+            .and_then(|x| x.strip_suffix('"'))
+            .unwrap();
+        let unescaped = inner.replace("\\\"", "\"").replace("\\\\", "\\");
+        assert!(!inner.replace("\\\"", "").contains('"'));
+        // 還原成 shell 那一行後，每個參數都是完整的單引號字串
+        assert_eq!(
+            unescaped,
+            "cd '/tmp/a'\"'\"'b' && claude 'it'\"'\"'s'\"'\"'; rm -rf ~; echo '\"'\"'\"$(x)\"'"
+        );
+    }
+
+    #[test]
+    fn cmd_metachars_fall_back_to_printing() {
+        assert!(cmd_unsafe(&["claude".into(), "a & del x".into()]));
+        assert!(cmd_unsafe(&["claude".into(), "say \"hi\"".into()]));
+        assert!(!cmd_unsafe(&["claude".into(), "整理 README 的段落".into()]));
+    }
 }

@@ -48,7 +48,10 @@ export function isValidScope(s: unknown): s is Scope {
   return o.repos === null || o.repos === undefined || Array.isArray(o.repos);
 }
 
-export function scopeRepos(scope: Scope, state: Pick<WorkbenchState, "repos" | "groups">): string[] {
+export function scopeRepos(
+  scope: Scope,
+  state: Pick<WorkbenchState, "repos" | "groups">,
+): string[] {
   if (Array.isArray(scope.repos)) return scope.repos.filter((r) => state.repos.includes(r));
   if (scope.group) return state.groups.find((g) => g.name === scope.group)?.members.slice() || [];
   return state.repos.slice();
@@ -71,8 +74,17 @@ export function scopeKindLabel(scope: Scope): string {
   return scope.group ? "常用牌組" : Array.isArray(scope.repos) ? "臨時範圍" : "跨組總覽";
 }
 
+/** 搜尋只比對畫面上看得到的文字：字串與數字的值（不含鍵名、不含動作的 payload）。 */
+function visibleText(v: unknown, out: string[]): string[] {
+  if (typeof v === "string" || typeof v === "number") out.push(String(v));
+  else if (Array.isArray(v)) v.forEach((x) => visibleText(x, out));
+  else if (v && typeof v === "object")
+    for (const [k, x] of Object.entries(v)) if (k !== "payload") visibleText(x, out);
+  return out;
+}
+
 export function matchesSearch(item: unknown, query: string): boolean {
-  return !query || JSON.stringify(item).toLocaleLowerCase().includes(query);
+  return !query || visibleText(item, []).join("\n").toLocaleLowerCase().includes(query);
 }
 
 /** 範圍內的卡：掃描的問句卡（本來就是這個範圍採集的）＋ state 卡中引擎標 lane＝scope 的。 */
@@ -100,7 +112,8 @@ export function cardSections(
 ): CardSection[] {
   const local = scopedCards(state, scan);
   const extras = state.cards.filter((c) => c.lane === "global");
-  const accept = (c: InboxCard) => matchesSearch(c, query) && (filter === "all" || c.kind === filter);
+  const accept = (c: InboxCard) =>
+    matchesSearch(c, query) && (filter === "all" || c.kind === filter);
   const sections: CardSection[] = [];
   const globalWarnings = extras.filter((c) => c.kind === "interrupt" && accept(c));
   if (globalWarnings.length)
@@ -154,13 +167,9 @@ export function actionLabel(a: CardAction): string {
   );
 }
 
-/** 主要動作：有建議落點就是「存入〈repo〉」，否則第一個非忽略／延後／改落點的動作。 */
+/** 主要動作：引擎標的 `primary`（規則在 `state.rs` 的 `mark_primary`）。 */
 export function primaryAction(c: InboxCard): CardAction | undefined {
-  const acts = c.actions || [];
-  return (
-    acts.find((a) => a.action === "route_collision") ||
-    acts.find((a) => !["ignore", "defer", "route_pick"].includes(a.action))
-  );
+  return (c.actions || []).find((a) => a.primary);
 }
 
 export function cardDescription(c: InboxCard): string | undefined {
@@ -221,7 +230,11 @@ export function emptyState(v: {
     };
   if (!v.scanReady || v.scanError)
     return v.scanError
-      ? { title: "無法確認目前狀態", text: "更新成功後，才能確認是否有待處理事項。", onboard: false }
+      ? {
+          title: "無法確認目前狀態",
+          text: "更新成功後，才能確認是否有待處理事項。",
+          onboard: false,
+        }
       : { title: "正在檢查這組 repo", text: "收件匣會在採集完成後更新。", onboard: false };
   if (v.filtered)
     return { title: "沒有符合條件的事項", text: "試著清除搜尋或選擇其他類型。", onboard: false };
@@ -353,14 +366,19 @@ export function reportLine(s: TermInfo): string {
  * 會話在哪：所屬牌組（home_group）＋對單一 repo 開的那個 repo。
  * label：「組 › repo」「組」「repo」「臨時（3 個 repo）」「本機 Shell」。
  */
-export function sessionWhere(s: TermInfo): { group: string | null; repo: string | null; label: string } {
+export function sessionWhere(s: TermInfo): {
+  group: string | null;
+  repo: string | null;
+  label: string;
+} {
   const group = s.home_group ?? null;
   const repo =
     s.scope && s.scope_repos?.length === 1 && s.scope_repos[0] === s.scope ? s.scope : null;
   const label =
     group && repo
       ? group + " › " + repo
-      : group || repo ||
+      : group ||
+        repo ||
         (s.scope === "臨時" && s.scope_repos?.length
           ? "臨時（" + s.scope_repos.length + " 個 repo）"
           : s.scope || "本機 Shell");

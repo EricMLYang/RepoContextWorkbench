@@ -53,7 +53,7 @@ fn todo(w: &World, text: &str, cwd: &Path) -> Value {
 
 fn code_of(e: Error) -> (String, Option<String>) {
     match e {
-        Error::Rejected { code, hint, .. } => (code, hint),
+        Error::Rejected { code, hint, .. } => (code.as_str().to_string(), hint),
         other => panic!("預期 AgentError，拿到 {other:?}"),
     }
 }
@@ -476,7 +476,11 @@ fn error_dict_shape() {
     assert_eq!(d["error"], "cross_scope");
     assert!(d["message"].as_str().unwrap().contains("研究"));
     assert!(d["hint"].as_str().is_some());
-    let d = api::error_dict(&api::agent_error("bad_request", "x", None));
+    let d = api::error_dict(&api::agent_error(
+        ctx_core::RejectCode::BadRequest,
+        "x",
+        None,
+    ));
     assert!(d.get("hint").is_none());
 }
 

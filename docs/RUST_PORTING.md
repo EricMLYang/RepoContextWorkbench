@@ -194,6 +194,21 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
     只報這些資料夾裡的變動；檔案樹改成 VS Code 檔案總管風格（攤平列、縮排導引線、檔案圖示、目前檔案反白、
     右鍵複製路徑／相對路徑、方向鍵操作）。
   macOS：單元／整合測試過，GUI 未實測；Windows：未測（ReadDirectoryChangesW 遞迴監看理論上可用）。
+- **重構（2026-10-13）**：合約不變（CLI 對拍 153/153、state 對拍全同）。
+  - 拆模組：`crossref/`（mod＝名字→路徑與鄰居、`read` 讀取與引用、`code` 程式碼定位、`ask` 委派、`drift` 變動與建議、
+    `doclint` 文件路徑）、`workbench/state/`（mod＝get_state／get_scan、`scope` 範圍歸屬、`cards` 收件匣卡片、`sessions` 會話）、
+    ctx-cli `mcp/`（mod＝協定、`args`、`schema`、`work` 工作層、`admin` 管理層、`tools` 工具表）。
+  - `Error::Rejected.code` 改成 `RejectCode` enum；backfill 的會話狀態改成 `SessionStatus` enum，統計搬進 `backfill::summarize`。
+  - CLI 與 MCP 共用：`crossref::check`（refs check 的資料）、`ctx_cli::text::relations`（關係的人話）。
+  - 原本前端算的搬回引擎：`actions[].primary`、`scope.gone`、`term_create` 的 `home_group` 判斷、action 結果的 `rescan`。
+    `parity_state.py` 比對前拿掉 `primary`／`gone`（Rust 才有）。
+  - Rust 才有的 action（`repo_tree`、`read_file`、`write_file`、`reorder`、筆記）參數改用 struct 解析。
+  - `once_cell` → `std::sync::LazyLock`；MCP `serverInfo.version` 讀 Cargo 版本。
+  - 前端：有變動事件就不輪詢 state；xterm 等第一次開終端才載入（主程式包 670KB → 339KB）；檔案分頁抽成 `useFileTabs`；
+    加 Prettier（`printWidth: 100`，CI 檢查）。
+- **資安修正**（2026-10-13；與 Python 刻意不同）：`session::open_terminal` 的 macOS AppleScript 改用 `shlex_quote`
+  跳脫每個參數與 cwd（Python 版只包單引號、不跳脫，task 文字可注入指令）；Windows `cmd /k` 遇到 `& | < > ^ % ! "`
+  改印出指令、不開視窗。`registry::add_repo` 拒絕根目錄、家目錄與其上層（Python 版不擋）。
 - **檢視器簡單編輯＋即時更新補強**（2026-10-13；Python 沒有）：action `write_file`（`filetree::write_file`）——只改既有的
   UTF-8 文字檔（≤1MB），帶讀檔時的 `version`（大小＋雜湊），磁碟上已被改過就不寫、回 `conflict`（`WriteOutcome` 型別），
   先寫暫存檔再改名、保留原檔 CRLF／BOM，不記 spine 事件（痕跡在 git）。`read_file` 的文字多 `editable`、`version`。

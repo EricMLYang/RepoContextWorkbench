@@ -114,7 +114,23 @@ pub fn handle_action(
     let Some((_, f)) = ACTIONS.iter().find(|(n, _)| *n == name) else {
         return Err(Error::invalid(format!("未知 action: {name}")));
     };
-    f(spine_dir.as_ref(), payload, terms)
+    let mut out = f(spine_dir.as_ref(), payload, terms)?;
+    if RESCAN_AFTER.contains(&name) {
+        if let Some(o) = out.as_object_mut() {
+            o.insert("rescan".into(), Value::Bool(true));
+        }
+    }
+    Ok(out)
+}
+
+/// 會改變 repo 採集結果的 action（tier、延後問句卡、移除 repo）：結果多帶 `rescan: true`，前端照它重新採集。
+/// Rust 才有（2026-10-13，原本前端寫死這份清單）。
+const RESCAN_AFTER: &[&str] = &["tier", "defer", "remove_repo"];
+
+/// 把 payload 解析成型別化參數。**新 action 一律用這個**（缺欄位、型別不對都在這裡擋下）；
+/// 下面那組 `raw`／`s`／`int` 只給照抄 Python 版的舊 action（`payload.get(k) or …` 的語意），合併回 main 後換掉。
+fn parse<T: serde::de::DeserializeOwned>(action: &str, p: &Value) -> Result<T> {
+    T::deserialize(p).map_err(|e| Error::invalid(format!("{action} 參數不合法：{e}")))
 }
 
 // ── payload 小工具（Python `payload.get(k) or …` 的語意）──
@@ -608,11 +624,16 @@ fn a_scan_dir(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
 }
 
 /// Rust 才有（2026-10-11）：repo 詳情的檔案清單，一次一層（見 [`crate::filetree`]）。
+#[derive(serde::Deserialize)]
+struct RepoTreeArgs {
+    id: String,
+    /// 相對 repo 根目錄；空＝根。
+    #[serde(default)]
+    dir: String,
+}
+
 fn a_repo_tree(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let Some(id) = s(p, "id") else {
-        return Err(Error::invalid("repo_tree 需要 id"));
-    };
-    let dir = raw(p, "dir").unwrap_or_default();
+    let RepoTreeArgs { id, dir } = parse("repo_tree", p)?;
     let root = registry::get_repo(d, &id)?.path();
     let l = crate::filetree::list_dir(&root, &dir)?;
     let entries: Vec<Value> = l
@@ -631,27 +652,32 @@ fn a_repo_tree(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
 
 /// Rust 才有（2026-10-11）：側欄拖曳排序。`kind`＝groups（`order`＝組名）｜members（`group`＋repo id）｜
 /// repos（「所有 repo」＝registry 順序）。只換順序、不記 spine 事件。
+#[derive(serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+enum ReorderArgs {
+    Groups { order: Vec<String> },
+    Members { group: String, order: Vec<String> },
+    Repos { order: Vec<String> },
+}
+
 fn a_reorder(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let order = list(p, "order").unwrap_or_default();
-    match s(p, "kind").as_deref() {
-        Some("groups") => registry::reorder_groups(d, &order)?,
-        Some("members") => {
-            let Some(g) = s(p, "group") else {
-                return Err(Error::invalid("reorder members 需要 group"));
-            };
-            registry::reorder_members(d, &g, &order)?;
-        }
-        Some("repos") => registry::reorder_repos(d, &order)?,
-        _ => return Err(Error::invalid("kind 需為 groups|members|repos")),
+    match parse("reorder", p)? {
+        ReorderArgs::Groups { order } => registry::reorder_groups(d, &order)?,
+        ReorderArgs::Members { group, order } => registry::reorder_members(d, &group, &order)?,
+        ReorderArgs::Repos { order } => registry::reorder_repos(d, &order)?,
     }
     Ok(json!({"ok": true}))
 }
 
 /// Rust 才有（2026-10-11）：唯讀檢視器讀一個檔（見 [`crate::filetree::read_file`]）。
+#[derive(serde::Deserialize)]
+struct ReadFileArgs {
+    id: String,
+    path: String,
+}
+
 fn a_read_file(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let (Some(id), Some(path)) = (s(p, "id"), s(p, "path")) else {
-        return Err(Error::invalid("read_file 需要 id 與 path"));
-    };
+    let ReadFileArgs { id, path } = parse("read_file", p)?;
     let root = registry::get_repo(d, &id)?.path();
     Ok(file_json(&id, crate::filetree::read_file(&root, &path)?))
 }
@@ -683,12 +709,22 @@ fn file_json(id: &str, f: crate::filetree::FileRead) -> Value {
 
 /// Rust 才有（2026-10-13）：檢視器簡單編輯（見 [`crate::filetree::write_file`]）。
 /// 不記 spine 事件——改檔的痕跡在 git。磁碟上已被改過回 `{ok: false, conflict: true}`。
+#[derive(serde::Deserialize)]
+struct WriteFileArgs {
+    id: String,
+    path: String,
+    text: String,
+    /// 讀檔時的 `version`。
+    base: String,
+}
+
 fn a_write_file(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let (Some(id), Some(path), Some(text), Some(base)) =
-        (s(p, "id"), s(p, "path"), raw(p, "text"), s(p, "base"))
-    else {
-        return Err(Error::invalid("write_file 需要 id、path、text、base"));
-    };
+    let WriteFileArgs {
+        id,
+        path,
+        text,
+        base,
+    } = parse("write_file", p)?;
     let root = registry::get_repo(d, &id)?.path();
     Ok(
         match crate::filetree::write_file(&root, &path, &text, &base)? {
@@ -710,27 +746,37 @@ fn notes_json(d: &Path, group: &str, notes: &[crate::notes::Note]) -> Value {
 }
 
 /// Rust 才有（2026-10-11）：牌組筆記（`groups/<組>/notes.md`，見 [`crate::notes`]）。
+/// 牌組筆記的參數（空的牌組名由 `notes` 模組報錯）。
+#[derive(serde::Deserialize)]
+struct NoteArgs {
+    #[serde(default)]
+    group: String,
+    #[serde(default)]
+    text: String,
+    /// 要刪的那則的時間（`note_remove`）。
+    #[serde(default)]
+    at: String,
+}
+
+fn notes_of(d: &Path, group: &str) -> Result<Value> {
+    Ok(notes_json(d, group, &crate::notes::list(d, group)?))
+}
+
 fn a_group_notes(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let group = raw(p, "group").unwrap_or_default().trim().to_string();
-    let notes = crate::notes::list(d, &group)?;
-    Ok(notes_json(d, &group, &notes))
+    let a: NoteArgs = parse("group_notes", p)?;
+    notes_of(d, a.group.trim())
 }
 
 fn a_note_add(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let group = raw(p, "group").unwrap_or_default().trim().to_string();
-    crate::notes::add(d, &group, &raw(p, "text").unwrap_or_default(), None)?;
-    a_group_notes(d, &json!({"group": group}), None)
+    let a: NoteArgs = parse("note_add", p)?;
+    crate::notes::add(d, a.group.trim(), &a.text, None)?;
+    notes_of(d, a.group.trim())
 }
 
 fn a_note_remove(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let group = raw(p, "group").unwrap_or_default().trim().to_string();
-    crate::notes::remove(
-        d,
-        &group,
-        &raw(p, "at").unwrap_or_default(),
-        &raw(p, "text").unwrap_or_default(),
-    )?;
-    a_group_notes(d, &json!({"group": group}), None)
+    let a: NoteArgs = parse("note_remove", p)?;
+    crate::notes::remove(d, a.group.trim(), &a.at, &a.text)?;
+    notes_of(d, a.group.trim())
 }
 
 /// Rust 才有（2026-10-11）：像 IDE 的 Add Folder to Workspace——一個 repo 資料夾加進牌組
@@ -814,6 +860,25 @@ fn a_brief(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     Ok(json!({"ok": true, "text": text, "file": out.to_string_lossy()}))
 }
 
+/// 對單一 repo 開的會話屬於哪個牌組（只給畫面歸類，Rust 才有，2026-10-13 從前端搬來）：
+/// `hint`（前端目前選的組）有這個 repo 就是它；否則只有一個組有它才算；都不成立就沒有。不是對單一 repo 開就照 `hint`。
+fn home_group_for(d: &Path, hint: Option<String>, repo: Option<&str>) -> Result<Option<String>> {
+    let Some(repo) = repo else {
+        return Ok(hint);
+    };
+    let owners: Vec<String> = registry::load(d)?
+        .groups
+        .iter()
+        .filter(|g| g.members().iter().any(|m| m == repo))
+        .map(|g| g.name())
+        .collect();
+    Ok(match hint {
+        Some(h) if owners.contains(&h) => Some(h),
+        _ if owners.len() == 1 => owners.into_iter().next(),
+        _ => None,
+    })
+}
+
 fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
     let Some(terms) = t else {
         return Err(Error::invalid("本 server 未啟用 terminal"));
@@ -825,6 +890,7 @@ fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
         let repo = s(p, "repo");
         let task = s(p, "task");
         let agent = s(p, "agent").unwrap_or_else(|| "claude".into());
+        let home = home_group_for(d, s(p, "home_group"), repo.as_deref())?;
         let plan = session::build(
             d,
             SessionOpts {
@@ -845,7 +911,7 @@ fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
             repo,
             task,
             origin: s(p, "origin"),
-            home_group: s(p, "home_group"),
+            home_group: home,
         })?
     } else {
         let cwd = s(p, "cwd").map(std::path::PathBuf::from);

@@ -1,0 +1,139 @@
+# 開發重點（Rust＋Tauri＋React＋MCP）
+
+> 給人和 agent 共用的寫程式準則：只寫**這個產品**特有的重點，通用常識不重複。
+> 架構方向與硬規定在 `AGENTS.md`；搬遷規約與刻意差異在 `docs/RUST_PORTING.md`；IPC 合約在 `desktop/IPC.md`。
+> 2026-10-13 依現況（`rust-desktop` 分支）整理，改架構時一起改這份。
+
+## 1. 產品特性決定的四條底線
+
+1. **資料格式就是合約。** spine（事件 md）、`registry.yaml`、`.state/`、CLI 旗標與 `--json` 欄位、MCP 工具介面都是對外 API：
+   人會手改、agent 會讀、git 會 diff。改合約要升版並寫進 `RUST_PORTING.md`；只加欄位、不改既有欄位的意思。
+2. **人和 agent 走同一個引擎。** 每個能力都先做成 `ctx-core` 的函式，再由 CLI／MCP／桌面三個入口各接一層薄殼。
+   入口裡只做參數轉換與輸出格式，不准有業務判斷。
+3. **agent 會同時改東西。** 任何寫入都要假設磁碟在你讀完之後被改過：寫 spine／registry 走 `locking`；寫使用者檔案要帶
+   讀取時的版本、對不上就回衝突（例：`filetree::write_file`）；先寫暫存檔再 rename。畫面上的資料隨時可能過期，
+   要靠事件即時更新，而不是靠輪詢。
+4. **留痕優先。** 判斷寫 spine、改檔交給 git，兩邊不重複記。新功能要先回答「這件事事後查得到嗎」。
+
+## 2. 分層與依賴方向
+
+```
+ctx-cli（clap／MCP stdio／hooks）  ─┐
+desktop/src-tauri（視窗、IPC、PTY）─┼─▶ ctx-core（引擎，純 lib）─▶ 檔案系統、git、gh、claude
+desktop/src（React，只管畫面）── IPC ┘
+```
+
+- 依賴只能往右指。`ctx-core` 不依賴 Tauri、clap 或任何 UI；要用殼的能力（例如會話清冊）就定義 trait 由外面注入（例：`Terms`）。
+- 一個領域一個模組（`spine`、`registry`、`filetree`…），對外只露少數函式；檔案超過約 800 行時，依職責拆成子模組
+  （`workbench/`、`agentapi/` 已經這樣拆）。
+- 外部指令（git／gh／claude）集中在少數模組呼叫並包裝錯誤，會跑很久的（claude）一定要設逾時；測試用 `testkit` 的假資料，
+  不打真的網路。
+
+## 3. Rust
+
+- **錯誤**：引擎用 `thiserror` 的 `ctx_core::Error`，每個變體都對應呼叫端要做的不同處理；不要再加只裝字串的通用變體。
+  錯誤訊息要寫給使用者看（說明是哪個檔、哪個 repo、該怎麼辦），因為它會直接顯示在 App 和 agent 那邊。
+- **型別表達狀態**：「成功／衝突」「文字／圖片／二進位」這種分支用 enum（例：`WriteOutcome`、`FileView`），不用布林加字串。
+  桌面 action 的參數用 `parse::<T>()` 解析成 `#[derive(Deserialize)]` 的 struct／enum（例：`ReadFileArgs`、`ReorderArgs`）；
+  照抄 Python 的舊 action 還用 `raw`／`s`／`int`（Python 的 truthy 語意），合併回 main 後再換。
+  拒絕給 agent 的錯誤用 `RejectCode` enum，字串形式是 MCP 合約。
+- **`unwrap`／`expect`** 只用在程式裡寫死的不變式；鎖中毒用 `unwrap_or_else(|e| e.into_inner())`。
+- **依賴從嚴**：版本放在 workspace 的 `[workspace.dependencies]` 統一管理；標準庫能做的就不加 crate；每加一個依賴，
+  都要在 commit 訊息說明為什麼。
+- **路徑**：一律用 `Path`／`PathBuf`，不手拼 `/`；從外面來的相對路徑都要經過 `filetree::resolve_in` 這種檢查（擋 `..` 和指到 repo 外的符號連結）。
+- **版本號**：從 `env!("CARGO_PKG_VERSION")` 取，不寫死。
+- **全域常數**：用標準庫的 `std::sync::LazyLock`（不用 once_cell）。
+
+## 4. 桌面殼（Tauri v2）
+
+- **權限採最小化**：`capabilities/default.json` 只開前端實際用到的；新功能優先寫成自訂 `#[tauri::command]`，
+  不要把 plugin 權限整包開給前端。CSP 維持不准 inline script、不連外網。
+- **不信任 repo 內容**：repo 裡的 md／html 不能在 App 裡執行（Markdown 自己轉成 React 元素，不用 `innerHTML`），
+  外部連結只複製、不開啟。
+- **閒置不吃 CPU**：檔案監看只看展開中的資料夾（`tree_watch`）；OS 漏掉事件時要整批重讀，不能直接丟掉。
+- **會話生命週期獨立於視窗**；本機服務只綁 127.0.0.1 並帶隨機 token；啟動時自己補 PATH（`env_path`）。
+- 殼裡的阻塞工作放進 `spawn_blocking`，不要卡住 IPC 執行緒。
+
+## 5. 前端（React＋TS）
+
+- **只負責畫面和互動**：資料一律從引擎取，不在前端計算業務結果。要新增一種資料，先在引擎加 action，
+  更新 `api/types.ts` 的 `ActionMap`，再寫畫面。
+- **非同步三件事**：執行中鎖住按鈕（`AsyncButton`）、失敗時把錯誤顯示出來、斷線或失敗時保留上次的資料。
+  連續發出的請求，只採用最後一次的結果（例：`FileTree` 的 `seq`）。
+- **元件依一級物件拆**：deck（牌）／inbox（收件匣）／sessions（會話）／deep（深看）／viewer；跨元件的狀態放在 `store/`，
+  不用 prop 一層層傳下去。
+- 需要給非同步回呼看最新值的 ref，在 effect 裡更新，不要在 render 時更新（`react-hooks/refs` 會擋）。
+- 不用瀏覽器原生的 `alert`／`confirm`，危險操作改成「按兩次」或站內提示。
+
+## 6. MCP／CLI 介面（給 agent 用的 API）
+
+- 工具依「使用者要完成的事」設計（`context_for`、`handoff`），不要把引擎的函式一個個直接開出去；工具和參數的描述
+  要寫清楚必填、選填和預設值，agent 只看得到這些描述。
+- stdio 模式的 stdout 只能輸出協定訊息；log 寫到 stderr 或檔案。
+- 錯誤要回「發生什麼事＋可以怎麼補救」（例：跨組寫入被拒時附上 hint），設定錯誤時不能讓 server 崩潰。
+- CLI 每個查詢指令都要支援 `--json`，欄位一旦發佈就不改意思。
+
+## 7. 測試與驗證
+
+- 改完必跑（CI 也跑同一套）：
+  `cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace`，
+  前端在 `desktop/` 跑 `npm run build && npm test && npm run lint && npm run format:check`（格式化用 `npm run format`）。
+- 引擎邏輯寫單元測試；action 和合約寫 `crates/ctx-core/tests/` 的整合測試；畫面行為寫 vitest（用 mock backend）。
+- 和 Python 版對拍（`scripts/parity.sh`）只到合併回 main 為止；之後由整合測試接手守住合約。
+- 每個功能的 commit 都要註明：macOS GUI 實測過沒有、Windows 測過沒有。
+
+## 8. 資訊安全
+
+### 信任模型（寫程式時要守住的邊界）
+
+| 來源 | 信任程度 | 守法 |
+|---|---|---|
+| 使用者自己下的 CLI／App 操作 | 信任 | — |
+| 登記的 repo 的**檔案內容**（md、程式碼） | **不信任**：可能是別人的 repo | 前端不執行（不用 innerHTML、CSP 不准 inline script、外部連結只複製）；路徑一律經 `filetree::resolve_in` |
+| 其他 repo 給 agent 的內容（`read_from`、`ask_repo`、開場注入） | **不信任**：可能夾帶 prompt injection | 當成資料、不是指令；`ask_repo` 的子 agent 只開唯讀工具；憑證樣式的內容要遮掉 |
+| spine 的 `config.yaml`（`agents.<名>.cmd`）、`.mcp.json` | **等於程式碼**：開會話時會被執行 | 只用自己的 spine；別人的 spine 要先讀過 |
+| App 的 webview | 一旦被攻破就等於本機權限（能開終端、讀寫登記 repo 裡的檔） | 所以上面三列都要守住；capabilities 只開事件監聽，新能力寫成自訂 command |
+
+### 寫程式的規則
+
+- **外部指令**：參數一律分開傳給 `Command::args`，不准用 `sh -c` 拼字串。非用 shell 不可時（PTY 的 `sh -lc`、
+  macOS Terminal 的 AppleScript）每個參數都要經過 `term::shlex_quote`，再依外層語法跳脫（例：`session::osascript_for`）。
+  Windows `cmd /k` 擋不住 `& | < > ^ % !`，有這些字元就不開視窗、改印出指令。
+- **路徑**：從前端或 agent 來的路徑都要 canonicalize 後確認在範圍內（符號連結跳出去也擋）；
+  不能把根目錄或家目錄登記成 repo（`registry::add_repo` 會拒絕）。
+- **寫檔**：同資料夾暫存檔（名稱不可預測、`create_new`）→ fsync → rename；保留原檔權限。
+- **本機服務**：只綁 127.0.0.1、隨機 token、timing-safe 比對；桌面版走 Tauri IPC，不開任何埠。
+- **機密**：不 commit 任何 token 和個人資料；測試用的假憑證放在 `pack` 測試裡，並標明是假的。
+  `docs/` 只放可以公開的內容，個人或公司的素材放在 repo 外。
+- **CI**：`permissions: contents: read`、第三方 actions 釘 commit SHA；依賴更新時在有網路的環境跑一次
+  `cargo audit`／`npm audit`。
+- **回報管道**：開源時加 `SECURITY.md`，寫清楚私下回報的方式。
+
+### 開源前的待辦（2026-10-13 檢查）
+
+- [ ] `docs/工具想法.md` 等檔有個人路徑與 Email，git 歷史裡也有 → 清理歷史，或用新 repo 單一 commit 釋出
+- [ ] `docs/` 逐檔審（公司與客戶脈絡、帳號設定），私人素材搬出 repo
+- [x] `LICENSE`（MIT）
+- [x] macOS 開終端的引號注入（`session.rs`）
+- [x] CI 權限最小化、actions 釘 SHA
+- [x] 拒絕登記根目錄／家目錄；存檔暫存檔不可預測
+- [ ] 加 `SECURITY.md`；在有網路的環境跑 `cargo audit`／`npm audit`
+
+## 9. 開源後要讓別人裝得起來（目前的缺口）
+
+| 項目 | 現況 | 要做的 |
+|---|---|---|
+| 授權 | 已補 `LICENSE`（MIT） | — |
+| 安裝 | 要自己 build；`install-app.sh` 是給開發者重裝用的 | 用 GitHub Releases 發 `.dmg` 和 `ctx` 執行檔；README 第一段寫三步驟安裝＋`ctx init` |
+| macOS 簽章 | 沒簽章、沒公證 → 別人下載後會被 Gatekeeper 擋住 | 發佈時用 Developer ID 簽章並公證（Tauri 有內建流程），在 CI 上做 |
+| Windows | CI 只確認 `ctx` 編得過 | 先發 CLI＋MCP，桌面版之後再補（每個功能都要註明測過沒有） |
+| 個人化設定 | bundle id 是 `dev.ericmlyang.*`，docs 裡有很多個人的設計紀錄 | 換成中性的 id；`docs/` 分成「使用者文件」和「設計紀錄」 |
+| 語言 | 只有中文 | 至少 README 要有英文版 |
+| 第一次使用 | `SpineSetup` 要手動填 spine 路徑 | `ctx init` 一步建好 spine，並附一個範例 |
+
+## 參考
+
+- Tauri v2 安全模型（預設拒絕、capabilities、CSP）：<https://www.oflight.co.jp/en/columns/tauri-v2-security-model>
+- Tauri 發佈與簽章：<https://v2.tauri.app/distribute>
+- 函式庫用 thiserror、應用程式用 anyhow：<https://oneuptime.com/blog/post/2026-01-25-error-types-thiserror-anyhow-rust/view>
+- MCP server 實務（stdout 乾淨、錯誤可補救、工具描述）：<https://nordicapis.com/8-tips-and-best-practices-for-mcp-server-development/>、<https://steipete.me/posts/2025/mcp-best-practices>

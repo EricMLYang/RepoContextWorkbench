@@ -20,7 +20,7 @@ pub fn todo_brief(spine_dir: &Path, num: &str, t: &Target) -> Result<Value> {
         .find(|ev| ev.num() == Some(num.as_str()))
         .ok_or_else(|| {
             agent_error(
-                "not_found",
+                crate::RejectCode::NotFound,
                 format!("找不到未結事項 {num}"),
                 Some("用 next_work 看目前的未結事項編號。"),
             )

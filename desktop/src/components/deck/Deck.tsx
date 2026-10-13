@@ -1,7 +1,7 @@
 import { memo, type HTMLAttributes, type Ref } from "react";
 import type { GroupInfo, RepoState, TermInfo } from "../../api/types";
 import { Icon } from "../../lib/icons";
-import { groupMeta, scopeRepos, sessionInGroup, type Scope } from "../../lib/view";
+import { groupMeta, sessionInGroup, type Scope } from "../../lib/view";
 import { useSortable } from "../../lib/useSortable";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { SessionRow } from "../sessions/SessionRow";
@@ -29,12 +29,24 @@ const GroupCard = memo(function GroupCard(props: {
   /** 整張牌可拖（牌組排序）：ref 量位置、手把事件掛在標題列。 */
   drag?: { ref: Ref<HTMLDivElement>; handle: HTMLAttributes<HTMLDivElement>; dragging: boolean };
 }) {
-  const { entry: g, scope, opened, lastStates, onSelect, onEdit, onToggle, onRepo, onRepoMenu } = props;
+  const {
+    entry: g,
+    scope,
+    opened,
+    lastStates,
+    onSelect,
+    onEdit,
+    onToggle,
+    onRepo,
+    onRepoMenu,
+  } = props;
   const sort = useSortable(g.members, props.onReorder || (async () => {}));
   const members = props.onReorder ? sort.order : g.members;
   const key = g.name || "*";
   const adhoc = g.name === "__adhoc__";
-  const on = adhoc ? Array.isArray(scope.repos) : !Array.isArray(scope.repos) && scope.group === g.name;
+  const on = adhoc
+    ? Array.isArray(scope.repos)
+    : !Array.isArray(scope.repos) && scope.group === g.name;
   const title = adhoc ? "臨時工作組" : g.name || "所有 repo";
   const sessions = props.sessions || [];
   const live = sessions.filter((s) => s.alive);
@@ -91,7 +103,9 @@ const GroupCard = memo(function GroupCard(props: {
                 key={r}
                 type="button"
                 className={"member ghost" + (sort.dragging === r ? " dragging" : "")}
-                title={r + (props.onReorder ? "（拖曳排序；右鍵：更多動作）" : "（右鍵：更多動作）")}
+                title={
+                  r + (props.onReorder ? "（拖曳排序；右鍵：更多動作）" : "（右鍵：更多動作）")
+                }
                 {...(props.onReorder ? sort.rowProps(r) : {})}
                 onClick={() => onRepo(r)}
                 onContextMenu={(e) => {
@@ -182,10 +196,9 @@ export function Deck() {
       })}
       {adhoc
         ? card(
-            { name: "__adhoc__", members: scopeRepos(scope, state) },
+            { name: "__adhoc__", members: store.scopeRepos },
             {
-              onReorder: async (order) =>
-                store.setScope({ group: null, repos: order }),
+              onReorder: async (order) => store.setScope({ group: null, repos: order }),
             },
           )
         : null}

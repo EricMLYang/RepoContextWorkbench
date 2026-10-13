@@ -17,7 +17,7 @@ export const interruptCard: StateCard = {
   title: "判定失敗（system-unsure）",
   lines: ["provider 回傳非 JSON"],
   actions: [
-    { label: "重跑判定", action: "collide_rerun", payload: { cid: "c1" } },
+    { label: "重跑判定", action: "collide_rerun", payload: { cid: "c1" }, primary: true },
     {
       label: "忽略並記錄",
       action: "ignore",
@@ -40,7 +40,7 @@ export const loopCard: StateCard = {
   title: "驗證 VDI",
   lines: [],
   actions: [
-    { label: "開碰撞", action: "collide_prefill", payload: { text: "驗證 VDI" } },
+    { label: "開碰撞", action: "collide_prefill", payload: { text: "驗證 VDI" }, primary: true },
     { label: "延 7 天", action: "loop_defer", payload: { num: "#3", days: 7 } },
     { label: "關閉", action: "close_loop", payload: { num: "#3" } },
   ],
@@ -55,6 +55,8 @@ export function makeState(over: Partial<WorkbenchState> = {}): WorkbenchState {
     tags: { a: [], b: [] },
     agents: ["claude"],
     cards: [interruptCard, loopCard],
+    // 引擎照請求的範圍算好的成員（預設＝所有 repo）
+    scope: { group: null, repos: null, members: over.repos ?? ["a", "b"] },
     ...over,
   };
 }

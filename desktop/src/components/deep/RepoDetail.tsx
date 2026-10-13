@@ -91,7 +91,8 @@ export function RepoDetail({ id, startConfirm = false }: { id: string; startConf
       </dl>
       {confirmRemove ? (
         <p className="detailmeta" role="alert">
-          移出後 {id} 會從所有牌組拿掉、指向它的關係也會刪除；repo 資料夾與檔案不會動，之後可以再加回來。
+          移出後 {id} 會從所有牌組拿掉、指向它的關係也會刪除；repo
+          資料夾與檔案不會動，之後可以再加回來。
         </p>
       ) : null}
       <label className="field">

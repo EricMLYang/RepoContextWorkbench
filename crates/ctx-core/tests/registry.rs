@@ -231,3 +231,16 @@ fn registry_yaml_keeps_unknown_keys_and_order() {
         "version: 2\nrepos:\n- id: r1\n  zeta: 2\n  path: /nowhere\n  type: mine\n  tags: []\n  tier: active\n  custom:\n    nested:\n    - a\n    - b\n  note: 新增欄位\ngroups: []\nfooter: keep\n"
     );
 }
+
+#[test]
+fn refuses_root_and_home_as_repo() {
+    let (_t, d) = spine();
+    let err = registry::add_repo(&d, "root", "/", AddRepo::default()).unwrap_err();
+    assert!(err.to_string().contains("範圍太大"), "{err}");
+    if let Some(home) = std::env::var_os("HOME") {
+        assert!(registry::add_repo(&d, "home", &home, AddRepo::default()).is_err());
+        assert!(registry::add_repo(&d, "tilde", "~", AddRepo::default()).is_err());
+        let parent = std::path::Path::new(&home).parent().unwrap().to_path_buf();
+        assert!(registry::add_repo(&d, "above-home", &parent, AddRepo::default()).is_err());
+    }
+}

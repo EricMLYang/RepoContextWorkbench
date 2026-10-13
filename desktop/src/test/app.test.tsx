@@ -126,7 +126,9 @@ describe("斷線", () => {
   });
 
   it("尚未登記 repo：顯示首次建組入口", async () => {
-    const backend = mockBackend({ getState: vi.fn(async () => makeState({ repos: [], groups: [], cards: [] })) });
+    const backend = mockBackend({
+      getState: vi.fn(async () => makeState({ repos: [], groups: [], cards: [] })),
+    });
     await mount(backend);
     expect(document.querySelector("#allclear h2")!.textContent).toBe("建立你的第一個工作範圍");
     expect(screen.getByRole("button", { name: "選擇資料夾，掃描 repo" })).toBeTruthy();
@@ -136,7 +138,9 @@ describe("斷線", () => {
 describe("範圍", () => {
   it("點牌組切範圍並以該組重新採集", async () => {
     const { backend } = await mount();
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "選擇牌組：產品開發" })));
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "選擇牌組：產品開發" })),
+    );
     expect(backend.getScan).toHaveBeenLastCalledWith({ group: "產品開發" });
     // state 也以新範圍重抓（卡片／事件／關係的 lane 由引擎照範圍算）
     expect(backend.getState).toHaveBeenLastCalledWith({ group: "產品開發" });
@@ -160,7 +164,10 @@ describe("關係建議（F-47）", () => {
   it("列出理由與依據；套用呼叫 relate，不相關呼叫 relation_dismiss", async () => {
     const backend = mockBackend({
       getState: vi.fn(async () =>
-        makeState({ rel_kinds: { "pm-of": { forward: "規劃", backward: "被規劃" } as never }, relation_suggestions: [suggestion] }),
+        makeState({
+          rel_kinds: { "pm-of": { forward: "規劃", backward: "被規劃" } as never },
+          relation_suggestions: [suggestion],
+        }),
       ),
     });
     await mount(backend);
@@ -170,7 +177,12 @@ describe("關係建議（F-47）", () => {
     expect(box.textContent).toContain("依據：a:plan.md");
     const apply = [...box.querySelectorAll("button")].find((b) => b.textContent === "套用")!;
     await act(async () => fireEvent.click(apply));
-    expect(backend.action).toHaveBeenCalledWith("relate", { a: "a", b: "b", kind: "pm-of", note: "" });
+    expect(backend.action).toHaveBeenCalledWith("relate", {
+      a: "a",
+      b: "b",
+      kind: "pm-of",
+      note: "",
+    });
     const dismiss = [...box.querySelectorAll("button")].find((b) => b.textContent === "不相關")!;
     await act(async () => fireEvent.click(dismiss));
     expect(backend.action).toHaveBeenCalledWith("relation_dismiss", { a: "a", b: "b" });
@@ -212,7 +224,7 @@ describe("相關新料卡（F-48）", () => {
     title: "新料：notes:索引重建.md",
     lines: ["共同詞：增量、重建、水位線"],
     actions: [
-      { label: "拿來試", action: "fresh_try", payload: { id: "r7" } },
+      { label: "拿來試", action: "fresh_try", payload: { id: "r7" }, primary: true },
       { label: "不相關", action: "fresh_dismiss", payload: { id: "r7" } },
     ],
   };
@@ -234,19 +246,26 @@ describe("任務包開會話（F-42）", () => {
     const { loopCard } = await import("./fixtures");
     const card = {
       ...loopCard,
-      actions: [...loopCard.actions, { label: "用任務包開會話", action: "brief_session" as const, payload: { num: "#3" } }],
+      actions: [
+        ...loopCard.actions,
+        { label: "用任務包開會話", action: "brief_session" as const, payload: { num: "#3" } },
+      ],
     } as StateCard;
     const backend = mockBackend({
       getState: vi.fn(async () => makeState({ cards: [card] })),
       action: vi.fn(async (name: string) =>
-        name === "todo_brief" ? { ok: true, id: "#3", markdown: "# 任務包：#3 驗證 VDI\n## 目標" } : { ok: true },
+        name === "todo_brief"
+          ? { ok: true, id: "#3", markdown: "# 任務包：#3 驗證 VDI\n## 目標" }
+          : { ok: true },
       ) as unknown as Backend["action"],
     });
     await mount(backend);
     const article = (await screen.findByText("驗證 VDI")).closest("article")!;
     await act(async () => fireEvent.click(article.querySelector(".more")!));
     const dialog = document.getElementById("detaildialog")!;
-    const btn = [...dialog.querySelectorAll("button")].find((b) => b.textContent === "用任務包開會話")!;
+    const btn = [...dialog.querySelectorAll("button")].find(
+      (b) => b.textContent === "用任務包開會話",
+    )!;
     await act(async () => fireEvent.click(btn));
     expect(backend.action).toHaveBeenCalledWith("todo_brief", { num: "#3" });
     await waitFor(() => expect(dialog.textContent).toContain("開啟 Agent 會話"));
@@ -270,8 +289,16 @@ describe("該重看的判斷卡（F-46）", () => {
       title: "該重看：先不做 Windows",
       lines: ["當初說的重看條件：2026-10-01 或 VDI 使用者回報"],
       actions: [
-        { label: "開會話重看", action: "term_create", payload: { kind: "agent", group: "產品開發", task: "重看判斷" } },
-        { label: "延 14 天", action: "reopen_defer", payload: { ref: "decision:2026-01-01-d1", days: 14 } },
+        {
+          label: "開會話重看",
+          action: "term_create",
+          payload: { kind: "agent", group: "產品開發", task: "重看判斷" },
+        },
+        {
+          label: "延 14 天",
+          action: "reopen_defer",
+          payload: { ref: "decision:2026-01-01-d1", days: 14 },
+        },
       ],
     };
     const backend = mockBackend({ getState: vi.fn(async () => makeState({ cards: [card] })) });
@@ -283,7 +310,10 @@ describe("該重看的判斷卡（F-46）", () => {
     const dialog = document.getElementById("detaildialog")!;
     const defer = [...dialog.querySelectorAll("button")].find((b) => b.textContent === "延 14 天")!;
     await act(async () => fireEvent.click(defer));
-    expect(backend.action).toHaveBeenCalledWith("reopen_defer", { ref: "decision:2026-01-01-d1", days: 14 });
+    expect(backend.action).toHaveBeenCalledWith("reopen_defer", {
+      ref: "decision:2026-01-01-d1",
+      days: 14,
+    });
   });
 });
 
@@ -368,14 +398,17 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
       root: "/r/" + name,
       dir,
       more: 0,
-      entries: [{ name: "plan.md", path: "docs/plan.md", abs: "/r/" + name + "/docs/plan.md", dir: false }],
+      entries: [
+        { name: "plan.md", path: "docs/plan.md", abs: "/r/" + name + "/docs/plan.md", dir: false },
+      ],
     };
   };
   const treeBackend = (extra: Partial<Backend> = {}) =>
     mockBackend({
       action: vi.fn(async (name: string, p: { id?: string; dir?: string }) => {
         if (name === "repo_tree") return tree(p.id!, p.dir || "");
-        if (name === "group_add_folder") return { ok: true, id: "new", registered: true, group: "產品開發" };
+        if (name === "group_add_folder")
+          return { ok: true, id: "new", registered: true, group: "產品開發" };
         return { ok: true };
       }) as never,
       ...extra,
@@ -398,7 +431,11 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     expect(pane.querySelectorAll(".reporoot").length).toBe(2);
     expect(backend.action).not.toHaveBeenCalledWith("repo_tree", expect.anything());
 
-    await act(async () => fireEvent.click(within(document.getElementById("tab-files")!).getByRole("button", { name: "a" })));
+    await act(async () =>
+      fireEvent.click(
+        within(document.getElementById("tab-files")!).getByRole("button", { name: "a" }),
+      ),
+    );
     expect(backend.action).toHaveBeenCalledWith("repo_tree", { id: "a", dir: "" });
     await act(async () => fireEvent.click(await screen.findByRole("treeitem", { name: "docs" })));
     expect(backend.action).toHaveBeenCalledWith("repo_tree", { id: "a", dir: "docs" });
@@ -411,7 +448,9 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: /複製相對路徑/ })));
     expect(write).toHaveBeenCalledWith("docs/plan.md");
     // 鍵盤：⌥⌘C 複製路徑
-    await act(async () => fireEvent.keyDown(plan, { code: "KeyC", key: "ç", altKey: true, metaKey: true }));
+    await act(async () =>
+      fireEvent.keyDown(plan, { code: "KeyC", key: "ç", altKey: true, metaKey: true }),
+    );
     expect(write).toHaveBeenCalledWith("/r/a/docs/plan.md");
   });
 
@@ -422,8 +461,14 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
       }) as never,
     });
     await openFiles(backend);
-    await act(async () => fireEvent.click(within(document.getElementById("tab-files")!).getByRole("button", { name: "a" })));
-    expect((await screen.findByRole("alert", { name: "" })).textContent).toContain("repo 路徑不存在");
+    await act(async () =>
+      fireEvent.click(
+        within(document.getElementById("tab-files")!).getByRole("button", { name: "a" }),
+      ),
+    );
+    expect((await screen.findByRole("alert", { name: "" })).textContent).toContain(
+      "repo 路徑不存在",
+    );
   });
 
   it("加入資料夾：原生選資料夾 → group_add_folder 加進目前牌組", async () => {
@@ -472,7 +517,9 @@ describe("repo 右側欄與右鍵選單", () => {
   } as const;
   const backendWithRepo = () =>
     mockBackend({
-      getScan: vi.fn(async () => makeScan({ states: [{ ...repoA, recent_commits: [], agents: [] }] })),
+      getScan: vi.fn(async () =>
+        makeScan({ states: [{ ...repoA, recent_commits: [], agents: [] }] }),
+      ),
       action: vi.fn(async (name: string) =>
         name === "repo_tree"
           ? { ok: true, id: "a", root: "/r/a", dir: "", more: 0, entries: [] }
@@ -554,7 +601,7 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
   const files: Record<string, string> = {
     "README.md": "# 說明\n\n看 [指南](docs/guide.md)，外部 [網站](https://example.com)。",
     "docs/guide.md": "## 指南\n內容",
-    "src/main.rs": "fn main() {\n    println!(\"hi\");\n}\n",
+    "src/main.rs": 'fn main() {\n    println!("hi");\n}\n',
   };
   const viewerBackend = () =>
     mockBackend({
@@ -574,7 +621,16 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
         if (name === "read_file") {
           const text = files[p.path!];
           if (text == null) throw new Error("檔案不存在：" + p.path);
-          return { ok: true, id: p.id, path: p.path, abs: "/r/a/" + p.path, size: text.length, kind: "text", text, truncated: false };
+          return {
+            ok: true,
+            id: p.id,
+            path: p.path,
+            abs: "/r/a/" + p.path,
+            size: text.length,
+            kind: "text",
+            text,
+            truncated: false,
+          };
         }
         return { ok: true };
       }) as never,
@@ -588,22 +644,30 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     });
     await act(async () => fireEvent.click(document.querySelector('[data-tab="files"]')!));
     await act(async () =>
-      fireEvent.click(within(document.getElementById("tab-files")!).getByRole("button", { name: "a" })),
+      fireEvent.click(
+        within(document.getElementById("tab-files")!).getByRole("button", { name: "a" }),
+      ),
     );
   }
 
   it("點檔案開分頁：md 預設預覽、可切原始碼；相對連結開新分頁；關掉回到工作區", async () => {
     const backend = viewerBackend();
     await openTree(backend);
-    await act(async () => fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" })));
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" })),
+    );
     expect(backend.action).toHaveBeenCalledWith("read_file", { id: "a", path: "README.md" });
     expect(document.getElementById("workspace")!.hidden).toBe(true);
     const viewer = () => document.querySelector(".viewer:not([hidden])")!;
     expect(viewer().querySelector("h1")!.textContent).toBe("說明");
 
-    await act(async () => fireEvent.click(within(viewer() as HTMLElement).getByRole("button", { name: "原始碼" })));
+    await act(async () =>
+      fireEvent.click(within(viewer() as HTMLElement).getByRole("button", { name: "原始碼" })),
+    );
     expect(viewer().querySelector(".codeview")!.textContent).toContain("# 說明");
-    await act(async () => fireEvent.click(within(viewer() as HTMLElement).getByRole("button", { name: "預覽" })));
+    await act(async () =>
+      fireEvent.click(within(viewer() as HTMLElement).getByRole("button", { name: "預覽" })),
+    );
 
     const write = vi.fn(async () => {});
     Object.assign(navigator, { clipboard: { writeText: write } });
@@ -624,7 +688,9 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
   it("程式碼有行號；讀取失敗顯示錯誤", async () => {
     const backend = viewerBackend();
     await openTree(backend);
-    await act(async () => fireEvent.click(await screen.findByRole("treeitem", { name: "main.rs" })));
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("treeitem", { name: "main.rs" })),
+    );
     const lines = document.querySelectorAll(".viewer:not([hidden]) .codeview .cl");
     expect(lines.length).toBe(3);
     expect(lines[1].querySelector(".ln")!.textContent).toBe("2");
@@ -646,11 +712,12 @@ describe("側欄排序與寬度", () => {
     await mount(backend);
     const head = document.querySelector('.gcard[data-key="產品開發"] .ghead')!;
     await act(async () => fireEvent.keyDown(head, { key: "ArrowDown", altKey: true }));
-    expect(backend.action).toHaveBeenCalledWith("reorder", { kind: "groups", order: ["研究", "產品開發"] });
+    expect(backend.action).toHaveBeenCalledWith("reorder", {
+      kind: "groups",
+      order: ["研究", "產品開發"],
+    });
 
-    await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: "展開所有 repo" })),
-    );
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "展開所有 repo" })));
     const member = document.querySelector('.gcard[data-key="*"] .member:nth-child(2)')!;
     await act(async () => fireEvent.keyDown(member, { key: "ArrowUp", altKey: true }));
     expect(backend.action).toHaveBeenCalledWith("reorder", { kind: "repos", order: ["b", "a"] });
@@ -691,11 +758,22 @@ describe("檔案樹跟著磁碟變", () => {
             more: 0,
             entries: [
               { name: "README.md", path: "README.md", abs: "/r/a/README.md", dir: false },
-              ...(round ? [{ name: "new.txt", path: "new.txt", abs: "/r/a/new.txt", dir: false }] : []),
+              ...(round
+                ? [{ name: "new.txt", path: "new.txt", abs: "/r/a/new.txt", dir: false }]
+                : []),
             ],
           };
         if (name === "read_file")
-          return { ok: true, id: "a", path: p.path, abs: "/r/a/" + p.path, size: 3, kind: "text", text: "v" + round, truncated: false };
+          return {
+            ok: true,
+            id: "a",
+            path: p.path,
+            abs: "/r/a/" + p.path,
+            size: 3,
+            kind: "text",
+            text: "v" + round,
+            truncated: false,
+          };
         return { ok: true };
       }) as never,
     });
@@ -780,23 +858,40 @@ describe("檔案簡單編輯", () => {
         subs.add(cb);
         return () => subs.delete(cb);
       },
-      action: vi.fn(async (name: string, p: { id?: string; path?: string; text?: string; base?: string }) => {
-        const file = () => ({
-          ok: true, id: "a", path: "a.md", abs: "/r/a/a.md", size: disk.text.length,
-          kind: "text", text: disk.text, truncated: false, editable: true, version: "v" + disk.v,
-        });
-        if (name === "repo_tree")
-          return { ok: true, id: "a", root: "/r/a", dir: "", more: 0,
-                   entries: [{ name: "a.md", path: "a.md", abs: "/r/a/a.md", dir: false }] };
-        if (name === "read_file") return file();
-        if (name === "write_file") {
-          if (p.base !== "v" + disk.v) return { ok: false, conflict: true, id: "a", path: "a.md" };
-          disk.text = p.text!;
-          disk.v += 1;
-          return file();
-        }
-        return { ok: true };
-      }) as never,
+      action: vi.fn(
+        async (name: string, p: { id?: string; path?: string; text?: string; base?: string }) => {
+          const file = () => ({
+            ok: true,
+            id: "a",
+            path: "a.md",
+            abs: "/r/a/a.md",
+            size: disk.text.length,
+            kind: "text",
+            text: disk.text,
+            truncated: false,
+            editable: true,
+            version: "v" + disk.v,
+          });
+          if (name === "repo_tree")
+            return {
+              ok: true,
+              id: "a",
+              root: "/r/a",
+              dir: "",
+              more: 0,
+              entries: [{ name: "a.md", path: "a.md", abs: "/r/a/a.md", dir: false }],
+            };
+          if (name === "read_file") return file();
+          if (name === "write_file") {
+            if (p.base !== "v" + disk.v)
+              return { ok: false, conflict: true, id: "a", path: "a.md" };
+            disk.text = p.text!;
+            disk.v += 1;
+            return file();
+          }
+          return { ok: true };
+        },
+      ) as never,
     });
     const agentWrites = (text: string) => {
       disk.text = text;
@@ -829,7 +924,10 @@ describe("檔案簡單編輯", () => {
     expect(document.querySelector(".filetab .dirtymark")).toBeTruthy();
     await act(async () => fireEvent.keyDown(box, { key: "s", metaKey: true }));
     expect(backend.action).toHaveBeenCalledWith("write_file", {
-      id: "a", path: "a.md", text: "我改的\n", base: "v2",
+      id: "a",
+      path: "a.md",
+      text: "我改的\n",
+      base: "v2",
     });
     expect(disk.text).toBe("我改的\n");
     expect(document.querySelector(".filetab .dirtymark")).toBeNull();
@@ -895,7 +993,9 @@ describe("會話放進所屬牌組", () => {
     expect(others.textContent).toContain("shell");
     expect(others.textContent).not.toContain("claude · a");
 
-    await act(async () => fireEvent.click(within(inCard as HTMLElement).getByRole("button", { name: /claude · a/ })));
+    await act(async () =>
+      fireEvent.click(within(inCard as HTMLElement).getByRole("button", { name: /claude · a/ })),
+    );
     expect(document.getElementById("termwhere")!.textContent).toBe("產品開發 › a");
   });
 
@@ -906,9 +1006,13 @@ describe("會話放進所屬牌組", () => {
       await store.refreshAll();
     });
     const card = document.querySelector('.gcard[data-key="產品開發"]')!;
-    await act(async () => fireEvent.click(within(card as HTMLElement).getByRole("button", { name: /展開/ })));
+    await act(async () =>
+      fireEvent.click(within(card as HTMLElement).getByRole("button", { name: /展開/ })),
+    );
     fireEvent.contextMenu(within(card as HTMLElement).getByRole("button", { name: /^a/ }));
-    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "開啟 Agent 會話…" })));
+    await act(async () =>
+      fireEvent.click(screen.getByRole("menuitem", { name: "開啟 Agent 會話…" })),
+    );
     const dialog = document.getElementById("detaildialog")!;
     expect(dialog.textContent).toContain("產品開發 › a");
   });
@@ -943,16 +1047,23 @@ describe("牌組筆記", () => {
     expect(document.activeElement).toBe(box);
 
     fireEvent.change(box, { target: { value: "  明天跟設計對齊  " } });
-    expect(JSON.parse(localStorage.getItem("workbench:noteDraft:產品開發")!)).toBe("  明天跟設計對齊  ");
+    expect(JSON.parse(localStorage.getItem("workbench:noteDraft:產品開發")!)).toBe(
+      "  明天跟設計對齊  ",
+    );
     await act(async () => fireEvent.keyDown(box, { key: "Enter", metaKey: true }));
-    expect(backend.action).toHaveBeenCalledWith("note_add", { group: "產品開發", text: "明天跟設計對齊" });
+    expect(backend.action).toHaveBeenCalledWith("note_add", {
+      group: "產品開發",
+      text: "明天跟設計對齊",
+    });
     expect(await within(pane).findByText("明天跟設計對齊")).toBeTruthy();
     expect(box.value).toBe("");
 
     const items = within(pane).getAllByRole("listitem");
     await act(async () => fireEvent.click(within(items[1]).getByRole("button", { name: "刪除" })));
     expect(backend.action).not.toHaveBeenCalledWith("note_remove", expect.anything());
-    await act(async () => fireEvent.click(within(items[1]).getByRole("button", { name: "確定刪除" })));
+    await act(async () =>
+      fireEvent.click(within(items[1]).getByRole("button", { name: "確定刪除" })),
+    );
     expect(backend.action).toHaveBeenCalledWith("note_remove", {
       group: "產品開發",
       at: "2026-10-11 09:00",
@@ -963,7 +1074,9 @@ describe("牌組筆記", () => {
 
   it("所有 repo／臨時組：不能記，說明要先選牌組", async () => {
     await mount(notesBackend());
-    expect((screen.getByRole("button", { name: "＋ 記一筆" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "＋ 記一筆" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     await act(async () => fireEvent.click(document.querySelector('[data-tab="notes"]')!));
     expect(document.getElementById("tab-notes")!.textContent).toContain("筆記記在牌組上");
   });

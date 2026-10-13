@@ -346,41 +346,7 @@ fn registry_suggest(ctx: &Ctx) -> CmdResult {
 }
 
 fn registry_relations(ctx: &Ctx, id: Option<&str>) -> CmdResult {
-    let d = ctx.spine_dir()?;
-    let n = if let Some(id) = id.filter(|s| !s.is_empty()) {
-        let rows = registry::relations_of(&d, id)?;
-        for r in &rows {
-            let arrow = if r.direction == registry::Direction::Out {
-                format!("{id} {}→ {}", r.label, r.peer)
-            } else {
-                format!("{id} 的{} {}", r.label, r.peer)
-            };
-            println!("{arrow}（{}）{}", r.kind, crate::note_tail(&r.note));
-        }
-        rows.len()
-    } else {
-        let kinds = registry::relation_kinds(&d)?;
-        let rows = registry::relations(&d, None)?;
-        for r in &rows {
-            let fwd = kinds
-                .get(&r.kind)
-                .map(|k| k.forward.clone())
-                .unwrap_or_else(|| r.kind.clone());
-            println!(
-                "{} {fwd}→ {}（{}）{}",
-                r.from,
-                r.to,
-                r.kind,
-                crate::note_tail(&r.note)
-            );
-        }
-        rows.len()
-    };
-    if n == 0 {
-        let kinds = registry::relation_kinds(&d)?;
-        let names: Vec<&str> = kinds.0.iter().map(|(k, _)| k.as_str()).collect();
-        println!("（無關係）可用 kind：{}", names.join(", "));
-    }
+    println!("{}", crate::text::relations(&ctx.spine_dir()?, id)?);
     Ok(())
 }
 

@@ -8,6 +8,7 @@
 - 已全面搬到 **Rust 引擎（`crates/ctx-core`）＋CLI／MCP（`crates/ctx-cli`，單一執行檔 `ctx`）＋Tauri 殼＋React 前端（`desktop/`）**，在 `rust-desktop` 分支。
 - Python 版（`repo_context/`、`tests/`）只當對拍規格（`scripts/parity.sh`），合併回 main 後刪除；合併前不刪、不改它的行為。
 - **資料格式就是合約**：spine（事件 md）、registry（YAML）、`.state/`、CLI、MCP 工具介面不隨語言變。規約與刻意差異見 `docs/RUST_PORTING.md`。
+- 寫程式的準則（分層、錯誤、並行寫入、前端非同步、MCP 設計、開源缺口）見 `docs/DEVELOPMENT.md`。
 
 ## Rust
 - 錯誤用 `Result` 往上傳；只有程式裡寫死的不變式才用 `unwrap`／`expect`。

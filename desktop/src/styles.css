@@ -33,9 +33,9 @@ body {
   background: var(--bg);
   color: var(--ink);
   display: grid;
-  grid-template: "top top" 56px "side main" minmax(0, 1fr) "side term" var(
-      --termh
-    ) "status status" 26px / var(--sidew) minmax(0, 1fr);
+  grid-template:
+    "top top" 56px "side main" minmax(0, 1fr) "side term" var(--termh)
+    "status status" 26px / var(--sidew) minmax(0, 1fr);
 }
 button,
 input,
@@ -1545,7 +1545,11 @@ dialog::backdrop {
 .ticon {
   flex: 0 0 16px;
   text-align: center;
-  font: 700 9px/1 "Cascadia Code", Menlo, Consolas, monospace;
+  font:
+    700 9px/1 "Cascadia Code",
+    Menlo,
+    Consolas,
+    monospace;
   letter-spacing: -0.5px;
   color: #7f8a99;
 }

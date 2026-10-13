@@ -42,7 +42,11 @@ export function Modal(props: {
         const back = returnTo.current as HTMLElement | null;
         returnTo.current = null;
         const active = document.activeElement;
-        if (back && back.isConnected && (!active || active === document.body || ref.current?.contains(active)))
+        if (
+          back &&
+          back.isConnected &&
+          (!active || active === document.body || ref.current?.contains(active))
+        )
           back.focus?.();
       }}
       onClick={(e) => {

@@ -10,10 +10,11 @@ const REVIEW_DONE_COVER: f64 = 0.45;
 /// 列為證據的最低覆蓋率。
 const REVIEW_EVIDENCE_COVER: f64 = 0.2;
 
-pub(super) static BACKFILL_TAIL: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[（(]回填自[^）)]*[）)]").expect("寫死的 regex"));
-static CJK_RUN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[\x{3400}-\x{9FFF}\x{F900}-\x{FAFF}]+").expect("寫死的 regex"));
+pub(super) static BACKFILL_TAIL: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"[（(]回填自[^）)]*[）)]").expect("寫死的 regex"));
+static CJK_RUN: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"[\x{3400}-\x{9FFF}\x{F900}-\x{FAFF}]+").expect("寫死的 regex")
+});
 
 /// 一筆可能的證據（opened 之後的 commit 或判斷／交接的「完成」）。
 struct Cand {

@@ -79,6 +79,22 @@ fn strs(v: &[String]) -> Value {
     Value::Sequence(v.iter().map(|s| Value::String(s.clone())).collect())
 }
 
+/// 登記的 repo 是檔案檢視器、編輯、終端的範圍；根目錄或家目錄（以及它們的上層）等於把整台機器開放出去。
+/// 刻意差異（2026-10-13，資安）：Python 版不擋。
+fn refuse_too_broad(path: &Path) -> Result<()> {
+    let real = crate::fsutil::resolve(&crate::fsutil::expanduser(path));
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(|h| crate::fsutil::resolve(Path::new(&h)));
+    if real.parent().is_none() || home.is_some_and(|h| h.starts_with(&real)) {
+        return Err(Error::invalid(format!(
+            "不能把根目錄或家目錄登記成 repo（範圍太大）：{}",
+            path.display()
+        )));
+    }
+    Ok(())
+}
+
 /// 對應 `registry.add_repo`。回傳新登記項。
 pub fn add_repo(
     spine_dir: impl AsRef<Path>,
@@ -92,6 +108,7 @@ pub fn add_repo(
     if !TIERS.contains(&opts.tier.as_str()) {
         return Err(Error::invalid(format!("tier 需為 {}", TIERS.join("|"))));
     }
+    refuse_too_broad(path.as_ref())?;
     let path = path.as_ref().to_string_lossy().into_owned();
     transaction(spine_dir, |data| {
         if data.repo(id).is_some() {

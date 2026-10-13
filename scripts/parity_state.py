@@ -119,6 +119,11 @@ def drop_rust_only(v):
         if isinstance(v.get("actions"), list):
             v["actions"] = [a for a in v["actions"]
                             if not (isinstance(a, dict) and a.get("action") in RUST_ONLY_ACTIONS)]
+            for a in v["actions"]:
+                if isinstance(a, dict):
+                    a.pop("primary", None)  # 2026-10-13：主要動作改由引擎標（Rust 才有）
+        if isinstance(v.get("members"), list) and "gone" in v:
+            v.pop("gone")  # 2026-10-13：範圍已不存在改由引擎判斷（Rust 才有）
         for x in v.values():
             drop_rust_only(x)
     elif isinstance(v, list):

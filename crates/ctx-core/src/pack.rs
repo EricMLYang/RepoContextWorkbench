@@ -11,9 +11,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
+use std::sync::LazyLock;
 
 use crate::fsutil::{expanduser, read_text_lossy};
 use crate::pystr::splitlines;
@@ -22,7 +22,7 @@ use crate::pystr::splitlines;
 pub const EXCLUDE_DIRS: &[&str] = &[".git", "node_modules", "__pycache__", ".venv", "venv"];
 
 /// 對應 `pack.SECRET_PATTERNS`：高精度樣式優先（誤攔正文比漏攔更傷用感；正式版換 Secretlint 全集）。
-static SECRET_PATTERNS: Lazy<Vec<(&'static str, Regex)>> = Lazy::new(|| {
+static SECRET_PATTERNS: LazyLock<Vec<(&'static str, Regex)>> = LazyLock::new(|| {
     let pats: [(&str, &str); 5] = [
         ("private-key", r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
         ("aws-key", r"\bAKIA[0-9A-Z]{16}\b"),

@@ -21,9 +21,9 @@ use std::process::Command;
 use std::str::FromStr;
 
 use chrono::{Duration, Local, NaiveDateTime, TimeZone};
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
+use std::sync::LazyLock;
 
 use crate::locking::FileLock;
 use crate::pystr::{repr, splitlines};
@@ -50,14 +50,14 @@ pub const ADMIN_TAG: &str = "〔registry〕";
 /// 空 token 清單（`append_event(.., NO_TOKENS, ..)`，免得型別推不出來）。
 pub const NO_TOKENS: &[&str] = &[];
 
-static HEADER_RE: Lazy<Regex> = Lazy::new(|| {
+static HEADER_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^## (?P<h>[0-2]\d):(?P<m>[0-5]\d) (?P<type>[a-z-]+) \[(?P<source>[a-z0-9-]+)\](?P<tail>( \S+)*)$")
         .expect("固定 regex")
 });
-static KV_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^(?:#\d+|(?:group|repo|ref|due|id):\S+)$").expect("固定 regex"));
-static DUE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^due:\d{4}-\d{2}-\d{2}$").expect("固定 regex"));
+static KV_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(?:#\d+|(?:group|repo|ref|due|id):\S+)$").expect("固定 regex"));
+static DUE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^due:\d{4}-\d{2}-\d{2}$").expect("固定 regex"));
 
 /// 事件型別（序列化字串與 Python 相同）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

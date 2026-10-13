@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Relation, RelationSuggestion } from "../../api/types";
 import { DetailLayout, useDetail } from "../../dialogs/Modal";
-import { matchesSearch, relationLabel, scopeRepos } from "../../lib/view";
+import { matchesSearch, relationLabel } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
 
@@ -12,17 +12,27 @@ export function RelationsPane({ query, active }: { query: string; active: boolea
   // in_scope／task 由引擎給（碰到目前範圍的關係、用這條關係開工作的任務）
   const list = state.relations.filter((r) => r.in_scope && matchesSearch(r, query));
   return (
-    <section id="tab-relations" className={"tabpane" + (active ? " on" : "")} aria-label="Repo 關係">
+    <section
+      id="tab-relations"
+      className={"tabpane" + (active ? " on" : "")}
+      aria-label="Repo 關係"
+    >
       <div className="sectionintro">
         <div>
           <h2>Repo 關係</h2>
-          <p className="small muted">目前範圍的 repo 如何規劃、供料與相互支援。跨組關係會保留另一端。</p>
+          <p className="small muted">
+            目前範圍的 repo 如何規劃、供料與相互支援。跨組關係會保留另一端。
+          </p>
         </div>
         <button
           type="button"
           id="reladd"
           onClick={() =>
-            ui.openDetail({ title: "新增 Repo 關係", eyebrow: "RELATIONSHIP", content: <RelationForm /> })
+            ui.openDetail({
+              title: "新增 Repo 關係",
+              eyebrow: "RELATIONSHIP",
+              content: <RelationForm />,
+            })
           }
         >
           ＋ 新增關係
@@ -83,7 +93,9 @@ function Suggestions() {
   return (
     <div id="relsuggest" className="relsuggest">
       <h3 className="small">建議設定的關係（{list.length}）</h3>
-      <p className="small muted">從文件互相提到、引用紀錄推出來的；設了之後 agent 開場就看得到鄰居。</p>
+      <p className="small muted">
+        從文件互相提到、引用紀錄推出來的；設了之後 agent 開場就看得到鄰居。
+      </p>
       {list.map((x) => (
         <SuggestionRow key={x.from + ">" + x.to} x={x} />
       ))}
@@ -96,7 +108,7 @@ function SuggestionRow({ x }: { x: RelationSuggestion }) {
   const ui = useUi();
   const { state } = useSnapshot();
   const [error, setError] = useState("");
-  const label = x.kind ? state.rel_kinds[x.kind]?.forward ?? x.kind : "有關";
+  const label = x.kind ? (state.rel_kinds[x.kind]?.forward ?? x.kind) : "有關";
   return (
     <div className="relation suggestion">
       <div className="relationcopy">
@@ -156,8 +168,8 @@ function SuggestionRow({ x }: { x: RelationSuggestion }) {
 function RelationForm({ initial }: { initial?: { a: string; b: string; kind?: string } }) {
   const store = useStore();
   const { setError, close } = useDetail();
-  const { state, scope } = useSnapshot();
-  const inScope = scopeRepos(scope, state);
+  const { state } = useSnapshot();
+  const inScope = store.scopeRepos;
   // 建議的來源可能在範圍外（跨組關係）：預填時一併列進來源選單
   const sources = initial && !inScope.includes(initial.a) ? [initial.a, ...inScope] : inScope;
   const kinds = Object.keys(state.rel_kinds);

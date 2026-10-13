@@ -20,10 +20,10 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use chrono::Local;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
+use std::sync::LazyLock;
 
 use crate::crossref::{self, Drift, Neighbor, RunText, MAX_READ_CHARS};
 use crate::fsutil::{expanduser, resolve as py_resolve};
@@ -40,7 +40,11 @@ use crate::{brief, collect, config, context, summary, Error, Result};
 pub use crate::status::{get_status, STATUSES};
 
 /// 對應 `AgentError(code, message, hint)` 的建構。
-pub fn agent_error(code: &str, message: impl Into<String>, hint: Option<&str>) -> Error {
+pub fn agent_error(
+    code: crate::RejectCode,
+    message: impl Into<String>,
+    hint: Option<&str>,
+) -> Error {
     Error::rejected(code, message, hint.map(str::to_string))
 }
 
@@ -312,7 +316,7 @@ fn check_write_scope(spine_dir: &Path, w: &Where, s: &Scope, cross_scope_ok: boo
         w.groups.join("、")
     };
     Err(agent_error(
-        "cross_scope",
+        crate::RejectCode::CrossScope,
         format!(
             "要寫入的範圍「{}」不在你的主場（{}／{groups}）。",
             s.label,
@@ -708,7 +712,7 @@ pub fn search_knowledge(
 ) -> Result<Value> {
     if query.trim().is_empty() {
         return Err(agent_error(
-            "bad_request",
+            crate::RejectCode::BadRequest,
             "query 不能是空的",
             Some("給一段文字、一個想法或一段卡片內容。"),
         ));
@@ -773,7 +777,7 @@ fn ref_call<T: Serialize>(r: Result<T>) -> Result<Value> {
         Ok(v) => Ok(serde_json::to_value(v)?),
         Err(e @ Error::Rejected { .. }) => Err(e),
         Err(Error::Invalid(m)) | Err(Error::Validation(m)) => {
-            Err(agent_error("bad_request", m, None))
+            Err(agent_error(crate::RejectCode::BadRequest, m, None))
         }
         Err(e) => Err(e),
     }
@@ -855,7 +859,7 @@ pub fn repo_status(
                 Some(r) => r.to_string(),
                 None => {
                     return Err(Error::rejected(
-                        "bad_request",
+                        crate::RejectCode::BadRequest,
                         "cwd 不在已登記的 repo 裡，請指定 repo",
                         w.hint.or(w.note),
                     ))
@@ -885,9 +889,11 @@ fn next_id(events: &[Event], date_str: &str, prefix: &str) -> String {
     format!("{date_str}-{prefix}{n}")
 }
 
-static LOOP_NUM_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^#\d+$").expect("固定 regex"));
-static REF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-z-]+:\S+$").expect("固定 regex"));
-static DATE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d{4}-\d{2}-\d{2}$").expect("固定 regex"));
+static LOOP_NUM_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^#\d+$").expect("固定 regex"));
+static REF_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-z-]+:\S+$").expect("固定 regex"));
+static DATE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\d{4}-\d{2}-\d{2}$").expect("固定 regex"));
 
 fn next_loop_num(events: &[Event]) -> String {
     let max = events
@@ -906,7 +912,7 @@ fn clean(text: &str, field: &str) -> Result<String> {
     let text = text.trim();
     if text.is_empty() {
         return Err(agent_error(
-            "bad_request",
+            crate::RejectCode::BadRequest,
             format!("{field} 不能是空的"),
             None,
         ));
@@ -932,7 +938,9 @@ fn append(
     body: &str,
 ) -> Result<Event> {
     spine::append_event(spine_dir, etype, source, tokens, body, None).map_err(|e| match e {
-        Error::Validation(m) => agent_error("invalid_event", m, Some("修正內容後重試。")),
+        Error::Validation(m) => {
+            agent_error(crate::RejectCode::InvalidEvent, m, Some("修正內容後重試。"))
+        }
         other => other,
     })
 }
@@ -970,12 +978,12 @@ pub struct DecisionExtra {
     pub outcome_of: Option<String>,
 }
 
-static SUPERSEDE_LINE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?m)^取代：\s*(decision:\S+)").expect("寫死的 regex"));
-static REOPEN_LINE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?m)^何時重看：\s*(.+?)\s*$").expect("寫死的 regex"));
-static ANY_DATE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\d{4}-\d{2}-\d{2}").expect("寫死的 regex"));
+static SUPERSEDE_LINE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^取代：\s*(decision:\S+)").expect("寫死的 regex"));
+static REOPEN_LINE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^何時重看：\s*(.+?)\s*$").expect("寫死的 regex"));
+static ANY_DATE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\d{4}-\d{2}-\d{2}").expect("寫死的 regex"));
 
 /// 被取代的判斷 → 取代它的判斷（ref → ref）。
 pub fn superseded_map(events: &[Event]) -> std::collections::HashMap<String, String> {
@@ -1075,7 +1083,7 @@ pub fn log_decision_ext(
             .any(|ev| ev.etype == EventType::Decision && event_ref(ev) == of);
         if !of.starts_with("decision:") || !exists {
             return Err(agent_error(
-                "bad_request",
+                crate::RejectCode::BadRequest,
                 format!("找不到這個結果所屬的判斷：{}", repr(of)),
                 Some("用判斷的 ref，例如 decision:2026-09-25-d1（search_knowledge 的 decisions 段有）。"),
             ));
@@ -1098,7 +1106,7 @@ pub fn log_decision_ext(
             .any(|ev| ev.etype == EventType::Decision && event_ref(ev) == old);
         if !old.starts_with("decision:") || !exists {
             return Err(agent_error(
-                "bad_request",
+                crate::RejectCode::BadRequest,
                 format!("找不到要取代的判斷：{}", repr(old)),
                 Some("用 log_decision 回傳的 ref，例如 decision:2026-09-25-d1。"),
             ));
@@ -1160,7 +1168,7 @@ fn write_event_body(
     if let Some(r) = reference.filter(|r| !r.is_empty()) {
         if !REF_RE.is_match(r) {
             return Err(agent_error(
-                "bad_request",
+                crate::RejectCode::BadRequest,
                 format!("ref 格式不對：{}", repr(r)),
                 Some(
                     "用其他工具回傳的 ref，例如 decision:2026-09-25-d1 或 collision:2026-09-25-a。",
@@ -1189,7 +1197,7 @@ pub fn add_todo(
     if let Some(d) = due {
         if !DATE_RE.is_match(d) {
             return Err(agent_error(
-                "bad_request",
+                crate::RejectCode::BadRequest,
                 format!("due 需為 YYYY-MM-DD：{}", repr(d)),
                 None,
             ));
@@ -1230,7 +1238,7 @@ pub fn close_todo(
         .find(|ev| ev.tokens.contains(&id))
     else {
         return Err(agent_error(
-            "not_found",
+            crate::RejectCode::NotFound,
             format!("找不到未結事項 {id}（不存在或已關）"),
             Some("用 next_work 或 context_for 看目前的未結清單。"),
         ));
@@ -1244,7 +1252,7 @@ pub fn close_todo(
                 || r.is_some_and(|r| home.contains(r));
             if !ok {
                 return Err(agent_error(
-                    "cross_scope",
+                    crate::RejectCode::CrossScope,
                     format!("{id} 屬於「{}」，不在你的主場。", g.or(r).unwrap_or("全域")),
                     Some("先問使用者；同意後帶 cross_scope_ok=true 重試。"),
                 ));

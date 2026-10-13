@@ -118,8 +118,14 @@ export class WorkbenchStore {
     this.listeners.forEach((fn) => fn());
   }
 
+  /** 範圍內的 repo：用引擎算好的 `state.scope.members`；範圍剛換、state 還沒回來時才先用本地推算頂著。 */
   get scopeRepos(): string[] {
-    return scopeRepos(this.snap.scope, this.snap.state);
+    const { scope, state } = this.snap;
+    const same =
+      state.scope &&
+      (state.scope.group ?? null) === (scope.group ?? null) &&
+      JSON.stringify(state.scope.repos ?? null) === JSON.stringify(scope.repos ?? null);
+    return same ? state.scope.members : scopeRepos(scope, state);
   }
   get scopePayload() {
     return scopePayload(this.snap.scope, this.snap.state);
@@ -165,10 +171,8 @@ export class WorkbenchStore {
         const next = await this.backend.getState(this.stateScope());
         if (asked !== JSON.stringify(this.stateScope()))
           queueMicrotask(() => void this.refreshState());
-        const { scope } = this.snap;
-        const gone =
-          (scope.group && !next.groups.some((g) => g.name === scope.group)) ||
-          (Array.isArray(scope.repos) && !scope.repos.some((r) => next.repos.includes(r)));
+        // 範圍還在不在由引擎判斷；只信這次問的就是目前範圍的回答
+        const gone = !!next.scope?.gone && asked === JSON.stringify(this.stateScope());
         this.set({ state: next, stateReady: true, stateError: "" });
         if (gone) {
           save("scope", ALL_SCOPE);
@@ -247,21 +251,30 @@ export class WorkbenchStore {
 
   // ── 生命週期 ────────────────────────────────────────────────────
 
-  /** 首次載入＋輪詢（state 5 秒、scan 2 分鐘）。視窗隱藏時不輪詢 state，回來時補一次。 */
+  /**
+   * 首次載入＋更新來源：
+   * - state：後端有變動事件（Tauri `workbench://changed`）就只靠事件，閒置不輪詢；沒有事件（HTTP 版）才每 5 秒輪詢。
+   *   視窗回到前景（可見、取得焦點）補抓一次——跨日的逾期判斷這類跟時間有關的，靠這個更新。
+   * - scan（各 repo 的 git 狀態）：沒有事件可聽，視窗可見時每 2 分鐘一次。
+   */
   start() {
     void this.refreshAll();
     const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+    this.unsubscribeChanged = this.backend.onChanged?.(() => void this.refreshState()) ?? null;
+    if (!this.unsubscribeChanged)
+      this.timers.push(
+        setInterval(() => {
+          if (!hidden()) void this.refreshState();
+        }, STATE_POLL_MS),
+      );
     this.timers.push(
-      setInterval(() => {
-        if (!hidden()) void this.refreshState();
-      }, STATE_POLL_MS),
       setInterval(() => {
         if (!this.snap.scanLoading && !hidden()) void this.rescan();
       }, SCAN_POLL_MS),
     );
     if (typeof document !== "undefined")
       document.addEventListener("visibilitychange", this.onVisible);
-    this.unsubscribeChanged = this.backend.onChanged?.(() => void this.refreshState()) ?? null;
+    if (typeof window !== "undefined") window.addEventListener("focus", this.onFocus);
   }
 
   stop() {
@@ -269,6 +282,7 @@ export class WorkbenchStore {
     this.timers = [];
     if (typeof document !== "undefined")
       document.removeEventListener("visibilitychange", this.onVisible);
+    if (typeof window !== "undefined") window.removeEventListener("focus", this.onFocus);
     this.unsubscribeChanged?.();
     this.unsubscribeChanged = null;
   }
@@ -276,4 +290,6 @@ export class WorkbenchStore {
   private onVisible = () => {
     if (document.visibilityState === "visible") void this.refreshState();
   };
+
+  private onFocus = () => void this.refreshState();
 }

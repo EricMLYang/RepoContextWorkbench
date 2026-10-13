@@ -6,13 +6,7 @@ import { useCallback, useState } from "react";
 import type { ActionName, CardAction, InboxCard } from "../../api/types";
 import { DetailLayout, useAutoFocus, useDetail } from "../../dialogs/Modal";
 import { useSnapshot, useStore, useUi } from "../../store/context";
-import {
-  KINDNAME,
-  actionLabel,
-  actionToast,
-  cardDetailText,
-  primaryAction,
-} from "../../lib/view";
+import { KINDNAME, actionLabel, actionToast, cardDetailText, primaryAction } from "../../lib/view";
 
 export type RunAction = (c: InboxCard, a: CardAction, from: "card" | "dialog") => Promise<void>;
 
@@ -37,7 +31,9 @@ export function useRunAction(): RunAction {
           const r = await store.action("todo_brief", { num: String(a.payload.num ?? "") });
           ui.closeDetail();
           ui.openSession({
-            ...(c.scope_kind === "group" ? { group: c.scope_label, repos: null } : { repos: c.scope_repos }),
+            ...(c.scope_kind === "group"
+              ? { group: c.scope_label, repos: null }
+              : { repos: c.scope_repos }),
             task: r.markdown,
             origin: "loop:" + String(a.payload.num ?? ""),
           });
@@ -70,21 +66,24 @@ export function useRunAction(): RunAction {
         return;
       }
       if (a.action === "tier" && a.payload?.tier === "paused" && !a.payload.resume_when) {
-        ui.openDetail({ title: "設定復工條件", content: <PauseForm card={c} action={a} run={run} /> });
+        ui.openDetail({
+          title: "設定復工條件",
+          content: <PauseForm card={c} action={a} run={run} />,
+        });
         return;
       }
       store.setBusy(c.key, true);
       store.setCardError(c.key, "");
       ui.setDetailError("");
       try {
-        const r = (await store.action(a.action as ActionName, (a.payload || {}) as never)) as Record<
-          string,
-          unknown
-        >;
+        const r = (await store.action(
+          a.action as ActionName,
+          (a.payload || {}) as never,
+        )) as Record<string, unknown>;
         ui.closeDetail();
         store.toast(actionToast(a, r));
         await store.refreshState();
-        if (["tier", "defer", "remove_repo"].includes(a.action)) await store.rescan();
+        if (r.rescan) await store.rescan();
       } catch (e) {
         const msg = (e as Error).message;
         if (from === "card") store.setCardError(c.key, msg);

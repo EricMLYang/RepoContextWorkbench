@@ -8,7 +8,12 @@ import { Modal } from "./Modal";
  * 「選擇 repo」：組臨時範圍或存成牌組；傳入 group＝編輯既有牌組（預勾成員、可改名、刪除）。
  * 搜尋＋tag 只影響顯示；「選取搜尋結果」「清除選取」「＋相關 repo」是明確動作；零選取不能套用。
  */
-export function PickerDialog(props: { open: boolean; group: GroupInfo | null; seq: number; onClose: () => void }) {
+export function PickerDialog(props: {
+  open: boolean;
+  group: GroupInfo | null;
+  seq: number;
+  onClose: () => void;
+}) {
   const { open, group, seq, onClose } = props;
   return (
     <Modal id="pickdialog" open={open} onClose={onClose} labelledBy="picktitle">
@@ -50,7 +55,8 @@ function PickerForm({ group, onClose }: { group: GroupInfo | null; onClose: () =
       setBusy(true);
       try {
         const r = await store.action("update_group", { name: editing, repos, new_name: trimmed });
-        if (store.getSnapshot().scope.group === editing) store.setScope({ group: r.name, repos: null });
+        if (store.getSnapshot().scope.group === editing)
+          store.setScope({ group: r.name, repos: null });
         if (r.name !== editing) ui.renameOpenGroup(editing, r.name);
         await store.refreshState();
         onClose();
@@ -70,7 +76,9 @@ function PickerForm({ group, onClose }: { group: GroupInfo | null; onClose: () =
       }
       store.setScope(trimmed ? { group: trimmed, repos: null } : { group: null, repos });
       onClose();
-      store.toast(trimmed ? "已儲存牌組「" + trimmed + "」" : "已套用 " + repos.length + " 個 repo");
+      store.toast(
+        trimmed ? "已儲存牌組「" + trimmed + "」" : "已套用 " + repos.length + " 個 repo",
+      );
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -133,7 +141,12 @@ function PickerForm({ group, onClose }: { group: GroupInfo | null; onClose: () =
         >
           選取搜尋結果
         </button>
-        <button type="button" id="picknone" className="ghost small" onClick={() => setSelected(new Set())}>
+        <button
+          type="button"
+          id="picknone"
+          className="ghost small"
+          onClick={() => setSelected(new Set())}
+        >
           清除選取
         </button>
         <button

@@ -13,7 +13,7 @@ pub fn try_fresh(spine_dir: &Path, link_id: &str, source: &str) -> Result<Value>
         .find(|l| l.id.as_deref() == Some(link_id))
         .ok_or_else(|| {
             agent_error(
-                "not_found",
+                crate::RejectCode::NotFound,
                 format!("找不到推薦 {link_id}"),
                 Some("ctx fresh --all 看全部推薦的 id。"),
             )

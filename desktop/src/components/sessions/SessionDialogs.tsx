@@ -7,7 +7,13 @@ import { useSnapshot, useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
 
 /** 開會話表單：選 Agent、寫任務；範圍在開啟時就固定。 */
-export function SessionForm({ payload, task: initialTask }: { payload: Record<string, unknown>; task: string }) {
+export function SessionForm({
+  payload,
+  task: initialTask,
+}: {
+  payload: Record<string, unknown>;
+  task: string;
+}) {
   const store = useStore();
   const ui = useUi();
   const { close } = useDetail();
@@ -50,7 +56,8 @@ export function SessionForm({ payload, task: initialTask }: { payload: Record<st
         開場會拿到：組情境卡（成員與關係、脈動、未結、最近事件）＋文件地圖，並被要求先說明拿到什麼、預計產出什麼、哪些動作要你確認。
       </p>
       <p className="sumsrc">
-        工作範圍是行為約定，不是工具層的權限限制——Agent 手上的工具碰得到組外檔案，所以它被要求越界前先問你。
+        工作範圍是行為約定，不是工具層的權限限制——Agent
+        手上的工具碰得到組外檔案，所以它被要求越界前先問你。
       </p>
       <label className="field">
         使用的 Agent
@@ -175,9 +182,7 @@ export function ConfirmKill({ term }: { term: TermInfo }) {
           <button
             type="button"
             onClick={() =>
-              ui.openDetail(
-                sessionResultSpec(term, () => ui.openDetail(confirmKillSpec(term))),
-              )
+              ui.openDetail(sessionResultSpec(term, () => ui.openDetail(confirmKillSpec(term))))
             }
           >
             先記錄結果

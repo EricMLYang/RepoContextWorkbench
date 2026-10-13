@@ -34,7 +34,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all --check
 cargo build -p ctx-cli && bash scripts/parity.sh          # 與 Python 版逐指令對拍
 python3 scripts/parity_state.py                           # 工作台 state／scan JSON 對拍
-cd desktop && npm run build && npm test && npm run lint
+cd desktop && npm run build && npm test && npm run lint && npm run format:check
 ```
 
 ## 安裝
@@ -52,6 +52,14 @@ ctx app                                  # 找 Repo Context.app（ctx 同目錄�
 ```
 
 桌面 App 目前只做了 macOS（Windows／VDI 未做、未測）。關視窗＝隱藏，會話照跑；選單列「結束」或 ⌘Q 才收掉會話。
+
+## 信任模型（資安）
+
+- **登記的 repo 內容視為不受信任**：App 只顯示、不執行裡面的 md／html；但 agent 讀到其他 repo 的文字時仍可能被
+  prompt injection 影響——只登記你信任的 repo。
+- **spine 等於程式碼**：`config.yaml` 的 agent 指令與 `.mcp.json` 會在開會話時執行；不要直接使用別人的 spine。
+- **App 的範圍＝登記的 repo**：檔案檢視、編輯、終端都限制在登記的 repo 裡；不能把根目錄或家目錄登記成 repo。
+- 細節與寫程式的規則見 `docs/DEVELOPMENT.md` §8。
 
 ## 從 Python 版切換
 

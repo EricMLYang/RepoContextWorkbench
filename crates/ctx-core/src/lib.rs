@@ -49,4 +49,4 @@ pub mod yamlout;
 #[cfg(feature = "testkit")]
 pub mod testkit;
 
-pub use error::{Error, Result};
+pub use error::{Error, RejectCode, Result};

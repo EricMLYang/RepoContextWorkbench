@@ -24,10 +24,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use chrono::Local;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
+use std::sync::LazyLock;
 
 use crate::agentapi::{self, Target};
 use crate::agents::{AgentProvider, ClaudeProvider};
@@ -41,7 +41,7 @@ const MSG_CHARS: usize = 1_500;
 const LIVE_MINUTES: f64 = 30.0;
 
 /// Python 用 `<(tag1|tag2…)>.*?</\1>`（反向參照）；Rust regex 沒有反向參照，逐一展開成等價的交替。
-static NOISE: Lazy<Regex> = Lazy::new(|| {
+static NOISE: LazyLock<Regex> = LazyLock::new(|| {
     let tags = [
         "system-reminder",
         "local-command-caveat",
@@ -243,8 +243,85 @@ pub struct SessionRec {
     pub last: Option<String>,
     pub title: Option<String>,
     pub user_turns: usize,
-    /// pending／done／live（還在寫）／unmapped（對不到 repo）／empty（沒有使用者發言）
-    pub status: String,
+    pub status: SessionStatus,
+}
+
+/// 一場會話的回填狀態（JSON 裡是小寫字串，合約不變）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SessionStatus {
+    /// 還沒抽取。
+    Pending,
+    /// 抽過了。
+    Done,
+    /// 還在寫（最近有變動），先不抽。
+    Live,
+    /// 對不到已登記的 repo。
+    Unmapped,
+    /// 沒有使用者發言。
+    Empty,
+}
+
+impl SessionStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SessionStatus::Pending => "pending",
+            SessionStatus::Done => "done",
+            SessionStatus::Live => "live",
+            SessionStatus::Unmapped => "unmapped",
+            SessionStatus::Empty => "empty",
+        }
+    }
+}
+
+/// `ctx backfill scan` 的統計（Rust 2026-10-13 從 CLI 搬來）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScanSummary {
+    /// 各狀態幾場，依第一次出現的順序（＝Python `dict(Counter)`）。
+    pub by_status: Vec<(SessionStatus, usize)>,
+    /// 各 repo 有幾場（只算 pending＋done），場次多的在前、同數維持第一次出現的順序。
+    pub by_repo: Vec<(String, usize)>,
+    /// 對不到 repo 的 cwd（排序、去重；沒有 cwd 記成 `?`）。
+    pub unmapped_cwds: Vec<String>,
+}
+
+/// 依第一次出現的順序計數。
+fn count_in_order<T: PartialEq>(items: impl Iterator<Item = T>) -> Vec<(T, usize)> {
+    let mut out: Vec<(T, usize)> = Vec::new();
+    for x in items {
+        match out.iter_mut().find(|(k, _)| *k == x) {
+            Some((_, n)) => *n += 1,
+            None => out.push((x, 1)),
+        }
+    }
+    out
+}
+
+/// 統計 [`scan`] 的結果。
+pub fn summarize(recs: &[SessionRec]) -> ScanSummary {
+    let mut by_repo = count_in_order(
+        recs.iter()
+            .filter(|r| matches!(r.status, SessionStatus::Pending | SessionStatus::Done))
+            .map(|r| r.repo.clone().unwrap_or_else(|| "None".into())),
+    );
+    by_repo.sort_by_key(|x| std::cmp::Reverse(x.1));
+    let mut unmapped_cwds: Vec<String> = recs
+        .iter()
+        .filter(|r| r.status == SessionStatus::Unmapped)
+        .map(|r| {
+            r.cwd
+                .clone()
+                .filter(|c| !c.is_empty())
+                .unwrap_or_else(|| "?".into())
+        })
+        .collect();
+    unmapped_cwds.sort();
+    unmapped_cwds.dedup();
+    ScanSummary {
+        by_status: count_in_order(recs.iter().map(|r| r.status)),
+        by_repo,
+        unmapped_cwds,
+    }
 }
 
 /// 對應 `backfill.scan`：列出所有會話與狀態。`root` 預設 [`projects_root`]；`now` 為 epoch 秒（測試用）。
@@ -273,15 +350,15 @@ pub fn scan(spine_dir: &Path, root: Option<&Path>, now: Option<f64>) -> Result<V
         let sid = stem(&p);
         let repo = matcher.matches(m.cwd.as_deref());
         let status = if now - mtime_secs(&p)? < LIVE_MINUTES * 60.0 {
-            "live"
+            SessionStatus::Live
         } else if repo.is_none() {
-            "unmapped"
+            SessionStatus::Unmapped
         } else if m.user_turns == 0 {
-            "empty"
+            SessionStatus::Empty
         } else if truthy(load(&sessions_dir.join(format!("{sid}.json"))).as_ref()) {
-            "done"
+            SessionStatus::Done
         } else {
-            "pending"
+            SessionStatus::Pending
         };
         out.push(SessionRec {
             sid,
@@ -292,7 +369,7 @@ pub fn scan(spine_dir: &Path, root: Option<&Path>, now: Option<f64>) -> Result<V
             last: m.last,
             title: m.title,
             user_turns: m.user_turns,
-            status: status.into(),
+            status,
         });
     }
     Ok(out)
@@ -740,7 +817,7 @@ pub fn run(spine_dir: &Path, call: &Call<'_>, opts: &RunOpts, log: &Log<'_>) -> 
     let sdir = dir(spine_dir, &["sessions"])?;
     // 歸屬改了（例：後來才登記更精確的子專案）：已抽的結果改掛新 repo，新舊兩邊都重彙整，不重抽
     let mut remapped: BTreeSet<String> = BTreeSet::new();
-    for r in scanned.iter().filter(|r| r.status == "done") {
+    for r in scanned.iter().filter(|r| r.status == SessionStatus::Done) {
         let sp = sdir.join(format!("{}.json", r.sid));
         let Some(mut s) = load(&sp).filter(|s| truthy(Some(s))) else {
             continue;
@@ -756,7 +833,7 @@ pub fn run(spine_dir: &Path, call: &Call<'_>, opts: &RunOpts, log: &Log<'_>) -> 
     let mut recs: Vec<SessionRec> = scanned
         .into_iter()
         .filter(|r| {
-            r.status == "pending"
+            r.status == SessionStatus::Pending
                 && opts
                     .repo
                     .as_ref()

@@ -160,12 +160,23 @@ fn test_scan_maps_cwd_and_skips() {
     let recs = bf::scan(&w.sp, Some(&w.root), None).unwrap();
     let st = |sid: &str| {
         let r = recs.iter().find(|r| r.sid == sid).unwrap();
-        (r.repo.clone(), r.status.clone())
+        (r.repo.clone(), r.status.as_str())
     };
-    assert_eq!(st("s1"), (Some("impl".into()), "pending".into())); // 子目錄
-    assert_eq!(st("s2"), (Some("impl".into()), "pending".into())); // Drive 舊路徑：資料夾名對上
-    assert_eq!(st("s3"), (None, "unmapped".into()));
+    assert_eq!(st("s1"), (Some("impl".into()), "pending")); // 子目錄
+    assert_eq!(st("s2"), (Some("impl".into()), "pending")); // Drive 舊路徑：資料夾名對上
+    assert_eq!(st("s3"), (None, "unmapped"));
     assert_eq!(st("s4").1, "live"); // 還在寫的不碰
+                                    // 統計（原本在 CLI 算）
+    let sum = bf::summarize(&recs);
+    assert_eq!(
+        sum.by_status
+            .iter()
+            .map(|(k, n)| (k.as_str(), *n))
+            .collect::<Vec<_>>(),
+        vec![("pending", 2), ("unmapped", 1), ("live", 1)]
+    );
+    assert_eq!(sum.by_repo, vec![("impl".to_string(), 2)]);
+    assert_eq!(sum.unmapped_cwds.len(), 1);
 }
 
 #[test]

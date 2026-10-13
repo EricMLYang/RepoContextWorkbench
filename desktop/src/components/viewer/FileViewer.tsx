@@ -233,7 +233,8 @@ export function FileViewer({
       let base = content.version ?? "";
       if (overwrite) {
         const cur = await store.action("read_file", { id: repo, path });
-        if (cur.kind !== "text" || !cur.editable) throw new Error("磁碟上的檔已經不能編輯了（變成二進位或太大）");
+        if (cur.kind !== "text" || !cur.editable)
+          throw new Error("磁碟上的檔已經不能編輯了（變成二進位或太大）");
         base = cur.version ?? "";
       }
       const r = await store.action("write_file", { id: repo, path, text: sent, base });
@@ -314,7 +315,12 @@ export function FileViewer({
               >
                 {saving ? "儲存中…" : "儲存"}
               </button>
-              <button type="button" className={"small ghost" + (armDiscard ? " danger" : "")} disabled={saving} onClick={stopEdit}>
+              <button
+                type="button"
+                className={"small ghost" + (armDiscard ? " danger" : "")}
+                disabled={saving}
+                onClick={stopEdit}
+              >
                 {!dirty ? "完成" : armDiscard ? "再按一次放棄修改" : "放棄修改"}
               </button>
             </>
@@ -386,7 +392,12 @@ export function FileViewer({
           <button type="button" className="small" disabled={saving} onClick={loadDisk}>
             載入磁碟版本（放棄我的修改）
           </button>
-          <button type="button" className="small danger" disabled={saving} onClick={() => void save(true)}>
+          <button
+            type="button"
+            className="small danger"
+            disabled={saving}
+            onClick={() => void save(true)}
+          >
             用我的版本覆蓋
           </button>
         </div>

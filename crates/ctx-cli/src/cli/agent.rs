@@ -76,7 +76,7 @@ fn agent_err(e: Error) -> Exit {
             code,
             message,
             hint,
-        } => fail(&code, message, hint, EXIT_REJECTED),
+        } => fail(code.as_str(), message, hint, EXIT_REJECTED),
         Error::Invalid(m) | Error::Validation(m) => fail("bad_request", m, None, EXIT_REJECTED),
         other => Exit::Core(other),
     }
@@ -883,62 +883,37 @@ pub struct BackfillArgs {
     pub jobs: i64,
 }
 
-/// Python `Counter(...).most_common()`：次數多的在前，同次數依第一次出現的順序。
-fn most_common<'a>(items: impl Iterator<Item = &'a str>) -> Vec<(String, usize)> {
-    let mut out: Vec<(String, usize)> = Vec::new();
-    for x in items {
-        match out.iter_mut().find(|(k, _)| k == x) {
-            Some((_, n)) => *n += 1,
-            None => out.push((x.to_string(), 1)),
-        }
-    }
-    // 穩定排序：同次數保持第一次出現的順序
-    out.sort_by_key(|x| std::cmp::Reverse(x.1));
-    out
-}
-
 pub fn cmd_backfill(ctx: &Ctx, a: &BackfillArgs) -> CmdResult {
     let d = ctx.spine_dir()?;
     match a.action {
         BackfillAction::Scan => {
             let recs = backfill::scan(&d, None, None)?;
-            // dict(Counter)：第一次出現的順序
+            let sum = backfill::summarize(&recs);
             let mut counts = Map::new();
-            for r in &recs {
-                let n = counts.get(&r.status).and_then(Value::as_u64).unwrap_or(0);
-                counts.insert(r.status.clone(), json!(n + 1));
+            for (k, n) in &sum.by_status {
+                counts.insert(k.as_str().into(), json!(n));
             }
-            let c = most_common(recs.iter().map(|r| r.status.as_str()));
-            let per = most_common(
-                recs.iter()
-                    .filter(|r| r.status == "pending" || r.status == "done")
-                    .map(|r| r.repo.as_deref().unwrap_or("None")),
-            );
-            let mut unmapped: Vec<String> = recs
-                .iter()
-                .filter(|r| r.status == "unmapped")
-                .map(|r| {
-                    r.cwd
-                        .clone()
-                        .filter(|c| !c.is_empty())
-                        .unwrap_or_else(|| "?".into())
-                })
-                .collect();
-            unmapped.sort();
-            unmapped.dedup();
             let out = json!({"sessions": recs, "counts": counts});
             ctx.emit(&out, |_| {
+                // 人話照場次多到少（同數維持第一次出現的順序）
+                let mut by_status = sum.by_status.clone();
+                by_status.sort_by_key(|x| std::cmp::Reverse(x.1));
                 let mut lines = vec![format!(
                     "會話 {} 場：{}",
                     recs.len(),
-                    c.iter()
-                        .map(|(k, v)| format!("{k} {v}"))
+                    by_status
+                        .iter()
+                        .map(|(k, v)| format!("{} {v}", k.as_str()))
                         .collect::<Vec<_>>()
                         .join("、")
                 )];
-                lines.extend(per.iter().map(|(rid, n)| format!("  {rid}：{n} 場")));
                 lines.extend(
-                    unmapped
+                    sum.by_repo
+                        .iter()
+                        .map(|(rid, n)| format!("  {rid}：{n} 場")),
+                );
+                lines.extend(
+                    sum.unmapped_cwds
                         .iter()
                         .map(|cwd| format!("對不到 repo 的 cwd：{cwd}")),
                 );
@@ -1157,10 +1132,11 @@ pub fn cmd_refs(ctx: &Ctx, a: &RefsArgs) -> CmdResult {
     let min = a.min.max(0) as usize;
     match a.action {
         RefsAction::Check => {
-            let only: Option<Vec<String>> = repo.map(|r| vec![r.to_string()]);
-            let broken = crossref::lint_doc_refs(&d, only.as_deref())?;
-            let dr = crossref::drift(&d, repo, None)?;
-            let sug = crossref::suggest_exports(&d, min, 1)?;
+            let crossref::RefsCheck {
+                broken,
+                drift: dr,
+                suggest: sug,
+            } = crossref::check(&d, repo, min)?;
             let res = json!({"ok": true, "broken": broken, "drift": dr, "suggest": sug});
             ctx.emit(&res, |_| {
                 let mut out: Vec<String> = Vec::new();

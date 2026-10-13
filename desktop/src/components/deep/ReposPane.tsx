@@ -1,12 +1,6 @@
 import { useState } from "react";
 import type { RepoState } from "../../api/types";
-import {
-  CORE_COLUMNS,
-  MORE_COLUMNS,
-  matchesSearch,
-  repoCell,
-  sortRepos,
-} from "../../lib/view";
+import { CORE_COLUMNS, MORE_COLUMNS, matchesSearch, repoCell, sortRepos } from "../../lib/view";
 import { useSnapshot, useUi } from "../../store/context";
 
 /** Repo 分頁：6 個核心欄位，可加 5 個進階欄位；可排序（aria-sort）、首欄固定。 */
@@ -42,7 +36,11 @@ export function ReposPane({ query, active }: { query: string; active: boolean })
       <div className="tblwrap" id="deeptable">
         {!rows.length ? (
           <div className="emptyline">
-            {scanError ? "更新失敗，請重試" : !scanReady ? "等待 repo 狀態…" : "沒有符合條件的 repo"}
+            {scanError
+              ? "更新失敗，請重試"
+              : !scanReady
+                ? "等待 repo 狀態…"
+                : "沒有符合條件的 repo"}
           </div>
         ) : (
           <table>
@@ -53,7 +51,11 @@ export function ReposPane({ query, active }: { query: string; active: boolean })
                     key={key}
                     scope="col"
                     aria-sort={
-                      sortColumn === key ? (sortDirection === 1 ? "ascending" : "descending") : "none"
+                      sortColumn === key
+                        ? sortDirection === 1
+                          ? "ascending"
+                          : "descending"
+                        : "none"
                     }
                   >
                     <button

@@ -15,7 +15,6 @@ serde_yaml.workspace = true
 thiserror.workspace = true
 chrono.workspace = true
 regex.workspace = true
-once_cell.workspace = true
 portable-pty.workspace = true
 tempfile = { workspace = true, optional = true }
 

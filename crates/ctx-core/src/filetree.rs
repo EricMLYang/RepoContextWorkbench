@@ -324,9 +324,22 @@ pub fn write_file(root: &Path, rel: &str, text: &str, base: &str) -> Result<Writ
         .parent()
         .ok_or_else(|| Error::invalid(format!("找不到上層資料夾：{rel}")))?;
     let name = target.file_name().unwrap_or_default().to_string_lossy();
-    let tmp = dir.join(format!(".{name}.ctx-save-{}", std::process::id()));
+    // 暫存檔名不可預測、create_new 不跟隨既有的檔或符號連結（同資料夾有人先放好連結也寫不出去）
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = dir.join(format!(
+        ".{name}.ctx-save-{}-{nonce:08x}-{seq}",
+        std::process::id()
+    ));
     let res = (|| -> std::io::Result<()> {
-        let mut f = std::fs::File::create(&tmp)?;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
         f.write_all(out.as_bytes())?;
         f.sync_all()?;
         std::fs::set_permissions(&tmp, meta.permissions())?;

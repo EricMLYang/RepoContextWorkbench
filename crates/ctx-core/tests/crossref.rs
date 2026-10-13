@@ -70,7 +70,7 @@ fn read(w: &World, r: &str, consumer: Option<&str>) -> ctx_core::Result<crossref
 
 fn code_of(e: Error) -> (String, Option<String>) {
     match e {
-        Error::Rejected { code, hint, .. } => (code, hint),
+        Error::Rejected { code, hint, .. } => (code.as_str().to_string(), hint),
         other => panic!("預期 RefError，拿到 {other:?}"),
     }
 }

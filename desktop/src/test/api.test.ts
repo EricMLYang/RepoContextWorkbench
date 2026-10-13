@@ -27,11 +27,23 @@ describe("httpBackend", () => {
   });
 
   it("網路失敗與代理錯誤都說連不上；200 卻不是 JSON 說回應不完整", async () => {
-    const down = createHttpBackend({ token: "", base: "", fetch: vi.fn(async () => Promise.reject(new TypeError("x"))) });
+    const down = createHttpBackend({
+      token: "",
+      base: "",
+      fetch: vi.fn(async () => Promise.reject(new TypeError("x"))),
+    });
     await expect(down.getState()).rejects.toThrow(MSG_UNREACHABLE);
-    const proxy = createHttpBackend({ token: "", base: "", fetch: vi.fn(async () => res(502, "Bad Gateway")) });
+    const proxy = createHttpBackend({
+      token: "",
+      base: "",
+      fetch: vi.fn(async () => res(502, "Bad Gateway")),
+    });
     await expect(proxy.getState()).rejects.toThrow(MSG_UNREACHABLE);
-    const broken = createHttpBackend({ token: "", base: "", fetch: vi.fn(async () => res(200, "<html>")) });
+    const broken = createHttpBackend({
+      token: "",
+      base: "",
+      fetch: vi.fn(async () => res(200, "<html>")),
+    });
     await expect(broken.getState()).rejects.toThrow(MSG_BAD_RESPONSE);
   });
 
@@ -66,7 +78,9 @@ describe("tauriBackend", () => {
   });
 
   it("spine 定位：get_spine／set_spine 照 IPC.md", async () => {
-    const invoke = vi.fn(async (cmd: string) => (cmd === "get_spine" ? { spine: null } : { spine: "/s" }));
+    const invoke = vi.fn(async (cmd: string) =>
+      cmd === "get_spine" ? { spine: null } : { spine: "/s" },
+    );
     const api = createSpineApi({ invoke });
     expect(await api.getSpine()).toEqual({ spine: null });
     expect(await api.setSpine("~/s")).toEqual({ spine: "/s" });
@@ -79,15 +93,22 @@ describe("tauriBackend", () => {
   });
 
   it("Rust 的 Err(String) → Error(同一句話)", async () => {
-    const b = createTauriBackend({ invoke: vi.fn(async () => Promise.reject("至少選擇一個 repo；空範圍不代表全部")) });
-    await expect(b.action("collide", { idea: "x", repos: [] })).rejects.toThrow("至少選擇一個 repo");
+    const b = createTauriBackend({
+      invoke: vi.fn(async () => Promise.reject("至少選擇一個 repo；空範圍不代表全部")),
+    });
+    await expect(b.action("collide", { idea: "x", repos: [] })).rejects.toThrow(
+      "至少選擇一個 repo",
+    );
     expect(toError({ message: "m" }).message).toBe("m");
   });
 
   it("終端：Channel 輸出解碼（ArrayBuffer／number[]／base64／closed）", () => {
     const ab = new Uint8Array([104, 105]).buffer;
     expect(decodeTermMessage(ab)).toEqual({ kind: "data", bytes: new Uint8Array([104, 105]) });
-    expect(decodeTermMessage([104, 105])).toEqual({ kind: "data", bytes: new Uint8Array([104, 105]) });
+    expect(decodeTermMessage([104, 105])).toEqual({
+      kind: "data",
+      bytes: new Uint8Array([104, 105]),
+    });
     expect(decodeTermMessage({ t: "data", b64: btoa("hi") })).toEqual({
       kind: "data",
       bytes: new Uint8Array([104, 105]),
