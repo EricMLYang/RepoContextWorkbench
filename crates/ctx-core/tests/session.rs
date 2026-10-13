@@ -161,3 +161,23 @@ fn test_build_includes_context_card_and_leaves_trace() {
     let last = plan.cmd.last().unwrap();
     assert!(last.contains("寫週報") && !last.contains("3 行"));
 }
+
+/// 組名有空白（2026-10-14）：用事件標頭裡換寫過的名字（PM_Group）開會話，料放進登記原名的組資料夾。
+#[test]
+fn test_session_with_rewritten_group_name_uses_registered_folder() {
+    let (_t, d) = spine_with_repos();
+    registry::add_group(&d, "PM Group", &["repo-a"]).unwrap();
+    let plan = build(
+        &d,
+        SessionOpts {
+            group: Some("PM_Group"),
+            ..Default::default()
+        },
+    );
+    assert!(
+        plan.pack_path
+            .starts_with(d.join("groups").join("PM Group").join("materials")),
+        "{:?}",
+        plan.pack_path
+    );
+}

@@ -113,9 +113,16 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
         pack::pack_index(&refs, 80)
     );
     let group = opts.group.filter(|g| !g.is_empty());
+    // 資料夾用登記的原名（只給組時 resolve_group 回的就是原名；給的可能是換寫過的 PM_Group）
+    let by_group_only = opts.repos.is_none_or(<[String]>::is_empty);
+    let dir = match group {
+        Some(_) if by_group_only => gname.as_str(),
+        Some(g) => g,
+        None => "adhoc",
+    };
     let out = spine_dir
         .join("groups")
-        .join(group.unwrap_or("adhoc"))
+        .join(dir)
         .join("materials")
         .join(format!("session-{}.md", now.format("%Y%m%d-%H%M%S")));
     if let Some(parent) = out.parent() {

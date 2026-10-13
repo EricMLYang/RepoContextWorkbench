@@ -364,8 +364,9 @@ pub fn resolve_group(
         return Ok(("全部".into(), data.repos.clone()));
     };
     match data.group(name) {
+        // 回登記的原名（給的可能是事件標頭裡換寫過的「PM_Group」）
         Some(g) => Ok((
-            name.to_string(),
+            g.name(),
             g.members()
                 .iter()
                 .map(|m| get(m))
