@@ -945,6 +945,53 @@ fn append(
     })
 }
 
+// ── 寫入工具的回傳（MCP／CLI --json 的合約：欄位順序與名稱不能改）──
+
+/// `log_decision`（含 outcome）的回傳。
+#[derive(Debug, Clone, Serialize)]
+pub struct Logged {
+    pub ok: bool,
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub event: Value,
+}
+
+/// `add_todo` 的回傳；`id` 是 `#N`。
+#[derive(Debug, Clone, Serialize)]
+pub struct TodoAdded {
+    pub ok: bool,
+    pub id: String,
+    pub todo: Value,
+}
+
+/// `close_todo` 的回傳；`closed` 是被關掉那一項的第一行。
+#[derive(Debug, Clone, Serialize)]
+pub struct TodoClosed {
+    pub ok: bool,
+    pub id: String,
+    pub closed: String,
+    pub event: Value,
+}
+
+/// `report_status` 的回傳；waiting／blocked 才有 `event`（留給收件匣的 suggestion）。
+#[derive(Debug, Clone, Serialize)]
+pub struct StatusReported {
+    pub ok: bool,
+    pub status: StatusRecord,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<Value>,
+}
+
+/// `handoff` 的回傳；`todos` 是 remaining 各自開出的未結編號。
+#[derive(Debug, Clone, Serialize)]
+pub struct HandedOff {
+    pub ok: bool,
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub todos: Vec<String>,
+    pub event: Value,
+}
+
 /// 對應 `agentapi.log_decision`：記一筆判斷（decision）。回傳 ref，之後可以用它引用這筆。
 /// Python 預設 `source="agent"`。
 pub fn log_decision(
@@ -954,7 +1001,7 @@ pub fn log_decision(
     reference: Option<&str>,
     cross_scope_ok: bool,
     source: &str,
-) -> Result<Value> {
+) -> Result<Logged> {
     log_decision_ext(
         spine_dir,
         text,
@@ -1061,7 +1108,7 @@ pub fn log_decision_ext(
     extra: &DecisionExtra,
     cross_scope_ok: bool,
     source: &str,
-) -> Result<Value> {
+) -> Result<Logged> {
     let supersedes = extra
         .supersedes
         .as_deref()
@@ -1133,7 +1180,7 @@ fn log_decision_body(
     reference: Option<&str>,
     cross_scope_ok: bool,
     source: &str,
-) -> Result<Value> {
+) -> Result<Logged> {
     write_event_body(
         spine_dir,
         "decision",
@@ -1157,7 +1204,7 @@ fn write_event_body(
     reference: Option<&str>,
     cross_scope_ok: bool,
     source: &str,
-) -> Result<Value> {
+) -> Result<Logged> {
     let w = where_am_i(spine_dir, t.cwd.as_deref())?;
     let s = scope_of(spine_dir, &w, t)?;
     check_write_scope(spine_dir, &w, &s, cross_scope_ok)?;
@@ -1178,7 +1225,11 @@ fn write_event_body(
         toks.push(format!("ref:{r}"));
     }
     let ev = append(spine_dir, etype, source, &toks, &clean(text, "text")?)?;
-    Ok(json!({"ok": true, "ref": event_ref(&ev), "event": event_dict(&ev)}))
+    Ok(Logged {
+        ok: true,
+        reference: event_ref(&ev),
+        event: event_dict(&ev),
+    })
 }
 
 /// 對應 `agentapi.add_todo`：開一個未結事項（open-loop）。編號自動配；沒給 due 用 config 的預設天數。
@@ -1189,7 +1240,7 @@ pub fn add_todo(
     t: &Target,
     cross_scope_ok: bool,
     source: &str,
-) -> Result<Value> {
+) -> Result<TodoAdded> {
     let w = where_am_i(spine_dir, t.cwd.as_deref())?;
     let s = scope_of(spine_dir, &w, t)?;
     check_write_scope(spine_dir, &w, &s, cross_scope_ok)?;
@@ -1215,7 +1266,11 @@ pub fn add_todo(
         .openloop_default_due_days;
     let toks = spine::default_due_tokens(&toks, &body, days, None);
     let ev = append(spine_dir, "open-loop", source, &toks, &body)?;
-    Ok(json!({"ok": true, "id": num, "todo": loop_dict(&ev, None)}))
+    Ok(TodoAdded {
+        ok: true,
+        id: num,
+        todo: loop_dict(&ev, None),
+    })
 }
 
 /// 對應 `agentapi.close_todo`：關掉一個未結事項。只能關主場範圍內的（跨範圍要使用者確認）。
@@ -1227,7 +1282,7 @@ pub fn close_todo(
     cwd: Option<&Path>,
     cross_scope_ok: bool,
     source: &str,
-) -> Result<Value> {
+) -> Result<TodoClosed> {
     let id = if id.starts_with('#') {
         id.to_string()
     } else {
@@ -1271,12 +1326,22 @@ pub fn close_todo(
         None => "closed → 完成".to_string(),
     };
     let ev = append(spine_dir, "open-loop", source, &toks, &body)?;
-    Ok(json!({"ok": true, "id": id, "closed": first(&cur), "event": event_dict(&ev)}))
+    Ok(TodoClosed {
+        ok: true,
+        id,
+        closed: first(&cur),
+        event: event_dict(&ev),
+    })
 }
 
 /// 對應 `agentapi.report_status`：回報目前階段（working／waiting／blocked／done）。
 /// 現況檔一直被覆寫（見 [`crate::status`]）；waiting 與 blocked 另留一筆 suggestion 讓使用者在收件匣看到。
-pub fn report_status(spine_dir: &Path, status_s: &str, text: &str, t: &Target) -> Result<Value> {
+pub fn report_status(
+    spine_dir: &Path,
+    status_s: &str,
+    text: &str,
+    t: &Target,
+) -> Result<StatusReported> {
     let st = status::parse_status(status_s)?;
     let w = where_am_i(spine_dir, t.cwd.as_deref())?;
     let s = scope_of(spine_dir, &w, t)?;
@@ -1290,7 +1355,11 @@ pub fn report_status(spine_dir: &Path, status_s: &str, text: &str, t: &Target) -
         repo: w.repo_id().map(str::to_string),
     };
     status::save_status(spine_dir, &rec)?;
-    let mut out = json!({"ok": true, "status": rec});
+    let mut out = StatusReported {
+        ok: true,
+        status: rec,
+        event: None,
+    };
     if matches!(st, AgentStatus::Waiting | AgentStatus::Blocked) {
         let label = if st == AgentStatus::Waiting {
             "等你回應"
@@ -1305,7 +1374,7 @@ pub fn report_status(spine_dir: &Path, status_s: &str, text: &str, t: &Target) -
             &tokens_for(&s, w.repo_id()),
             &format!("agent {label}：{}", clean(msg, "text")?),
         )?;
-        out["event"] = event_dict(&ev);
+        out.event = Some(event_dict(&ev));
     }
     Ok(out)
 }
@@ -1320,7 +1389,7 @@ pub fn handoff<S: AsRef<str>>(
     t: &Target,
     cross_scope_ok: bool,
     source: &str,
-) -> Result<Value> {
+) -> Result<HandedOff> {
     let w = where_am_i(spine_dir, t.cwd.as_deref())?;
     let s = scope_of(spine_dir, &w, t)?;
     check_write_scope(spine_dir, &w, &s, cross_scope_ok)?;
@@ -1333,8 +1402,7 @@ pub fn handoff<S: AsRef<str>>(
         .collect();
     let mut todos: Vec<String> = Vec::new();
     for r in &remaining {
-        let v = add_todo(spine_dir, r, None, t, true, source)?;
-        todos.push(v["id"].as_str().unwrap_or_default().to_string());
+        todos.push(add_todo(spine_dir, r, None, t, true, source)?.id);
     }
     let eid = next_id(&spine::iter_events(spine_dir)?, &today(), "d");
     let done_lines = splitlines(&done);
@@ -1366,7 +1434,12 @@ pub fn handoff<S: AsRef<str>>(
     toks.extend(tokens_for(&s, w.repo_id()));
     let ev = append(spine_dir, "decision", source, &toks, &body)?;
     report_status(spine_dir, "done", &head, t)?;
-    Ok(json!({"ok": true, "ref": event_ref(&ev), "todos": todos, "event": event_dict(&ev)}))
+    Ok(HandedOff {
+        ok: true,
+        reference: event_ref(&ev),
+        todos,
+        event: event_dict(&ev),
+    })
 }
 
 /// 對應 `agentapi.all_statuses`。

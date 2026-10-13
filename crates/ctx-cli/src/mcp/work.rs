@@ -67,6 +67,10 @@ pub(super) fn w_next(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     let limit = arg_int(a, "limit").unwrap_or(5).max(0) as usize;
     agentapi::next_work(d, &target(a, here), limit)
 }
+/// 型別化的回傳 → MCP 的 JSON（欄位由 struct 的 Serialize 決定）。
+fn json<T: serde::Serialize>(r: Result<T>) -> Result<Value> {
+    Ok(serde_json::to_value(r?)?)
+}
 pub(super) fn w_log(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("log_decision", a, &["text"])?;
     let extra = agentapi::DecisionExtra {
@@ -74,7 +78,7 @@ pub(super) fn w_log(d: &Path, a: &Args, here: &Path) -> Result<Value> {
         reopen_when: nz(a, "reopen_when"),
         outcome_of: nz(a, "outcome_of"),
     };
-    agentapi::log_decision_ext(
+    json(agentapi::log_decision_ext(
         d,
         &arg_s(a, "text").unwrap_or_default(),
         &target(a, here),
@@ -82,42 +86,42 @@ pub(super) fn w_log(d: &Path, a: &Args, here: &Path) -> Result<Value> {
         &extra,
         arg_flag(a, "cross_scope_ok"),
         "agent",
-    )
+    ))
 }
 pub(super) fn w_add_todo(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("add_todo", a, &["text"])?;
-    agentapi::add_todo(
+    json(agentapi::add_todo(
         d,
         &arg_s(a, "text").unwrap_or_default(),
         nz(a, "due").as_deref(),
         &target(a, here),
         arg_flag(a, "cross_scope_ok"),
         "agent",
-    )
+    ))
 }
 pub(super) fn w_close_todo(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("close_todo", a, &["id"])?;
-    agentapi::close_todo(
+    json(agentapi::close_todo(
         d,
         &arg_s(a, "id").unwrap_or_default(),
         nz(a, "note").as_deref(),
         Some(&cwd_of(a, here)),
         arg_flag(a, "cross_scope_ok"),
         "agent",
-    )
+    ))
 }
 pub(super) fn w_status(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("report_status", a, &["status"])?;
-    agentapi::report_status(
+    json(agentapi::report_status(
         d,
         &arg_s(a, "status").unwrap_or_default(),
         &nz(a, "text").unwrap_or_default(),
         &target(a, here),
-    )
+    ))
 }
 pub(super) fn w_handoff(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("handoff", a, &["done", "next_step"])?;
-    agentapi::handoff(
+    json(agentapi::handoff(
         d,
         &arg_s(a, "done").unwrap_or_default(),
         &arg_s(a, "next_step").unwrap_or_default(),
@@ -125,7 +129,7 @@ pub(super) fn w_handoff(d: &Path, a: &Args, here: &Path) -> Result<Value> {
         &target(a, here),
         arg_flag(a, "cross_scope_ok"),
         "agent",
-    )
+    ))
 }
 pub(super) fn w_search(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("search_knowledge", a, &["query"])?;

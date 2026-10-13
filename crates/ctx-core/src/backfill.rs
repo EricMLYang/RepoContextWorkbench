@@ -1093,19 +1093,19 @@ pub fn accept<S: AsRef<str>>(spine_dir: &Path, repo: &str, ids: &[S]) -> Result<
                 }
                 body.push_str(&format!("\n{src}"));
                 let r = agentapi::log_decision(spine_dir, &body, &t, None, false, "backfill")?;
-                written.push(py_str(&r["ref"]));
+                written.push(r.reference);
             }
             't' => {
                 let text = format!("{} {src}", get_s(it, "text", ""));
                 let r = agentapi::add_todo(spine_dir, &text, None, &t, false, "backfill")?;
-                written.push(py_str(&r["id"]));
+                written.push(r.id);
             }
             _ => {
                 let done = get_or(it, "done", "（未記錄）");
                 let next = format!("{} {src}", get_or(it, "next", "（未記錄）"));
                 let r =
                     agentapi::handoff::<&str>(spine_dir, &done, &next, &[], &t, false, "backfill")?;
-                written.push(py_str(&r["ref"]));
+                written.push(r.reference);
             }
         }
         accepted.insert(i);

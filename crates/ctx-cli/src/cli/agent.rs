@@ -83,13 +83,15 @@ fn agent_err(e: Error) -> Exit {
 }
 
 /// 對應 `_agent_call`：跑 agentapi，錯誤轉結構化，成功印人話或 JSON。
-fn agent_call(
+fn agent_call<T: serde::Serialize>(
     ctx: &Ctx,
-    f: impl FnOnce(&Path) -> ctx_core::Result<Value>,
+    f: impl FnOnce(&Path) -> ctx_core::Result<T>,
     human: impl FnOnce(&Value) -> String,
 ) -> CmdResult {
     let d = ctx.spine_dir()?;
-    let res = f(&d).map_err(agent_err)?;
+    let res = f(&d)
+        .and_then(|v| Ok(serde_json::to_value(v)?))
+        .map_err(agent_err)?;
     ctx.emit(&res, human);
     Ok(())
 }

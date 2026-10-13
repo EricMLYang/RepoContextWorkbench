@@ -40,6 +40,6 @@ pub fn try_fresh(spine_dir: &Path, link_id: &str, source: &str) -> Result<Value>
     let now = Local::now().format("%Y-%m-%d %H:%M").to_string();
     ruminate::mark_tried(spine_dir, link_id, &now)?;
     Ok(
-        json!({"ok": true, "todo": todo["id"], "group": link.group, "ref": link.reference, "text": text}),
+        json!({"ok": true, "todo": todo.id, "group": link.group, "ref": link.reference, "text": text}),
     )
 }

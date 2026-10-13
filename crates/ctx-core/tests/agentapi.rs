@@ -48,7 +48,12 @@ fn at(p: &Path) -> Target {
 }
 
 fn todo(w: &World, text: &str, cwd: &Path) -> Value {
-    api::add_todo(&w.sp, text, None, &at(cwd), false, "agent").unwrap()
+    v(api::add_todo(&w.sp, text, None, &at(cwd), false, "agent").unwrap())
+}
+
+/// 型別化的回傳 → JSON：斷言比的是 MCP／CLI 看到的欄位（合約）。
+fn v<T: serde::Serialize>(x: T) -> Value {
+    serde_json::to_value(x).unwrap()
 }
 
 fn code_of(e: Error) -> (String, Option<String>) {
@@ -95,6 +100,8 @@ fn test_add_todo_numbers_and_tokens_follow_cwd() {
         "agent",
     )
     .unwrap();
+    let a = v(a);
+    let b = v(b);
     assert_eq!(
         (a["id"].clone(), b["id"].clone()),
         (json!("#1"), json!("#2"))
@@ -117,12 +124,14 @@ fn test_log_decision_returns_resolvable_ref() {
         "agent",
     )
     .unwrap();
+    let r = v(r);
     let rf = r["ref"].as_str().unwrap().to_string();
     assert!(r["ok"] == true && rf.starts_with("decision:") && rf.ends_with("-d1"));
     // 內文的 markdown 標題被降級，不會被 validator 拒寫
     assert!(r["event"]["text"].as_str().unwrap().starts_with("### 結論"));
     let r2 =
         api::log_decision(&w.sp, "延伸判斷", &at(&w.impl_), Some(&rf), false, "agent").unwrap();
+    let r2 = v(r2);
     assert!(r2["ref"].as_str().unwrap().ends_with("-d2"));
     assert!(spine_mod::lint(&w.sp, None).unwrap().is_empty()); // ref 解得回去
 }
@@ -163,6 +172,7 @@ fn test_cross_scope_write_is_refused_until_user_confirms() {
     let (code, hint) = code_of(e);
     assert!(code == "cross_scope" && hint.unwrap().contains("先問使用者"));
     let ok = api::add_todo(&w.sp, "使用者同意後寫入", None, &t, true, "agent").unwrap();
+    let ok = v(ok);
     assert_eq!(ok["todo"]["group"], "研究");
     // 同組的另一個 repo 不算跨組
     let same = api::log_decision(
@@ -174,6 +184,7 @@ fn test_cross_scope_write_is_refused_until_user_confirms() {
         "agent",
     )
     .unwrap();
+    let same = v(same);
     assert_eq!(same["ok"], true);
 }
 
@@ -193,6 +204,7 @@ fn test_close_todo_respects_scope() {
         "agent",
     )
     .unwrap();
+    let r = v(r);
     assert_eq!(r["closed"], "研究的事");
     let ctx = api::context_for(&w.sp, &at(&w.notes), true).unwrap();
     assert_eq!(ctx["open_loops"], json!([]));
@@ -215,6 +227,7 @@ fn test_handoff_becomes_next_step_and_opens_remaining() {
         "agent",
     )
     .unwrap();
+    let h = v(h);
     assert_eq!(h["todos"], json!(["#1"])); // 空字串不開
     let ctx = api::context_for(&w.sp, &at(&w.plan), true).unwrap();
     assert_eq!(ctx["last_handoff"]["next_step"], "補整合測試");
@@ -265,8 +278,10 @@ fn test_overdue_todo_outranks_handoff() {
 fn test_report_status_waiting_reaches_inbox() {
     let w = two_groups();
     let r = api::report_status(&w.sp, "working", "改快取", &at(&w.impl_)).unwrap();
+    let r = v(r);
     assert!(r.get("event").is_none()); // working 不吵人
     let r = api::report_status(&w.sp, "waiting", "要不要換 Redis？", &at(&w.impl_)).unwrap();
+    let r = v(r);
     assert_eq!(r["event"]["type"], "suggestion");
     assert!(r["event"]["text"].as_str().unwrap().contains("等你回應"));
     let st = api::get_status(
@@ -600,6 +615,7 @@ fn review_does_not_count_the_handoff_that_opened_the_todo() {
         "agent",
     )
     .unwrap();
+    let r = v(r);
     let id = r["todos"][0].as_str().unwrap().to_string();
     // 剛開：還在進行
     let now = api::review_todos(&w.sp, &at(&w.plan)).unwrap();
@@ -649,6 +665,7 @@ fn session_start_shows_review_hint_for_overdue_untouched_todo() {
         "agent",
     )
     .unwrap();
+    let r = v(r);
     let id = r["id"].as_str().unwrap();
     let out = hooks::session_start(
         &w.sp,
@@ -682,6 +699,7 @@ fn log_ext(
         false,
         "agent",
     )
+    .map(v)
 }
 
 #[test]
@@ -947,6 +965,7 @@ fn retro_candidates_and_outcome_closes_the_loop() {
         "agent",
     )
     .unwrap();
+    let r = v(r);
     assert_eq!(r["event"]["type"], "outcome");
     let events = spine_mod::iter_events(&w.sp).unwrap();
     assert!(api::retro_candidates(&w.sp, &events, Some(("產品", &ids)), now).is_empty());
