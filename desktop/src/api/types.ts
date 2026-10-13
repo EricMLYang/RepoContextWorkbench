@@ -533,6 +533,11 @@ export interface ActionMap {
   /** Rust 才有（F-57）：repo 名片（唯讀）與編輯——三欄送完整內容，引擎只寫有變的欄位。 */
   repo_profile: { payload: { id: string }; result: RepoProfile };
   palette: { payload: { query: string }; result: PaletteResult };
+  /** Rust 才有：挑好的檔案 → 會話任務文字（依 repo 分段、附名片）＋`@絕對路徑`（一行一個）。 */
+  pick_brief: {
+    payload: { files: { id: string; path: string }[] };
+    result: { ok: true; text: string; mentions: string; repos: string[]; count: number };
+  };
   describe_repo: {
     payload: { id: string; description: string; role: string; keywords: string };
     result: RepoProfile & { changed: boolean };

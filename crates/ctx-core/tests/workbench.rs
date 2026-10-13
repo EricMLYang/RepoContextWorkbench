@@ -1476,6 +1476,10 @@ fn read_only_actions_leave_spine_untouched() {
         ("group_notes", json!({"group": "g1"})),
         ("repo_profile", json!({"id": "repo-a"})),
         ("palette", json!({"query": "rep"})),
+        (
+            "pick_brief",
+            json!({"files": [{"id": "repo-a", "path": "README.md"}]}),
+        ),
         ("scan_dir", json!({"dir": d.parent().unwrap()})),
     ];
     let before = spine_files(&d);
@@ -2000,4 +2004,70 @@ fn palette_finds_repos_by_partial_name_and_profile_and_groups() {
         act(&d, "palette", json!({})).unwrap()["groups"][0]["name"],
         "g1"
     );
+}
+
+// ── 挑幾份檔案交給 agent（痛點 2，Rust 才有）──
+
+#[test]
+fn pick_brief_groups_by_repo_with_profile_and_rejects_escapes() {
+    let (_t, d) = spine_with_repos();
+    act(
+        &d,
+        "describe_repo",
+        json!({"id": "repo-a", "description": "讀書筆記", "role": "知識庫"}),
+    )
+    .unwrap();
+    let ra = registry::get_repo(&d, "repo-a").unwrap().path();
+    let rb = registry::get_repo(&d, "repo-b").unwrap().path();
+    let plan = Path::new("notes").join("plan.md");
+    let r = act(
+        &d,
+        "pick_brief",
+        json!({"files": [
+            {"id": "repo-a", "path": "README.md"},
+            {"id": "repo-b", "path": "wip0.md"},
+            {"id": "repo-a", "path": plan},
+            {"id": "repo-a", "path": "README.md"},
+        ]}),
+    )
+    .unwrap();
+    assert_eq!(r["repos"], json!(["repo-a", "repo-b"]));
+    assert_eq!(r["count"], 3);
+    let text = r["text"].as_str().unwrap();
+    let a_readme = ra.join("README.md").to_string_lossy().into_owned();
+    let a_plan = ra.join(&plan).to_string_lossy().into_owned();
+    let b_wip = rb.join("wip0.md").to_string_lossy().into_owned();
+    assert!(text.contains("## repo-a（知識庫） — 讀書筆記\n"), "{text}");
+    let (ia, ip, ib) = (
+        text.find(&a_readme).unwrap(),
+        text.find(&a_plan).unwrap(),
+        text.find(&b_wip).unwrap(),
+    );
+    assert!(ia < ip && ip < ib, "照 repo 分段、段內照挑的順序：{text}");
+    assert_eq!(text.matches(&a_readme).count(), 1);
+    assert_eq!(r["mentions"], format!("@{a_readme}\n@{a_plan}\n@{b_wip}"));
+
+    assert!(err(&d, "pick_brief", json!({"files": []})).contains("還沒挑"));
+    assert!(err(
+        &d,
+        "pick_brief",
+        json!({"files": [{"id": "repo-a", "path": "../x"}]})
+    )
+    .contains("repo 裡"));
+    assert!(err(
+        &d,
+        "pick_brief",
+        json!({"files": [{"id": "nope", "path": "a"}]})
+    )
+    .contains("nope"));
+    assert!(err(
+        &d,
+        "pick_brief",
+        json!({"files": [{"id": "repo-a", "path": "ghost.md"}]})
+    )
+    .contains("不存在"));
+    let many: Vec<Value> = (0..51)
+        .map(|_| json!({"id": "repo-a", "path": "README.md"}))
+        .collect();
+    assert!(err(&d, "pick_brief", json!({ "files": many })).contains("最多 50"));
 }

@@ -43,6 +43,9 @@ export interface Ui {
   closeRepo(): void;
   /** ⌘K：找 repo 或牌組。 */
   openPalette(): void;
+  /** 挑檔案給 agent：已挑就移出、沒挑就加入（`name` 只給畫面顯示）。 */
+  togglePick(pick: Pick): void;
+  clearPicks(): void;
   /** 在主區開一個檔案分頁（已開就切過去）。 */
   openFile(repo: string, path: string): void;
   /** repo 的右鍵選單（x、y 是視窗座標）。 */
@@ -69,9 +72,21 @@ export interface UiState {
   draft: string;
   termCollapsed: boolean;
   activeSid: string | null;
+  /** 從檔案樹挑的檔案（要一起交給 agent 的；照挑的順序）。 */
+  picks: readonly Pick[];
   /** 側欄展開中的牌組（key＝組名，"*"＝所有 repo，"__adhoc__"＝臨時組）。 */
   openGroups: ReadonlySet<string>;
 }
+
+/** 挑起來要交給 agent 的一個檔案。 */
+export interface Pick {
+  repo: string;
+  /** 相對 repo 根目錄 */
+  path: string;
+  name: string;
+}
+
+export const samePick = (a: Pick, b: Pick) => a.repo === b.repo && a.path === b.path;
 
 export const UiContext = createContext<Ui | null>(null);
 export const UiStateContext = createContext<UiState | null>(null);

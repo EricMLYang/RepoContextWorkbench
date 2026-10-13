@@ -81,6 +81,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("repo_profile", a_repo_profile),
     ("describe_repo", a_describe_repo),
     ("palette", a_palette),
+    ("pick_brief", a_pick_brief),
     ("save_group", a_save_group),
     ("update_group", a_update_group),
     ("remove_group", a_remove_group),
@@ -112,6 +113,7 @@ const READ_ONLY: &[&str] = &[
     "group_notes",
     "repo_profile",
     "palette",
+    "pick_brief",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -681,6 +683,75 @@ fn a_palette(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
         })
         .collect();
     Ok(json!({"ok": true, "query": query, "repos": repos, "groups": groups}))
+}
+
+/// Rust 才有（2026-10-14，痛點 2「挑幾份文件丟給 agent」）：從檔案樹挑的檔案 → 會話任務文字＋`@路徑`。
+/// 每個路徑都要在它的 repo 裡（同檢視器的檢查）；重複的只算一次、照挑的順序依 repo 分段，
+/// 段落標題帶名片（角色、介紹），agent 不用再問「這是哪個 repo」。
+#[derive(serde::Deserialize)]
+struct PickBriefArgs {
+    files: Vec<PickedFile>,
+}
+
+#[derive(serde::Deserialize)]
+struct PickedFile {
+    id: String,
+    path: String,
+}
+
+/// 一次最多交幾個檔（再多就該用組情境卡或任務包，不是逐一挑）。
+const PICK_MAX: usize = 50;
+
+fn a_pick_brief(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let PickBriefArgs { files } = parse("pick_brief", p)?;
+    if files.is_empty() {
+        return Err(Error::invalid("還沒挑任何檔案"));
+    }
+    if files.len() > PICK_MAX {
+        return Err(Error::invalid(format!(
+            "一次最多 {PICK_MAX} 個檔案（挑了 {} 個）；要整組的脈絡請用組情境卡",
+            files.len()
+        )));
+    }
+    let data = registry::load(d)?;
+    // repo → 挑到的絕對路徑（保留第一次出現的順序）
+    let mut by_repo: Vec<(registry::Repo, Vec<String>)> = Vec::new();
+    for f in &files {
+        let repo = data
+            .repo(&f.id)
+            .ok_or_else(|| Error::invalid(format!("repo 不存在: {}", f.id)))?;
+        let abs = crate::filetree::locate(&repo.path(), &f.path)?
+            .to_string_lossy()
+            .into_owned();
+        match by_repo.iter_mut().find(|(r, _)| r.id() == f.id) {
+            Some((_, list)) if list.contains(&abs) => {}
+            Some((_, list)) => list.push(abs),
+            None => by_repo.push((repo.clone(), vec![abs])),
+        }
+    }
+    let mut text = String::from("先讀這幾份檔案（從工作台挑的），讀完再開始：\n");
+    let mut mentions = Vec::new();
+    for (repo, list) in &by_repo {
+        let card = crate::profile::profile(repo);
+        let mut head = format!("\n## {}", card.id);
+        if let Some(role) = &card.role {
+            head.push_str(&format!("（{role}）"));
+        }
+        if let Some(desc) = &card.description {
+            head.push_str(&format!(" — {desc}"));
+        }
+        text.push_str(&head);
+        text.push('\n');
+        for abs in list {
+            text.push_str(&format!("- {abs}\n"));
+            mentions.push(format!("@{abs}"));
+        }
+    }
+    let repos: Vec<String> = by_repo.iter().map(|(r, _)| r.id()).collect();
+    Ok(
+        json!({"ok": true, "text": text, "mentions": mentions.join("\n"),
+              "repos": repos, "count": mentions.len()}),
+    )
 }
 
 fn a_save_group(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {

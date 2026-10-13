@@ -2276,3 +2276,58 @@ button.filetab.home {
   padding: 7px 14px;
   border-top: 1px solid var(--line);
 }
+
+/* 挑好的檔案（交給 agent）：疊在主區下緣 */
+.trow .tpicked {
+  margin-left: auto;
+  padding-right: 6px;
+  color: var(--green);
+  font-size: 11px;
+}
+.trow.picked .tlabel {
+  color: var(--green);
+}
+#picktray {
+  grid-area: main;
+  align-self: end;
+  justify-self: center;
+  z-index: 20;
+  width: min(640px, calc(100% - 32px));
+  margin-bottom: 12px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  padding: 6px 8px;
+}
+.pickbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+#picktray .error {
+  margin: 6px 4px 0;
+}
+.picklist {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 30vh;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+.picklist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  font-size: 12px;
+}
+.pickpath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

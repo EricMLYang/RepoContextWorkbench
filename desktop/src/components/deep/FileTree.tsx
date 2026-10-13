@@ -9,7 +9,7 @@ import {
 import type { TreeEntry } from "../../api/types";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
-import { useStore, useUi, useUiState } from "../../store/context";
+import { samePick, useStore, useUi, useUiState, type Pick } from "../../store/context";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 
 interface DirState {
@@ -253,10 +253,17 @@ export function RepoRoot(props: {
     ev.preventDefault();
   };
 
+  const pickOf = (e: TreeEntry): Pick => ({ repo: id, path: e.path, name: e.name });
+  const isPicked = (e: TreeEntry) => view.picks.some((p) => samePick(p, pickOf(e)));
   const menuItems = (e: TreeEntry): MenuItem[] => [
     e.dir
       ? { label: open.has(e.path) ? "收合" : "展開", run: () => toggle(e.path) }
       : { label: "開啟", run: () => ui.openFile(id, e.path) },
+    {
+      label: isPicked(e) ? "移出挑選" : "加入挑選（交給 Agent）",
+      hint: "⌘＋點",
+      run: () => ui.togglePick(pickOf(e)),
+    },
     { label: "複製路徑", hint: "⌥⌘C", run: () => copy(e.abs, "路徑") },
     { label: "複製相對路徑", hint: "⇧⌥⌘C", run: () => copy(e.path, "相對路徑") },
   ];
@@ -289,6 +296,7 @@ export function RepoRoot(props: {
           );
         const e = r.e;
         const isOpen = e.dir && open.has(e.path);
+        const picked = isPicked(e);
         return (
           <div
             key={e.path}
@@ -296,15 +304,24 @@ export function RepoRoot(props: {
             aria-level={r.depth + 1}
             aria-expanded={e.dir ? isOpen : undefined}
             aria-selected={!e.dir && e.path === active}
-            aria-label={e.name}
+            aria-label={picked ? e.name + "（已挑）" : e.name}
             data-path={e.path}
             tabIndex={e.path === tabStop ? 0 : -1}
             className={
-              "trow" + (e.dir ? " dir" : " file") + (!e.dir && e.path === active ? " selected" : "")
+              "trow" +
+              (e.dir ? " dir" : " file") +
+              (!e.dir && e.path === active ? " selected" : "") +
+              (picked ? " picked" : "")
             }
             style={pad}
             title={e.path}
-            onClick={() => activate(e)}
+            onClick={(ev) => {
+              // ⌘／Ctrl＋點＝挑起來（多選要交給 agent 的檔案），不開檔
+              if (ev.metaKey || ev.ctrlKey) {
+                setFocusPath(e.path);
+                ui.togglePick(pickOf(e));
+              } else activate(e);
+            }}
             onFocus={() => setFocusPath(e.path)}
             onKeyDown={(ev) => onKey(ev, e)}
             onContextMenu={(ev) => {
@@ -317,6 +334,11 @@ export function RepoRoot(props: {
             {e.dir ? <Chevron open={!!isOpen} /> : <span className="tchevspace" />}
             {e.dir ? null : <FileIcon name={e.name} />}
             <span className="tlabel">{e.name}</span>
+            {picked ? (
+              <span className="tpicked" aria-hidden="true">
+                ✓
+              </span>
+            ) : null}
           </div>
         );
       })}

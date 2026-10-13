@@ -9,6 +9,7 @@ import { Workspace } from "./components/Workspace";
 import { RepoMenu } from "./components/deep/RepoMenu";
 import { RepoPanel } from "./components/deep/RepoPanel";
 import { Palette } from "./components/Palette";
+import { PickTray } from "./components/PickTray";
 import { FileTabs } from "./components/viewer/FileTabs";
 import { FileViewer, fileKey } from "./components/viewer/FileViewer";
 import { useFileTabs } from "./components/viewer/useFileTabs";
@@ -21,7 +22,9 @@ import {
   StoreContext,
   UiContext,
   UiStateContext,
+  samePick,
   type DetailSpec,
+  type Pick,
   type Tab,
   type Ui,
   type UiState,
@@ -91,6 +94,27 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
   useSavedWidths();
 
   // ── 右側欄（點 repo）＋右鍵選單 ──
+  // ── 挑檔案給 agent（記在這台電腦；檔案不見了交出去時引擎會擋）──
+  const [picks, setPicks] = useState<Pick[]>(() => {
+    const v = load<unknown>("picks", []);
+    return Array.isArray(v)
+      ? v.filter(
+          (x): x is Pick =>
+            !!x &&
+            typeof x.repo === "string" &&
+            typeof x.path === "string" &&
+            typeof x.name === "string",
+        )
+      : [];
+  });
+  const updatePicks = useCallback((f: (cur: Pick[]) => Pick[]) => {
+    setPicks((cur) => {
+      const next = f(cur);
+      save("picks", next);
+      return next;
+    });
+  }, []);
+
   const [paletteOpen, setPaletteOpen] = useState(false);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
   const [panelRepo, setPanelRepo] = useState<string | null>(() =>
@@ -154,6 +178,13 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       openRepo: (id) => setPanel((cur) => (cur === id ? null : id)),
       showRepo: (id) => setPanel(() => id),
       openPalette: () => setPaletteOpen(true),
+      togglePick: (pick) =>
+        updatePicks((cur) =>
+          cur.some((x) => samePick(x, pick))
+            ? cur.filter((x) => !samePick(x, pick))
+            : [...cur, pick],
+        ),
+      clearPicks: () => updatePicks(() => []),
       closeRepo: () => setPanel(() => null),
       repoMenu: (id, x, y) => setMenu({ id, x, y }),
       openFile,
@@ -185,11 +216,20 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       setPanel,
       openFile,
       updateOpen,
+      updatePicks,
     ],
   );
   const uiState: UiState = useMemo(
-    () => ({ panelRepo, activeFile: shownFileObj, draft, termCollapsed, activeSid, openGroups }),
-    [panelRepo, shownFileObj, draft, termCollapsed, activeSid, openGroups],
+    () => ({
+      panelRepo,
+      activeFile: shownFileObj,
+      draft,
+      termCollapsed,
+      activeSid,
+      openGroups,
+      picks,
+    }),
+    [panelRepo, shownFileObj, draft, termCollapsed, activeSid, openGroups, picks],
   );
 
   // 首次載入＋輪詢；#deep 直接開 Repo 分頁、#adhoc 開選擇 repo
@@ -287,6 +327,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
             onClose={closePicker}
           />
           {paletteOpen ? <Palette onClose={closePalette} /> : null}
+          {picks.length ? <PickTray /> : null}
           {menu ? <RepoMenu id={menu.id} x={menu.x} y={menu.y} onClose={closeMenu} /> : null}
           <DetailDialog
             spec={detail}

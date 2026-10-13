@@ -455,6 +455,74 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     expect(write).toHaveBeenCalledWith("/r/a/docs/plan.md");
   });
 
+  it("挑檔案交給 Agent：⌘＋點挑、右鍵移出、引擎組任務；失敗顯示原因；記在這台電腦", async () => {
+    let fail = true;
+    const backend = treeBackend({
+      action: vi.fn(async (name: string, p: { id?: string; dir?: string; files?: unknown[] }) => {
+        if (name === "repo_tree") return tree(p.id!, p.dir || "");
+        if (name === "pick_brief") {
+          if (fail) {
+            fail = false;
+            throw new Error("檔案不存在：README.md");
+          }
+          return {
+            ok: true,
+            text: "先讀這幾份檔案…",
+            mentions: "@/r/a/README.md\n@/r/b/README.md",
+            repos: ["a", "b"],
+            count: 2,
+          };
+        }
+        return { ok: true };
+      }) as never,
+    });
+    await openFiles(backend);
+    const pane = document.getElementById("tab-files")!;
+    for (const root of ["a", "b"])
+      await act(async () =>
+        fireEvent.click(within(pane).getByRole("button", { name: new RegExp("^" + root + "$") })),
+      );
+    const readmes = await within(pane).findAllByRole("treeitem", { name: "README.md" });
+    expect(document.getElementById("picktray")).toBeNull();
+    await act(async () => fireEvent.click(readmes[0], { metaKey: true }));
+    await act(async () => fireEvent.click(readmes[1], { ctrlKey: true }));
+    // 挑不會開檔
+    expect(backend.action).not.toHaveBeenCalledWith("read_file", expect.anything());
+    expect(within(pane).getAllByRole("treeitem", { name: "README.md（已挑）" })).toHaveLength(2);
+    const tray = document.getElementById("picktray")!;
+    expect(tray.textContent).toContain("已挑 2 個檔案");
+
+    await act(async () =>
+      fireEvent.click(within(tray).getByRole("button", { name: "交給 Agent…" })),
+    );
+    expect(within(tray).getByRole("alert").textContent).toContain("檔案不存在");
+    await act(async () =>
+      fireEvent.click(within(tray).getByRole("button", { name: "交給 Agent…" })),
+    );
+    expect(backend.action).toHaveBeenLastCalledWith("pick_brief", {
+      files: [
+        { id: "a", path: "README.md" },
+        { id: "b", path: "README.md" },
+      ],
+    });
+    expect(document.getElementById("detailtitle")!.textContent).toBe("開啟 Agent 會話");
+    expect((document.querySelector("#detaildialog textarea") as HTMLTextAreaElement).value).toBe(
+      "先讀這幾份檔案…",
+    );
+    expect(JSON.parse(localStorage.getItem("workbench:picks")!)).toHaveLength(2);
+
+    // 右鍵移出挑選；清單展開可個別移除
+    fireEvent.contextMenu(within(pane).getAllByRole("treeitem", { name: "README.md（已挑）" })[0]);
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: /移出挑選/ })));
+    expect(tray.textContent).toContain("已挑 1 個檔案");
+    await act(async () => fireEvent.click(within(tray).getByRole("button", { name: /已挑/ })));
+    await act(async () =>
+      fireEvent.click(within(tray).getByRole("button", { name: "不挑 b 的 README.md" })),
+    );
+    expect(document.getElementById("picktray")).toBeNull();
+    expect(localStorage.getItem("workbench:picks")).toBe("[]");
+  });
+
   it("讀取失敗顯示錯誤", async () => {
     const backend = mockBackend({
       action: vi.fn(async () => {

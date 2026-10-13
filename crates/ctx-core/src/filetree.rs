@@ -69,6 +69,13 @@ fn resolve_in(root: &Path, rel: &str, noun: &str) -> Result<(PathBuf, PathBuf, P
     Ok((rel_p, root_real, target_real))
 }
 
+/// `root/rel` 存在且在 repo 裡（符號連結跳出去也擋）就回 `root/rel`（不展開符號連結，跟檔案樹的 `abs` 同一種寫法）。
+/// 給「挑幾份檔案交給 agent」驗證路徑用。
+pub fn locate(root: &Path, rel: &str) -> Result<PathBuf> {
+    let (rel_p, _, _) = resolve_in(root, rel, "檔案")?;
+    Ok(root.join(rel_p))
+}
+
 /// git repo 裡被忽略的那些（`rels` 是相對 root 的路徑）。不是 git、或 git 不能用＝都不忽略。
 fn ignored(root: &Path, rels: &[PathBuf]) -> Vec<bool> {
     let mut out = vec![false; rels.len()];
