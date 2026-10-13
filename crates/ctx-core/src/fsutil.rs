@@ -84,15 +84,41 @@ pub fn mtime_secs(p: &Path) -> std::io::Result<f64> {
     })
 }
 
-/// 先寫同目錄的暫存檔（檔名帶行程 id，同時寫不互踩）再改名：讀的人不會看到寫一半的檔。
+/// 原子寫檔（DEVELOPMENT.md §8）：同資料夾的暫存檔（隱藏、名稱不可預測、`create_new` 不跟隨既有的檔或
+/// 符號連結）→ fsync → 原檔在就沿用它的權限 → rename。讀的人不會看到寫一半的檔；失敗不留暫存檔。
+/// `p` 是符號連結時改寫的是連結本身（要寫實體檔請先 canonicalize）。
 pub fn write_atomic(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let mut tmp = p.as_os_str().to_owned();
-    tmp.push(format!(".tmp{}", std::process::id()));
-    let tmp = std::path::PathBuf::from(tmp);
-    std::fs::write(&tmp, bytes)?;
-    std::fs::rename(&tmp, p).inspect_err(|_| {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let dir = p.parent().unwrap_or_else(|| Path::new("."));
+    let name = p.file_name().unwrap_or_default().to_string_lossy();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    let tmp = dir.join(format!(
+        ".{name}.ctx-tmp-{}-{nonce:08x}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    let perms = std::fs::metadata(p).ok().map(|m| m.permissions());
+    let res = (|| -> std::io::Result<()> {
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+        if let Some(perms) = perms {
+            std::fs::set_permissions(&tmp, perms)?;
+        }
+        std::fs::rename(&tmp, p)
+    })();
+    if res.is_err() {
         let _ = std::fs::remove_file(&tmp);
-    })
+    }
+    res
 }
 
 /// 現在的 Unix 秒數（浮點）——對應 `time.time()`。
@@ -121,5 +147,29 @@ mod tests {
         let d = std::env::temp_dir();
         let canon = d.canonicalize().expect("temp dir 存在");
         assert_eq!(resolve(&d.join("nope/../x")), canon.join("x"));
+    }
+
+    #[test]
+    fn write_atomic_replaces_keeps_permissions_and_leaves_no_temp() {
+        let t = tempfile::tempdir().unwrap();
+        let p = t.path().join("a.json");
+        write_atomic(&p, b"{}").unwrap();
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "{}");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600)).unwrap();
+            write_atomic(&p, b"{\"x\":1}").unwrap();
+            let mode = std::fs::metadata(&p).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+        assert!(std::fs::read_to_string(&p).unwrap().contains('x') || cfg!(not(unix)));
+        let names: Vec<String> = std::fs::read_dir(t.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["a.json"]);
+        // 上層資料夾不存在：失敗、不留東西
+        assert!(write_atomic(&t.path().join("nope").join("b.json"), b"x").is_err());
     }
 }

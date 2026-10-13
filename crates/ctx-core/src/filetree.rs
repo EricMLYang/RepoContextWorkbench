@@ -329,36 +329,8 @@ pub fn write_file(root: &Path, rel: &str, text: &str, base: &str) -> Result<Writ
         out.insert_str(0, BOM);
     }
 
-    // 暫存檔放同一個資料夾，改名才是原子的；寫到符號連結指向的實體檔，連結本身不動
-    let dir = target
-        .parent()
-        .ok_or_else(|| Error::invalid(format!("找不到上層資料夾：{rel}")))?;
-    let name = target.file_name().unwrap_or_default().to_string_lossy();
-    // 暫存檔名不可預測、create_new 不跟隨既有的檔或符號連結（同資料夾有人先放好連結也寫不出去）
-    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0);
-    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let tmp = dir.join(format!(
-        ".{name}.ctx-save-{}-{nonce:08x}-{seq}",
-        std::process::id()
-    ));
-    let res = (|| -> std::io::Result<()> {
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&tmp)?;
-        f.write_all(out.as_bytes())?;
-        f.sync_all()?;
-        std::fs::set_permissions(&tmp, meta.permissions())?;
-        std::fs::rename(&tmp, &target)
-    })();
-    if let Err(e) = res {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(e.into());
-    }
+    // 寫到符號連結指向的實體檔（target 已 canonicalize），連結本身不動；暫存檔與權限見 write_atomic
+    crate::fsutil::write_atomic(&target, out.as_bytes())?;
     Ok(WriteOutcome::Saved(read_file(root, rel)?))
 }
 
