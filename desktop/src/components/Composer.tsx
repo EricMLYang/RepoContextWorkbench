@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { scopeLabel } from "../lib/view";
-import { useSnapshot, useStore, useUi } from "../store/context";
+import { useSnapshot, useStore, useUi, useUiState } from "../store/context";
 
 /**
  * 碰撞台：草稿存本機（重新整理不丟）；成功送出才清草稿，失敗保留並顯示原因；
@@ -10,6 +10,7 @@ export function Composer(props: { open: boolean; focusSeq: number; onClose: () =
   const { open, focusSeq, onClose } = props;
   const store = useStore();
   const ui = useUi();
+  const view = useUiState();
   const { scope } = useSnapshot();
   const [error, setError] = useState("");
   const [sending, setSending] = useState<"" | "sending" | "sent">("");
@@ -23,7 +24,7 @@ export function Composer(props: { open: boolean; focusSeq: number; onClose: () =
 
   async function submit() {
     if (sending === "sending") return;
-    const value = ui.draft.trim();
+    const value = view.draft.trim();
     const payload = store.scopePayload;
     if (!value) {
       setError("先寫下一個想法，再開始分析。");
@@ -65,7 +66,7 @@ export function Composer(props: { open: boolean; focusSeq: number; onClose: () =
         ref={ref}
         rows={3}
         placeholder="寫下想法，讓 Agent 對照這組 repo 的脈絡分析。"
-        value={ui.draft}
+        value={view.draft}
         onChange={(e) => ui.setDraft(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {

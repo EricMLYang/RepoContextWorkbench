@@ -56,7 +56,7 @@ export function useRunAction(): RunAction {
       }
       if (a.action === "collide_prefill") {
         const text = String(a.payload.text ?? "");
-        if (ui.draft.trim() && ui.draft !== text) {
+        if (ui.getDraft().trim() && ui.getDraft() !== text) {
           ui.openDetail({ title: "保留現有草稿？", content: <PrefillConfirm text={text} /> });
         } else {
           ui.setDraft(text);
@@ -234,7 +234,7 @@ function PrefillConfirm({ text }: { text: string }) {
           type="button"
           className="primary"
           onClick={() => {
-            ui.setDraft(ui.draft + "\n\n" + text);
+            ui.setDraft(ui.getDraft() + "\n\n" + text);
             ui.closeDetail();
             ui.showComposer();
           }}

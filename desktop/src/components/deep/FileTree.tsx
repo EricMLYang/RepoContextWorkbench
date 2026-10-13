@@ -9,7 +9,7 @@ import {
 import type { TreeEntry } from "../../api/types";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
-import { useStore, useUi } from "../../store/context";
+import { useStore, useUi, useUiState } from "../../store/context";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 
 interface DirState {
@@ -102,6 +102,7 @@ export function RepoRoot(props: {
   const { id, actions, bare = false, onRootMenu, watching = true } = props;
   const store = useStore();
   const ui = useUi();
+  const view = useUiState();
   const copy = useCopy();
   const prefKey = "tree:" + (bare ? "panel:" : "files:") + id;
   const [root, setRoot] = useState("");
@@ -260,7 +261,7 @@ export function RepoRoot(props: {
     { label: "複製相對路徑", hint: "⇧⌥⌘C", run: () => copy(e.path, "相對路徑") },
   ];
 
-  const active = ui.activeFile?.repo === id ? ui.activeFile.path : null;
+  const active = view.activeFile?.repo === id ? view.activeFile.path : null;
   const tree = (
     <div
       ref={treeRef}

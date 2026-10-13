@@ -1,6 +1,6 @@
 import type { TermInfo } from "../../api/types";
 import { sessionDot, sessionMeta, sessionTooltip, sessionWhere } from "../../lib/view";
-import { useUi } from "../../store/context";
+import { useUi, useUiState } from "../../store/context";
 
 /**
  * 會話一列：小圓點（綠＝有留痕、琥珀＝執行中尚無回報、紅＝等你／卡住、灰＝已結束）＋標題＋狀態。
@@ -8,7 +8,8 @@ import { useUi } from "../../store/context";
  */
 export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: boolean }) {
   const ui = useUi();
-  const on = ui.activeSid === s.sid;
+  const view = useUiState();
+  const on = view.activeSid === s.sid;
   const where = sessionWhere(s);
   return (
     <div className={"session" + (on ? " on" : "") + (inGroup ? " ingroup" : "")}>

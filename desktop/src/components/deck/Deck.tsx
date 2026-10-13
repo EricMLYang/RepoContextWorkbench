@@ -3,7 +3,7 @@ import type { GroupInfo, RepoState, TermInfo } from "../../api/types";
 import { Icon } from "../../lib/icons";
 import { groupMeta, sessionInGroup, type Scope } from "../../lib/view";
 import { useSortable } from "../../lib/useSortable";
-import { useSnapshot, useStore, useUi } from "../../store/context";
+import { useSnapshot, useStore, useUi, useUiState } from "../../store/context";
 import { SessionRow } from "../sessions/SessionRow";
 
 interface DeckEntry {
@@ -134,6 +134,7 @@ const GroupCard = memo(function GroupCard(props: {
 export function Deck() {
   const store = useStore();
   const ui = useUi();
+  const view = useUiState();
   const { state, scope, lastStates } = useSnapshot();
   const names = state.groups.map((g) => g.name);
   const groupSort = useSortable(names, async (order) => {
@@ -162,7 +163,7 @@ export function Deck() {
       key={g.name || "*"}
       entry={g}
       scope={scope}
-      opened={ui.openGroups.has(g.name || "*")}
+      opened={view.openGroups.has(g.name || "*")}
       lastStates={lastStates}
       onSelect={(e) =>
         e.name === "__adhoc__" ? ui.openPicker() : store.setScope({ group: e.name, repos: null })

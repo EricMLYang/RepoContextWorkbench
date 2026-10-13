@@ -16,7 +16,15 @@ import { DetailDialog } from "./dialogs/Modal";
 import { PickerDialog } from "./dialogs/PickerDialog";
 import { load, save } from "./lib/storage";
 import { sessionPayload } from "./lib/view";
-import { StoreContext, UiContext, type DetailSpec, type Tab, type Ui } from "./store/context";
+import {
+  StoreContext,
+  UiContext,
+  UiStateContext,
+  type DetailSpec,
+  type Tab,
+  type Ui,
+  type UiState,
+} from "./store/context";
 import type { WorkbenchStore } from "./store/store";
 
 /**
@@ -49,9 +57,11 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
 
   // ── 碰撞台草稿（存本機，重新整理不丟）──
   const [draft, setDraftState] = useState(() => load<string>("draft", ""));
-  const [composerOpen, setComposerOpen] = useState(() => !!load<string>("draft", ""));
+  const draftRef = useRef(draft);
+  const [composerOpen, setComposerOpen] = useState(() => !!draft);
   const [composerFocusSeq, setComposerFocusSeq] = useState(0);
   const setDraft = useCallback((v: string) => {
+    draftRef.current = v;
     setDraftState(v);
     save("draft", v);
   }, []);
@@ -84,9 +94,12 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     load<string | null>("panelRepo", null),
   );
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
-  const setPanel = useCallback((id: string | null) => {
-    setPanelRepo(id);
-    save("panelRepo", id);
+  const setPanel = useCallback((fn: (cur: string | null) => string | null) => {
+    setPanelRepo((cur) => {
+      const next = fn(cur);
+      save("panelRepo", next);
+      return next;
+    });
   }, []);
   const closeMenu = useCallback(() => setMenu(null), []);
   // 版面多一欄：body 是 grid（styles.css 的 body.withpanel）
@@ -113,6 +126,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
   const [termCollapsed, setTermCollapsed] = useState(true);
   const [selectSeq, setSelectSeq] = useState(0);
 
+  // 操作只依賴穩定的 setter，整個生命週期同一個物件；會變的狀態另外放 UiStateContext
   const ui: Ui = useMemo(
     () => ({
       openDetail,
@@ -134,14 +148,12 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       openOnboarding() {
         openDetail({ title: "建立第一個工作範圍", eyebrow: "FIRST RUN", content: <Onboarding /> });
       },
-      panelRepo,
-      openRepo: (id) => setPanel(panelRepo === id ? null : id),
-      closeRepo: () => setPanel(null),
+      openRepo: (id) => setPanel((cur) => (cur === id ? null : id)),
+      closeRepo: () => setPanel(() => null),
       repoMenu: (id, x, y) => setMenu({ id, x, y }),
       openFile,
-      activeFile: shownFileObj,
       showComposer,
-      draft,
+      getDraft: () => draftRef.current,
       setDraft,
       showTab: setTab,
       selectTerm(sid) {
@@ -151,9 +163,6 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       },
       toggleTerm: () => setTermCollapsed((c) => !c),
       collapseTerm: () => setTermCollapsed(true),
-      termCollapsed,
-      activeSid,
-      openGroups,
       toggleGroup: (key) => updateOpen((s) => (s.has(key) ? s.delete(key) : s.add(key))),
       renameOpenGroup: (from, to) =>
         updateOpen((s) => {
@@ -167,17 +176,15 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       closeDetail,
       openPicker,
       showComposer,
-      draft,
       setDraft,
-      panelRepo,
       setPanel,
       openFile,
-      shownFileObj,
-      termCollapsed,
-      activeSid,
-      openGroups,
       updateOpen,
     ],
+  );
+  const uiState: UiState = useMemo(
+    () => ({ panelRepo, activeFile: shownFileObj, draft, termCollapsed, activeSid, openGroups }),
+    [panelRepo, shownFileObj, draft, termCollapsed, activeSid, openGroups],
   );
 
   // 首次載入＋輪詢；#deep 直接開 Repo 分頁、#adhoc 開選擇 repo
@@ -211,64 +218,66 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
   return (
     <StoreContext.Provider value={store}>
       <UiContext.Provider value={ui}>
-        <TopBar
-          onHome={() => {
-            store.setScope({ group: null, repos: null });
-            setTab("inbox");
-          }}
-        />
-        <Sidebar />
-        <Resizer side="left" />
-        <main id="main" className={files.length ? "withtabs" : undefined}>
-          {files.length ? (
-            <FileTabs
-              files={files}
-              active={shownFile}
-              dirty={dirtyFiles}
-              onSelect={setActiveFile}
-              onClose={closeFile}
-            />
-          ) : null}
-          <Workspace
-            tab={tab}
-            composerOpen={composerOpen}
-            composerFocusSeq={composerFocusSeq}
-            closeComposer={() => setComposerOpen(false)}
-            hidden={!!shownFile}
+        <UiStateContext.Provider value={uiState}>
+          <TopBar
+            onHome={() => {
+              store.setScope({ group: null, repos: null });
+              setTab("inbox");
+            }}
           />
-          {files.map((f) => (
-            <FileViewer
-              key={fileKey(f)}
-              file={f}
-              hidden={fileKey(f) !== shownFile}
-              onDirty={(d) => setFileDirty(fileKey(f), d)}
+          <Sidebar />
+          <Resizer side="left" />
+          <main id="main" className={files.length ? "withtabs" : undefined}>
+            {files.length ? (
+              <FileTabs
+                files={files}
+                active={shownFile}
+                dirty={dirtyFiles}
+                onSelect={setActiveFile}
+                onClose={closeFile}
+              />
+            ) : null}
+            <Workspace
+              tab={tab}
+              composerOpen={composerOpen}
+              composerFocusSeq={composerFocusSeq}
+              closeComposer={() => setComposerOpen(false)}
+              hidden={!!shownFile}
             />
-          ))}
-        </main>
-        <TerminalPanel
-          activeSid={activeSid}
-          setActiveSid={setActiveSid}
-          collapsed={termCollapsed}
-          setCollapsed={setTermCollapsed}
-          selectSeq={selectSeq}
-        />
-        {panelRepo ? <RepoPanel id={panelRepo} /> : null}
-        {panelRepo ? <Resizer side="right" /> : null}
-        <StatusBar />
-        <Toast />
-        <PickerDialog
-          open={picker.open}
-          group={picker.group}
-          seq={picker.seq}
-          onClose={closePicker}
-        />
-        {menu ? <RepoMenu id={menu.id} x={menu.x} y={menu.y} onClose={closeMenu} /> : null}
-        <DetailDialog
-          spec={detail}
-          error={detailError}
-          setError={setDetailError}
-          onClose={closeDetail}
-        />
+            {files.map((f) => (
+              <FileViewer
+                key={fileKey(f)}
+                file={f}
+                hidden={fileKey(f) !== shownFile}
+                onDirty={(d) => setFileDirty(fileKey(f), d)}
+              />
+            ))}
+          </main>
+          <TerminalPanel
+            activeSid={activeSid}
+            setActiveSid={setActiveSid}
+            collapsed={termCollapsed}
+            setCollapsed={setTermCollapsed}
+            selectSeq={selectSeq}
+          />
+          {panelRepo ? <RepoPanel id={panelRepo} /> : null}
+          {panelRepo ? <Resizer side="right" /> : null}
+          <StatusBar />
+          <Toast />
+          <PickerDialog
+            open={picker.open}
+            group={picker.group}
+            seq={picker.seq}
+            onClose={closePicker}
+          />
+          {menu ? <RepoMenu id={menu.id} x={menu.x} y={menu.y} onClose={closeMenu} /> : null}
+          <DetailDialog
+            spec={detail}
+            error={detailError}
+            setError={setDetailError}
+            onClose={closeDetail}
+          />
+        </UiStateContext.Provider>
       </UiContext.Provider>
     </StoreContext.Provider>
   );

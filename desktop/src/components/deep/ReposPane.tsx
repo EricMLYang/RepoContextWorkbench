@@ -1,12 +1,13 @@
 import { useState } from "react";
 import type { RepoState } from "../../api/types";
 import { CORE_COLUMNS, MORE_COLUMNS, matchesSearch, repoCell, sortRepos } from "../../lib/view";
-import { useSnapshot, useUi } from "../../store/context";
+import { useSnapshot, useUi, useUiState } from "../../store/context";
 
 /** Repo 分頁：6 個核心欄位，可加 5 個進階欄位；可排序（aria-sort）、首欄固定。 */
 export function ReposPane({ query, active }: { query: string; active: boolean }) {
   const { scan, scanReady, scanError } = useSnapshot();
   const ui = useUi();
+  const view = useUiState();
   const [more, setMore] = useState(false);
   const [sortColumn, setSortColumn] = useState<keyof RepoState>("id");
   const [sortDirection, setSortDirection] = useState<1 | -1>(1);
@@ -82,7 +83,7 @@ export function ReposPane({ query, active }: { query: string; active: boolean })
                           type="button"
                           className="ghost"
                           title={s.id + "（右鍵：更多動作）"}
-                          aria-pressed={ui.panelRepo === s.id}
+                          aria-pressed={view.panelRepo === s.id}
                           onClick={() => ui.openRepo(s.id)}
                           onContextMenu={(e) => {
                             e.preventDefault();
