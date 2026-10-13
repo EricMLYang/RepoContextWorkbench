@@ -957,6 +957,21 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     );
   }
 
+  it("看檔案時用 ⌘K 切分頁：回到工作區", async () => {
+    const backend = viewerBackend();
+    await openTree(backend);
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" })),
+    );
+    expect(document.getElementById("workspace")!.hidden).toBe(true);
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    const box = screen.getByRole("combobox", { name: "找 repo 或牌組" });
+    fireEvent.change(box, { target: { value: ">活動" } });
+    await act(async () => fireEvent.keyDown(box, { key: "Enter" }));
+    expect(document.getElementById("workspace")!.hidden).toBe(false);
+    expect(document.getElementById("tab-activity")!.classList.contains("on")).toBe(true);
+  });
+
   it("檢視器「加入挑選」：挑起來、按鈕變「已挑」，再按取消", async () => {
     const backend = viewerBackend();
     await openTree(backend);

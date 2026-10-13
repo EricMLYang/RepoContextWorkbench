@@ -195,10 +195,17 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       closeRepo: () => setPanel(() => null),
       repoMenu: (id, x, y) => setMenu({ id, x, y }),
       openFile,
-      showComposer,
+      showComposer: () => {
+        setActiveFile(null);
+        showComposer();
+      },
       getDraft: () => draftRef.current,
       setDraft,
-      showTab: setTab,
+      // 切分頁／開碰撞台＝要看工作區：正在看檔案分頁的話先回到工作區（⌘K 指令、選單列都會走這裡）
+      showTab: (t) => {
+        setActiveFile(null);
+        setTab(t);
+      },
       selectTerm(sid) {
         setActiveSid(sid);
         setTermCollapsed(false);
@@ -222,6 +229,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       setDraft,
       setPanel,
       openFile,
+      setActiveFile,
       updateOpen,
       updatePicks,
     ],
