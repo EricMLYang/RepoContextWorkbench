@@ -70,6 +70,9 @@
 | macOS 替換執行中 App 的做法（Apple 論壇／社群） | 發佈與升級 | — | 先結束 App；用 ditto 整包替換（cp 改內容會讓下次啟動簽章崩潰）；清 quarantine | — → F-49 | 參考 | 🔗 | 2026-10-10 | R20 查詢 | [Apple 論壇](https://developer.apple.com/forums/thread/761433)、[updating mac software](https://developer.apple.com/documentation/security/updating-mac-software.md) |
 | agentsview／tuneloop／agentacct | 觀測（成本與時間） | 讀本機 Claude Code 等會話紀錄 | 每會話 token、成本、依日／模型／agent 分；本機、無遙測 | 已做得好 → F-29 整合不重做 | 零件 | 🔗 | 2026-10-10 | R24 查詢 | [agentsview](https://braindetox.kr/en/posts/agentsview_agent_session_analytics_2026.html)、[tuneloop](https://cdn.jsdelivr.net/npm/tuneloop@0.8.1/README.md)、[agentacct](https://www.everydev.ai/tools/agentacct/llms.txt) |
 | Claude Code auto memory | 平台 | `~/.claude/projects/<路徑>/memory/*.md` | 本機 md 記憶；匯出／匯入功能請求被關成不做 | 單一路徑、不跨 repo → F-44 可對接 | 觀察 | 🔗 | 2026-10-10 | R04 查詢 | [docs](https://code.claude.com/docs/en/memory)、[issue #67369](https://github.com/anthropics/claude-code/issues/67369) |
+| AiderDesk | agent 桌面殼 | 對話的脈絡檔清單 | 檔案瀏覽器每列一個「＋」加進脈絡——挑檔交給 agent 的直接做法 | 單 repo、檔清單綁在一個對話；ctx 的挑選跨 repo、交給新會話或貼到目前會話（F-59） | 參考 | 🔗 | 2026-10-14 | R29 查詢 4 | [aiderdesk 文件](https://aiderdesk.hotovo.com/docs/core/context-files) |
+| Qoder | IDE＋agent | 對話脈絡 | 從檔案總管把檔拖進對話框就加入脈絡 | 同上；ctx 拖到終端貼 @路徑（F-59） | 參考 | 🔗 | 2026-10-14 | R29 查詢 4 | [Qoder 文件](https://docs.qoder.com/user-guide/chat/context) |
+| cmdk | 元件庫 | — | ⌘K 指令面板（WAI-ARIA combobox、鍵盤優先） | 不加依賴：自己寫 combobox（F-58），排名放引擎 | 零件（不採用） | 🔗 | 2026-10-14 | R29 查詢 2 | [awesome-command-palette](https://awesome.ecosyste.ms/lists/gorkemcetin%2Fawesome-command-palette) |
 
 ## 待查對標（下一輪處理）
 
@@ -135,9 +138,15 @@
 
 - R24：`track time and cost per task across AI coding agent sessions dashboard local 2026`
 
+- R29：`Claude Code Projects local thread hooks MCP SessionStart 2026`（沒找到 Projects 本機 thread 的資料）
+- R29：`desktop app command palette accessibility keyboard-first React 2026`
+- R29：`service catalog repo description ownership metadata many repositories developer portal alternatives Backstage 2026`
+- R29：`select multiple files add to context coding agent desktop app file tree "add to chat" 2026`
+- R29：本機 `claude --help`（確認 `--settings <file-or-json>`）＋ `claude -p` 實測 Stop hook
+
 ### 下一輪查詢
-1. `Claude Code Projects local thread hooks MCP SessionStart`（本機 thread 會不會觸發 hook／掛 MCP）
-2. `AgDR tooling adoption 2026 decision records in repo agents read`（F-40 之後）
-3. `Nx Polygraph synthetic monorepo agent memory`（R14 留下）
-4. `desktop app command palette accessibility keyboard-first React 2026`（N-09）
-5. `session time tracking AI coding agents cost per task dashboard`（F-29）
+1. `Claude Code hooks Notification notification_type permission_prompt idle_prompt payload`（F-60 判斷「要你允許」用的欄位要查證）
+2. `Conductor diff review workflow agent changes approve commit 2026`（F-62 之後：審完怎麼收）
+3. `AgDR tooling adoption 2026 decision records in repo agents read`（F-40 之後）
+4. `Nx Polygraph synthetic monorepo agent memory`（R14 留下）
+5. `fast local full-text index Rust tantivy vs json cache small corpus startup time`（N-29）
