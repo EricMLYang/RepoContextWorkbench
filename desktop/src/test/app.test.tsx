@@ -1512,10 +1512,13 @@ describe("⌘K 找 repo／牌組", () => {
     await waitFor(() => expect(opts()).toHaveLength(3));
     expect(backend.action).toHaveBeenCalledWith("palette", { query: "" });
     const first = opts();
-    expect(first[0].textContent).toContain("知識庫");
-    expect(first[0].textContent).toContain("書摘與卡片");
-    expect(first[2].textContent).toContain("目標：把登入做完");
+    // 牌組在前
+    expect(first[0].textContent).toContain("目標：把登入做完");
+    expect(first[1].textContent).toContain("知識庫");
+    expect(first[1].textContent).toContain("書摘與卡片");
     expect(first[0].getAttribute("aria-selected")).toBe("true");
+    expect(box().getAttribute("writingsuggestions")).toBe("false");
+    expect(box().getAttribute("autocomplete")).toBe("off");
 
     fireEvent.change(box(), { target: { value: "zz" } });
     await waitFor(() => expect(screen.getByText(/沒有符合「zz」/)).toBeTruthy());
@@ -1546,7 +1549,7 @@ describe("⌘K 找 repo／牌組", () => {
     const store = await mount(backend);
     await act(async () => fireEvent.click(screen.getByRole("button", { name: /找 repo/ })));
     await waitFor(() => expect(opts()).toHaveLength(3));
-    await act(async () => fireEvent.click(opts()[2]));
+    await act(async () => fireEvent.click(opts()[0]));
     expect(store.getSnapshot().scope.group).toBe("產品開發");
 
     await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
@@ -1557,6 +1560,7 @@ describe("⌘K 找 repo／牌組", () => {
     fireEvent.change(box(), { target: { value: "x" } });
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("registry 讀不到"));
     expect(opts()).toHaveLength(3);
+    fireEvent.keyDown(box(), { key: "ArrowDown" });
     await act(async () => fireEvent.keyDown(box(), { key: "Enter", metaKey: true }));
     expect(document.getElementById("detaildialog")!.hasAttribute("open")).toBe(true);
     expect(document.getElementById("detailtitle")!.textContent).toBe("開啟 Agent 會話");

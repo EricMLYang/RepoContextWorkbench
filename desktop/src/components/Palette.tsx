@@ -13,9 +13,10 @@ type Item =
 
 function itemsOf(r: PaletteResult | null): Item[] {
   if (!r) return [];
+  // 牌組在前：組是工作單位、數量少；repo 次之；檔案最後
   return [
-    ...r.repos.map((hit) => ({ kind: "repo" as const, key: "r:" + hit.repo, hit })),
     ...r.groups.map((group) => ({ kind: "group" as const, key: "g:" + group.name, group })),
+    ...r.repos.map((hit) => ({ kind: "repo" as const, key: "r:" + hit.repo, hit })),
     ...(r.files || []).map((file) => ({
       kind: "file" as const,
       key: "f:" + file.repo + ":" + file.path,
@@ -114,6 +115,12 @@ export function Palette({ onClose }: { onClose: () => void }) {
           aria-controls={listId}
           aria-activedescendant={cur ? listId + "-" + cur.key : undefined}
           aria-autocomplete="list"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          // macOS WebView 的行內輸入建議（灰字＋×）會蓋住結果
+          {...{ writingsuggestions: "false" }}
           placeholder="找 repo、牌組或檔案：名稱、角色、介紹、關鍵字、檔名…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}

@@ -431,16 +431,37 @@ pub struct FileHit {
     pub score: u32,
 }
 
-/// 檔名／路徑的吻合程度（不分大小寫）：檔名相同＞檔名開頭＞檔名包含＞路徑包含＞每個詞都在路徑裡
-/// （`docs vision` 找 `docs/VISION.md`）。沒中＝None。
+/// `name` 裡有沒有一段 `q` 從「詞的開頭」開始（開頭、非英數字元之後、camelCase 的大寫、數字與字母交界）。
+/// `00_product_vision.md`、`productVision.md` 算；`revision.md`、`provisioning.png` 不算。
+fn word_start_match(orig_name: &str, q: &str) -> bool {
+    let chars: Vec<char> = orig_name.chars().collect();
+    let qn = q.chars().count();
+    (0..chars.len()).any(|i| {
+        let starts = i == 0 || {
+            let (p, c) = (chars[i - 1], chars[i]);
+            !p.is_alphanumeric()
+                || (p.is_lowercase() && c.is_uppercase())
+                || (p.is_ascii_digit() != c.is_ascii_digit())
+        };
+        starts
+            && i + qn <= chars.len()
+            && chars[i..i + qn].iter().collect::<String>().to_lowercase() == q
+    })
+}
+
+/// 檔名／路徑的吻合程度（不分大小寫）：檔名相同＞檔名開頭＞檔名裡某個詞的開頭＞檔名中間＞路徑包含＞
+/// 每個詞都在路徑裡（`docs vision` 找 `docs/VISION.md`）。沒中＝None。
 pub fn file_score(rel: &str, q: &str) -> Option<u32> {
     let path = rel.to_lowercase();
     let name = path.rsplit('/').next().unwrap_or(&path);
+    let orig_name = rel.rsplit('/').next().unwrap_or(rel);
     let stem = name.split('.').next().unwrap_or(name);
     if name == q || stem == q {
         Some(100)
     } else if name.starts_with(q) {
         Some(60)
+    } else if word_start_match(orig_name, q) {
+        Some(50)
     } else if name.contains(q) {
         Some(40)
     } else if path.contains(q) {
@@ -696,6 +717,15 @@ mod tests {
         assert_eq!(file_score("docs/VISION.md", "vision"), Some(100));
         assert_eq!(file_score("docs/VISION.md", "vis"), Some(60));
         assert_eq!(file_score("docs/VISION.md", "sion"), Some(40));
+        // 詞的開頭比詞中間好：vision 找 00_product_vision 先於 revision
+        assert_eq!(file_score("a/00_product_vision.md", "vision"), Some(50));
+        assert_eq!(file_score("a/productVision.md", "vision"), Some(50));
+        assert_eq!(file_score("a/SupervisionParadox.md", "vision"), Some(40));
+        assert_eq!(
+            file_score("a/slide_05_version_revision.yaml", "vision"),
+            Some(40)
+        );
+        assert_eq!(file_score("a/report2026.md", "2026"), Some(50));
         assert_eq!(file_score("docs/VISION.md", "docs/"), Some(20));
         assert_eq!(file_score("docs/VISION.md", "docs vision"), Some(15));
         assert_eq!(file_score("docs/VISION.md", "zzz"), None);
