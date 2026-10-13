@@ -410,3 +410,31 @@ pub fn load_review_cache(spine_dir: &Path) -> Map<String, Value> {
         .and_then(|v| v.get("items").and_then(Value::as_object).cloned())
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// mention_nums（先算一次）跟 mentions（逐項搜尋）的判斷要一模一樣。
+    #[test]
+    fn mention_nums_agrees_with_mentions() {
+        let texts = [
+            "做完 #12",
+            "#123 不是 #12",
+            "##12 也算",
+            "見#12a",
+            "#12、#7 與 #70",
+            "沒有編號",
+            "#",
+            "結尾 #9",
+            "中文＃12 全形不算",
+        ];
+        let nums = ["#12", "#123", "#7", "#70", "#9", "#1"];
+        for t in texts {
+            let set = mention_nums(t);
+            for n in nums {
+                assert_eq!(set.contains(n), mentions(t, n), "{t:?} {n}");
+            }
+        }
+    }
+}
