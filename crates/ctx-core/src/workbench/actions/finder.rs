@@ -1,0 +1,192 @@
+//! 找東西與看變更（2026-10-14，Rust 才有）：⌘K 的 `palette`、`scope_changes`、`repo_changes`、`file_diff`。
+
+use super::*;
+
+/// Rust 才有（2026-10-13）：App 的 ⌘K——打字找 repo（名稱部分字串、縮寫、名片內容）與牌組（名稱、目標）。
+/// 排名在 [`crate::profile::quick_find`]；前端只畫。repo 多帶它在哪些牌組。
+#[derive(serde::Deserialize)]
+struct PaletteArgs {
+    #[serde(default)]
+    query: String,
+    /// 找檔案的範圍（畫面目前的範圍；都沒有＝所有沒封存的 repo）。repo 與牌組不受範圍限制。
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default)]
+    repos: Option<Vec<String>>,
+}
+
+/// ⌘K 一次最多列幾個 repo（打字會再縮小範圍）。
+const PALETTE_LIMIT: usize = 30;
+/// ⌘K 一次最多列幾個檔案。
+const PALETTE_FILES: usize = 20;
+/// 打幾個字以上才找檔案（一個字會中一大堆）。
+const PALETTE_FILE_MIN_CHARS: usize = 2;
+
+pub(super) fn a_palette(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let PaletteArgs {
+        query,
+        group,
+        repos: scope_repos,
+    } = parse("palette", p)?;
+    let data = registry::load(d)?;
+    let profiles: Vec<_> = data.repos.iter().map(crate::profile::profile).collect();
+    let q = query.trim().to_lowercase();
+    let repos: Vec<Value> = crate::profile::quick_find(&profiles, &q, PALETTE_LIMIT)
+        .into_iter()
+        .map(|h| {
+            let groups: Vec<String> = data
+                .groups
+                .iter()
+                .filter(|g| g.members().contains(&h.repo))
+                .map(|g| g.name())
+                .collect();
+            let mut v = serde_json::to_value(&h)?;
+            v["groups"] = json!(groups);
+            Ok(v)
+        })
+        .collect::<Result<_>>()?;
+    let groups: Vec<Value> = data
+        .groups
+        .iter()
+        .filter(|g| {
+            let goal = g.get_str("goal").unwrap_or_default();
+            q.is_empty() || g.name().to_lowercase().contains(&q) || goal.to_lowercase().contains(&q)
+        })
+        .map(|g| {
+            json!({"name": g.name(), "members": g.members().len(),
+                   "goal": g.get_str("goal").unwrap_or_default()})
+        })
+        .collect();
+    let files = if q.chars().count() >= PALETTE_FILE_MIN_CHARS {
+        palette_files(&data, &q, group.as_deref(), scope_repos.as_deref())
+    } else {
+        Vec::new()
+    };
+    Ok(json!({"ok": true, "query": query, "repos": repos, "groups": groups, "files": files}))
+}
+
+/// 畫面範圍 → (repo id, 路徑)：`repos` 優先；`group`＝組員；都沒有＝所有沒封存的 repo。不在 registry 的略過。
+fn scope_roots(
+    data: &registry::RegistryData,
+    group: Option<&str>,
+    scope_repos: Option<&[String]>,
+) -> Vec<(String, PathBuf)> {
+    let ids: Vec<String> = match (scope_repos, group) {
+        (Some(r), _) => r.to_vec(),
+        (None, Some(g)) => data
+            .groups
+            .iter()
+            .find(|x| x.name() == g)
+            .map(|x| x.members())
+            .unwrap_or_default(),
+        (None, None) => data
+            .repos
+            .iter()
+            .filter(|r| r.tier() != Some(registry::Tier::Archived))
+            .map(|r| r.id())
+            .collect(),
+    };
+    ids.iter()
+        .filter_map(|id| data.repo(id).map(|r| (id.clone(), r.path())))
+        .collect()
+}
+
+/// Rust 才有（2026-10-14）：範圍內每個 repo 還沒 commit 的變更（各 repo 平行跑 git status）——
+/// 多個 agent 同時在不同 repo 改東西時，一眼看出誰動了什麼。只回有變更的 repo（照範圍順序）；
+/// 不是 git repo 的略過，git 失敗的帶 `error`。
+#[derive(serde::Deserialize)]
+struct ScopeArgs {
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default)]
+    repos: Option<Vec<String>>,
+}
+
+pub(super) fn a_scope_changes(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let ScopeArgs { group, repos } = parse("scope_changes", p)?;
+    let data = registry::load(d)?;
+    let roots = scope_roots(&data, group.as_deref(), repos.as_deref());
+    let rows: Vec<Value> = std::thread::scope(|sc| {
+        let jobs: Vec<_> = roots
+            .iter()
+            .map(|(id, root)| {
+                sc.spawn(move || {
+                    (
+                        id,
+                        root.join(".git")
+                            .exists()
+                            .then(|| crate::filetree::changes(root)),
+                    )
+                })
+            })
+            .collect();
+        jobs.into_iter()
+            .filter_map(|j| j.join().ok())
+            .filter_map(|(id, res)| match res? {
+                Ok((cs, _)) if cs.is_empty() => None,
+                Ok((cs, more)) => Some(json!({"id": id, "more": more, "changes": cs.iter()
+                    .map(|c| json!({"path": c.rel, "status": c.kind})).collect::<Vec<_>>()})),
+                Err(e) => Some(json!({"id": id, "error": e.to_string(), "changes": [], "more": 0})),
+            })
+            .collect()
+    });
+    Ok(json!({"ok": true, "repos": rows}))
+}
+
+/// ⌘K 的檔案結果：範圍內每個 repo 用檔名找（各 repo 平行跑 `git ls-files`），合起來照分數排。
+fn palette_files(
+    data: &registry::RegistryData,
+    q: &str,
+    group: Option<&str>,
+    scope_repos: Option<&[String]>,
+) -> Vec<Value> {
+    let roots = scope_roots(data, group, scope_repos);
+    let mut hits: Vec<(String, PathBuf, crate::filetree::FileHit)> = std::thread::scope(|sc| {
+        let jobs: Vec<_> = roots
+            .iter()
+            .map(|(id, root)| {
+                sc.spawn(move || {
+                    crate::filetree::find_files(root, q, PALETTE_FILES)
+                        .into_iter()
+                        .map(|h| (id.clone(), root.clone(), h))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        jobs.into_iter()
+            .flat_map(|j| j.join().unwrap_or_default())
+            .collect()
+    });
+    hits.sort_by(|a, b| {
+        b.2.score
+            .cmp(&a.2.score)
+            .then(a.2.rel.len().cmp(&b.2.rel.len()))
+    });
+    hits.truncate(PALETTE_FILES);
+    hits.into_iter()
+        .map(|(id, root, h)| {
+            json!({"repo": id, "path": h.rel, "name": h.name,
+                   "abs": root.join(&h.rel).to_string_lossy()})
+        })
+        .collect()
+}
+
+/// Rust 才有（2026-10-14）：還沒 commit 的變更（看 agent 改了什麼；見 [`crate::filetree::changes`]）。
+pub(super) fn a_repo_changes(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let ProfileArgs { id } = parse("repo_changes", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let (cs, more) = crate::filetree::changes(&root)?;
+    let changes: Vec<Value> = cs
+        .iter()
+        .map(|c| json!({"path": c.rel, "status": c.kind}))
+        .collect();
+    Ok(json!({"ok": true, "id": id, "changes": changes, "more": more}))
+}
+
+/// Rust 才有（2026-10-14）：單檔差異（見 [`crate::filetree::diff`]）。
+pub(super) fn a_file_diff(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let ReadFileArgs { id, path } = parse("file_diff", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let (diff, truncated) = crate::filetree::diff(&root, &path)?;
+    Ok(json!({"ok": true, "id": id, "path": path, "diff": diff, "truncated": truncated}))
+}
