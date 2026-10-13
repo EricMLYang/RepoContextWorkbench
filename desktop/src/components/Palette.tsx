@@ -1,20 +1,45 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { PaletteResult } from "../api/types";
-import { useStore, useUi } from "../store/context";
+import type { PaletteResult, TermInfo } from "../api/types";
+import { STATUS_TXT, sessionNeedsYou, sessionWhere } from "../lib/view";
+import { useSnapshot, useStore, useUi } from "../store/context";
 
 /** 打字後多久才問引擎（毫秒）——邊打邊找，不必每個字都問。 */
 const DEBOUNCE_MS = 120;
 
 type FileHit = NonNullable<PaletteResult["files"]>[number];
+/** 一次最多列幾個會話。 */
+const SESSIONS_SHOWN = 6;
+
 type Item =
+  | { kind: "session"; key: string; term: TermInfo }
   | { kind: "repo"; key: string; hit: PaletteResult["repos"][number] }
   | { kind: "group"; key: string; group: PaletteResult["groups"][number] }
   | { kind: "file"; key: string; file: FileHit };
 
-function itemsOf(r: PaletteResult | null): Item[] {
-  if (!r) return [];
-  // 牌組在前：組是工作單位、數量少；repo 次之；檔案最後
+/**
+ * 執行中的 agent 會話（畫面已經有的資料，只做文字過濾）：空查詢＝全部、在等你的在前；
+ * 有查詢＝標題、任務、所在（組 › repo）包含查詢的。
+ */
+function sessionsOf(terms: TermInfo[], query: string): Item[] {
+  const q = query.trim().toLocaleLowerCase();
+  const live = terms.filter((t) => t.alive && t.kind === "agent");
+  const hit = q
+    ? live.filter((t) =>
+        [t.title, t.task || "", sessionWhere(t).label].some((x) =>
+          x.toLocaleLowerCase().includes(q),
+        ),
+      )
+    : [...live].sort((a, b) => Number(sessionNeedsYou(b)) - Number(sessionNeedsYou(a)));
+  return hit
+    .slice(0, SESSIONS_SHOWN)
+    .map((term) => ({ kind: "session" as const, key: "s:" + term.sid, term }));
+}
+
+function itemsOf(r: PaletteResult | null, sessions: Item[]): Item[] {
+  if (!r) return sessions;
+  // 會話在前（切過去最常用）；牌組是工作單位、數量少；repo 次之；檔案最後
   return [
+    ...sessions,
     ...r.groups.map((group) => ({ kind: "group" as const, key: "g:" + group.name, group })),
     ...r.repos.map((hit) => ({ kind: "repo" as const, key: "r:" + hit.repo, hit })),
     ...(r.files || []).map((file) => ({
@@ -26,7 +51,8 @@ function itemsOf(r: PaletteResult | null): Item[] {
 }
 
 /**
- * ⌘K：打字找 repo（名稱片段、縮寫、名片的角色／介紹／關鍵字）、牌組、檔案（目前範圍內，用檔名）。
+ * ⌘K：打字找執行中的 agent 會話（切過去）、repo（名稱片段、縮寫、名片的角色／介紹／關鍵字）、牌組、
+ * 檔案（目前範圍內，用檔名）。
  * 排名全在引擎（`palette` action），這裡只畫。
  * Enter＝在右側欄開 repo／切到牌組／開檔；⌘Enter（Ctrl+Enter）＝對 repo 開 Agent 會話／把檔案加入挑選；Esc 關。
  * 鍵盤操作照 WAI-ARIA combobox：焦點留在輸入框，↑↓ 移動 aria-activedescendant。
@@ -75,13 +101,16 @@ export function Palette({ onClose }: { onClose: () => void }) {
     };
   }, [store, query]);
 
-  const items = itemsOf(result);
+  const { state } = useSnapshot();
+  const items = itemsOf(result, sessionsOf(state.terms || [], query));
   const cur = items[Math.min(active, items.length - 1)];
 
   function choose(item: Item | undefined, session: boolean) {
     if (!item) return;
     onClose();
-    if (item.kind === "group") {
+    if (item.kind === "session") {
+      ui.selectTerm(item.term.sid);
+    } else if (item.kind === "group") {
       store.setScope({ group: item.group.name, repos: null });
     } else if (item.kind === "file") {
       const f = item.file;
@@ -121,7 +150,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
           spellCheck={false}
           // macOS WebView 的行內輸入建議（灰字＋×）會蓋住結果
           {...{ writingsuggestions: "false" }}
-          placeholder="找 repo、牌組或檔案：名稱、角色、介紹、關鍵字、檔名…"
+          placeholder="找會話、repo、牌組或檔案：名稱、角色、介紹、關鍵字、檔名…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -156,7 +185,9 @@ export function Palette({ onClose }: { onClose: () => void }) {
               onMouseMove={() => setActive(items.indexOf(it))}
               onClick={(e) => choose(it, e.metaKey || e.ctrlKey)}
             >
-              {it.kind === "repo" ? (
+              {it.kind === "session" ? (
+                <SessionItem term={it.term} />
+              ) : it.kind === "repo" ? (
                 <RepoRow hit={it.hit} />
               ) : it.kind === "group" ? (
                 <GroupRow group={it.group} />
@@ -167,11 +198,11 @@ export function Palette({ onClose }: { onClose: () => void }) {
           ))}
         </ul>
         {result && !items.length ? (
-          <p className="muted small paletteempty">沒有符合「{query}」的 repo、牌組或檔案。</p>
+          <p className="muted small paletteempty">沒有符合「{query}」的會話、repo、牌組或檔案。</p>
         ) : null}
         <p className="palettehint small muted">
           <span>↑↓ 選擇</span>
-          <span>Enter 開 repo 側欄／切牌組／開檔</span>
+          <span>Enter 切到會話／開 repo 側欄／切牌組／開檔</span>
           <span>⌘/Ctrl + Enter 開 Agent 會話／檔案加入挑選</span>
           <span>Esc 關閉</span>
         </p>
@@ -221,6 +252,28 @@ function FileRow({ file }: { file: FileHit }) {
       <div className="palettedesc small muted" title={file.abs}>
         {file.path}
       </div>
+    </>
+  );
+}
+
+function SessionItem({ term }: { term: TermInfo }) {
+  const needs = sessionNeedsYou(term);
+  return (
+    <>
+      <div className="paletterow">
+        <span className="palettekind small muted">會話</span>
+        <span className="palettename">{term.title}</span>
+        {needs ? (
+          <span className="pill palettewait">{STATUS_TXT[term.agent_status!.status]}</span>
+        ) : null}
+        <span className="spacer" />
+        <span className="small muted">{sessionWhere(term).label}</span>
+      </div>
+      {needs && term.agent_status?.text ? (
+        <div className="palettedesc small muted">{term.agent_status.text}</div>
+      ) : term.task ? (
+        <div className="palettedesc small muted">任務：{term.task}</div>
+      ) : null}
     </>
   );
 }

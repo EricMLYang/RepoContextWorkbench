@@ -1740,6 +1740,57 @@ describe("⌘K 找 repo／牌組", () => {
     expect(backend.action).toHaveBeenCalledWith("read_file", { id: "a", path: "docs/plan.md" });
   });
 
+  it("會話：等你的排最前、打字依標題／任務／所在過濾，Enter 切到那個會話", async () => {
+    const term = (sid: string, title: string, extra: Record<string, unknown> = {}) => ({
+      sid,
+      title,
+      alive: true,
+      kind: "agent",
+      origin: null,
+      scope: "a",
+      scope_repos: ["a"],
+      started: "2026-10-14 01:00",
+      task: null,
+      report: null,
+      report_basis: "",
+      agent_status: null,
+      ...extra,
+    });
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({
+          terms: [
+            term("t1", "claude · a", { task: "整理 README" }),
+            term("t2", "claude · b", {
+              scope: "b",
+              scope_repos: ["b"],
+              agent_status: { status: "blocked", text: "要你允許 Bash", at: "2026-10-14 01:05" },
+            }),
+            term("t3", "shell", { kind: "shell" }),
+          ] as never,
+        }),
+      ),
+      action: vi.fn(async (name: string, p: { query?: string }) =>
+        name === "palette" ? result(p.query ?? "") : { ok: true },
+      ) as never,
+    });
+    await mount(backend);
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    await waitFor(() => expect(opts().length).toBeGreaterThan(2));
+    const first = opts();
+    expect(first[0].textContent).toContain("claude · b");
+    expect(first[0].textContent).toContain("卡住了");
+    expect(first[0].textContent).toContain("要你允許 Bash");
+    expect(first[1].textContent).toContain("claude · a");
+    expect(first.some((o) => o.textContent!.includes("shell"))).toBe(false);
+    fireEvent.change(box(), { target: { value: "README" } });
+    await waitFor(() => expect(opts()[0].textContent).toContain("任務：整理 README"));
+    expect(opts().filter((o) => o.textContent!.startsWith("會話"))).toHaveLength(1);
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter" }));
+    expect(noBox()).toBeNull();
+    expect(document.getElementById("termwhere")!.textContent).toBe("a");
+  });
+
   it("焦點在終端裡時 Ctrl+K 留給 shell", async () => {
     await mount(backendWithPalette());
     const term = document.createElement("div");

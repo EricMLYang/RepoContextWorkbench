@@ -2455,3 +2455,6 @@ body.withpicks #main {
 .scopechangerepo .eyebrow {
   margin: 6px 0 2px;
 }
+.pill.palettewait {
+  color: var(--red);
+}
