@@ -26,5 +26,5 @@
 | 量測時留下的假會話檔 | 0 | — | **2**（已手動刪除，見 N-14） | 0 ✅ | 0 | — | 0 | 0 | 0 |
 | 沒結束的會話 marker（hook_sessions） | 0 | — | — | **6**（最舊 10-05；會話沒走 SessionEnd 就留下） | 6 | — | 6 | 未量（迭代 11 起 7 天自動清） | 未量 |
 | `ctx todo review`／`registry suggest` | < 500ms／背景 | — | — | — | — | — | 50ms／2.4s（suggest 在反芻背景跑） | 30ms | 未量 |
-| 規模（合成 1 萬筆事件，`scripts/perf_spine.py`）：開場 hook／build_state／todo review | < 500／300／300ms | — | — | — | — | — | 迭代 13：0.60s→0.33s／145ms／0.41s→0.13s | 0.39s／未量／0.17s ✅ | 未量；`get_state` 真資料 10ms／440KB |
+| 規模（合成 1 萬筆事件，`scripts/perf_spine.py`）：開場 hook／build_state／todo review | < 500／300／300ms | — | — | — | — | — | 迭代 13：0.60s→0.33s／145ms／0.41s→0.13s | 0.39s／未量／0.17s ✅ | 11,108 筆、MI3.0 組（ForwardDeployedEngineer）：hook 667ms ❌／todo review 478ms ❌／context 687ms（同條件舊版 918／485／951ms，平行採集變快但仍超預算 → N-34）；`get_state` 真資料 10ms／440KB |
 | **使用前基準**（`ctx health`，真資料副本近 14 天）：交接率／推薦命中率／未結開 vs 關 | 交接 ↑、命中 ↑、關 ≈ 開 | — | — | — | — | — | 迭代 16：76%（28／9）／0%（0／45）／開 46、關 6 | 同使用前（新版未裝） | 74%（40／14）／0%（0／46）／開 55、關 7（新版仍未裝）；名片 16/18 |

@@ -35,7 +35,8 @@ def main():
     shutil.copytree(a.src, a.out, ignore=shutil.ignore_patterns(".git", "hook_sessions"))
     rnd = random.Random(7)
     reg = yaml.safe_load(open(os.path.join(a.out, "registry.yaml"), encoding="utf-8"))
-    groups = [g["name"] for g in reg.get("groups") or []] or ["g"]
+    # 標頭 token 用空白分隔：組名有空白就照引擎的寫法換成 _（spine::token_value）
+    groups = ["_".join(g["name"].split()) for g in reg.get("groups") or []] or ["g"]
     repos = [r["id"] for r in reg.get("repos") or []] or ["r"]
 
     def text(n):
