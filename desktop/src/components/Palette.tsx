@@ -10,7 +10,17 @@ type FileHit = NonNullable<PaletteResult["files"]>[number];
 /** 一次最多列幾個會話。 */
 const SESSIONS_SHOWN = 6;
 
+/** ⌘K 的指令（畫面動作，前端定義）。 */
+interface Command {
+  id: string;
+  label: string;
+  /** 找得到這個指令的別名（例「note」「shell」） */
+  keys: string;
+  run: () => void | Promise<void>;
+}
+
 type Item =
+  | { kind: "command"; key: string; cmd: Command }
   | { kind: "session"; key: string; term: TermInfo }
   | { kind: "repo"; key: string; hit: PaletteResult["repos"][number] }
   | { kind: "group"; key: string; group: PaletteResult["groups"][number] }
@@ -35,10 +45,25 @@ function sessionsOf(terms: TermInfo[], query: string): Item[] {
     .map((term) => ({ kind: "session" as const, key: "s:" + term.sid, term }));
 }
 
-function itemsOf(r: PaletteResult | null, sessions: Item[]): Item[] {
-  if (!r) return sessions;
-  // 會話在前（切過去最常用）；牌組是工作單位、數量少；repo 次之；檔案最後
+/**
+ * 指令：查詢以「>」開頭＝列出全部（像 VS Code）；否則打兩個字以上、名稱或別名包含查詢的才列（免得擠掉 repo）。
+ */
+function commandsOf(cmds: Command[], query: string): Item[] {
+  const q = query.trim().toLocaleLowerCase();
+  const all = q.startsWith(">");
+  const qq = all ? q.slice(1).trim() : q;
+  // 沒有「>」時至少打兩個字才比對（一個字母會中一堆別名）
+  if (!all && [...qq].length < 2) return [];
+  return cmds
+    .filter((c) => !qq || (c.label + " " + c.keys).toLocaleLowerCase().includes(qq))
+    .map((cmd) => ({ kind: "command" as const, key: "c:" + cmd.id, cmd }));
+}
+
+function itemsOf(r: PaletteResult | null, sessions: Item[], commands: Item[]): Item[] {
+  if (!r) return [...commands, ...sessions];
+  // 指令（打了才出現）、會話（切過去最常用）；牌組是工作單位、數量少；repo 次之；檔案最後
   return [
+    ...commands,
     ...sessions,
     ...r.groups.map((group) => ({ kind: "group" as const, key: "g:" + group.name, group })),
     ...r.repos.map((hit) => ({ kind: "repo" as const, key: "r:" + hit.repo, hit })),
@@ -102,13 +127,72 @@ export function Palette({ onClose }: { onClose: () => void }) {
   }, [store, query]);
 
   const { state } = useSnapshot();
-  const items = itemsOf(result, sessionsOf(state.terms || [], query));
+  const commands: Command[] = [
+    {
+      id: "note",
+      label: "記一筆到目前牌組",
+      keys: "note 筆記 capture",
+      run: () => ui.showTab("notes"),
+    },
+    {
+      id: "idea",
+      label: "新增想法（碰撞台）",
+      keys: "idea collide 想法",
+      run: () => ui.showComposer(),
+    },
+    {
+      id: "session",
+      label: "開這個範圍的 Agent 會話",
+      keys: "agent session claude 會話",
+      run: () => ui.openSession({ origin: "palette" }),
+    },
+    {
+      id: "shell",
+      label: "開一個 Shell",
+      keys: "shell terminal 終端",
+      run: async () => {
+        const r = await store.action("term_create", { kind: "shell" });
+        await store.refreshState();
+        ui.selectTerm(r.sid);
+      },
+    },
+    {
+      id: "refresh",
+      label: "更新狀態（重新採集）",
+      keys: "refresh rescan 更新",
+      run: () => store.refreshAll(),
+    },
+    ...(
+      [
+        ["inbox", "待處理"],
+        ["notes", "筆記"],
+        ["repos", "Repo"],
+        ["files", "檔案"],
+        ["activity", "活動"],
+        ["relations", "關係"],
+      ] as const
+    ).map(([tab, name]) => ({
+      id: "tab:" + tab,
+      label: "切到「" + name + "」分頁",
+      keys: "tab 分頁 " + tab,
+      run: () => ui.showTab(tab),
+    })),
+  ];
+  // 「>」開頭＝只看指令（不列會話、repo、檔案）
+  const commandMode = query.trim().startsWith(">");
+  const items = commandMode
+    ? commandsOf(commands, query)
+    : itemsOf(result, sessionsOf(state.terms || [], query), commandsOf(commands, query));
   const cur = items[Math.min(active, items.length - 1)];
 
   function choose(item: Item | undefined, session: boolean) {
     if (!item) return;
     onClose();
-    if (item.kind === "session") {
+    if (item.kind === "command") {
+      void Promise.resolve(item.cmd.run()).catch((e: unknown) =>
+        store.toast(e instanceof Error ? e.message : String(e)),
+      );
+    } else if (item.kind === "session") {
       ui.selectTerm(item.term.sid);
     } else if (item.kind === "group") {
       store.setScope({ group: item.group.name, repos: null });
@@ -185,7 +269,12 @@ export function Palette({ onClose }: { onClose: () => void }) {
               onMouseMove={() => setActive(items.indexOf(it))}
               onClick={(e) => choose(it, e.metaKey || e.ctrlKey)}
             >
-              {it.kind === "session" ? (
+              {it.kind === "command" ? (
+                <div className="paletterow">
+                  <span className="palettekind small muted">指令</span>
+                  <span className="palettename">{it.cmd.label}</span>
+                </div>
+              ) : it.kind === "session" ? (
                 <SessionItem term={it.term} />
               ) : it.kind === "repo" ? (
                 <RepoRow hit={it.hit} />
@@ -204,6 +293,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
           <span>↑↓ 選擇</span>
           <span>Enter 切到會話／開 repo 側欄／切牌組／開檔</span>
           <span>⌘/Ctrl + Enter 開 Agent 會話／檔案加入挑選</span>
+          <span>「&gt;」只看指令</span>
           <span>Esc 關閉</span>
         </p>
       </div>

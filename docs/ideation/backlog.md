@@ -65,7 +65,7 @@
 | N-06 | 閒置耗能 | 量 App 開一小時的能耗；改用 FSEvents（`notify` crate）取代輪詢 | 未量 | — | P1 | 構想 | R01 | R01 |
 | N-07 | 可觀測 | 每次 MCP 呼叫記到 `.state/metrics.jsonl`；`ctx doctor`；錯誤附下一步；R02：mra 有 mra_doctor，可對照；R17：MCP 每次呼叫記一行到 `.state/metrics.jsonl`（工具、毫秒、成功與否），給 `ctx health` 算工具用量與延遲；**迭代 16 完成**：MCP 呼叫記 `.state/metrics.jsonl`| 目前沒有工具層計時 | 脈絡 | P1 | 完成 | R01 | R17 |
 | N-08 | 發佈與升級 | codesign＋notarize、Tauri updater 或 Homebrew cask；R02：notarytool＋.dmg 首裝＋updater 讀 GitHub Releases 上的 latest.json | 重 build 後要手動重新裝到 /Applications | 同介面 | P1 | 構想 | R01 | R02 |
-| N-09 | 前端體驗 | ⌘K 指令面板、慢動作顯示秒數並可取消、無障礙稽核（#12） | — | 同介面 | P1 | 構想 | R01 | R01 |
+| N-09 | 前端體驗 | ⌘K 指令面板、慢動作顯示秒數並可取消、無障礙稽核（#12）；R29：⌘K 完成（F-58，含指令：「>」只列指令，記一筆、開會話／Shell、更新狀態、切分頁），慢動作與無障礙稽核還沒 | — | 同介面 | P1 | 構想 | R01 | R01 |
 | N-10 | 可攜 | Windows／VDI：ConPTY、補 PATH、路徑大小寫、多使用者 token 隔離 | AGENTS.md 要求註明 Windows 有沒有測，目前全空白（#12） | 同介面 | P2 | 構想 | R01 | R01 |
 | N-11 | 隱私安全 | ask_repo 唯讀沙盒確認；spine 推送前先過洩密哨兵；R02：dev.to 提出用 symlink＋chmod 做「核心層強制」的唯讀，見 N-15 | — | — | P2 | 構想 | R01 | R02 |
 | N-12 | 規模 | 合成 100 repo／1 萬筆事件，測 context 與 search 的上限；R14：12 個迭代在 build_state（App 每次檔案變動都重算）與開場 hook 加了取代／重看／新料／體檢；用合成 1 萬筆事件、多組多 repo 的 spine 量，定預算並修熱點；**迭代 13 完成**：`scripts/perf_spine.py` 合成 1 萬筆；開場 hook 0.60→0.33s（體檢 0.41→0.13s：事件只斷詞一次、未結文字只處理一次）；build_state 145ms| 目前 spine 事件 8 份、.state 71MB | 脈絡 | P2 | 完成 | R01 | R14 |

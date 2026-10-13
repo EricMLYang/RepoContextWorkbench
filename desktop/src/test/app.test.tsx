@@ -1845,6 +1845,27 @@ describe("⌘K 找 repo／牌組", () => {
     expect(document.getElementById("termwhere")!.textContent).toBe("a");
   });
 
+  it("指令：「>」只列指令；打字比對名稱或別名；Enter 執行", async () => {
+    const backend = backendWithPalette();
+    await mount(backend);
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    fireEvent.change(box(), { target: { value: ">" } });
+    await waitFor(() => expect(opts().length).toBeGreaterThan(5));
+    expect(opts().every((o) => o.textContent!.startsWith("指令"))).toBe(true);
+    fireEvent.change(box(), { target: { value: ">筆記" } });
+    await waitFor(() => expect(opts().map((o) => o.textContent)).toContain("指令切到「筆記」分頁"));
+    // 一般查詢：別名也找得到（note）
+    fireEvent.change(box(), { target: { value: "note" } });
+    await waitFor(() =>
+      expect(opts().some((o) => o.textContent === "指令記一筆到目前牌組")).toBe(true),
+    );
+    const i = opts().findIndex((o) => o.textContent === "指令記一筆到目前牌組");
+    for (let k = 0; k < i; k++) fireEvent.keyDown(box(), { key: "ArrowDown" });
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter" }));
+    expect(noBox()).toBeNull();
+    expect(document.getElementById("tab-notes")!.classList.contains("on")).toBe(true);
+  });
+
   it("焦點在終端裡時 Ctrl+K 留給 shell", async () => {
     await mount(backendWithPalette());
     const term = document.createElement("div");
