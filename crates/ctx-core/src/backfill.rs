@@ -87,14 +87,12 @@ fn truthy(v: Option<&Value>) -> bool {
 }
 
 fn save(p: &Path, obj: &Value) -> Result<()> {
-    let tmp = PathBuf::from(format!("{}.tmp", p.display()));
     // 同 Python json.dumps(ensure_ascii=False, indent=1)
     let mut buf = Vec::new();
     let fmt = serde_json::ser::PrettyFormatter::with_indent(b" ");
     let mut ser = serde_json::Serializer::with_formatter(&mut buf, fmt);
     obj.serialize(&mut ser)?;
-    std::fs::write(&tmp, buf)?;
-    std::fs::rename(&tmp, p)?;
+    crate::fsutil::write_atomic(p, &buf)?;
     Ok(())
 }
 

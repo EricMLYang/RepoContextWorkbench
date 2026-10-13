@@ -128,9 +128,7 @@ where
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let tmp = path.with_extension(format!("tmp{}", std::process::id()));
-        std::fs::write(&tmp, serde_json::to_string(&v)?)?;
-        std::fs::rename(&tmp, path)?;
+        crate::fsutil::write_atomic(path, serde_json::to_string(&v)?.as_bytes())?;
         Ok(r)
     })
 }

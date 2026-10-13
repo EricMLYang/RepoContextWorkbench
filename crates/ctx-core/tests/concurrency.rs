@@ -116,18 +116,33 @@ fn test_inv_registry_no_lost_updates() {
 }
 
 /// 寫到一半炸掉 → 原檔完好（先寫暫存檔再 rename），讀的人不會讀到半份 YAML。
-/// Python 版 monkeypatch `yaml.safe_dump`；這裡讓暫存檔位置被一個資料夾佔住，寫暫存檔就失敗。
+/// Python 版 monkeypatch `yaml.safe_dump`。Rust 的 registry 寫入走 `fsutil::write_atomic`（2026-10-14 起暫存檔名
+/// 不可預測，沒辦法再「先佔住暫存檔位置」），失敗時原檔完好、不留暫存檔由它的單元測試保證；這裡驗
+/// spine 是唯讀資料夾時寫入失敗、原檔沒被動，以及正常寫完不留暫存檔。
 #[test]
 fn test_registry_write_is_atomic() {
     let (_t, d) = spine_with_repos();
-    let before = std::fs::read_to_string(d.join("registry.yaml")).unwrap();
-    std::fs::create_dir(d.join(format!(".registry.yaml.{}.tmp", std::process::id()))).unwrap();
     let none: &[&str] = &[];
-    assert!(registry::tag_repo(&d, "repo-a", &["x"], none).is_err());
-    assert_eq!(
-        std::fs::read_to_string(d.join("registry.yaml")).unwrap(),
-        before
-    );
+    registry::tag_repo(&d, "repo-a", &["x"], none).unwrap();
+    let leftovers: Vec<String> = std::fs::read_dir(&d)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| n.contains("registry.yaml") && n != "registry.yaml")
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let before = std::fs::read_to_string(d.join("registry.yaml")).unwrap();
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let r = registry::tag_repo(&d, "repo-a", &["y"], none);
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(r.is_err());
+        assert_eq!(
+            std::fs::read_to_string(d.join("registry.yaml")).unwrap(),
+            before
+        );
+    }
 }
 
 #[test]

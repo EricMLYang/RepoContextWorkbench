@@ -331,14 +331,12 @@ pub fn load(spine_dir: impl AsRef<Path>) -> Result<RegistryData> {
     RegistryData::from_value(v)
 }
 
-/// 對應 `store._write`：原子寫入——先寫暫存檔 `.registry.yaml.<pid>.tmp` 再 rename，
+/// 對應 `store._write`：原子寫入（[`crate::fsutil::write_atomic`]：暫存檔再 rename），
 /// 讀的人（不拿 lock）永遠讀到完整的一份。
 fn write(spine_dir: &Path, data: &RegistryData) -> Result<()> {
     let p = path_of(spine_dir);
     let text = crate::yamlout::to_string(&data.to_value());
-    let tmp = spine_dir.join(format!(".registry.yaml.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, &p)?;
+    crate::fsutil::write_atomic(&p, text.as_bytes())?;
     Ok(())
 }
 

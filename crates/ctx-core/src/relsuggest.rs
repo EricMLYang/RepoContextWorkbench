@@ -156,9 +156,10 @@ pub fn compute(spine_dir: &Path) -> Result<Vec<Suggestion>> {
     if let Some(parent) = cache_path(spine_dir).parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let tmp = cache_path(spine_dir).with_extension(format!("json.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, serde_json::to_string(&suggestions)?)?;
-    std::fs::rename(&tmp, cache_path(spine_dir))?;
+    crate::fsutil::write_atomic_cache(
+        &cache_path(spine_dir),
+        serde_json::to_string(&suggestions)?.as_bytes(),
+    )?;
     Ok(suggestions)
 }
 

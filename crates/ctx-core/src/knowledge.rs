@@ -158,9 +158,7 @@ fn save_cache(spine_dir: &Path, cache: &Cache) -> Option<(SystemTime, u64)> {
         let _ = std::fs::create_dir_all(parent);
     }
     let s = serde_json::to_string(cache).ok()?;
-    let tmp = p.with_extension(format!("json.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, s).ok()?;
-    std::fs::rename(&tmp, &p).ok()?;
+    crate::fsutil::write_atomic_cache(&p, s.as_bytes()).ok()?;
     file_stamp(&p)
 }
 

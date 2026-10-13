@@ -88,6 +88,16 @@ pub fn mtime_secs(p: &Path) -> std::io::Result<f64> {
 /// 符號連結）→ fsync → 原檔在就沿用它的權限 → rename。讀的人不會看到寫一半的檔；失敗不留暫存檔。
 /// `p` 是符號連結時改寫的是連結本身（要寫實體檔請先 canonicalize）。
 pub fn write_atomic(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    write_atomic_with(p, bytes, true)
+}
+
+/// 同 [`write_atomic`] 但不 fsync：給壞了可以重建的快取（知識索引 60MB，fsync 要多 40ms 左右）。
+/// 讀的人一樣不會看到寫一半的檔；只是當機時可能留下舊版或空檔，下次重建。
+pub fn write_atomic_cache(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    write_atomic_with(p, bytes, false)
+}
+
+fn write_atomic_with(p: &Path, bytes: &[u8], sync: bool) -> std::io::Result<()> {
     use std::io::Write;
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
@@ -109,7 +119,9 @@ pub fn write_atomic(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
             .create_new(true)
             .open(&tmp)?;
         f.write_all(bytes)?;
-        f.sync_all()?;
+        if sync {
+            f.sync_all()?;
+        }
         if let Some(perms) = perms {
             std::fs::set_permissions(&tmp, perms)?;
         }
@@ -171,5 +183,27 @@ mod tests {
         assert_eq!(names, ["a.json"]);
         // 上層資料夾不存在：失敗、不留東西
         assert!(write_atomic(&t.path().join("nope").join("b.json"), b"x").is_err());
+        // 寫不出暫存檔（唯讀資料夾）：失敗、原檔完好
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let before = std::fs::read(&p).unwrap();
+            std::fs::set_permissions(t.path(), std::fs::Permissions::from_mode(0o555)).unwrap();
+            let r = write_atomic(&p, b"new");
+            std::fs::set_permissions(t.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+            assert!(r.is_err());
+            assert_eq!(std::fs::read(&p).unwrap(), before);
+        }
+        // rename 失敗（目標是資料夾）：暫存檔要清掉
+        let dir_target = t.path().join("adir");
+        std::fs::create_dir(&dir_target).unwrap();
+        std::fs::write(dir_target.join("x"), "x").unwrap();
+        assert!(write_atomic(&dir_target, b"x").is_err());
+        let names: Vec<String> = std::fs::read_dir(t.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n.contains("ctx-tmp"))
+            .collect();
+        assert!(names.is_empty(), "{names:?}");
     }
 }

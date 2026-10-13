@@ -130,9 +130,7 @@ fn write(p: &Path, text: &str) -> Result<()> {
     if let Some(dir) = p.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let tmp = p.with_extension("md.tmp");
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, p)?;
+    crate::fsutil::write_atomic(p, text.as_bytes())?;
     Ok(())
 }
 
