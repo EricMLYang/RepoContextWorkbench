@@ -18,6 +18,8 @@ pub enum HookEvent {
     Notification,
     /// Rust 才有：你送出訊息（Claude Code `UserPromptSubmit`）→「處理中」
     Prompt,
+    /// Rust 才有：要你允許工具或回答（Notification 的 permission_prompt／elicitation_*／agent_needs_input）→「卡住了」
+    Permission,
 }
 
 impl HookEvent {
@@ -28,6 +30,7 @@ impl HookEvent {
             HookEvent::Stop => "stop",
             HookEvent::Notification => "notification",
             HookEvent::Prompt => "prompt",
+            HookEvent::Permission => "permission",
         }
     }
 }
@@ -39,7 +42,7 @@ pub fn cmd_hook(ctx: &Ctx, event: HookEvent) -> CmdResult {
     let stdin = String::from_utf8_lossy(&buf);
     if matches!(
         event,
-        HookEvent::Stop | HookEvent::Notification | HookEvent::Prompt
+        HookEvent::Stop | HookEvent::Notification | HookEvent::Prompt | HookEvent::Permission
     ) {
         // 會話狀態：照 App 給的路徑寫，不找 spine、不印任何東西（不是 App 開的會話就什麼都不做）
         let target = std::env::var(ctx_core::session_status::ENV).ok();

@@ -3,8 +3,9 @@
 //! 多個 agent 會話同時跑時，最要緊的是一眼看出**哪個在等我**。MCP `report_status` 要 agent 自己記得回報，
 //! 而且依範圍存（同範圍兩個會話會互蓋）；這裡改由 Claude Code 自己的 hook 自動寫、依會話存：
 //! - `Stop`（這一輪做完）→ `waiting`「這一輪做完了，等你回覆」
-//! - `Notification`：要你允許工具 → `blocked`（agent 停住了，App 視窗不在前面時發系統通知）；
-//!   閒著等輸入 → `waiting`。都帶 Claude Code 給的訊息
+//! - `Notification`（依通知種類分開掛）：要你允許工具或回答（`permission_prompt`、`elicitation_*`、
+//!   `agent_needs_input`）→ `blocked`（agent 停住了，App 視窗不在前面時發系統通知）；閒著等輸入
+//!   （`idle_prompt`）→ `waiting`。都帶 Claude Code 給的訊息；其他種類（登入成功等）不動狀態
 //! - `UserPromptSubmit`（你送出訊息）→ `working`
 //!
 //! 只有 App 開的 Claude Code 會話會寫：開會話時多帶 `--settings=<spine>/.state/session_hooks.json`
@@ -67,32 +68,39 @@ pub fn settings_file(spine_dir: &Path, ctx: &Path) -> Result<PathBuf> {
     if let Some(parent) = p.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let hook = |arg: &str| {
-        json!([{"hooks": [{"type": "command",
-                            "command": crate::agentsetup::hook_command(ctx, arg)}]}])
-    };
+    let cmd = |arg: &str| json!([{"type": "command", "command": crate::agentsetup::hook_command(ctx, arg)}]);
+    // Notification 依通知種類（matcher）分開掛：要你允許／要你回答 → permission（blocked）；閒著等輸入 →
+    // notification（waiting）；其他種類（登入成功、額度…）不動會話狀態。一個 matcher 一筆，不靠 regex 的「|」
+    let mut notification: Vec<Value> = PERMISSION_MATCHERS
+        .iter()
+        .map(|m| json!({"matcher": m, "hooks": cmd("permission")}))
+        .collect();
+    notification.push(json!({"matcher": "idle_prompt", "hooks": cmd("notification")}));
     let v = json!({"hooks": {
-        "Stop": hook("stop"),
-        "Notification": hook("notification"),
-        "UserPromptSubmit": hook("prompt"),
+        "Stop": [{"hooks": cmd("stop")}],
+        "Notification": notification,
+        "UserPromptSubmit": [{"hooks": cmd("prompt")}],
     }});
     crate::fsutil::write_atomic(&p, serde_json::to_string_pretty(&v)?.as_bytes())?;
     Ok(p)
 }
+
+/// 這些通知種類＝agent 停住、要你做決定（Claude Code hooks 文件的 Notification matcher）。
+const PERMISSION_MATCHERS: [&str; 4] = [
+    "permission_prompt",
+    "elicitation_dialog",
+    "elicitation_url_dialog",
+    "agent_needs_input",
+];
 
 /// hook 事件 → (status, text)。不認得＝None。
 fn status_of(event: &str, payload: &Value) -> Option<(&'static str, String)> {
     match event {
         "stop" => Some(("waiting", "這一輪做完了，等你回覆".to_string())),
         "notification" => {
-            let msg = payload
-                .get("message")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|m| !m.is_empty())
-                .unwrap_or("需要你回應");
-            let text = crate::pystr::take_chars(msg, TEXT_MAX).to_string();
-            // 要你允許工具＝agent 停在那裡動不了（blocked，App 會發通知）；閒著等輸入只是 waiting
+            let text = message(payload, "需要你回應");
+            let msg = text.as_str();
+            // 照 matcher 掛的是 idle_prompt；萬一舊設定沒分 matcher，從欄位或訊息再判斷一次是不是要你允許
             let permission = payload.get("notification_type").and_then(Value::as_str)
                 == Some("permission_prompt")
                 || msg.to_lowercase().contains("permission");
@@ -102,9 +110,21 @@ fn status_of(event: &str, payload: &Value) -> Option<(&'static str, String)> {
                 ("waiting", text)
             })
         }
+        "permission" => Some(("blocked", message(payload, "要你允許或回答"))),
         "prompt" => Some(("working", "處理中".to_string())),
         _ => None,
     }
+}
+
+/// 通知的訊息（截到 [`TEXT_MAX`]）；沒有就用 `fallback`。
+fn message(payload: &Value, fallback: &str) -> String {
+    let msg = payload
+        .get("message")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .unwrap_or(fallback);
+    crate::pystr::take_chars(msg, TEXT_MAX).to_string()
 }
 
 /// 環境變數給的路徑像不像我們的狀態檔：`…/.state/session_status/<名稱>.json`。不像就不寫（不往任意路徑寫檔）。
@@ -205,6 +225,17 @@ mod tests {
         assert_eq!(read(sp, "t3").unwrap()["status"], "blocked");
         assert!(record_hook("stop", "not json", Some(tp), at));
         assert_eq!(read(sp, "t3").unwrap()["text"], "這一輪做完了，等你回覆");
+        assert!(record_hook(
+            "permission",
+            r#"{"message":"Allow Edit?"}"#,
+            Some(tp),
+            at
+        ));
+        let v = read(sp, "t3").unwrap();
+        assert_eq!(
+            (v["status"].as_str(), v["text"].as_str()),
+            (Some("blocked"), Some("Allow Edit?"))
+        );
         assert!(!record_hook("bogus", "{}", Some(tp), at));
 
         clear(sp, "t3");
@@ -217,21 +248,40 @@ mod tests {
     }
 
     #[test]
-    fn settings_file_has_three_hooks_pointing_at_ctx() {
+    fn settings_file_hooks_point_at_ctx_by_notification_matcher() {
         let t = tempfile::tempdir().unwrap();
         let p = settings_file(t.path(), Path::new("/opt/ctx")).unwrap();
         let v: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
-        for (ev, arg) in [
-            ("Stop", "stop"),
-            ("Notification", "notification"),
-            ("UserPromptSubmit", "prompt"),
-        ] {
+        for (ev, arg) in [("Stop", "stop"), ("UserPromptSubmit", "prompt")] {
             let cmd = v["hooks"][ev][0]["hooks"][0]["command"].as_str().unwrap();
             assert!(
                 cmd.contains("/opt/ctx") && cmd.ends_with(&format!("hook {arg}")),
                 "{cmd}"
             );
         }
+        // Notification：一個 matcher 一筆
+        let by: Vec<(&str, &str)> = v["hooks"]["Notification"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| {
+                let cmd = e["hooks"][0]["command"].as_str().unwrap();
+                (
+                    e["matcher"].as_str().unwrap(),
+                    cmd.rsplit(' ').next().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            by,
+            [
+                ("permission_prompt", "permission"),
+                ("elicitation_dialog", "permission"),
+                ("elicitation_url_dialog", "permission"),
+                ("agent_needs_input", "permission"),
+                ("idle_prompt", "notification"),
+            ]
+        );
         assert!(v["hooks"].get("SessionStart").is_none());
     }
 }

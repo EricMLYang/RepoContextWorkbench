@@ -174,7 +174,10 @@ pub fn sessions_asking_permission(spine_dir: impl AsRef<Path>, terms: &[Value]) 
             let st = crate::session_status::read(spine_dir, sid)?;
             let at = st.get("at").and_then(Value::as_str)?;
             let asking = st.get("status").and_then(Value::as_str) == Some("blocked")
-                && st.get("event").and_then(Value::as_str) == Some("notification")
+                && matches!(
+                    st.get("event").and_then(Value::as_str),
+                    Some("notification" | "permission")
+                )
                 && at >= tget(t, "started").unwrap_or("~");
             asking.then(|| {
                 json!({"sid": sid, "title": tget(t, "title").unwrap_or(sid),

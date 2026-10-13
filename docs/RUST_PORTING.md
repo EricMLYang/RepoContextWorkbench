@@ -257,8 +257,8 @@ CLI／MCP（ctx-cli）：
   「睡到下一個排程點，最多 300s 重看一次」。
 - **`--help` 的排版是 clap 的**（子命令順序、說明文字照 Python；argparse 與 clap 的版面不同，不對拍）。
   長旗標可縮寫（`infer_long_args`，同 argparse 的 prefix matching）。用法錯誤一律 exit 2（同 argparse）。
-- **App 開的 Claude Code 會話自動回報「等你／處理中」**（2026-10-14，Rust 才有）：`ctx hook` 多三個事件
-  `stop｜notification｜prompt`，只照環境變數 `REPO_CONTEXT_SESSION_STATUS` 給的路徑寫 `.state/session_status/<sid>.json`
+- **App 開的 Claude Code 會話自動回報「等你／處理中」**（2026-10-14，Rust 才有）：`ctx hook` 多四個事件
+  `stop｜notification｜prompt｜permission`（Notification 依 matcher 分：要你允許／回答＝permission，閒著＝notification），只照環境變數 `REPO_CONTEXT_SESSION_STATUS` 給的路徑寫 `.state/session_status/<sid>.json`
   （沒有環境變數＝不是 App 開的會話，什麼都不做；不印東西、永遠 exit 0）。只由 App 開會話時的 `--settings` 掛上，
   `ctx setup --claude` 不裝這三個 hook（setup 輸出與對拍不變）。
 - **SIGPIPE 恢復預設**（2026-10-10，ideation N-27）：`ctx … | head` 截斷時安靜結束（exit 141），不再 panic

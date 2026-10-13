@@ -161,7 +161,7 @@ Rust 端簽名建議：
 - `lane`（卡片與 `recent[]` 事件）：`scope`＝屬於目前範圍、`global`＝全域與未分類（卡片另含：範圍外的打斷）、`other`＝不顯示。前端照它分欄，不自己判斷範圍。
 - `terms[]`：`sid, title, alive, kind, origin, scope, scope_repos, started, task, report{text,type,source,at}|null, report_basis`，agent 會話另有 `agent_status{status,text,at,…}|null`。
   Rust 才有（2026-10-14）：`agent_status` 也可能來自 Claude Code hook——`term_create` 開 Claude Code（config `mcp: mcp-config`）時多帶
-  `--settings=<spine>/.state/session_hooks.json`（只掛 `Stop`／`Notification`／`UserPromptSubmit` → `ctx hook stop|notification|prompt`，
+  `--settings=<spine>/.state/session_hooks.json`（只掛 `Stop` → `ctx hook stop`、`UserPromptSubmit` → `prompt`、`Notification` 依 matcher：`permission_prompt`／`elicitation_dialog`／`elicitation_url_dialog`／`agent_needs_input` → `permission`、`idle_prompt` → `notification`，
   不動使用者的 `~/.claude/settings.json`）與環境變數 `REPO_CONTEXT_SESSION_STATUS=<spine>/.state/session_status/<sid>.json`；
   hook 照這個路徑寫 `{status, text, at, event}`（做完＝waiting、要你允許工具＝blocked＋訊息、閒著等輸入＝waiting＋訊息、你送出＝working）。
   `blocked` 的（agent 停住了）殼會在視窗不在前面時發系統通知「<會話> 要你允許」，同一次請求只發一次（`workbench::fresh_permission_asks`）。這種的多一個 `event` 鍵。

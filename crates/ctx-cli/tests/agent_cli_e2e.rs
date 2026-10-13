@@ -219,6 +219,12 @@ fn test_session_status_hooks_write_only_with_app_env() {
         || -> Value { serde_json::from_str(&std::fs::read_to_string(&target).unwrap()).unwrap() };
     assert_eq!(read()["status"], "blocked");
     assert_eq!(read()["text"], "Claude needs your permission to use Bash");
+    let r = app()
+        .stdin(r#"{"hook_event_name":"Notification","message":"Allow Edit?"}"#)
+        .run(&["hook", "permission"]);
+    assert_eq!((r.code, r.stdout.as_str()), (0, ""));
+    assert_eq!(read()["status"], "blocked");
+    assert_eq!(read()["event"], "permission");
     let r = app().stdin("").run(&["hook", "prompt"]);
     assert_eq!(r.code, 0);
     assert_eq!(read()["status"], "working");

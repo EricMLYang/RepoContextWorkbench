@@ -2301,12 +2301,17 @@ fn sessions_asking_permission_lists_only_hook_permission_requests() {
         ("t1", "notification", perm),
         ("t2", "stop", "{}"),
         ("t3", "notification", perm),
+        ("t4", "permission", r#"{"message":"Allow Edit?"}"#),
     ] {
         let p = path_for(&d, sid).to_string_lossy().into_owned();
         assert!(record_hook(ev, stdin, Some(&p), now));
     }
-    let asks = sessions_asking_permission(&d, &[t("t1", true), t("t2", true), t("t3", false)]);
-    assert_eq!(asks.len(), 1);
+    let asks = sessions_asking_permission(
+        &d,
+        &[t("t1", true), t("t2", true), t("t3", false), t("t4", true)],
+    );
+    assert_eq!(asks.len(), 2);
+    assert_eq!(asks[1]["text"], "Allow Edit?");
     assert_eq!(asks[0]["sid"], "t1");
     assert_eq!(asks[0]["title"], "claude · t1");
     assert_eq!(asks[0]["text"], "Claude needs your permission to use Bash");
