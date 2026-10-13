@@ -130,6 +130,13 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     });
   }, []);
   const closeMenu = useCallback(() => setMenu(null), []);
+  // 挑選列疊在主區下緣：主區底下留空，最後幾列不會被蓋住
+  const hasPicks = picks.length > 0;
+  useEffect(() => {
+    document.body.classList.toggle("withpicks", hasPicks);
+    return () => document.body.classList.remove("withpicks");
+  }, [hasPicks]);
+
   // 版面多一欄：body 是 grid（styles.css 的 body.withpanel）
   useEffect(() => {
     document.body.classList.toggle("withpanel", !!panelRepo);

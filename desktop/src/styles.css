@@ -2358,3 +2358,6 @@ button.linkish {
 .healthprofiles > button:not(.linkish) {
   margin-left: 8px;
 }
+body.withpicks #main {
+  padding-bottom: 72px;
+}
