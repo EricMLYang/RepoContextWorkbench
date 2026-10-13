@@ -96,7 +96,7 @@ Rust 端簽名建議：
 | `write_file`（Rust 才有） | `{id, path, text, base}`（`base`＝讀檔時的 `version`） | 寫成功：同 `read_file` 的結果（新 `version`）；讀檔之後磁碟上已被改過：`{ok: false, conflict: true, id, path}`（沒有寫）。只改既有的 UTF-8 文字檔（≤1MB、不新增不刪除），先寫暫存檔再改名，保留原檔 CRLF／BOM；不記 spine 事件 |
 | `repo_profile`（Rust 才有，唯讀） | `{id}` | 名片：`id`, `path`, `role?`, `description?`, `description_source?: "registry"\|"readme"`（沒填介紹時從 README 截的推測）, `keywords?`, `tags?` |
 | `describe_repo`（Rust 才有） | `{id, description, role, keywords}`（表單三欄的完整內容；`keywords` 是一串字，逗號、頓號、全形逗號或換行分隔） | 同 `repo_profile` ＋ `changed`。只寫跟 registry 不同的欄位（走 `registry_describe`，同 CLI／MCP 的留痕）；都沒變＝不寫、`changed: false` |
-| `palette`（Rust 才有，唯讀） | `{query}`（空＝全部） | `query`, `repos: [{repo, score, why, role?, description?, groups}]`（名稱完全相同＞開頭＞包含＞詞首縮寫，加上名片欄位包含整串查詢、名片詞命中；最多 30 個）, `groups: [{name, members, goal}]`（名稱或目標包含查詢）。App 的 ⌘K；排名在 `profile::quick_find` |
+| `palette`（Rust 才有，唯讀） | `{query, group?, repos?}`（query 空＝全部；group／repos＝找檔案的範圍，都沒有＝所有沒封存的 repo） | `query`, `repos: [{repo, score, why, role?, description?, groups}]`（名稱完全相同＞開頭＞包含＞詞首縮寫，加上名片欄位包含整串查詢、名片詞命中；最多 30 個）, `groups: [{name, members, goal}]`（名稱或目標包含查詢）, `files: [{repo, path, name, abs}]`（兩個字以上才找；git repo 用 `git ls-files`（含沒被忽略的未追蹤檔），否則往下走；檔名相同＞開頭＞包含＞路徑包含；最多 20 個）。App 的 ⌘K；排名在 `profile::quick_find`、`filetree::find_files` |
 | `pick_brief`（Rust 才有，唯讀） | `{files: [{id, path}]}`（從檔案樹挑的，最多 50 個） | `text`（會話任務：依 repo 分段、段落標題帶名片）, `mentions`（`@絕對路徑` 一行一個）, `repos`, `count`。每個路徑都要在它的 repo 裡（同 `read_file` 的檢查），重複的只算一次 |
 | `group_notes`（Rust 才有） | `{group}`（已儲存的牌組） | `group`, `path`（`<spine>/groups/<組>/notes.md`）, `notes: [{at, text}]`（新的在前） |
 | `note_add`（Rust 才有） | `{group, text}` | 同 `group_notes` |

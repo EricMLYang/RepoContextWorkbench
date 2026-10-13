@@ -1424,6 +1424,10 @@ describe("⌘K 找 repo／牌組", () => {
           { repo: "b", score: 2, why: ["介紹命中"], groups: [] },
         ],
     groups: query ? [] : [{ name: "產品開發", members: 2, goal: "把登入做完" }],
+    files:
+      query === "plan"
+        ? [{ repo: "a", path: "docs/plan.md", name: "plan.md", abs: "/r/a/docs/plan.md" }]
+        : [],
   });
   const backendWithPalette = () =>
     mockBackend({
@@ -1502,6 +1506,33 @@ describe("⌘K 找 repo／牌組", () => {
     await act(async () => fireEvent.keyDown(box(), { key: "Enter", metaKey: true }));
     expect(document.getElementById("detaildialog")!.hasAttribute("open")).toBe(true);
     expect(document.getElementById("detailtitle")!.textContent).toBe("開啟 Agent 會話");
+  });
+
+  it("檔案：Enter 開檔、⌘Enter 加入挑選；查詢帶目前範圍", async () => {
+    const backend = backendWithPalette();
+    const store = await mount(backend);
+    store.setScope({ group: "產品開發", repos: null });
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    fireEvent.change(box(), { target: { value: "plan" } });
+    await waitFor(() =>
+      expect(opts().some((o) => o.textContent!.includes("docs/plan.md"))).toBe(true),
+    );
+    expect(backend.action).toHaveBeenCalledWith("palette", { query: "plan", group: "產品開發" });
+    const fileIdx = opts().findIndex((o) => o.textContent!.includes("docs/plan.md"));
+    for (let i = 0; i < fileIdx; i++) fireEvent.keyDown(box(), { key: "ArrowDown" });
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter", metaKey: true }));
+    expect(noBox()).toBeNull();
+    expect(document.getElementById("picktray")!.textContent).toContain("已挑 1 個檔案");
+
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    fireEvent.change(box(), { target: { value: "plan" } });
+    await waitFor(() =>
+      expect(opts().some((o) => o.textContent!.includes("docs/plan.md"))).toBe(true),
+    );
+    await act(async () =>
+      fireEvent.click(opts().find((o) => o.textContent!.includes("docs/plan.md"))!),
+    );
+    expect(backend.action).toHaveBeenCalledWith("read_file", { id: "a", path: "docs/plan.md" });
   });
 
   it("焦點在終端裡時 Ctrl+K 留給 shell", async () => {

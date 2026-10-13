@@ -646,13 +646,26 @@ fn a_describe_repo(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value>
 struct PaletteArgs {
     #[serde(default)]
     query: String,
+    /// 找檔案的範圍（畫面目前的範圍；都沒有＝所有沒封存的 repo）。repo 與牌組不受範圍限制。
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default)]
+    repos: Option<Vec<String>>,
 }
 
 /// ⌘K 一次最多列幾個 repo（打字會再縮小範圍）。
 const PALETTE_LIMIT: usize = 30;
+/// ⌘K 一次最多列幾個檔案。
+const PALETTE_FILES: usize = 20;
+/// 打幾個字以上才找檔案（一個字會中一大堆）。
+const PALETTE_FILE_MIN_CHARS: usize = 2;
 
 fn a_palette(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let PaletteArgs { query } = parse("palette", p)?;
+    let PaletteArgs {
+        query,
+        group,
+        repos: scope_repos,
+    } = parse("palette", p)?;
     let data = registry::load(d)?;
     let profiles: Vec<_> = data.repos.iter().map(crate::profile::profile).collect();
     let q = query.trim().to_lowercase();
@@ -682,7 +695,68 @@ fn a_palette(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
                    "goal": g.get_str("goal").unwrap_or_default()})
         })
         .collect();
-    Ok(json!({"ok": true, "query": query, "repos": repos, "groups": groups}))
+    let files = if q.chars().count() >= PALETTE_FILE_MIN_CHARS {
+        palette_files(&data, &q, group.as_deref(), scope_repos.as_deref())
+    } else {
+        Vec::new()
+    };
+    Ok(json!({"ok": true, "query": query, "repos": repos, "groups": groups, "files": files}))
+}
+
+/// ⌘K 的檔案結果：範圍內每個 repo 用檔名找（各 repo 平行跑 `git ls-files`），合起來照分數排。
+fn palette_files(
+    data: &registry::RegistryData,
+    q: &str,
+    group: Option<&str>,
+    scope_repos: Option<&[String]>,
+) -> Vec<Value> {
+    let ids: Vec<String> = match (scope_repos, group) {
+        (Some(r), _) => r.to_vec(),
+        (None, Some(g)) => data
+            .groups
+            .iter()
+            .find(|x| x.name() == g)
+            .map(|x| x.members())
+            .unwrap_or_default(),
+        (None, None) => data
+            .repos
+            .iter()
+            .filter(|r| r.tier() != Some(registry::Tier::Archived))
+            .map(|r| r.id())
+            .collect(),
+    };
+    let roots: Vec<(String, PathBuf)> = ids
+        .iter()
+        .filter_map(|id| data.repo(id).map(|r| (id.clone(), r.path())))
+        .collect();
+    let mut hits: Vec<(String, PathBuf, crate::filetree::FileHit)> = std::thread::scope(|sc| {
+        let jobs: Vec<_> = roots
+            .iter()
+            .map(|(id, root)| {
+                sc.spawn(move || {
+                    crate::filetree::find_files(root, q, PALETTE_FILES)
+                        .into_iter()
+                        .map(|h| (id.clone(), root.clone(), h))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        jobs.into_iter()
+            .flat_map(|j| j.join().unwrap_or_default())
+            .collect()
+    });
+    hits.sort_by(|a, b| {
+        b.2.score
+            .cmp(&a.2.score)
+            .then(a.2.rel.len().cmp(&b.2.rel.len()))
+    });
+    hits.truncate(PALETTE_FILES);
+    hits.into_iter()
+        .map(|(id, root, h)| {
+            json!({"repo": id, "path": h.rel, "name": h.name,
+                   "abs": root.join(&h.rel).to_string_lossy()})
+        })
+        .collect()
 }
 
 /// Rust 才有（2026-10-14，痛點 2「挑幾份文件丟給 agent」）：從檔案樹挑的檔案 → 會話任務文字＋`@路徑`。

@@ -283,6 +283,8 @@ export interface PaletteResult {
     groups: string[];
   }[];
   groups: { name: string; members: number; goal: string }[];
+  /** 用檔名找到的檔（兩個字以上才找；照 payload 的範圍）。舊引擎沒有這個鍵。 */
+  files?: { repo: string; path: string; name: string; abs: string }[];
 }
 
 /** Rust 才有（F-57）：repo 名片。存在 spine 的 registry，不寫進 repo。 */
@@ -541,7 +543,7 @@ export interface ActionMap {
   };
   /** Rust 才有（F-57）：repo 名片（唯讀）與編輯——三欄送完整內容，引擎只寫有變的欄位。 */
   repo_profile: { payload: { id: string }; result: RepoProfile };
-  palette: { payload: { query: string }; result: PaletteResult };
+  palette: { payload: { query: string } & ScanParams; result: PaletteResult };
   /** Rust 才有：挑好的檔案 → 會話任務文字（依 repo 分段、附名片）＋`@絕對路徑`（一行一個）。 */
   pick_brief: {
     payload: { files: { id: string; path: string }[] };

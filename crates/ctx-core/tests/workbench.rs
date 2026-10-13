@@ -2004,6 +2004,39 @@ fn palette_finds_repos_by_partial_name_and_profile_and_groups() {
         act(&d, "palette", json!({})).unwrap()["groups"][0]["name"],
         "g1"
     );
+
+    // 檔案：兩個字以上才找；照範圍
+    let f = act(&d, "palette", json!({"query": "plan"})).unwrap();
+    let files = f["files"].as_array().unwrap();
+    // 兩個 repo 都有 notes/plan.md：同分照 registry 順序
+    assert_eq!(files.len(), 2, "{files:?}");
+    assert_eq!(files[0]["repo"], "repo-a");
+    assert_eq!(files[1]["repo"], "repo-b");
+    assert_eq!(files[0]["path"], "notes/plan.md");
+    let root = registry::get_repo(&d, "repo-a").unwrap().path();
+    assert_eq!(
+        files[0]["abs"],
+        json!(root.join("notes/plan.md").to_string_lossy())
+    );
+    assert!(act(&d, "palette", json!({"query": "p"})).unwrap()["files"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    let scoped = act(
+        &d,
+        "palette",
+        json!({"query": "readme", "repos": ["repo-b"]}),
+    )
+    .unwrap();
+    let repos: Vec<&str> = scoped["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["repo"].as_str().unwrap())
+        .collect();
+    assert_eq!(repos, ["repo-b"]);
+    let by_group = act(&d, "palette", json!({"query": "readme", "group": "g1"})).unwrap();
+    assert_eq!(by_group["files"].as_array().unwrap().len(), 2);
 }
 
 // ── 挑幾份檔案交給 agent（痛點 2，Rust 才有）──

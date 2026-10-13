@@ -12,6 +12,9 @@
 //! [`write_file`]（2026-10-13）：檢視器的簡單編輯。只改既有的文字檔（不新增、刪除、改名）；
 //! 帶讀檔時的 `version`，磁碟上已經被改過（agent 寫得很快）就不寫、回 [`WriteOutcome::Conflict`]；
 //! 先寫暫存檔再改名；保留原檔的 CRLF 與 BOM（textarea 會把 CRLF 變 LF）。
+//!
+//! [`find_files`]（2026-10-14）：⌘K 用檔名找檔。git repo 用 `git ls-files`（追蹤中＋沒被忽略的未追蹤檔，
+//! 規則跟 git 一致）；不是 git 的往下走（略過隱藏資料夾、node_modules、target），每個 repo 最多看 [`FIND_SCAN_MAX`] 個。
 
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -359,6 +362,114 @@ pub fn write_file(root: &Path, rel: &str, text: &str, base: &str) -> Result<Writ
     Ok(WriteOutcome::Saved(read_file(root, rel)?))
 }
 
+/// ⌘K 找檔時每個 repo 最多看幾個路徑（超大 repo 也不會卡住）。
+pub const FIND_SCAN_MAX: usize = 50_000;
+/// `git ls-files` 最多等多久。
+const FIND_GIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+/// 不是 git 的資料夾往下走時跳過的資料夾（隱藏資料夾另外跳過）。
+const WALK_SKIP: [&str; 3] = ["node_modules", "target", "__pycache__"];
+
+/// repo 裡的檔案（相對路徑，`/` 分隔）。git：`ls-files` 追蹤中＋沒被忽略的未追蹤檔；不是 git 或 git 失敗：往下走。
+pub fn all_files(root: &Path) -> Vec<String> {
+    if root.join(".git").exists() {
+        let (code, out) = crate::crossref::git(
+            root,
+            &[
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+            ],
+            FIND_GIT_TIMEOUT,
+        );
+        if code == 0 {
+            let mut v: Vec<String> = out
+                .split('\0')
+                .filter(|s| !s.is_empty())
+                .take(FIND_SCAN_MAX)
+                .map(str::to_string)
+                .collect();
+            v.dedup();
+            return v;
+        }
+    }
+    let mut out = Vec::new();
+    let mut stack = vec![PathBuf::new()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(root.join(&dir)) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let rel = dir.join(&name);
+            match e.file_type() {
+                Ok(t) if t.is_dir() => {
+                    if !name.starts_with('.') && !WALK_SKIP.contains(&name.as_str()) {
+                        stack.push(rel);
+                    }
+                }
+                Ok(t) if t.is_file() => {
+                    out.push(rel.to_string_lossy().replace('\\', "/"));
+                    if out.len() >= FIND_SCAN_MAX {
+                        return out;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+/// 一個找到的檔。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileHit {
+    /// 相對 repo 根目錄（`/` 分隔）。
+    pub rel: String,
+    pub name: String,
+    pub score: u32,
+}
+
+/// 檔名／路徑的吻合程度（不分大小寫）：檔名相同＞檔名開頭＞檔名包含＞路徑包含＞每個詞都在路徑裡
+/// （`docs vision` 找 `docs/VISION.md`）。沒中＝None。
+pub fn file_score(rel: &str, q: &str) -> Option<u32> {
+    let path = rel.to_lowercase();
+    let name = path.rsplit('/').next().unwrap_or(&path);
+    let stem = name.split('.').next().unwrap_or(name);
+    if name == q || stem == q {
+        Some(100)
+    } else if name.starts_with(q) {
+        Some(60)
+    } else if name.contains(q) {
+        Some(40)
+    } else if path.contains(q) {
+        Some(20)
+    } else {
+        let words: Vec<&str> = q.split_whitespace().collect();
+        (words.len() > 1 && words.iter().all(|w| path.contains(w))).then_some(15)
+    }
+}
+
+/// 在 repo 裡用檔名找檔：分數高的在前，同分路徑短的在前。`query` 空白＝不找。
+pub fn find_files(root: &Path, query: &str, limit: usize) -> Vec<FileHit> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let mut hits: Vec<FileHit> = all_files(root)
+        .into_iter()
+        .filter_map(|rel| {
+            let score = file_score(&rel, &q)?;
+            let name = rel.rsplit('/').next().unwrap_or(&rel).to_string();
+            Some(FileHit { rel, name, score })
+        })
+        .collect();
+    hits.sort_by(|a, b| b.score.cmp(&a.score).then(a.rel.len().cmp(&b.rel.len())));
+    hits.truncate(limit);
+    hits
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -576,6 +687,47 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(t.path().join("secret.txt")).unwrap(),
             "x"
+        );
+    }
+
+    #[test]
+    fn file_score_prefers_name_then_path() {
+        assert_eq!(file_score("docs/VISION.md", "vision.md"), Some(100));
+        assert_eq!(file_score("docs/VISION.md", "vision"), Some(100));
+        assert_eq!(file_score("docs/VISION.md", "vis"), Some(60));
+        assert_eq!(file_score("docs/VISION.md", "sion"), Some(40));
+        assert_eq!(file_score("docs/VISION.md", "docs/"), Some(20));
+        assert_eq!(file_score("docs/VISION.md", "docs vision"), Some(15));
+        assert_eq!(file_score("docs/VISION.md", "zzz"), None);
+    }
+
+    #[test]
+    fn find_files_in_git_repo_skips_ignored_and_in_plain_folder_skips_hidden() {
+        let t = tempfile::tempdir().unwrap();
+        let g = crate::testkit::make_git_repo(t.path(), "g", 1, 0, true);
+        std::fs::write(g.join(".gitignore"), "build/\n").unwrap();
+        std::fs::create_dir_all(g.join("build")).unwrap();
+        std::fs::write(g.join("build").join("plan.md"), "").unwrap();
+        std::fs::write(g.join("plan-untracked.md"), "").unwrap();
+        let rels: Vec<String> = find_files(&g, "plan", 10)
+            .into_iter()
+            .map(|h| h.rel)
+            .collect();
+        assert_eq!(rels, ["notes/plan.md", "plan-untracked.md"]);
+        assert!(find_files(&g, "  ", 10).is_empty());
+
+        let p = t.path().join("plain");
+        std::fs::create_dir_all(p.join(".hidden")).unwrap();
+        std::fs::create_dir_all(p.join("node_modules")).unwrap();
+        std::fs::create_dir_all(p.join("sub")).unwrap();
+        std::fs::write(p.join(".hidden").join("plan.md"), "").unwrap();
+        std::fs::write(p.join("node_modules").join("plan.md"), "").unwrap();
+        std::fs::write(p.join("sub").join("Plan.txt"), "").unwrap();
+        let hits = find_files(&p, "PLAN", 10);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(
+            (hits[0].rel.as_str(), hits[0].name.as_str()),
+            ("sub/Plan.txt", "Plan.txt")
         );
     }
 }

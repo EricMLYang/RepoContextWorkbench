@@ -5,21 +5,29 @@ import { useStore, useUi } from "../store/context";
 /** 打字後多久才問引擎（毫秒）——邊打邊找，不必每個字都問。 */
 const DEBOUNCE_MS = 120;
 
+type FileHit = NonNullable<PaletteResult["files"]>[number];
 type Item =
   | { kind: "repo"; key: string; hit: PaletteResult["repos"][number] }
-  | { kind: "group"; key: string; group: PaletteResult["groups"][number] };
+  | { kind: "group"; key: string; group: PaletteResult["groups"][number] }
+  | { kind: "file"; key: string; file: FileHit };
 
 function itemsOf(r: PaletteResult | null): Item[] {
   if (!r) return [];
   return [
     ...r.repos.map((hit) => ({ kind: "repo" as const, key: "r:" + hit.repo, hit })),
     ...r.groups.map((group) => ({ kind: "group" as const, key: "g:" + group.name, group })),
+    ...(r.files || []).map((file) => ({
+      kind: "file" as const,
+      key: "f:" + file.repo + ":" + file.path,
+      file,
+    })),
   ];
 }
 
 /**
- * ⌘K：打字找 repo（名稱片段、縮寫、名片的角色／介紹／關鍵字）與牌組。排名全在引擎（`palette` action），這裡只畫。
- * Enter＝在右側欄開 repo／切到牌組；⌘Enter（Ctrl+Enter）＝對那個 repo 開 Agent 會話；Esc 關。
+ * ⌘K：打字找 repo（名稱片段、縮寫、名片的角色／介紹／關鍵字）、牌組、檔案（目前範圍內，用檔名）。
+ * 排名全在引擎（`palette` action），這裡只畫。
+ * Enter＝在右側欄開 repo／切到牌組／開檔；⌘Enter（Ctrl+Enter）＝對 repo 開 Agent 會話／把檔案加入挑選；Esc 關。
  * 鍵盤操作照 WAI-ARIA combobox：焦點留在輸入框，↑↓ 移動 aria-activedescendant。
  */
 export function Palette({ onClose }: { onClose: () => void }) {
@@ -49,7 +57,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
     const t = setTimeout(
       () => {
         store
-          .action("palette", { query })
+          .action("palette", { query, ...store.scopePayload })
           .then((r) => {
             if (!live) return;
             setResult(r);
@@ -74,6 +82,12 @@ export function Palette({ onClose }: { onClose: () => void }) {
     onClose();
     if (item.kind === "group") {
       store.setScope({ group: item.group.name, repos: null });
+    } else if (item.kind === "file") {
+      const f = item.file;
+      if (session) {
+        ui.togglePick({ repo: f.repo, path: f.path, name: f.name });
+        store.toast("已加入挑選：" + f.repo + " / " + f.path);
+      } else ui.openFile(f.repo, f.path);
     } else if (session) {
       const id = item.hit.repo;
       ui.openSession({ repo: id, repos: [id], origin: "repo:" + id });
@@ -100,7 +114,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
           aria-controls={listId}
           aria-activedescendant={cur ? listId + "-" + cur.key : undefined}
           aria-autocomplete="list"
-          placeholder="找 repo 或牌組：名稱、角色、介紹、關鍵字…"
+          placeholder="找 repo、牌組或檔案：名稱、角色、介紹、關鍵字、檔名…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -135,17 +149,23 @@ export function Palette({ onClose }: { onClose: () => void }) {
               onMouseMove={() => setActive(items.indexOf(it))}
               onClick={(e) => choose(it, e.metaKey || e.ctrlKey)}
             >
-              {it.kind === "repo" ? <RepoRow hit={it.hit} /> : <GroupRow group={it.group} />}
+              {it.kind === "repo" ? (
+                <RepoRow hit={it.hit} />
+              ) : it.kind === "group" ? (
+                <GroupRow group={it.group} />
+              ) : (
+                <FileRow file={it.file} />
+              )}
             </li>
           ))}
         </ul>
         {result && !items.length ? (
-          <p className="muted small paletteempty">沒有符合「{query}」的 repo 或牌組。</p>
+          <p className="muted small paletteempty">沒有符合「{query}」的 repo、牌組或檔案。</p>
         ) : null}
         <p className="palettehint small muted">
           <span>↑↓ 選擇</span>
-          <span>Enter 在側邊欄開／切到牌組</span>
-          <span>⌘/Ctrl + Enter 開 Agent 會話</span>
+          <span>Enter 開 repo 側欄／切牌組／開檔</span>
+          <span>⌘/Ctrl + Enter 開 Agent 會話／檔案加入挑選</span>
           <span>Esc 關閉</span>
         </p>
       </div>
@@ -178,6 +198,22 @@ function GroupRow({ group }: { group: PaletteResult["groups"][number] }) {
         <span className="small muted">{group.members} 個 repo</span>
       </div>
       {group.goal ? <div className="palettedesc small muted">目標：{group.goal}</div> : null}
+    </>
+  );
+}
+
+function FileRow({ file }: { file: FileHit }) {
+  return (
+    <>
+      <div className="paletterow">
+        <span className="palettekind small muted">檔案</span>
+        <span className="palettename">{file.name}</span>
+        <span className="spacer" />
+        <span className="small muted">{file.repo}</span>
+      </div>
+      <div className="palettedesc small muted" title={file.abs}>
+        {file.path}
+      </div>
     </>
   );
 }
