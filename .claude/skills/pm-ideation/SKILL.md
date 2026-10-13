@@ -104,3 +104,9 @@ ls .github/workflows 2>/dev/null; grep -ro '#\[test\]' crates | wc -l   # 測試
 6. **使用者的 App 開著就不做 GUI 實測**（重 bundle 會覆寫、另開會搶焦點）；記下來等使用者。
 7. **節奏**：連續迭代很耗用量；迭代之間可以在背景等一段時間（`sleep` 放背景，完成會被通知）。
 8. **收尾**：更新 `docs/VISION.md`「走到哪了」「接下來」（使用前基準、在真實使用中看什麼）、spine 交接。
+9. **2026-10-14 自動迭代學到的**：
+   - 檢查指令串不要用 `| tail` 接在 `&& git commit` 前面（管線吃掉失敗的 exit code，曾經帶著沒過的測試 commit）；
+     把檢查寫成一支失敗就非零結束的腳本，log 存檔、照 exit code 決定 commit。
+   - spine 副本先 `git remote remove`，免得 autocommit 推到真的 remote。
+   - 規模測試不只看秒數也看輸出大小：新舊版輸出不一樣大＝範圍判斷不同，不能直接比快慢。
+   - 用 `claude -p` 驗 hook 時用 `scripts/e2e_claude.sh` 的隔離參數，不然會跑到使用者全域的 hook 和真的 spine。

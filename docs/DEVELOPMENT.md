@@ -87,6 +87,13 @@ desktop/src（React，只管畫面）── IPC ┘
 - 引擎邏輯寫單元測試；action 和合約寫 `crates/ctx-core/tests/` 的整合測試；畫面行為寫 vitest（用 mock backend）。
 - 和 Python 版對拍（`scripts/parity.sh`）只到合併回 main 為止；之後由整合測試接手守住合約。
 - 每個功能的 commit 都要註明：macOS GUI 實測過沒有、Windows 測過沒有。
+- **真 agent 端到端**（2026-10-14）：`bash scripts/e2e_claude.sh <spine>` 用真的 Claude Code（haiku，花一次小額 API）
+  在 spine **副本**上走開場注入 → `context_for` → `handoff` → 結束，自動檢查交接、標記清理、會話狀態。
+  隔離：`--setting-sources project`（不跑使用者的其他 hook）＋`--settings`／`--strict-mcp-config` 只掛 `--spine <副本>` 的 ctx。
+  改 hook、MCP 或開場注入後跑一次。
+- **GUI 實測**：使用者的 App 沒開時，`npx tauri build --no-bundle` 的執行檔帶 `--spine <副本>`（副本先拿掉 git remote），
+  截圖只拍該 pid 的視窗（`screencapture -l`）、按鍵只送該 pid（`CGEventPostToPid`）；不要全域點擊或打字。
+  滑鼠事件送 pid 不生效（視窗不是 key window），點擊流程要人來點。
 
 ## 8. 資訊安全
 
