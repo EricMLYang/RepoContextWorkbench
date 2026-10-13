@@ -1478,6 +1478,7 @@ fn read_only_actions_leave_spine_untouched() {
         ("palette", json!({"query": "rep"})),
         ("repo_changes", json!({"id": "repo-b"})),
         ("scope_changes", json!({"group": "g1"})),
+        ("review_brief", json!({"id": "repo-b"})),
         ("file_diff", json!({"id": "repo-b", "path": "wip0.md"})),
         (
             "pick_brief",
@@ -2355,4 +2356,21 @@ fn scope_changes_lists_only_repos_with_changes_in_scope_order() {
     registry::add_repo(&d, "plain", &plain, registry::AddRepo::default()).unwrap();
     let r = act(&d, "scope_changes", json!({"repos": ["plain"]})).unwrap();
     assert!(r["repos"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn review_brief_lists_changes_and_forbids_editing() {
+    let (_t, d) = spine_with_repos();
+    let r = act(&d, "review_brief", json!({"id": "repo-b"})).unwrap();
+    assert_eq!(r["count"], 2);
+    let text = r["text"].as_str().unwrap();
+    assert!(
+        text.starts_with("審查 repo-b 還沒 commit 的變更（2 個檔）"),
+        "{text}"
+    );
+    assert!(text.contains("- 新檔（未追蹤）：wip0.md"), "{text}");
+    assert!(text.contains("先不要改任何檔、也不要 commit"), "{text}");
+    assert!(text.contains("log_decision"), "{text}");
+    // 乾淨的 repo：沒得審
+    assert!(err(&d, "review_brief", json!({"id": "repo-a"})).contains("沒有還沒 commit 的變更"));
 }

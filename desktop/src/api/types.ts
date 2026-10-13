@@ -556,6 +556,11 @@ export interface ActionMap {
       repos: { id: string; changes: RepoChange[]; more: number; error?: string }[];
     };
   };
+  /** Rust 才有：請 agent 審查還沒 commit 的變更的任務文字（先不改檔、不 commit）。沒有變更會失敗。 */
+  review_brief: {
+    payload: { id: string };
+    result: { ok: true; id: string; text: string; count: number };
+  };
   /** Rust 才有：單檔差異（對上一個 commit；還沒追蹤的整份算新增）。沒有差異＝空字串。 */
   file_diff: {
     payload: { id: string; path: string };

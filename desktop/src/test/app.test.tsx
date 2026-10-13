@@ -854,6 +854,7 @@ describe("repo 右側欄與右鍵選單", () => {
         }
         if (name === "file_diff")
           return { ok: true, id: "a", path: "src/a.ts", diff, truncated: false };
+        if (name === "review_brief") return { ok: true, id: "a", text: "審查 a 的變更", count: 2 };
         if (name === "read_file") throw new Error("檔案不存在：src/a.ts");
         return { ok: true, id: "a", path: "/r/a" };
       }) as never,
@@ -865,6 +866,17 @@ describe("repo 右側欄與右鍵選單", () => {
     });
     await waitFor(() => expect(sec.textContent).toContain("變更（2）"));
     expect(within(sec).getByLabelText("修改").textContent).toBe("M");
+    await act(async () =>
+      fireEvent.click(within(sec).getByRole("button", { name: "請 Agent 審…" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("review_brief", { id: "a" });
+    expect(document.getElementById("detailtitle")!.textContent).toBe("開啟 Agent 會話");
+    expect((document.querySelector("#detaildialog textarea") as HTMLTextAreaElement).value).toBe(
+      "審查 a 的變更",
+    );
+    await act(async () => {
+      (document.getElementById("detaildialog") as HTMLDialogElement).close();
+    });
     await act(async () => fireEvent.click(within(sec).getByRole("button", { name: /src\/a\.ts/ })));
     expect(backend.action).toHaveBeenCalledWith("file_diff", { id: "a", path: "src/a.ts" });
     const view = await screen.findByRole("region", { name: "檢視：a/src/a.ts" });

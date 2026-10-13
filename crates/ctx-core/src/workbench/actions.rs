@@ -97,6 +97,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("repo_changes", a_repo_changes),
     ("scope_changes", a_scope_changes),
     ("file_diff", a_file_diff),
+    ("review_brief", a_review_brief),
     ("write_file", a_write_file),
     ("group_notes", a_group_notes),
     ("note_add", a_note_add),
@@ -117,6 +118,7 @@ const READ_ONLY: &[&str] = &[
     "repo_changes",
     "scope_changes",
     "file_diff",
+    "review_brief",
     "group_notes",
     "repo_profile",
     "palette",
@@ -1120,6 +1122,53 @@ fn a_file_diff(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     let (diff, truncated) = crate::filetree::diff(&root, &path)?;
     Ok(json!({"ok": true, "id": id, "path": path, "diff": diff, "truncated": truncated}))
 }
+
+/// Rust 才有（2026-10-14）：請 agent 審查一個 repo 還沒 commit 的變更的任務文字——先不改檔、不 commit，
+/// 摘要＋風險＋建議怎麼切 commit，結論用 log_decision 留痕。沒有變更＝錯誤。
+fn a_review_brief(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let ProfileArgs { id } = parse("review_brief", p)?;
+    let repo = registry::get_repo(d, &id)?;
+    let (cs, more) = crate::filetree::changes(&repo.path())?;
+    if cs.is_empty() {
+        return Err(Error::invalid(format!("{id} 沒有還沒 commit 的變更")));
+    }
+    let card = crate::profile::profile(&repo);
+    let role = card.role.map(|r| format!("（{r}）")).unwrap_or_default();
+    let mark = |k: crate::filetree::ChangeKind| {
+        use crate::filetree::ChangeKind::*;
+        match k {
+            Modified => "修改",
+            Added => "新增",
+            Deleted => "刪除",
+            Renamed => "改名",
+            Untracked => "新檔（未追蹤）",
+            Conflicted => "衝突",
+        }
+    };
+    let mut text = format!(
+        "審查 {id}{role} 還沒 commit 的變更（{} 個檔）。**先不要改任何檔、也不要 commit。**\n\n",
+        cs.len() + more
+    );
+    for c in cs.iter().take(REVIEW_FILES) {
+        text.push_str(&format!("- {}：{}\n", mark(c.kind), c.rel));
+    }
+    let rest = cs.len().saturating_sub(REVIEW_FILES) + more;
+    if rest > 0 {
+        text.push_str(&format!("- …另 {rest} 個（`git status` 看完整清單）\n"));
+    }
+    text.push_str(
+        "\n請：\n\
+         1. 用 `git diff HEAD -- <檔>` 看每個檔（未追蹤的直接讀）。\n\
+         2. 摘要改了什麼、看得出來的話為什麼改。\n\
+         3. 列出風險：可能壞掉的地方、漏掉的測試或文件、會影響哪些其他 repo。\n\
+         4. 建議怎麼切 commit，每個附一句 commit 訊息。\n\
+         看完用 log_decision 記下結論（依據寫檔名），等我決定要不要照做。\n",
+    );
+    Ok(json!({"ok": true, "id": id, "text": text, "count": cs.len() + more}))
+}
+
+/// 審查任務最多列幾個檔。
+const REVIEW_FILES: usize = 40;
 
 fn file_json(id: &str, f: crate::filetree::FileRead) -> Value {
     let mut out = json!({"ok": true, "id": id, "path": f.rel.to_string_lossy(),

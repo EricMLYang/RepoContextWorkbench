@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { RepoChange } from "../../api/types";
 import { useSnapshot, useStore, useUi, useUiState } from "../../store/context";
+import { AsyncButton } from "../AsyncButton";
 
 /** 一次最多列幾個（其餘寫數量；全部看 git 或終端）。 */
 const SHOWN = 30;
@@ -21,6 +22,7 @@ const MARK: Record<RepoChange["status"], [string, string]> = {
  */
 export function RepoChanges({ id }: { id: string }) {
   const store = useStore();
+  const ui = useUi();
   const view = useUiState();
   const { state, lastStates } = useSnapshot();
   const [list, setList] = useState<{ id: string; changes: RepoChange[]; more: number } | null>(
@@ -61,6 +63,19 @@ export function RepoChanges({ id }: { id: string }) {
           變更{shown ? "（" + (shown.changes.length + shown.more) + "）" : ""}
         </p>
         <span className="spacer" />
+        {shown?.changes.length ? (
+          <AsyncButton
+            className="ghost small"
+            title="開一個 Agent 會話審查這些變更：摘要、風險、建議怎麼切 commit（先不改檔、不 commit）"
+            onError={(m) => store.toast(m)}
+            run={async () => {
+              const r = await store.action("review_brief", { id });
+              ui.openSession({ repo: id, repos: [id], task: r.text, origin: "review:" + id });
+            }}
+          >
+            請 Agent 審…
+          </AsyncButton>
+        ) : null}
         <button
           type="button"
           className="icon ghost"
