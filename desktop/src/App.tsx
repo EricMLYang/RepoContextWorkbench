@@ -17,7 +17,7 @@ import { Onboarding } from "./dialogs/misc";
 import { DetailDialog } from "./dialogs/Modal";
 import { PickerDialog } from "./dialogs/PickerDialog";
 import { load, save } from "./lib/storage";
-import { sessionPayload } from "./lib/view";
+import { firstNeedingYou, sessionPayload } from "./lib/view";
 import {
   StoreContext,
   UiContext,
@@ -264,6 +264,17 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
         setNotesFocusSeq((n) => n + 1);
       }),
     [store, setActiveFile],
+  );
+
+  // 選單列「等你的會話」：切到最該先處理的那個（卡住的優先）
+  useEffect(
+    () =>
+      store.backend.onNextWaiting?.(() => {
+        const t = firstNeedingYou(store.getSnapshot().state.terms || []);
+        if (t) ui.selectTerm(t.sid);
+        else store.toast("現在沒有會話在等你");
+      }),
+    [store, ui],
   );
 
   // Ctrl+` 收合／展開終端（有對話框開著時不動）；⌘K（Ctrl+K）找 repo——

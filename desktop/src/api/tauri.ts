@@ -100,6 +100,19 @@ export function createTauriBackend(
     }
   };
 
+  /** 訂閱殼發的事件（不帶資料）；回傳取消訂閱（listen 還沒回來就取消也收得掉）。 */
+  const subscribe = (event: string, cb: () => void) => {
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    listen(event, () => cb())
+      .then((un) => (cancelled ? un() : (stop = un)))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  };
+
   return {
     kind: "tauri",
     getState: (p = {}) => run("get_state", { group: p.group ?? null, repos: p.repos ?? null }),
@@ -120,28 +133,9 @@ export function createTauriBackend(
         stop?.();
       };
     },
-    onChanged(cb) {
-      let stop: (() => void) | null = null;
-      let cancelled = false;
-      listen("workbench://changed", () => cb())
-        .then((un) => (cancelled ? un() : (stop = un)))
-        .catch(() => {});
-      return () => {
-        cancelled = true;
-        stop?.();
-      };
-    },
-    onCapture(cb) {
-      let stop: (() => void) | null = null;
-      let cancelled = false;
-      listen("ui://capture", () => cb())
-        .then((un) => (cancelled ? un() : (stop = un)))
-        .catch(() => {});
-      return () => {
-        cancelled = true;
-        stop?.();
-      };
-    },
+    onChanged: (cb) => subscribe("workbench://changed", cb),
+    onCapture: (cb) => subscribe("ui://capture", cb),
+    onNextWaiting: (cb) => subscribe("ui://next-waiting", cb),
     openTerminal(sid): TermStream {
       const dataCbs: ((b: Uint8Array) => void)[] = [];
       const openCbs: (() => void)[] = [];

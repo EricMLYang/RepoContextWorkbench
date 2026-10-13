@@ -1478,6 +1478,39 @@ describe("會話放進所屬牌組", () => {
     await waitFor(() => expect(writes.join("")).toBe("@/r/a/x.md "));
   });
 
+  it("選單列「等你的會話」：切到卡住的那個會話", async () => {
+    let next: (() => void) | null = null;
+    const backend = Object.assign(
+      mockBackend({
+        getState: vi.fn(async () =>
+          makeState({
+            terms: [
+              term({ sid: "t1", title: "claude · a" }),
+              term({
+                sid: "t2",
+                title: "claude · b",
+                scope: "b",
+                scope_repos: ["b"],
+                agent_status: { status: "blocked", text: "要你允許", at: "2026-10-12 09:30" },
+              }),
+            ] as never,
+          }),
+        ),
+      }),
+      {
+        onNextWaiting: (cb: () => void) => {
+          next = cb;
+          return () => {
+            next = null;
+          };
+        },
+      },
+    );
+    await mount(backend);
+    await act(async () => next!());
+    expect(document.getElementById("termwhere")!.textContent).toBe("b");
+  });
+
   it("從牌組裡對 repo 開會話：帶上所屬牌組", async () => {
     const store = new WorkbenchStore(mockBackend(), { group: "產品開發", repos: null });
     render(<App store={store} autoStart={false} />);

@@ -31,6 +31,8 @@ const MAIN: &str = "main";
 const TRAY_ID: &str = "main";
 /// 選單列「記一筆…」→ 前端（desktop/IPC.md 事件表）。
 const EVENT_CAPTURE: &str = "ui://capture";
+/// 選單列「等你的會話」→ 前端切到第一個在等你的會話。
+const EVENT_NEXT_WAITING: &str = "ui://next-waiting";
 
 struct TauriNotifier {
     app: AppHandle,
@@ -91,6 +93,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let capture = MenuItem::with_id(app, "capture", "記一筆…", true, None::<&str>)?;
     let unread = MenuItem::with_id(app, "unread", "未讀：—", false, None::<&str>)?;
     app.manage(UnreadItem(unread.clone()));
+    // 有會話在等你時可以點：叫出視窗、切到那個會話（set_tray 依數量開關）
     let waiting = MenuItem::with_id(app, "waiting", "等你的會話：—", false, None::<&str>)?;
     app.manage(WaitingItem(waiting.clone()));
     let quit = MenuItem::with_id(app, "quit", "結束", true, None::<&str>)?;
@@ -112,6 +115,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, ev| match ev.id.as_ref() {
             "open" => show_main(app),
             // 隨手記一筆到目前牌組的筆記（F-37 第一步）：叫出視窗，前端切到筆記分頁、游標放進輸入框
+            "waiting" => {
+                show_main(app);
+                let _ = app.emit(EVENT_NEXT_WAITING, ());
+            }
             "capture" => {
                 show_main(app);
                 let _ = app.emit(EVENT_CAPTURE, ());
@@ -152,7 +159,14 @@ pub fn set_tray(app: &AppHandle, unread: Option<usize>, waiting: Option<usize>) 
         let _ = item.0.set_text(line("未讀", unread));
     }
     if let Some(item) = app.try_state::<WaitingItem>() {
-        let _ = item.0.set_text(line("等你的會話", waiting));
+        let n = waiting.unwrap_or(0);
+        let text = if n > 0 {
+            format!("等你的會話：{n}（點了切過去）")
+        } else {
+            line("等你的會話", waiting)
+        };
+        let _ = item.0.set_text(text);
+        let _ = item.0.set_enabled(n > 0);
     }
 }
 

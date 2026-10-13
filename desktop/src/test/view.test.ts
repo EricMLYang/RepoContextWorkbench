@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { InboxCard, QuestionCard } from "../api/types";
 import {
   draggedFileAbs,
+  firstNeedingYou,
   reportLine,
   sessionNeedsYou,
   pathForTerminal,
@@ -183,5 +184,20 @@ describe("會話在等你（Claude Code hook 自動寫）", () => {
     expect(sessionNeedsYou(term({ ...hook, status: "working" }))).toBe(false);
     expect(sessionNeedsYou(term(hook, false))).toBe(false);
     expect(sessionNeedsYou(term(null))).toBe(false);
+  });
+  it("最該先處理的：卡住的優先，同類取最早開始的；沒有＝null", () => {
+    const t = (sid: string, status: string | null, started: string, alive = true) =>
+      ({
+        ...(term(status ? { status, text: "", at: "2026-10-14 01:00" } : null, alive) as object),
+        sid,
+        started,
+      }) as never;
+    expect(firstNeedingYou([t("a", "working", "1")])).toBeNull();
+    const w1 = t("w1", "waiting", "2026-10-14 01:00");
+    const w0 = t("w0", "waiting", "2026-10-14 00:50");
+    const b = t("b", "blocked", "2026-10-14 01:10");
+    const dead = t("d", "blocked", "2026-10-14 00:10", false);
+    expect((firstNeedingYou([w1, w0]) as { sid: string }).sid).toBe("w0");
+    expect((firstNeedingYou([w1, w0, b, dead]) as { sid: string }).sid).toBe("b");
   });
 });

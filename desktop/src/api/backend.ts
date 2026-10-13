@@ -54,6 +54,8 @@ export interface Backend {
   onChanged?(cb: () => void): () => void;
   /** 選配（Tauri 才有）：選單列「記一筆…」——前端切到筆記分頁、游標放進輸入框。回傳取消訂閱。 */
   onCapture?(cb: () => void): () => void;
+  /** 選配（Tauri 才有）：選單列「等你的會話」被點——前端切到第一個在等你的會話。回傳取消訂閱。 */
+  onNextWaiting?(cb: () => void): () => void;
 }
 
 /** 給人看的連線錯誤訊息（兩個實作共用，與 Python 版前端逐字一致）。 */

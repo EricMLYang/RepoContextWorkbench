@@ -448,6 +448,19 @@ export function sessionNeedsYou(s: TermInfo): boolean {
   return !!s.alive && !!s.agent_status && ["waiting", "blocked"].includes(s.agent_status.status);
 }
 
+/** 最該先處理的在等你的會話：卡住（要你允許）優先，再來是等你回覆；同類取最早開始的。沒有＝null。 */
+export function firstNeedingYou(terms: TermInfo[]): TermInfo | null {
+  const rank = (t: TermInfo) => (t.agent_status?.status === "blocked" ? 0 : 1);
+  return (
+    terms
+      .filter(sessionNeedsYou)
+      .sort(
+        (a, b) =>
+          rank(a) - rank(b) || String(a.started ?? "").localeCompare(String(b.started ?? "")),
+      )[0] ?? null
+  );
+}
+
 export type DotState = "dead" | "silent" | "needs" | "ok";
 
 export function sessionDot(s: TermInfo): DotState[] {
