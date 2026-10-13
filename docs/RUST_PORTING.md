@@ -194,6 +194,15 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
     只報這些資料夾裡的變動；檔案樹改成 VS Code 檔案總管風格（攤平列、縮排導引線、檔案圖示、目前檔案反白、
     右鍵複製路徑／相對路徑、方向鍵操作）。
   macOS：單元／整合測試過，GUI 未實測；Windows：未測（ReadDirectoryChangesW 遞迴監看理論上可用）。
+- **repo 名片與組員名冊**（2026-10-13；Python 沒有）：
+  - registry 的 repo 多三個選填鍵 `description`／`role`／`keywords`（registry 保留不認得的鍵，Python 讀寫照樣保留）。
+    操作 `registry_describe`（操作表最後一項；CLI `ctx registry describe`、MCP 管理層），空字串／空清單＝清掉。
+  - `profile` 模組：沒填介紹時從 repo 的 README（或 AGENTS.md）截第一句當推測（`description_source: "readme"`），
+    只讀不存；依名片（名稱／角色／關鍵字／tag／介紹）排 repo。
+  - `context_for` 多 `roster` 鍵（範圍有兩個以上 repo 才給）：每個成員的 id、絕對路徑、名片、`sessions`
+    （開場 hook 標記數）、`you`；開場注入多「## 同組成員」段。`search_knowledge` 多 `repo_profiles` 鍵（有命中才給）。
+  - MCP 工作層多 `describe_repo`（只能改主場：所在 repo＋同組成員，跨組要 `cross_scope_ok`）。
+  - 對拍：`scripts/parity.py` 比對前拿掉 `roster`／`repo_profiles`／同組成員段／這兩個工具／skill 的名片段。
 - **App 首次設定可直接建 spine**（2026-10-13；Python 沒有）：殼多命令 `create_spine`（`ctx_core::init::init_spine`，
   跟 `ctx init` 同一份 scaffold），只建在新路徑或空資料夾，已是 spine 就直接用，有東西又不是 spine 一律拒絕。
   macOS：單元測試過，GUI 未實測；Windows：未測。

@@ -561,6 +561,11 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
     if !reopen.is_empty() {
         out["reopen"] = Value::Array(reopen);
     }
+    // Rust 才有（2026-10-13）：組員名冊——同組有誰、在哪、什麼角色、有沒有會話在跑；只有一個 repo 就不給這個鍵
+    let roster = roster_of(spine_dir, &entries, &w);
+    if !roster.is_empty() {
+        out["roster"] = serde_json::to_value(&roster)?;
+    }
     // Rust 才有（N-26）：未結太多時只給最該處理的 CONTEXT_LOOP_CAP 項（逾期 → 到期近 → 沒期限），
     // 其餘只給數量——規模大時 context_for 曾到 51KB（約 1.5 萬 token），agent 每次開工都要吞
     cap_open_loops(&mut out);
@@ -744,6 +749,11 @@ pub fn search_knowledge(
         out.extend(m);
     }
     add_refs(out.get_mut("files"));
+    // Rust 才有（2026-10-13）：先回答「是哪個 repo」——依名片（介紹／角色／關鍵字／tag／名稱）排；沒有命中就不放這個鍵
+    let by_profile = profile_hits(&entries, query);
+    if !by_profile.is_empty() {
+        out.insert("repo_profiles".into(), serde_json::to_value(&by_profile)?);
+    }
     // Rust 才有（F-22）：過去的判斷也搜得到（留痕了要找得回來）；沒有命中就不放這個鍵
     let decisions = search_decisions(spine_dir, query, &w, t, opts.everywhere && !explicit, 5)?;
     if !decisions.is_empty() {
@@ -1516,3 +1526,5 @@ mod hints;
 use hints::*;
 mod agdr;
 pub use agdr::*;
+mod profile;
+pub use profile::*;

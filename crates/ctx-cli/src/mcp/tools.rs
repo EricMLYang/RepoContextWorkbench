@@ -181,6 +181,29 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
             w_handoff,
         ),
         work(
+            "describe_repo",
+            "寫 repo 的名片：一句話介紹、協作角色、搜尋關鍵字。組員名冊與 search_knowledge 的 repo 排名都靠它；\
+             存在 spine（registry），不會寫進 repo。開場名冊標「推測自 README」或沒有介紹時，做完手上的事順手補。\
+             只能改主場（所在 repo＋同組成員）；空字串／空陣列＝清掉該欄。",
+            s_(
+                cat(vec![
+                    vec![
+                        ("id", d_(str_t(), "repo id；省略＝你所在的 repo")),
+                        (
+                            "description",
+                            d_(str_t(), "一句話：這個 repo 是什麼、別的 repo 會來這裡找什麼"),
+                        ),
+                        ("role", d_(str_t(), "協作角色，一個短詞（例 知識庫、規格來源、實作）")),
+                        ("keywords", d_(arr_t(), "搜尋用關鍵字（tags 是給人分類的，別重複）")),
+                    ],
+                    cwd_props(),
+                    cross_props(),
+                ]),
+                &[],
+            ),
+            w_describe,
+        ),
+        work(
             "search_knowledge",
             "找其他 repo 的相關內容（跨 repo 參考的第一步）：給一段文字（問題、想法、卡片內容），\
              回傳 files（md，附行號片段、why、可直接給 read_from 的 ref）、code（git grep 命中的程式碼）\

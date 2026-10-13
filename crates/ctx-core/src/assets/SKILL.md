@@ -39,6 +39,15 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 - `repo_status` 看某個 repo 的現況：最近變化、沒 commit 的檔、正在跑的 dev server
   （啟動後有沒有檔案又改過＝改了要不要重開）、失效的跨 repo 路徑、上游變動。
 
+## 同組成員與 repo 名片（Rust 版）
+
+- 開場注入的「## 同組成員」＝這組有誰：角色、絕對路徑、一句話介紹、有沒有會話在跑（MCP `context_for` 的 `roster`）。
+  要別人的東西先看這裡判斷找誰；只看一眼可以直接讀路徑，要寫進結論或複製就用 `read_from`（會留引用）。
+- `search_knowledge` 的 `repo_profiles` 段先回答「是哪個 repo」（依介紹／角色／關鍵字／tag／名稱排），再看 `files`。
+- 名片缺了或標「推測自 README」：手上的事做完，用 `describe_repo` 補一句介紹與角色（`role` 是一個短詞，
+  例 知識庫、規格來源、實作；`keywords` 給搜尋用，別跟 tags 重複）。名片存在 spine，**不寫進任何 repo**；
+  只能改主場（所在 repo＋同組成員）。
+
 ## 反芻推薦（別人替你先找好的）
 
 開場注入若有「自上次以來跟你手上工作相關的新料」：那是排程在會話之間，拿本組的目標／未結／

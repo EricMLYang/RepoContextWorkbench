@@ -69,8 +69,19 @@ MCP_EXTRA_PARAMS = [
 ]
 
 
+MCP_EXTRA_TOOLS = {
+    "describe_repo": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
+    "registry_describe": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
+}
+
+
 def drop_mcp_extras(resp, allowed):
-    """tools/list 回應：拿掉 Rust 才有的選填參數（就地改），用到的理由加進 allowed。"""
+    """tools/list 回應：拿掉 Rust 才有的工具與選填參數（就地改），用到的理由加進 allowed。"""
+    tools = (resp.get("result") or {}).get("tools")
+    if isinstance(tools, list):
+        for t in [t for t in tools if t.get("name") in MCP_EXTRA_TOOLS]:
+            tools.remove(t)
+            allowed.add(MCP_EXTRA_TOOLS[t["name"]])
     for t in ((resp.get("result") or {}).get("tools") or []):
         props = (t.get("inputSchema") or {}).get("properties") or {}
         for name, param, why in MCP_EXTRA_PARAMS:
@@ -315,7 +326,8 @@ def snapshot(side):
 FILE_ALLOWED_USED = set()
 
 RULES_WHY = ("Rust 才有的內容，比對前拿掉：反芻推薦的 rules（N-20）、search 的 decisions（F-22）、"
-             "context_for 的 hints 與開場的提醒段／新能力那一行（N-22）")
+             "context_for 的 hints 與開場的提醒段／新能力那一行（N-22）、"
+             "repo 名片（2026-10-13：search 的 repo_profiles、context_for 的 roster、開場的同組成員段）")
 
 
 def strip_rust_only(v):
@@ -331,10 +343,18 @@ def strip_rust_only(v):
         if "open_loops" in v and "scope" in v and "hints" in v:  # context_for 的提醒（N-22）
             del v["hints"]
             hit = True
+        if "query" in v and "files" in v and "repo_profiles" in v:  # search 的 repo 名片排名（2026-10-13）
+            del v["repo_profiles"]
+            hit = True
+        if "open_loops" in v and "scope" in v and "roster" in v:  # context_for 的組員名冊（2026-10-13）
+            del v["roster"]
+            hit = True
         ac = v.get("additionalContext")
         if isinstance(ac, str):  # 開場注入：提醒段與新能力那一行（N-22）
             new = re.sub(r"\n## 提醒（[^\n]*\n(?:- [^\n]*\n)*\n?", "\n", ac)
             new = re.sub(r"\n- 改掉舊判斷→[^\n]*", "", new)
+            # 組員名冊段（2026-10-13）
+            new = re.sub(r"\n## 同組成員（[^\n]*\n(?:- [^\n]*\n)*(?:你所在的 repo 還沒寫介紹[^\n]*\n)?\n?", "\n", new)
             if new != ac:
                 v["additionalContext"] = new
                 hit = True
@@ -507,7 +527,7 @@ def main():
 
     # ── 讀（初始狀態）──
     C("instructions", ["instructions"], spine=False,
-      stdout_fix=lambda s: re.sub(r"\n## 判斷的沿革、回顧與交辦（Rust 版）\n.*?(?=\n## )", "", s, flags=re.S))
+      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|同組成員與 repo 名片)（Rust 版）\n.*?(?=\n## )", "", s, flags=re.S))
     C("registry list", ["registry", "list"])
     C("registry list --json", ["registry", "list", "--json"])
     C("registry relations", ["registry", "relations"])

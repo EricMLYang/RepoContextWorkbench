@@ -117,6 +117,8 @@ ctx init ~/repo-spine                                  # 建 spine repo（桌面
 ctx setup --spine ~/repo-spine --claude --dry-run      # 記住 spine＋掛 MCP（user scope）＋hooks＋skill；先看會改什麼
 ctx registry add my-repo ~/Coding/my-repo              # 登記；registry scan <目錄> --apply 批次登記
 ctx group add 產品 my-repo,my-notes                     # 建組（add-member／remove-member／rename／remove）
+ctx registry describe my-notes --role 知識庫 --description "書摘與主題閱讀" --keywords 書摘,閱讀
+                                                       # repo 名片：給 agent 開場的組員名冊與搜尋用（存 spine，不寫進 repo）
 ctx registry relate my-pm my-code --kind pm-of         # 關係：A 是 B 的 PM；registry suggest 看建議
 ctx app                                                # 桌面工作台
 ctx instructions                                       # 給沒有 skill 機制的 agent：貼進 AGENTS.md

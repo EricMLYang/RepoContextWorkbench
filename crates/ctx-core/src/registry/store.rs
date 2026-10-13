@@ -150,6 +150,18 @@ impl Repo {
     pub fn upstream(&self) -> Option<String> {
         self.get_str("upstream").filter(|s| !s.is_empty())
     }
+    /// Rust 才有（2026-10-13）：一句話介紹（給名冊與搜尋；沒填時 [`crate::profile`] 從 README 推）。
+    pub fn description(&self) -> Option<String> {
+        self.get_str("description").filter(|s| !s.trim().is_empty())
+    }
+    /// Rust 才有：協作角色（一個短詞，例「知識庫」「規格來源」）。
+    pub fn role(&self) -> Option<String> {
+        self.get_str("role").filter(|s| !s.trim().is_empty())
+    }
+    /// Rust 才有：搜尋用關鍵字（自由寫；tags 是給人分類篩選的）。
+    pub fn keywords(&self) -> Vec<String> {
+        seq_strings(self.get("keywords"))
+    }
     pub fn origin(&self) -> Option<String> {
         self.get_str("origin").filter(|s| !s.is_empty())
     }

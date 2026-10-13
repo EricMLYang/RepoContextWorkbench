@@ -531,7 +531,9 @@ fn context_for_keys_and_no_card() {
             "attention",
             "neighbors",
             "drift",
-            "fresh"
+            "fresh",
+            // Rust 才有（2026-10-13）：組員名冊
+            "roster"
         ]
     );
     assert_eq!(ctx["where"]["repo"]["id"], "impl");
@@ -1118,4 +1120,90 @@ fn context_for_caps_open_loops() {
         out.contains("未結（35）") && out.contains("…另 29 項"),
         "{out}"
     );
+}
+
+// ---- repo 名片（2026-10-13，Rust 才有）：組員名冊、先找 repo、agent 寫介紹 ----
+
+#[test]
+fn test_roster_lists_group_members_with_inferred_description() {
+    let w = two_groups();
+    let c = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
+    let roster = c["roster"].as_array().unwrap();
+    let ids: Vec<&str> = roster.iter().map(|r| r["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, vec!["plan", "impl"]);
+    let me = &roster[1];
+    assert_eq!(me["you"], true);
+    assert_eq!(me["path"], w.impl_.to_string_lossy().as_ref());
+    // 沒填介紹：從 README 截第一句（只讀 repo）
+    assert_eq!(me["description"], "這個 repo 談 widget 快取設計。");
+    assert_eq!(me["description_source"], "readme");
+    assert!(roster[0].get("you").is_none());
+    // 只有一個 repo 的範圍沒有「同組」：不給 roster 鍵
+    let solo = api::context_for(&w.sp, &at(&w.notes), false).unwrap();
+    assert!(solo.get("roster").is_none());
+}
+
+#[test]
+fn test_describe_repo_is_scoped_and_feeds_roster_search_and_hook() {
+    let w = two_groups();
+    let d = registry::Describe {
+        description: Some("產品規格與決策紀錄".into()),
+        role: Some("規格來源".into()),
+        keywords: Some(vec!["roadmap".into()]),
+    };
+    let r = v(api::describe_repo(&w.sp, Some("plan"), &d, Some(&w.impl_), false).unwrap());
+    assert_eq!(r["repo"]["role"], "規格來源");
+    assert!(r["said"].as_str().unwrap().contains("規格來源"));
+    // 留痕：agent 改了 registry，使用者看得到
+    let evs = spine_mod::iter_events(&w.sp).unwrap();
+    let last = evs.last().unwrap();
+    assert_eq!(last.source, "agent");
+    assert!(last.body.contains("plan 名片"));
+    // 別組的 repo：先問使用者
+    let e = api::describe_repo(&w.sp, Some("notes"), &d, Some(&w.impl_), false).unwrap_err();
+    assert_eq!(code_of(e).0, "cross_scope");
+    assert!(api::describe_repo(&w.sp, Some("notes"), &d, Some(&w.impl_), true).is_ok());
+    // 什麼都沒給
+    let e = api::describe_repo(
+        &w.sp,
+        None,
+        &registry::Describe::default(),
+        Some(&w.impl_),
+        false,
+    )
+    .unwrap_err();
+    assert_eq!(code_of(e).0, "bad_request");
+    // 空字串＝清掉
+    let clear = registry::Describe {
+        description: Some(String::new()),
+        ..Default::default()
+    };
+    api::describe_repo(&w.sp, Some("notes"), &clear, Some(&w.impl_), true).unwrap();
+    assert!(registry::get_repo(&w.sp, "notes")
+        .unwrap()
+        .description()
+        .is_none());
+
+    // 搜尋先回答「是哪個 repo」
+    let s = api::search_knowledge(&w.sp, "roadmap 規格", &at(&w.impl_), &SearchOpts::default())
+        .unwrap();
+    assert_eq!(s["repo_profiles"][0]["repo"], "plan");
+    assert!(s["repo_profiles"][0]["why"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("關鍵字命中")));
+    // 開場名冊
+    let out = hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "s1", "cwd": w.impl_.to_string_lossy()}),
+        None,
+    );
+    let ctx: Value = serde_json::from_str(&out).unwrap();
+    let ctx = ctx["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(ctx.contains("## 同組成員（2 個"), "{ctx}");
+    assert!(ctx.contains("- **plan**｜規格來源｜") && ctx.contains("產品規格與決策紀錄"));
+    assert!(ctx.contains("- **impl**（你在這）") && ctx.contains("（推測自 README）"));
+    assert!(ctx.contains("describe_repo"));
 }

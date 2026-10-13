@@ -223,6 +223,15 @@ fn registry_set(d: &Path, a: &Args) -> Result<Value> {
     Ok(registry::set_field(d, &a.req("id"), &a.req("key"), v)?.to_json())
 }
 
+fn registry_describe(d: &Path, a: &Args) -> Result<Value> {
+    let desc = registry::Describe {
+        description: a.s("description"),
+        role: a.s("role"),
+        keywords: a.csv("keywords"),
+    };
+    Ok(registry::describe_repo(d, &a.req("id"), &desc)?.to_json())
+}
+
 fn registry_tier(d: &Path, a: &Args) -> Result<Value> {
     let (id, tier) = (a.req("id"), a.req("tier"));
     if !registry::TIERS.contains(&tier.as_str()) {
@@ -627,6 +636,40 @@ static OPS: LazyLock<Vec<Op>> = LazyLock::new(|| {
             audit: Some(|r, _| {
                 let body = if rtruthy(r, "goal") { format!("本組目標：{}", rs(r, "goal")) } else { "清除本組目標".to_string() };
                 Some((vec![format!("group:{}", rs(r, "group"))], body))
+            }),
+        },
+        // Rust 才有（2026-10-13）：放最後，前面的順序跟 Python 的操作表一樣
+        Op {
+            name: "registry_describe",
+            summary: "改 repo 的名片：一句話介紹、協作角色、搜尋關鍵字（存 registry，不寫進 repo；空字串＝清掉）",
+            params: vec![
+                p("id", Str, "repo id", true),
+                p("description", Str, "一句話介紹：這個 repo 是什麼、別的 repo 來這裡找什麼", false),
+                p("role", Str, "協作角色，一個短詞（例 知識庫、規格來源、實作）", false),
+                p("keywords", Arr, "搜尋用關鍵字", false),
+            ],
+            run: registry_describe,
+            say: |r, _| {
+                let mut bits = vec![format!("已更新 {} 的名片", rs(r, "id"))];
+                for (k, label) in [("role", "角色"), ("description", "介紹")] {
+                    if let Some(v) = r.get(k).and_then(Value::as_str) {
+                        bits.push(format!("{label}：{v}"));
+                    }
+                }
+                bits.join("｜")
+            },
+            audit: Some(|r, a| {
+                let mut parts = Vec::new();
+                if let Some(v) = a.s("role") {
+                    parts.push(format!("角色＝{}", if v.is_empty() { "（清掉）".into() } else { v }));
+                }
+                if let Some(v) = a.s("description") {
+                    parts.push(format!("介紹＝{}", if v.is_empty() { "（清掉）".into() } else { v }));
+                }
+                if let Some(v) = a.csv("keywords") {
+                    parts.push(format!("關鍵字＝{}", if v.is_empty() { "（清掉）".into() } else { v.join("、") }));
+                }
+                Some((vec![format!("repo:{}", rs(r, "id"))], format!("{} 名片：{}", rs(r, "id"), parts.join("；"))))
             }),
         },
     ]

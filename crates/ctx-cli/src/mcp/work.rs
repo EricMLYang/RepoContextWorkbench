@@ -177,3 +177,21 @@ pub(super) fn w_repo_status(d: &Path, a: &Args, here: &Path) -> Result<Value> {
         nz(a, "since").as_deref(),
     )
 }
+/// Rust 才有（2026-10-13）：改 repo 名片（存 spine 的 registry，不寫進 repo）。
+pub(super) fn w_describe(d: &Path, a: &Args, here: &Path) -> Result<Value> {
+    let desc = registry::Describe {
+        description: arg_s(a, "description"),
+        role: arg_s(a, "role"),
+        keywords: match a.get("keywords") {
+            None | Some(Value::Null) => None,
+            Some(_) => Some(arg_list(a, "keywords")),
+        },
+    };
+    json(agentapi::describe_repo(
+        d,
+        nz(a, "id").as_deref(),
+        &desc,
+        Some(&cwd_of(a, here)),
+        arg_flag(a, "cross_scope_ok"),
+    ))
+}

@@ -28,7 +28,7 @@ pub use relations::{
     RelationKind, RelationKinds, RelationRow, RelationView,
 };
 pub use repos::{
-    add_repo, all_tags, get_repo, remove_repo, set_field, survival, tag_repo, AddRepo, Survival,
-    Tier, TIERS,
+    add_repo, all_tags, describe_repo, get_repo, remove_repo, set_field, survival, tag_repo,
+    AddRepo, Describe, Survival, Tier, TIERS,
 };
 pub use store::{load, save, transaction, Export, Group, RegistryData, Relation, Repo};

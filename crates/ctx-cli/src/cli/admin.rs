@@ -63,6 +63,19 @@ pub enum RegistryCmd {
         key: String,
         value: String,
     },
+    /// 寫 repo 名片：介紹／協作角色／搜尋關鍵字（存 registry，不寫進 repo；給空字串＝清掉）
+    Describe {
+        id: String,
+        /// 一句話介紹：這個 repo 是什麼、別的 repo 來這裡找什麼
+        #[arg(long)]
+        description: Option<String>,
+        /// 協作角色，一個短詞（例 知識庫、規格來源、實作）
+        #[arg(long)]
+        role: Option<String>,
+        /// 搜尋用關鍵字（逗號分隔）
+        #[arg(long)]
+        keywords: Option<String>,
+    },
     /// 改 tier（paused 可帶 --resume-when）
     Tier {
         id: String,
@@ -157,6 +170,16 @@ pub fn cmd_registry(ctx: &Ctx, c: &RegistryCmd) -> CmdResult {
             "registry_add",
             json!({"id": id, "path": path, "type": kind, "tier": tier,
                    "tags": tags, "upstream": upstream}),
+        ),
+        Describe {
+            id,
+            description,
+            role,
+            keywords,
+        } => op(
+            ctx,
+            "registry_describe",
+            json!({"id": id, "description": description, "role": role, "keywords": keywords}),
         ),
         Set { id, key, value } => op(
             ctx,

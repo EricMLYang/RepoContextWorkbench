@@ -148,6 +148,44 @@ pub fn set_field(
     })
 }
 
+/// `describe_repo` 要改哪些名片欄位：None＝不動、空字串／空清單＝清掉。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Describe {
+    pub description: Option<String>,
+    pub role: Option<String>,
+    pub keywords: Option<Vec<String>>,
+}
+
+/// Rust 才有（2026-10-13）：改 repo 名片（介紹／角色／關鍵字），存 registry——不寫進 repo（最小打擾）。
+/// 回傳更新後的登記項。三個都沒給＝錯。
+pub fn describe_repo(spine_dir: impl AsRef<Path>, id: &str, d: &Describe) -> Result<Repo> {
+    if d.description.is_none() && d.role.is_none() && d.keywords.is_none() {
+        return Err(Error::invalid("description／role／keywords 至少給一個"));
+    }
+    transaction(spine_dir, |data| {
+        let r = data
+            .repo_mut(id)
+            .ok_or_else(|| Error::invalid(format!("repo 不存在: {id}")))?;
+        for (k, v) in [("description", &d.description), ("role", &d.role)] {
+            match v.as_deref().map(str::trim) {
+                Some("") => {
+                    r.remove(k);
+                }
+                Some(t) => r.set(k, t),
+                None => {}
+            }
+        }
+        match &d.keywords {
+            Some(k) if k.is_empty() => {
+                r.remove("keywords");
+            }
+            Some(k) => r.set("keywords", strs(k)),
+            None => {}
+        }
+        Ok(r.clone())
+    })
+}
+
 /// 對應 `registry.tag_repo`：P1 tag 操作（2026-09-01 使用者需求：分群以外要能很容易下 tag）。
 /// 回傳更新後的 tags；重複 add 冪等、remove 不存在的 tag 靜默略過。
 pub fn tag_repo<A: AsRef<str>, R: AsRef<str>>(

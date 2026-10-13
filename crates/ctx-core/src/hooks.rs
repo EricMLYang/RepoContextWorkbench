@@ -31,8 +31,57 @@ use crate::{crossref, ruminate, Result};
 pub const TOOLS_LINE: &str = "context_for／next_work／log_decision／add_todo／close_todo／\
 report_status／handoff／search_knowledge／read_from／ask_repo／repo_status";
 
+/// 開場名冊最多列幾個成員。
+const ROSTER_LINES: usize = 20;
+
+/// 名冊一列：`- **id**（你在這）｜角色｜路徑 — 介紹（推測）｜N 個會話在跑`。
+fn roster_line(r: &Value) -> String {
+    let mut line = format!("- **{}**", s(r, "id"));
+    if r["you"] == true {
+        line.push_str("（你在這）");
+    }
+    if let Some(role) = r["role"].as_str() {
+        line.push_str(&format!("｜{role}"));
+    }
+    line.push_str(&format!("｜{}", s(r, "path")));
+    if let Some(d) = r["description"].as_str() {
+        line.push_str(&format!(" — {d}"));
+        if r["description_source"] == "readme" {
+            line.push_str("（推測自 README）");
+        }
+    }
+    let n = r["sessions"].as_u64().unwrap_or(0);
+    if n > 0 && r["you"] != true {
+        line.push_str(&format!("｜{n} 個會話在跑"));
+    }
+    line
+}
+
 fn marker_dir(spine_dir: &Path) -> PathBuf {
     spine_dir.join(".state").join("hook_sessions")
+}
+
+/// Rust 才有（2026-10-13，組員名冊）：每個 repo 現在開著幾個 agent 會話——讀開場標記（SessionEnd 會刪、
+/// 超過 [`STALE_MARKER_DAYS`] 天的開場時清掉）。讀不到就是空的。
+pub fn open_sessions_by_repo(spine_dir: &Path) -> std::collections::HashMap<String, usize> {
+    let mut out = std::collections::HashMap::new();
+    let Ok(rd) = std::fs::read_dir(marker_dir(spine_dir)) else {
+        return out;
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.extension().is_none_or(|x| x != "json") {
+            continue;
+        }
+        let repo = std::fs::read_to_string(&p)
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|v| v["repo"].as_str().map(String::from));
+        if let Some(r) = repo {
+            *out.entry(r).or_insert(0) += 1;
+        }
+    }
+    out
 }
 
 static BACKFILL_TAIL: LazyLock<Regex> =
@@ -164,6 +213,31 @@ pub fn render_start(c: &ContextFor) -> String {
             py_str(&st["at"]),
             st.get("text").map(py_str).unwrap_or_default()
         ));
+    }
+    // Rust 才有（2026-10-13）：組員名冊（context_for 的 roster）
+    let roster: Vec<&Value> = ctx["roster"].as_array().into_iter().flatten().collect();
+    if !roster.is_empty() {
+        out.push(String::new());
+        out.push(format!(
+            "## 同組成員（{} 個；路徑可直接讀，要留引用就用 read_from）",
+            roster.len()
+        ));
+        out.extend(roster.iter().take(ROSTER_LINES).map(|r| roster_line(r)));
+        if roster.len() > ROSTER_LINES {
+            out.push(format!(
+                "- …另 {} 個（context_for 的 roster 有完整清單）",
+                roster.len() - ROSTER_LINES
+            ));
+        }
+        let you_missing = roster
+            .iter()
+            .any(|r| r["you"] == true && r["description_source"] != "registry");
+        if you_missing {
+            out.push(
+                "你所在的 repo 還沒寫介紹：手上的事做完，可用 describe_repo 補一句介紹與角色（存在 spine，不動 repo）。"
+                    .into(),
+            );
+        }
     }
     if !c.neighbors.is_empty() {
         out.push(String::new());
