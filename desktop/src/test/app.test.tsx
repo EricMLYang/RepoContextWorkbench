@@ -584,14 +584,17 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     expect(localStorage.getItem("workbench:picks")).toBe("[]");
   });
 
-  it("這組的變更：只列有變更的 repo，查詢帶目前範圍，點了開差異；沒有變更整段不顯示", async () => {
-    let rows: unknown[] = [
+  it("這組的變更：只列有變更的 repo，查詢帶目前範圍，點了開差異；讀過之後失敗保留清單；沒有變更整段不顯示", async () => {
+    let rows: unknown[] | null = [
       { id: "b", more: 0, changes: [{ path: "wip0.md", status: "untracked" }] },
     ];
     const backend = treeBackend({
       action: vi.fn(async (name: string, p: { id?: string; dir?: string }) => {
         if (name === "repo_tree") return tree(p.id!, p.dir || "");
-        if (name === "scope_changes") return { ok: true, repos: rows };
+        if (name === "scope_changes") {
+          if (rows === null) throw new Error("git 跑不起來");
+          return { ok: true, repos: rows };
+        }
         if (name === "file_diff")
           return { ok: true, id: "b", path: "wip0.md", diff: "+草稿", truncated: false };
         return { ok: true };
@@ -602,6 +605,17 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     expect(backend.action).toHaveBeenCalledWith("scope_changes", { group: "產品開發" });
     expect(sec.textContent).toContain("這組的變更（1 個 repo、1 個檔）");
     expect(sec.textContent).toContain("b（1）");
+    // 讀過之後失敗：保留清單、顯示原因
+    const ok = rows;
+    rows = null;
+    await act(async () => {
+      await store.refreshState();
+    });
+    await waitFor(() =>
+      expect(within(sec).getByRole("alert").textContent).toContain("git 跑不起來"),
+    );
+    expect(sec.textContent).toContain("b（1）");
+    rows = ok;
     await act(async () => fireEvent.click(within(sec).getByRole("button", { name: /wip0\.md/ })));
     expect(backend.action).toHaveBeenCalledWith("file_diff", { id: "b", path: "wip0.md" });
     rows = [];
@@ -609,7 +623,9 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
       await store.refreshState();
     });
     await waitFor(() =>
-      expect(screen.queryByRole("region", { name: "這組還沒 commit 的變更" })).toBeNull(),
+      expect(
+        screen.queryByRole("region", { name: "這組還沒 commit 的變更", hidden: true }),
+      ).toBeNull(),
     );
   });
 

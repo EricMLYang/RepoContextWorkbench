@@ -125,6 +125,7 @@ export function ChangeList(props: {
 /**
  * 檔案分頁上方「這組的變更」：範圍內每個有變更的 repo 一段（多個 agent 同時在不同 repo 改東西時，一眼看出誰動了什麼）。
  * 引擎一次平行查完（`scope_changes`）；分頁看得到時、state 一變就重讀；沒有任何變更就整段不顯示。
+ * 讀失敗：讀成功過才顯示原因（保留上次的清單），從沒成功過就不顯示。
  */
 export function ScopeChanges({ active }: { active: boolean }) {
   const store = useStore();
@@ -153,7 +154,8 @@ export function ScopeChanges({ active }: { active: boolean }) {
     };
   }, [store, key, active, state, nonce]);
 
-  if (!error && !rows?.length) return null;
+  // 輔助的總覽：從沒讀成功過（例如舊引擎沒有這個 action）就安靜不顯示；讀過之後失敗才保留舊的並顯示原因
+  if (rows === null || (!error && !rows.length)) return null;
   const total = (rows || []).reduce((n, r) => n + r.changes.length + r.more, 0);
   return (
     <section className="scopechanges" aria-label="這組還沒 commit 的變更">
