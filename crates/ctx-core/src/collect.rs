@@ -266,9 +266,26 @@ fn annotate_agents(states: &mut [RepoState], spine_dir: &Path) {
     }
 }
 
+/// [`collect_group`] 一次最多平行採集幾個 repo。
+const COLLECT_PARALLEL: usize = 8;
+
 /// 對應 `collect.collect_group`。有 `spine_dir` 才做 agent 偵測。
 pub fn collect_group(entries: &[RepoSpec], spine_dir: Option<&Path>) -> Vec<RepoState> {
-    let mut states: Vec<RepoState> = entries.iter().map(collect_repo).collect();
+    // Rust 才有（2026-10-14）：各 repo 平行採集（每個 repo 要跑好幾個 git，原本逐一跑：5 個 repo 的組
+    // `ctx next` 約 280ms）。一次最多 COLLECT_PARALLEL 個，結果照原本順序。
+    let mut states: Vec<RepoState> = Vec::with_capacity(entries.len());
+    for chunk in entries.chunks(COLLECT_PARALLEL) {
+        std::thread::scope(|sc| {
+            let jobs: Vec<_> = chunk
+                .iter()
+                .map(|e| sc.spawn(move || collect_repo(e)))
+                .collect();
+            // collect_repo 不會 panic；萬一有，就在這個執行緒重跑一次（跟逐一跑時一樣會把 panic 帶上來）
+            for (job, e) in jobs.into_iter().zip(chunk) {
+                states.push(job.join().unwrap_or_else(|_| collect_repo(e)));
+            }
+        });
+    }
     if let Some(sd) = spine_dir {
         annotate_agents(&mut states, sd);
     }
