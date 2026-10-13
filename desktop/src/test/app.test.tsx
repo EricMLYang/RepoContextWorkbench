@@ -1302,6 +1302,13 @@ describe("會話放進所屬牌組", () => {
       fireEvent.click(within(inCard as HTMLElement).getByRole("button", { name: /claude · a/ })),
     );
     expect(document.getElementById("termwhere")!.textContent).toBe("產品開發 › a");
+    // 對單一 repo 開的會話：「看變更」在右側欄打開那個 repo
+    await act(async () =>
+      fireEvent.click(
+        within(document.getElementById("termbar")!).getByRole("button", { name: "看變更" }),
+      ),
+    );
+    expect(document.getElementById("repopanel")!.getAttribute("aria-label")).toBe("Repo：a");
   });
 
   it("agent 會話的終端標題能切到同目錄的 Terminal 再切回來；Terminal 不另列在會話列", async () => {

@@ -405,6 +405,16 @@ export function TerminalPanel(props: {
         >
           重新連線
         </button>
+        {where?.repo ? (
+          <button
+            type="button"
+            className="ghost small"
+            title={"在右側欄看 " + where.repo + " 還沒 commit 的變更（agent 改了什麼）"}
+            onClick={() => where.repo && ui.showRepo(where.repo)}
+          >
+            看變更
+          </button>
+        ) : null}
         <button
           type="button"
           id="termresult"
