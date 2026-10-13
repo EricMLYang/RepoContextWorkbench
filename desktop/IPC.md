@@ -158,7 +158,8 @@ Rust 端簽名建議：
   Rust 才有（2026-10-14）：`agent_status` 也可能來自 Claude Code hook——`term_create` 開 Claude Code（config `mcp: mcp-config`）時多帶
   `--settings=<spine>/.state/session_hooks.json`（只掛 `Stop`／`Notification`／`UserPromptSubmit` → `ctx hook stop|notification|prompt`，
   不動使用者的 `~/.claude/settings.json`）與環境變數 `REPO_CONTEXT_SESSION_STATUS=<spine>/.state/session_status/<sid>.json`；
-  hook 照這個路徑寫 `{status, text, at, event}`（做完＝waiting、要你允許＝waiting＋訊息、你送出＝working）。這種的多一個 `event` 鍵。
+  hook 照這個路徑寫 `{status, text, at, event}`（做完＝waiting、要你允許工具＝blocked＋訊息、閒著等輸入＝waiting＋訊息、你送出＝working）。
+  `blocked` 的（agent 停住了）殼會在視窗不在前面時發系統通知「<會話> 要你允許」，同一次請求只發一次（`workbench::fresh_permission_asks`）。這種的多一個 `event` 鍵。
   跟 agent 經 MCP 回報的取新的（同一分鐘取 MCP 的）；會話結束刪檔、App 重開清空（sid 從 t1 重編）。
 - `ScanResult`：`group, states[RepoState], summary(WorkSummary), pulse, recent_commits[{repo,date,hash,subject}], question_cards[]（含 provenance：scope_kind="repo"）, questions[], quiet, session_tasks[{label,text}], audit[]`。
 - `RepoState`（`collect.collect_repo`）：`id, type, tier, path, exists, dirty, dirty_days, last_commit_days, ahead, behind, branch, last_subject, worktrees, commits_7d, commits_30d, recent_commits[], agents[], note`。

@@ -3,7 +3,8 @@
 //! 多個 agent 會話同時跑時，最要緊的是一眼看出**哪個在等我**。MCP `report_status` 要 agent 自己記得回報，
 //! 而且依範圍存（同範圍兩個會話會互蓋）；這裡改由 Claude Code 自己的 hook 自動寫、依會話存：
 //! - `Stop`（這一輪做完）→ `waiting`「這一輪做完了，等你回覆」
-//! - `Notification`（要你允許工具、或閒著等輸入）→ `waiting`＋Claude Code 給的訊息
+//! - `Notification`：要你允許工具 → `blocked`（agent 停住了，App 視窗不在前面時發系統通知）；
+//!   閒著等輸入 → `waiting`。都帶 Claude Code 給的訊息
 //! - `UserPromptSubmit`（你送出訊息）→ `working`
 //!
 //! 只有 App 開的 Claude Code 會話會寫：開會話時多帶 `--settings=<spine>/.state/session_hooks.json`
@@ -90,10 +91,16 @@ fn status_of(event: &str, payload: &Value) -> Option<(&'static str, String)> {
                 .map(str::trim)
                 .filter(|m| !m.is_empty())
                 .unwrap_or("需要你回應");
-            Some((
-                "waiting",
-                crate::pystr::take_chars(msg, TEXT_MAX).to_string(),
-            ))
+            let text = crate::pystr::take_chars(msg, TEXT_MAX).to_string();
+            // 要你允許工具＝agent 停在那裡動不了（blocked，App 會發通知）；閒著等輸入只是 waiting
+            let permission = payload.get("notification_type").and_then(Value::as_str)
+                == Some("permission_prompt")
+                || msg.to_lowercase().contains("permission");
+            Some(if permission {
+                ("blocked", text)
+            } else {
+                ("waiting", text)
+            })
         }
         "prompt" => Some(("working", "處理中".to_string())),
         _ => None,
@@ -184,11 +191,18 @@ mod tests {
         assert_eq!(
             (v["status"].as_str(), v["text"].as_str(), v["at"].as_str()),
             (
-                Some("waiting"),
+                Some("blocked"),
                 Some("Claude needs your permission to use Bash"),
                 Some("2026-10-14 01:02")
             )
         );
+        let idle =
+            r#"{"message":"Claude is waiting for your input","notification_type":"idle_prompt"}"#;
+        assert!(record_hook("notification", idle, Some(tp), at));
+        assert_eq!(read(sp, "t3").unwrap()["status"], "waiting");
+        let typed = r#"{"message":"需要確認","notification_type":"permission_prompt"}"#;
+        assert!(record_hook("notification", typed, Some(tp), at));
+        assert_eq!(read(sp, "t3").unwrap()["status"], "blocked");
         assert!(record_hook("stop", "not json", Some(tp), at));
         assert_eq!(read(sp, "t3").unwrap()["text"], "這一輪做完了，等你回覆");
         assert!(!record_hook("bogus", "{}", Some(tp), at));

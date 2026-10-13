@@ -2278,3 +2278,32 @@ fn sessions_needing_you_counts_only_live_agents_waiting_or_blocked() {
     ];
     assert_eq!(sessions_needing_you(&d, &terms).unwrap(), 2);
 }
+
+#[test]
+fn sessions_asking_permission_lists_only_hook_permission_requests() {
+    use ctx_core::session_status::{path_for, record_hook};
+    use ctx_core::workbench::sessions_asking_permission;
+    let (_t, d) = spine_with_repos();
+    let started = (Local::now() - Duration::minutes(5))
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    let t = |sid: &str, alive: bool| {
+        json!({"sid": sid, "title": format!("claude · {sid}"), "kind": "agent", "alive": alive,
+               "scope": "repo-a", "scope_repos": ["repo-a"], "started": started})
+    };
+    let now = Some(Local::now().naive_local());
+    let perm = r#"{"message":"Claude needs your permission to use Bash"}"#;
+    for (sid, ev, stdin) in [
+        ("t1", "notification", perm),
+        ("t2", "stop", "{}"),
+        ("t3", "notification", perm),
+    ] {
+        let p = path_for(&d, sid).to_string_lossy().into_owned();
+        assert!(record_hook(ev, stdin, Some(&p), now));
+    }
+    let asks = sessions_asking_permission(&d, &[t("t1", true), t("t2", true), t("t3", false)]);
+    assert_eq!(asks.len(), 1);
+    assert_eq!(asks[0]["sid"], "t1");
+    assert_eq!(asks[0]["title"], "claude · t1");
+    assert_eq!(asks[0]["text"], "Claude needs your permission to use Bash");
+}

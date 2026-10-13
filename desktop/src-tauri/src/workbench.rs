@@ -59,6 +59,44 @@ pub fn needs_you_count(state: &Value) -> usize {
     })
 }
 
+/// 現在有哪些會話在「要你允許工具」（引擎 `sessions_asking_permission`）。spine 未設定＝沒有。
+pub fn permission_asks_now(st: &AppState) -> Vec<Value> {
+    let Some(sp) = st.spine() else {
+        return Vec::new();
+    };
+    let terms: Vec<Value> = st
+        .terms_opt()
+        .map(|t| t.list().iter().map(workbench::term_value).collect())
+        .unwrap_or_default();
+    workbench::sessions_asking_permission(&sp, &terms)
+}
+
+/// 哪些「要你允許」還沒通知過：回新的那幾筆（同一個會話同一次請求只通知一次），
+/// 並把 `seen` 換成現在這份（不再請求的會話拿掉，下次再請求才會再通知）。
+pub fn fresh_permission_asks(
+    seen: &mut std::collections::HashMap<String, String>,
+    asks: &[Value],
+) -> Vec<Value> {
+    let fresh: Vec<Value> = asks
+        .iter()
+        .filter(|a| {
+            let sid = a["sid"].as_str().unwrap_or("");
+            seen.get(sid).map(String::as_str) != a["at"].as_str()
+        })
+        .cloned()
+        .collect();
+    *seen = asks
+        .iter()
+        .filter_map(|a| {
+            Some((
+                a["sid"].as_str()?.to_string(),
+                a["at"].as_str()?.to_string(),
+            ))
+        })
+        .collect();
+    fresh
+}
+
 /// 視窗藏起來時（沒有 `get_state`）也要算在等你的會話數：直接問引擎（只讀階段檔）。
 pub fn needs_you_now(st: &AppState) -> Option<usize> {
     let sp = st.spine()?;
@@ -167,6 +205,25 @@ mod tests {
             run_action(&st, "collide", &json!({"idea": " "})).unwrap_err(),
             "想法不可為空"
         );
+    }
+
+    #[test]
+    fn permission_asks_notify_once_per_request() {
+        let mut seen = std::collections::HashMap::new();
+        let ask = |sid: &str, at: &str| json!({"sid": sid, "at": at, "title": sid, "text": "x"});
+        let a1 = [ask("t1", "2026-10-14 01:00")];
+        assert_eq!(fresh_permission_asks(&mut seen, &a1).len(), 1);
+        assert!(fresh_permission_asks(&mut seen, &a1).is_empty());
+        // 多一個會話請求：只通知新的
+        let a2 = [ask("t1", "2026-10-14 01:00"), ask("t2", "2026-10-14 01:01")];
+        let f = fresh_permission_asks(&mut seen, &a2);
+        assert_eq!((f.len(), f[0]["sid"].as_str()), (1, Some("t2")));
+        // t1 允許完又來一次（不同時間）：再通知
+        let a3 = [ask("t1", "2026-10-14 01:05")];
+        assert_eq!(fresh_permission_asks(&mut seen, &a3).len(), 1);
+        // 都處理完：清空，之後同一分鐘再請求也會通知
+        assert!(fresh_permission_asks(&mut seen, &[]).is_empty());
+        assert_eq!(fresh_permission_asks(&mut seen, &a3).len(), 1);
     }
 
     #[test]

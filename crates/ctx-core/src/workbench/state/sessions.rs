@@ -161,6 +161,29 @@ pub fn sessions_needing_you(spine_dir: impl AsRef<Path>, terms: &[Value]) -> Res
         .count())
 }
 
+/// 活著、Claude Code hook 標成「要你允許工具」（blocked）的會話：`[{sid, title, text, at}]`——殼據此發系統通知
+/// （agent 停住動不了，打斷是掙來的）。只看依會話自動寫的狀態，只認會話開始後的（Rust 才有，2026-10-14）。
+pub fn sessions_asking_permission(spine_dir: impl AsRef<Path>, terms: &[Value]) -> Vec<Value> {
+    let spine_dir = spine_dir.as_ref();
+    terms
+        .iter()
+        .filter(|t| t.get("kind").and_then(Value::as_str) == Some("agent"))
+        .filter(|t| t.get("alive").and_then(Value::as_bool) == Some(true))
+        .filter_map(|t| {
+            let sid = tget(t, "sid")?;
+            let st = crate::session_status::read(spine_dir, sid)?;
+            let at = st.get("at").and_then(Value::as_str)?;
+            let asking = st.get("status").and_then(Value::as_str) == Some("blocked")
+                && st.get("event").and_then(Value::as_str) == Some("notification")
+                && at >= tget(t, "started").unwrap_or("~");
+            asking.then(|| {
+                json!({"sid": sid, "title": tget(t, "title").unwrap_or(sid),
+                       "text": st.get("text").cloned().unwrap_or(Value::Null), "at": at})
+            })
+        })
+        .collect()
+}
+
 /// [`TermInfo`] → 給 [`annotate_terms`]／[`session_draft`] 的物件（欄位同 Python `TermManager.list()`）。
 pub fn term_value(info: &TermInfo) -> Value {
     serde_json::to_value(info).unwrap_or(Value::Null)

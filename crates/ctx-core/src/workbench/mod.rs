@@ -20,6 +20,6 @@ pub mod state;
 pub use actions::{handle_action, is_read_only, Terms, ACTIONS};
 pub use state::{
     annotate_terms, api_state, build_cards, build_scan, build_state, event_scopes, normalize_dest,
-    relation_task, session_draft, session_report, sessions_needing_you, term_value, Prov,
-    StateScope, STATUS_PROMPT,
+    relation_task, session_draft, session_report, sessions_asking_permission, sessions_needing_you,
+    term_value, Prov, StateScope, STATUS_PROMPT,
 };

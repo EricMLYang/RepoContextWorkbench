@@ -80,6 +80,9 @@ fn show_main(app: &AppHandle) {
 struct UnreadItem(MenuItem<tauri::Wry>);
 /// 選單列「等你的會話：N」那一行。
 struct WaitingItem(MenuItem<tauri::Wry>);
+/// 已經發過系統通知的「要你允許」：sid → 請求時間（同一次請求只通知一次）。
+#[derive(Default)]
+struct NotifiedAsks(std::sync::Mutex<std::collections::HashMap<String, String>>);
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "開啟工作台", true, None::<&str>)?;
@@ -157,6 +160,35 @@ fn refresh_unread(app: &AppHandle) {
             .map(|p| p.count);
         let waiting = st.as_ref().and_then(|s| workbench::needs_you_now(s));
         set_tray(&app, n, waiting);
+        // agent 停在「要你允許工具」：打斷是掙來的——視窗不在前面就發系統通知（同一次請求只發一次）
+        let asks = st
+            .as_ref()
+            .map(|s| workbench::permission_asks_now(s))
+            .unwrap_or_default();
+        let fresh = match app.try_state::<NotifiedAsks>() {
+            Some(n) => match n.0.lock() {
+                Ok(mut seen) => workbench::fresh_permission_asks(&mut seen, &asks),
+                Err(_) => Vec::new(),
+            },
+            None => Vec::new(),
+        };
+        let focused = app
+            .get_webview_window(MAIN)
+            .and_then(|w| w.is_focused().ok())
+            .unwrap_or(false);
+        if !focused {
+            for a in fresh {
+                let _ = app
+                    .notification()
+                    .builder()
+                    .title(format!(
+                        "{} 要你允許",
+                        a["title"].as_str().unwrap_or("會話")
+                    ))
+                    .body(a["text"].as_str().unwrap_or(""))
+                    .show();
+            }
+        }
     });
 }
 
@@ -300,6 +332,7 @@ pub fn run() {
                 app.manage(tw);
             }
             build_tray(&handle)?;
+            app.manage(NotifiedAsks::default());
             refresh_unread(&handle);
             Ok(())
         })
