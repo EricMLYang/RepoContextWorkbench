@@ -106,6 +106,29 @@ fn mentions(text: &str, num: &str) -> bool {
         })
 }
 
+/// 文字裡提到的未結編號：`#` 後面整段數字（「#12」；「#123」不算提到 #12）——跟 [`mentions`] 同一個規則，
+/// 每個事件先算一次（N-34：原本每一項未結都對每個事件做字串搜尋）。
+fn mention_nums(text: &str) -> HashSet<String> {
+    let b = text.as_bytes();
+    let mut out = HashSet::new();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] != b'#' {
+            i += 1;
+            continue;
+        }
+        let mut j = i + 1;
+        while j < b.len() && b[j].is_ascii_digit() {
+            j += 1;
+        }
+        if j > i + 1 {
+            out.insert(text[i..j].to_string());
+        }
+        i = j;
+    }
+    out
+}
+
 /// 交接只看「完成：」那行（剩下／下次是還沒做的事）；其他判斷看全文。
 fn evidence_text(ev: &Event) -> String {
     if is_handoff(ev) {
@@ -180,11 +203,22 @@ pub fn review_todos_at(
             }
         }
     }
-    // N-12：判斷／結果事件先斷詞一次（舊版每一項未結都把之後的事件重斷一次＝未結數 × 事件數）
-    let ev_pre: Vec<(&Event, Cand)> = events
+    // N-34：每個事件的時間與提到的編號（內文＋token）先算一次——下面每一項未結都要看全部事件
+    let stamps: Vec<String> = events.iter().map(Event::stamp).collect();
+    let mentioned_in: Vec<HashSet<String>> = events
         .iter()
-        .filter(|ev| matches!(ev.etype, EventType::Decision | EventType::Outcome))
         .map(|ev| {
+            let mut m = mention_nums(&ev.body);
+            m.extend(ev.tokens.iter().filter(|t| t.starts_with('#')).cloned());
+            m
+        })
+        .collect();
+    // N-12：判斷／結果事件先斷詞一次（舊版每一項未結都把之後的事件重斷一次＝未結數 × 事件數）
+    let ev_pre: Vec<(&Event, &HashSet<String>, Cand)> = events
+        .iter()
+        .zip(&mentioned_in)
+        .filter(|(ev, _)| matches!(ev.etype, EventType::Decision | EventType::Outcome))
+        .map(|(ev, m)| {
             let body = evidence_text(ev);
             let c = Cand {
                 kind: if is_handoff(ev) { "handoff" } else { "event" },
@@ -199,7 +233,7 @@ pub fn review_todos_at(
                 text: crate::pystr::take_chars(&body, 160).to_string(),
                 terms: knowledge::tokenize(&body).into_iter().collect(),
             };
-            (ev, c)
+            (ev, m, c)
         })
         .collect();
     let mut items: Vec<Value> = Vec::new();
@@ -210,22 +244,22 @@ pub fn review_todos_at(
         let raw = lp.first_line().to_string();
         let backfilled = BACKFILL_TAIL.is_match(&raw);
         let text = BACKFILL_TAIL.replace_all(&raw, "").trim().to_string();
-        let later: Vec<&Event> = events
-            .iter()
-            .filter(|ev| ev.stamp() >= opened && ev.num() != Some(num.as_str()))
-            .collect();
-        let mentioned =
-            |ev: &Event| mentions(&ev.body, &num) || ev.tokens.iter().any(|t| t == &num);
         // 開出這項的交接（同一分鐘、「剩下：#N …」）不算後來有人提到
-        let last_mention = later
+        let last_mention = events
             .iter()
-            .filter(|ev| ev.stamp() > opened && mentioned(ev))
-            .map(|ev| ev.stamp())
+            .zip(&stamps)
+            .zip(&mentioned_in)
+            .filter(|((ev, at), m)| {
+                at.as_str() > opened.as_str() && ev.num() != Some(num.as_str()) && m.contains(&num)
+            })
+            .map(|((_, at), _)| at.clone())
             .max();
         let ev_cands = ev_pre
             .iter()
-            .filter(|(ev, c)| c.at >= opened && ev.num() != Some(num.as_str()) && !mentioned(ev))
-            .map(|(_, c)| c);
+            .filter(|(ev, m, c)| {
+                c.at >= opened && ev.num() != Some(num.as_str()) && !m.contains(&num)
+            })
+            .map(|(_, _, c)| c);
         let cover_text = CoverText::new(&text);
         let mut scored: Vec<(f64, &Cand, Vec<String>)> = commits
             .iter()
