@@ -749,14 +749,27 @@ pub fn search_knowledge(
     };
     let refs: Vec<RepoRef> = entries.iter().map(RepoRef::from).collect();
     let boosts = crossref::search_boosts(spine_dir, w.repo_id())?;
-    let res = knowledge::search(
-        &refs,
-        query,
-        opts.limit,
-        Some(spine_dir),
-        &opts.exclude_paths,
-        &boosts,
-    );
+    // 程式碼搜尋跟知識搜尋互不相干：平行跑（Rust 才有，2026-10-14；真資料約 395ms＋220ms → 約 400ms）
+    let (res, code_hits) = std::thread::scope(|sc| {
+        let code = opts.code.then(|| {
+            sc.spawn(|| crossref::code_search(&entries, query, (opts.limit / 2).max(3), 40))
+        });
+        let res = knowledge::search(
+            &refs,
+            query,
+            opts.limit,
+            Some(spine_dir),
+            &opts.exclude_paths,
+            &boosts,
+        );
+        // code_search 不會 panic；萬一有，就在這裡重跑一次（跟原本循序時一樣把 panic 帶上來）
+        let code_hits = code.map(|h| {
+            h.join().unwrap_or_else(|_| {
+                crossref::code_search(&entries, query, (opts.limit / 2).max(3), 40)
+            })
+        });
+        (res, code_hits)
+    });
     let mut out = Map::new();
     out.insert("ok".into(), Value::Bool(true));
     out.insert("scope".into(), Value::String(label));
@@ -774,8 +787,7 @@ pub fn search_knowledge(
     if !decisions.is_empty() {
         out.insert("decisions".into(), Value::Array(decisions));
     }
-    if opts.code {
-        let hits = crossref::code_search(&entries, query, (opts.limit / 2).max(3), 40);
+    if let Some(hits) = code_hits {
         let mut v = serde_json::to_value(hits)?;
         add_refs(Some(&mut v));
         out.insert("code".into(), v);
