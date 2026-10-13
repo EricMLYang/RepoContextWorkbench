@@ -342,3 +342,19 @@ fn event_file_bytes_match_python_format() {
         "<!-- validator 拒寫: 未知事件型別 'nope'（合法: presented, chosen, decision, suggestion, collision, open-loop, outcome） -->\n## 07:05 nope [hotkey]\n原文\n"
     );
 }
+
+/// 讀到壞標頭：照舊整份失敗，但訊息說出是哪個檔第幾行（Rust 才有，2026-10-14，ideation N-35）。
+#[test]
+fn bad_header_error_names_file_and_line() {
+    let (_t, d) = ctx_core::testkit::spine();
+    let dir = d.join("spine").join("events");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("2026-10-14.md"),
+        "## 09:00 decision [agent] repo:a\n好的一筆\n\n## 09:05 decision [agent] group:PM Group\n壞的一筆\n",
+    )
+    .unwrap();
+    let e = ctx_core::spine::iter_events(&d).unwrap_err().to_string();
+    assert!(e.contains("kv token 不合法"), "{e}");
+    assert!(e.contains("spine/events/2026-10-14.md 第 4 行"), "{e}");
+}

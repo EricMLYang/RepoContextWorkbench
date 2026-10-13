@@ -373,13 +373,22 @@ pub fn iter_events(spine_dir: impl AsRef<Path>) -> Result<Vec<Event>> {
         let text = std::fs::read_to_string(&f)?;
         let mut cur: Option<Event> = None;
         let mut body_lines: Vec<&str> = Vec::new();
-        for ln in splitlines(&text) {
+        for (i, ln) in splitlines(&text).into_iter().enumerate() {
             if ln.starts_with("## ") {
                 if let Some(mut ev) = cur.take() {
                     ev.body = body_lines.join("\n").trim().to_string();
                     out.push(ev);
                 }
-                cur = Some(parse_header(ln, &date)?);
+                // 壞行照舊讓整份讀取失敗（Python 版的刻意設計，見 ideation N-35），但說出在哪個檔第幾行，
+                // 人才找得到、修得掉（Rust 才有，2026-10-14）
+                cur = Some(parse_header(ln, &date).map_err(|e| match e {
+                    Error::Validation(m) => Error::Validation(format!(
+                        "{m}（spine/events/{} 第 {} 行；修好這行 spine 才讀得了）",
+                        f.file_name().map(|n| n.to_string_lossy()).unwrap_or_default(),
+                        i + 1
+                    )),
+                    other => other,
+                })?);
                 body_lines.clear();
             } else if cur.is_some() && ln.trim() != "---" {
                 body_lines.push(ln);

@@ -262,6 +262,7 @@ CLI／MCP（ctx-cli）：
   Rust 寫入時把 `group:`／`repo:` 值裡的空白換成 `_`（`spine::token_value`），比對時兩種寫法都認（`spine::same_token`、
   registry 的 `group()`／`repo()` 找不到原名時認換寫過的名字），App 的標籤顯示登記的原名。沒有空白的名字完全不變，
   對拍的 fixture 沒有空白名字，不受影響。
+- **讀到壞標頭的錯誤訊息多了位置**（2026-10-14）：照舊整份失敗（同 Python），訊息尾巴多「（spine/events/<檔> 第 N 行；修好這行 spine 才讀得了）」。
 - **App 開的 Claude Code 會話自動回報「等你／處理中」**（2026-10-14，Rust 才有）：`ctx hook` 多四個事件
   `stop｜notification｜prompt｜permission`（Notification 依 matcher 分：要你允許／回答＝permission，閒著＝notification），只照環境變數 `REPO_CONTEXT_SESSION_STATUS` 給的路徑寫 `.state/session_status/<sid>.json`
   （沒有環境變數＝不是 App 開的會話，什麼都不做；不印東西、永遠 exit 0）。只由 App 開會話時的 `--settings` 掛上，
