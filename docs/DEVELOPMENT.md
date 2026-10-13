@@ -37,6 +37,9 @@ desktop/src（React，只管畫面）── IPC ┘
   桌面 action 的參數用 `parse::<T>()` 解析成 `#[derive(Deserialize)]` 的 struct／enum（例：`ReadFileArgs`、`ReorderArgs`）；
   照抄 Python 的舊 action 還用 `raw`／`s`／`int`（Python 的 truthy 語意），合併回 main 後再換。
   拒絕給 agent 的錯誤用 `RejectCode` enum，字串形式是 MCP 合約。
+- **回傳用 struct**：引擎函式回 `#[derive(Serialize)]` 的 struct（例：`agentapi::Logged`、`TodoAdded`、`HandedOff`），
+  到 MCP／CLI 的邊界才轉成 JSON（`mcp/work.rs` 的 `json()`、CLI 的 `agent_call`）。欄位順序和名稱就是合約，
+  改了要過 `parity.sh`。舊函式還有不少回 `serde_json::Value` 的（讀取類工具、`ops`），碰到時順手換。
 - **`unwrap`／`expect`** 只用在程式裡寫死的不變式；鎖中毒用 `unwrap_or_else(|e| e.into_inner())`。
 - **依賴從嚴**：版本放在 workspace 的 `[workspace.dependencies]` 統一管理；標準庫能做的就不加 crate；每加一個依賴，
   都要在 commit 訊息說明為什麼。
@@ -63,6 +66,9 @@ desktop/src（React，只管畫面）── IPC ┘
 - **元件依一級物件拆**：deck（牌）／inbox（收件匣）／sessions（會話）／deep（深看）／viewer；跨元件的狀態放在 `store/`，
   不用 prop 一層層傳下去。
 - 需要給非同步回呼看最新值的 ref，在 effect 裡更新，不要在 render 時更新（`react-hooks/refs` 會擋）。
+- **畫面操作和畫面狀態分開**：`useUi()` 只有操作（整個 App 生命週期同一個物件），`useUiState()` 是會變的狀態
+  （草稿、展開的牌組、目前的終端…）。只在點擊當下需要值的，用操作端的 getter（例：`ui.getDraft()`），不要訂閱狀態，
+  否則每打一個字整個畫面都會重畫。
 - 不用瀏覽器原生的 `alert`／`confirm`，危險操作改成「按兩次」或站內提示。
 
 ## 6. MCP／CLI 介面（給 agent 用的 API）
@@ -107,17 +113,24 @@ desktop/src（React，只管畫面）── IPC ┘
   `docs/` 只放可以公開的內容，個人或公司的素材放在 repo 外。
 - **CI**：`permissions: contents: read`、第三方 actions 釘 commit SHA；依賴更新時在有網路的環境跑一次
   `cargo audit`／`npm audit`。
-- **回報管道**：開源時加 `SECURITY.md`，寫清楚私下回報的方式。
+- **回報管道**：`SECURITY.md`（GitHub 私下回報；repo 設定要打開 Private vulnerability reporting）。
 
 ### 開源前的待辦（2026-10-13 檢查）
 
-- [ ] `docs/工具想法.md` 等檔有個人路徑與 Email，git 歷史裡也有 → 清理歷史，或用新 repo 單一 commit 釋出
-- [ ] `docs/` 逐檔審（公司與客戶脈絡、帳號設定），私人素材搬出 repo
+- [ ] git 歷史要處理：個人路徑與 Email 在 `docs/工具想法.md`（2026-10-13 已從目前的檔案移除，歷史裡還在），
+  commit 作者也有公司租戶信箱（6 筆）和本機主機名信箱（9 筆）→ 用新 repo 單一 commit 釋出最乾淨；
+  要保留歷史就用 `git filter-repo` 刪檔＋`--mailmap` 改作者
+- [x] `docs/` 收斂（2026-10-13）：只留 `VISION.md`、`DEVELOPMENT.md`、`RUST_PORTING.md`、`ideation/`；
+  過程紀錄與截圖移除。開源前再看一次 `ideation/` 的對標與輪次是否提到個人 repo 名稱
 - [x] `LICENSE`（MIT）
 - [x] macOS 開終端的引號注入（`session.rs`）
 - [x] CI 權限最小化、actions 釘 SHA
 - [x] 拒絕登記根目錄／家目錄；存檔暫存檔不可預測
-- [ ] 加 `SECURITY.md`；在有網路的環境跑 `cargo audit`／`npm audit`
+- [x] 加 `SECURITY.md`（公開 repo 後要在設定打開 Private vulnerability reporting）
+- [x] `cargo audit`／`npm audit`（2026-10-13）：沒有漏洞。`cargo audit` 有 3 個警告：`unsafe-libyaml`
+  無人維護（`serde_yaml` 帶進來，`serde_yaml` 本身也已封存）、`proc-macro-error` 無人維護與 `glib` unsound
+  （都是 Tauri 在 Linux 才用的 GTK 依賴，macOS／Windows 不編譯）。`serde_yaml` 要換成維護中的分支，
+  但會影響 registry.yaml 的輸出格式，要等合併回 main 後跟對拍一起處理
 
 ## 9. 開源後要讓別人裝得起來（目前的缺口）
 
@@ -127,7 +140,7 @@ desktop/src（React，只管畫面）── IPC ┘
 | 安裝 | 要自己 build；`install-app.sh` 是給開發者重裝用的 | 用 GitHub Releases 發 `.dmg` 和 `ctx` 執行檔；README 第一段寫三步驟安裝＋`ctx init` |
 | macOS 簽章 | 沒簽章、沒公證 → 別人下載後會被 Gatekeeper 擋住 | 發佈時用 Developer ID 簽章並公證（Tauri 有內建流程），在 CI 上做 |
 | Windows | CI 只確認 `ctx` 編得過 | 先發 CLI＋MCP，桌面版之後再補（每個功能都要註明測過沒有） |
-| 個人化設定 | bundle id 是 `dev.ericmlyang.*`，docs 裡有很多個人的設計紀錄 | 換成中性的 id；`docs/` 分成「使用者文件」和「設計紀錄」 |
+| 個人化設定 | bundle id 是 `dev.ericmlyang.*` | 換成中性的 id |
 | 語言 | 只有中文 | 至少 README 要有英文版 |
 | 第一次使用 | `SpineSetup` 要手動填 spine 路徑 | `ctx init` 一步建好 spine，並附一個範例 |
 

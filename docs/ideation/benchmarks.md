@@ -3,7 +3,7 @@
 > 用法：每輪先跑「下一輪查詢」，再處理「待查對標」，然後用**延伸法**——對「標竿」「參考」各搜 `<名稱> alternatives`／`<名稱> vs`，找更新更好的對象。
 > 狀態：**標竿**（該類最值得學）｜**參考**（有可抄的設計）｜**零件**（直接接，不重做）｜**觀察**｜**反面**（死法）｜**淘汰**（停更或被取代）
 > 查證：✅ 讀過官方原文｜🔗 只看到搜尋結果｜💭 推論
-> 2026-09-01 那輪的 11＋6 個工具（gitpane、mani、Repomix…）已拆在 `docs/20260901_外部工具比對_逐一介紹.md`，下表只列摘要。
+> 2026-09-01 那輪的 11＋6 個工具（gitpane、mani、Repomix…）當時的拆解報告已收斂（原檔在 git 歷史），下表只列摘要。
 
 ## 清單
 
@@ -26,11 +26,11 @@
 | Letta | Agent 記憶 | 可編輯的文字記憶區塊 | 記憶就是純文字檔 → F-02 | 是完整 agent 框架，不接 | 參考 | 🔗 | 2026-10-09 | 同上 | 同上 |
 | Mem0 | Agent 記憶 | 向量庫加實體提示 | — | 向量庫不符「純檔案」 | 觀察 | 🔗 | 2026-10-09 | 同上 | 同上 |
 | Cognee | Agent 記憶 | 實體抽取管線 | — | — | 觀察 | 🔗 | 2026-10-09 | 同上 | 同上 |
-| gitpane／mani／GitKraken WS | 多 repo 狀態 | 見 0901 文件 | 採集欄位、registry 骨架 | — | 參考（已落地） | ✅ | 2026-09-01 | 0901 輪 | `docs/20260901_…` §二 |
-| Repomix／gitingest | repo 打包 | 見 0901 文件 | token 預算、洩密哨兵 | — | 零件（已落地） | ✅ | 2026-09-01 | 0901 輪 | `docs/20260901_…` §四 |
-| second-brain／MemoryOS | 知識層 | 見 0901 文件 | typed records、lint 衛生迴圈 | 就地更新 | 參考（已落地） | ✅ | 2026-09-01 | 0901 輪 | `docs/20260901_…` §五 |
-| NewReleases.io | 訊號源 | 見 0901 文件 | release webhook | — | 零件 | ✅ | 2026-09-01 | 0901 輪 | `docs/20260901_…` §三 |
-| GitHub Repository Dashboard | 多 repo 狀態 | 官方全量檢視 | — | 官方免費做了，不做這塊 | 觀察 | 🔗 | 2026-09-01 | 0901 輪 | `docs/20260901_…` §六 |
+| gitpane／mani／GitKraken WS | 多 repo 狀態 | 見 0901 文件 | 採集欄位、registry 骨架 | — | 參考（已落地） | ✅ | 2026-09-01 | 0901 輪 | 0901 拆解 §二 |
+| Repomix／gitingest | repo 打包 | 見 0901 文件 | token 預算、洩密哨兵 | — | 零件（已落地） | ✅ | 2026-09-01 | 0901 輪 | 0901 拆解 §四 |
+| second-brain／MemoryOS | 知識層 | 見 0901 文件 | typed records、lint 衛生迴圈 | 就地更新 | 參考（已落地） | ✅ | 2026-09-01 | 0901 輪 | 0901 拆解 §五 |
+| NewReleases.io | 訊號源 | 見 0901 文件 | release webhook | — | 零件 | ✅ | 2026-09-01 | 0901 輪 | 0901 拆解 §三 |
+| GitHub Repository Dashboard | 多 repo 狀態 | 官方全量檢視 | — | 官方免費做了，不做這塊 | 觀察 | 🔗 | 2026-09-01 | 0901 輪 | 0901 拆解 §六 |
 | **multi-repo-agent（mra）** | 跨 repo 脈絡（**最接近的同類**） | 有相依的 repo 群組 | 5 種掃描器自動偵測相依；`--with-deps` 一起載入；依相依順序開 PR；MCP 9 個工具（含 doctor）；workspace allowlist；「專案知識庫」有 [DECISION] 標記 | 只有 2 顆星；偏程式碼相依，沒有人的判斷、交接、收件匣 → F-33、F-41 | 參考 | ✅ | 2026-10-09 | R02 查詢 3 | [GitHub](https://github.com/hanfour/multi-repo-agent) |
 | The context problem nobody solved（dev.to） | 跨 repo 脈絡（論述） | View Directory：symlink 指到 worktree | 寫入範圍用 chmod 由核心強制，不靠 prompt；整理了 5 種現有做法的缺點 | 文章，不是工具 → N-15 | 參考 | ✅ | 2026-10-09 | R02 查詢 3 | [dev.to](https://dev.to/mnzs/the-context-problem-nobody-solved-ai-agents-across-multiple-repos-4533) |
 | Repo Lens MCP／multi-repo harness 研究 | 跨 repo 脈絡 | 跨 repo 程式碼搜尋（AST） | 結構化搜尋 | 只管程式碼 | 觀察 | 🔗 | 2026-10-09 | R02 查詢 3 | [mcpservers](https://mcpservers.org/servers/yohannhommet/mcp-repo-search-server)、[深入研究](https://aixsoftware.substack.com/p/ai-research-multi-repo-agentic-harnesses) |

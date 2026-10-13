@@ -19,7 +19,7 @@ docs/ideation/
   backlog.md         構想池：功能 F-xx／非功能 N-xx，ID 永不重編，只改狀態
   benchmarks.md      對標清單＋搜尋線索（用過的查詢、下一輪查詢、待查對標）
   baseline.md        非功能量測基準（每輪加一欄，看趨勢）
-  rounds/            每輪一份：YYYYMMDD_Rnn_主題.md
+  rounds/            每輪一份：YYYYMMDD_Rnn_主題.md（只留最近一輪；結論記在 README 索引）
   _template_round.md 輪次檔模板
 ```
 
@@ -27,7 +27,7 @@ docs/ideation/
 
 ### 0. 讀現況（不讀就不准提案）
 1. `docs/ideation/README.md` → 最新一輪輪次檔 → `backlog.md`、`benchmarks.md`、`baseline.md`。
-2. `AGENTS.md`「目的」「架構方向」、`README.md` 開頭「現況」段。
+2. `docs/VISION.md`（目的、護欄、接下來）、`AGENTS.md`「目的」「架構方向」。
 3. repo-context：`context_for`（上次交接、未結事項）。未結事項與構想池重疊的，在 backlog 註記 `#N`。
 4. 問使用者這輪有沒有聚焦主題（例如「只看知識層」「只看效能」）；沒說就全面盤點。
 
@@ -103,4 +103,4 @@ ls .github/workflows 2>/dev/null; grep -ro '#\[test\]' crates | wc -l   # 測試
 5. **暫存檔只刪自己建的**：暫存範例用唯一檔名（`examples/zz_tmp_*.rs`）並只刪那一個，不要 `rm -rf` 目錄。
 6. **使用者的 App 開著就不做 GUI 實測**（重 bundle 會覆寫、另開會搶焦點）；記下來等使用者。
 7. **節奏**：連續迭代很耗用量；迭代之間可以在背景等一段時間（`sleep` 放背景，完成會被通知）。
-8. **收尾**：更新 `docs/<日期>_自動迭代驗收清單.md`（裝上步驟、使用前基準、每項在真實使用中看什麼）、spine 交接。
+8. **收尾**：更新 `docs/VISION.md`「走到哪了」「接下來」（使用前基準、在真實使用中看什麼）、spine 交接。
