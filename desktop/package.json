@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
+    "preview:screens": "vite --port 5199 --strictPort",
     "tauri": "tauri",
     "build:ctx": "node scripts/build-ctx.mjs",
     "bundle": "npm run build:ctx && tauri build --config src-tauri/tauri.bundle.conf.json",

@@ -198,9 +198,17 @@ function blocks(lines: string[], hooks: MdHooks, key: string): ReactNode[] {
                 aria-label={hooks.tasks ? "勾選或取消這個待辦" : undefined}
               />
             ) : null}
-            {simple
-              ? inline(first, hooks, key + "l" + n + "-" + j)
-              : blocks([first, ...restLines], hooks, key + "l" + n + "-" + j)}
+            {simple ? (
+              inline(first, hooks, key + "l" + n + "-" + j)
+            ) : task ? (
+              // 待辦有子項目：第一行跟方塊放同一行，其餘（子清單、段落）接在下面
+              <>
+                {inline(first, hooks, key + "l" + n + "-" + j + "f")}
+                {blocks(restLines, hooks, key + "l" + n + "-" + j)}
+              </>
+            ) : (
+              blocks([first, ...restLines], hooks, key + "l" + n + "-" + j)
+            )}
           </li>
         );
       });

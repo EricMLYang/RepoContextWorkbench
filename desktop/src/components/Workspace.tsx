@@ -75,9 +75,10 @@ export function Workspace(props: {
             {stateReady
               ? [
                   repos.length + " 個 repo",
-                  "待跟進 " + counts.loop,
-                  "要你判斷 " + counts.decide,
-                  "未讀 " + counts.unread,
+                  // 是 0 的不講（省一行，也不把「沒事」講成一個數字）
+                  counts.loop ? "待跟進 " + counts.loop : "",
+                  counts.decide ? "要你判斷 " + counts.decide : "",
+                  counts.unread ? "未讀 " + counts.unread : "",
                   counts.pending ? "分析中 " + counts.pending : "",
                 ]
                   .filter(Boolean)
@@ -89,6 +90,7 @@ export function Workspace(props: {
           <button
             type="button"
             id="notebtn"
+            className="ghost"
             disabled={!stateReady || !scope.group}
             title={
               scope.group
@@ -102,6 +104,7 @@ export function Workspace(props: {
           <button
             type="button"
             id="ideatoggle"
+            className="ghost"
             disabled={noScope}
             title="寫下想法，讓 Agent 對照這組 repo 分析；結果回到「待處理」"
             onClick={ui.showComposer}

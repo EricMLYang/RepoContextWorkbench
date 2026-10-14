@@ -93,6 +93,11 @@ desktop/src（React，只管畫面）── IPC ┘
   改 hook、MCP 或開場注入後跑一次。
 - **GUI 實測**：使用者的 App 沒開時，`npx tauri build --no-bundle` 的執行檔帶 `--spine <副本>`（副本先拿掉 git remote），
   截圖只拍該 pid 的視窗（`screencapture -l`）、按鍵只送該 pid（`CGEventPostToPid`）；不要全域點擊或打字。
+- **畫面預覽（App 開著、或只想看排版時）**：`desktop/dev/preview.html` 用真的 App 元件＋固定假資料，`?scene=` 選場景
+  （workspace／editor／code／assist／assist-empty）。`cd desktop && npm run preview:screens`，再用 headless 瀏覽器
+  （獨立的 `--user-data-dir`、`--headless=new`，不開視窗、不碰使用者的瀏覽器）截圖：
+  `"…/Google Chrome" --headless=new --user-data-dir=<暫存> --window-size=1440,900 --virtual-time-budget=5000 --screenshot=<png> "http://localhost:5199/dev/preview.html?scene=editor"`。
+  看得到排版與上色，看不到 Tauri 才有的東西（終端、檔案監看、原生對話框），那些仍要真 App 實測。
   滑鼠事件送 pid 不生效（視窗不是 key window），點擊流程要人來點。
 
 ## 8. 資訊安全

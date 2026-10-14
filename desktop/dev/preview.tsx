@@ -1,0 +1,268 @@
+/**
+ * 畫面預覽（開發用，不進 App）：真的 App 元件＋固定的假資料，用網址 `?scene=` 選場景。
+ * 給沒辦法開 App 實測時（使用者的 App 開著）用 headless 瀏覽器截圖看排版：
+ *   npx vite --port 5199  →  http://localhost:5199/dev/preview.html?scene=editor
+ * 場景：workspace（工作區＋右欄變更頁）、editor（md 分割編輯）、code（程式碼上色＋尋找）、
+ *       assist（⌘K 請助手的計畫）、assist-empty（只打「?」）
+ */
+import { createRoot } from "react-dom/client";
+import "../src/styles.css";
+import type { Backend, TermStream } from "../src/api/backend";
+import { App } from "../src/App";
+import { EMPTY_SCAN, EMPTY_STATE, WorkbenchStore } from "../src/store/store";
+
+const scene = new URLSearchParams(location.search).get("scene") || "workspace";
+localStorage.clear();
+const put = (k: string, v: unknown) => localStorage.setItem("workbench:" + k, JSON.stringify(v));
+
+const NOTES = `# 夜間迭代筆記
+
+## 待辦
+- [x] UI/UX 檢討落地
+- [ ] 重裝 App 實測
+  - [ ] 分割編輯
+
+## 程式碼
+\`\`\`rust
+fn main() {
+    let s = "hello"; // 註解
+    println!("{s} {}", 42);
+}
+\`\`\`
+
+| 項目 | 狀態 |
+| --- | --- |
+| 助手 | 完成 |
+`;
+const RS = `//! 範例
+use std::path::Path;
+
+/// 讀一個檔
+pub fn read(p: &Path) -> Result<String, std::io::Error> {
+    let text = std::fs::read_to_string(p)?; /* 區塊
+    註解 */
+    Ok(format!("{} bytes: {}", text.len(), 'a'))
+}
+`;
+const files: Record<string, string> = {
+  "docs/notes.md": NOTES,
+  "src/main.rs": RS,
+  "README.md": "# repo-a\n",
+};
+
+const term = {
+  sid: "t1",
+  title: "claude · repo-a",
+  alive: true,
+  kind: "agent",
+  origin: null,
+  scope: "repo-a",
+  scope_repos: ["repo-a"],
+  started: "2026-10-15 01:00",
+  task: "整理 UI",
+  report: null,
+  report_basis: "",
+  agent_status: { status: "waiting", text: "這一輪做完了，等你回覆", at: "01:30", event: "stop" },
+  home_group: "產品開發",
+};
+const card = (key: string, kind: string, title: string) => ({
+  key,
+  kind,
+  lane: "scope",
+  scope_kind: "repo",
+  scope_label: "repo-a",
+  scope_repos: ["repo-a"],
+  time: "01:00",
+  date: "2026-10-15",
+  title,
+  lines: [],
+  actions: [],
+});
+const state = {
+  ...EMPTY_STATE,
+  repos: ["repo-a", "repo-b"],
+  groups: [{ name: "產品開發", members: ["repo-a", "repo-b"], goal: "把登入做完", goal_at: "" }],
+  tiers: { "repo-a": "active", "repo-b": "active" },
+  tags: { "repo-a": ["開發"], "repo-b": [] },
+  agents: ["claude"],
+  terms: [term],
+  cards: [
+    card("loop:#1", "loop", "驗證 Windows 版"),
+    card("e1", "event", "交接：夜間迭代完成"),
+    card("e2", "event", "判斷：助手一律先確認"),
+  ],
+  scope: { group: "產品開發", repos: null, members: ["repo-a", "repo-b"] },
+};
+const repoState = (id: string) => ({
+  id,
+  repo_type: "mine",
+  tier: "active",
+  path: "/Users/me/" + id,
+  exists: true,
+  dirty: 2,
+  dirty_days: 0,
+  last_commit_days: 0.2,
+  ahead: 1,
+  behind: 0,
+  branch: "main",
+  last_subject: "feat：助手",
+  worktrees: 1,
+  commits_7d: 12,
+  commits_30d: 40,
+  recent_commits: [],
+  agents: [],
+  note: "",
+});
+const scan = {
+  ...EMPTY_SCAN,
+  group: "產品開發",
+  states: [repoState("repo-a"), repoState("repo-b")],
+  quiet: 0,
+};
+const plan = {
+  ok: true,
+  text: "把 repo-b 移出產品開發，repo-a 加標籤 規格，然後打開筆記",
+  summary: "調整組員與標籤",
+  source: "agent",
+  steps: [
+    {
+      op: "set_members",
+      args: { group: "產品開發", repos: ["repo-a"] },
+      text: "牌組「產品開發」：移出 repo-b",
+      why: "使用者要移出",
+      danger: true,
+    },
+    {
+      op: "tag",
+      args: { id: "repo-a", add: ["規格"], remove: [] },
+      text: "repo-a：加標籤「規格」",
+      why: "",
+      danger: false,
+    },
+    {
+      op: "remove_group",
+      args: {},
+      text: "remove_group",
+      why: "",
+      danger: false,
+      error: "助手不能做「remove_group」（不在白名單）",
+    },
+    { op: "open_tab", args: { tab: "notes" }, text: "打開「筆記」分頁", why: "", danger: false },
+  ],
+};
+
+const stream: TermStream = {
+  onData() {},
+  onOpen() {},
+  onClose() {},
+  write() {},
+  resize() {},
+  close() {},
+  connected: false,
+};
+const backend: Backend = {
+  kind: "http",
+  getState: async () => state as never,
+  getScan: async () => scan as never,
+  openTerminal: () => stream,
+  action: (async (name: string, p: Record<string, unknown>) => {
+    if (name === "repo_tree")
+      return {
+        ok: true,
+        id: p.id,
+        root: "/Users/me/" + p.id,
+        dir: p.dir || "",
+        more: 0,
+        entries: p.dir
+          ? Object.keys(files)
+              .filter((f) => f.startsWith(p.dir + "/"))
+              .map((f) => ({ name: f.split("/").pop(), path: f, abs: "/x/" + f, dir: false }))
+          : [
+              { name: "docs", path: "docs", abs: "/x/docs", dir: true },
+              { name: "src", path: "src", abs: "/x/src", dir: true },
+              { name: "README.md", path: "README.md", abs: "/x/README.md", dir: false },
+            ],
+      };
+    if (name === "read_file") {
+      const text = files[String(p.path)] ?? "";
+      return {
+        ok: true,
+        id: p.id,
+        path: p.path,
+        abs: "/x/" + p.path,
+        size: text.length,
+        kind: "text",
+        text,
+        truncated: false,
+        editable: true,
+        version: "v1",
+      };
+    }
+    if (name === "repo_changes")
+      return {
+        ok: true,
+        id: p.id,
+        changes: [
+          { path: "docs/notes.md", status: "modified" },
+          { path: "src/new.rs", status: "untracked" },
+        ],
+        more: 0,
+      };
+    if (name === "palette") return { ok: true, query: "", repos: [], groups: [], files: [] };
+    if (name === "assist_plan") return plan;
+    if (name === "assist_recent")
+      return { ok: true, texts: ["切到 產品開發", "repo-a 加標籤 規格"] };
+    if (name === "repo_profile")
+      return { ok: true, id: p.id, path: "/x", role: "實作", description: "登入服務" };
+    if (name === "group_notes") return { ok: true, group: "產品開發", path: "/x", notes: [] };
+    return { ok: true };
+  }) as never,
+};
+
+put("scope", { group: "產品開發", repos: null });
+if (scene === "workspace") {
+  put("panelRepo", "repo-a");
+  put("panelTab", "changes");
+}
+if (scene === "editor") {
+  put("openFiles", [
+    { repo: "repo-a", path: "docs/notes.md", edit: true },
+    { repo: "repo-b", path: "docs/notes.md" },
+  ]);
+  put("activeFile", "repo-a\u0000docs/notes.md");
+  put("editLayout", "split");
+}
+if (scene === "code") {
+  put("openFiles", [{ repo: "repo-a", path: "src/main.rs" }]);
+  put("activeFile", "repo-a\u0000src/main.rs");
+}
+
+const store = new WorkbenchStore(backend, { group: "產品開發", repos: null });
+createRoot(document.getElementById("root")!).render(<App store={store} />);
+
+// 需要互動的場景：等畫面好了再送鍵盤事件（只送給這一頁）
+const later = (ms: number, f: () => void) => setTimeout(f, ms);
+const typeInto = (el: HTMLInputElement, v: string) => {
+  const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  set.call(el, v);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+};
+if (scene === "assist" || scene === "assist-empty") {
+  later(600, () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+    later(200, () => {
+      const box = document.querySelector<HTMLInputElement>("#palette input")!;
+      typeInto(box, scene === "assist" ? "?" + plan.text : "?");
+      if (scene === "assist")
+        later(200, () =>
+          box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
+        );
+    });
+  });
+}
+if (scene === "code") {
+  later(800, () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", metaKey: true, bubbles: true }));
+    later(200, () => typeInto(document.querySelector<HTMLInputElement>(".findbar input")!, "text"));
+  });
+}
