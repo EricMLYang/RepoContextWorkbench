@@ -510,7 +510,13 @@ export function FileViewer({
     }
   };
   // 剛新增的檔：讀到內容就直接進編輯（只做一次）
-  const autoEdit = useRef(!!file.edit);
+  // HackMD 式偏好：打開 md 就直接進編輯（版面照上次選的，預設分割；預設關，⋯ 裡切換）
+  const [mdOpenEdit, setMdOpenEditState] = useState(() => loadPref<boolean>("mdOpenEdit", false));
+  const setMdOpenEdit = (on: boolean) => {
+    savePref("mdOpenEdit", on);
+    setMdOpenEditState(on);
+  };
+  const autoEdit = useRef(!!file.edit || (isMarkdown(path) && mdOpenEdit && !file.diff));
   useEffect(() => {
     if (autoEdit.current && content?.kind === "text" && content.editable && draft === null) {
       autoEdit.current = false;
@@ -632,6 +638,14 @@ export function FileViewer({
   const moreItems: MenuItem[] = [];
   if (!editing && content?.kind === "text" && (!md || mode === "source"))
     moreItems.push({ label: wrap ? "關閉自動換行" : "自動換行", run: () => setWrap(!wrap) });
+  if (md)
+    moreItems.push({
+      label: mdOpenEdit ? "打開 md 時直接分割編輯：開（按了關掉）" : "打開 md 時直接分割編輯",
+      run: () => {
+        setMdOpenEdit(!mdOpenEdit);
+        store.toast(mdOpenEdit ? "之後打開 md 先看預覽" : "之後打開 md 直接左寫右看");
+      },
+    });
   moreItems.push({ label: "複製相對路徑", run: () => copy(store, path, "相對路徑") });
   if (content)
     moreItems.push({ label: "複製絕對路徑", run: () => copy(store, content.abs, "絕對路徑") });

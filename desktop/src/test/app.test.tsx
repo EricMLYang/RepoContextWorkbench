@@ -1263,6 +1263,44 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     );
   });
 
+  it("偏好「打開 md 時直接分割編輯」：開了之後點 md 直接進編輯", async () => {
+    localStorage.setItem("workbench:mdOpenEdit", "true");
+    const disk: Record<string, string> = { "README.md": "# 說明" };
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: { id?: string; path?: string }) => {
+        if (name === "repo_tree")
+          return {
+            ok: true,
+            id: p.id,
+            root: "/r/a",
+            dir: "",
+            more: 0,
+            entries: [{ name: "README.md", path: "README.md", abs: "/r/a/README.md", dir: false }],
+          };
+        if (name === "read_file")
+          return {
+            ok: true,
+            id: p.id,
+            path: p.path,
+            abs: "/r/a/" + p.path,
+            size: 4,
+            kind: "text",
+            text: disk[p.path!],
+            truncated: false,
+            editable: true,
+            version: "v1",
+          };
+        if (name === "palette") return { ok: true, query: "", repos: [], groups: [], files: [] };
+        return { ok: true };
+      }) as never,
+    });
+    await openTree(backend);
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" })),
+    );
+    expect(await screen.findByRole("textbox", { name: "編輯 README.md" })).toBeTruthy();
+  });
+
   it("md 大綱：列出標題，點了捲過去", async () => {
     const backend = viewerBackend();
     await openTree(backend);
