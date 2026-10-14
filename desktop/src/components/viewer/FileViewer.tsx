@@ -475,6 +475,25 @@ export function FileViewer({
   const bodyRef = useRef<HTMLDivElement>(null);
   const [finding, setFinding] = useState(false);
   const editorHandle = useRef<EditorHandle | null>(null);
+  const [gotoOpen, setGoto] = useState(false);
+  /** 前往第 n 行：編輯中選起那一行；看的時候捲過去並閃一下。超過範圍就到最後一行。 */
+  const gotoLine = (n: number) => {
+    if (draft !== null) {
+      const total = draft.split("\n").length;
+      const line = Math.max(1, Math.min(n, total)) - 1;
+      const a = lineOffset(draft, line);
+      const b = draft.indexOf("\n", a);
+      editorHandle.current?.select(a, b < 0 ? draft.length : b);
+      return;
+    }
+    const rows = bodyRef.current?.querySelectorAll<HTMLElement>(".codeview .cl");
+    if (!rows?.length) return;
+    const el = rows[Math.max(1, Math.min(n, rows.length)) - 1];
+    el.scrollIntoView?.({ block: "center" });
+    el.classList.remove("cl-flash");
+    void el.offsetWidth; // 重新觸發動畫
+    el.classList.add("cl-flash");
+  };
   // 這個分頁的快捷鍵（每次重畫換成最新的，監聽只掛一次）：
   // ⌘F 尋找；HackMD 式 ⌘⌥E 編輯、⌘⌥B 分割、⌘⌥V 預覽（md）
   const keysRef = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -762,6 +781,17 @@ export function FileViewer({
       setFinding(true);
       return;
     }
+    // ⌘L／Ctrl+L：前往第幾行（程式碼、原始碼、編輯中）
+    if (
+      !e.altKey &&
+      k === "l" &&
+      content?.kind === "text" &&
+      (draft !== null || !md || mode === "source")
+    ) {
+      e.preventDefault();
+      setGoto(true);
+      return;
+    }
     if (!e.altKey || !md || content?.kind !== "text") return;
     // Windows／Linux 的 Ctrl+Alt＝AltGr（例：德文鍵盤 AltGr+E 打 €）：在輸入框裡不能搶，只認 macOS 的 ⌘⌥
     const typing = (e.target as Element | null)?.closest?.("textarea, input");
@@ -1021,6 +1051,28 @@ export function FileViewer({
           ) : null}
         </div>
       </div>
+      {gotoOpen && !hidden ? (
+        <div className="findbar" role="search">
+          <input
+            autoFocus
+            inputMode="numeric"
+            aria-label="前往第幾行"
+            placeholder="前往第幾行"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const n = parseInt(e.currentTarget.value, 10);
+                if (n > 0) gotoLine(n);
+                setGoto(false);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setGoto(false);
+              }
+            }}
+            onBlur={() => setGoto(false)}
+          />
+        </div>
+      ) : null}
       {finding && !hidden && draft !== null ? (
         <EditFindBar handle={editorHandle} draft={draft} onClose={() => setFinding(false)} />
       ) : finding && !hidden ? (

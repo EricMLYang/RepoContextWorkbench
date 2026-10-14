@@ -2692,3 +2692,16 @@ body.withpicks #main {
   color: var(--blue);
   font-size: 13px;
 }
+
+/* 前往第幾行：那一行閃一下 */
+@keyframes clflash {
+  from {
+    background: rgba(145, 183, 255, 0.35);
+  }
+  to {
+    background: transparent;
+  }
+}
+.codeview .cl.cl-flash {
+  animation: clflash 1.6s ease-out;
+}

@@ -1383,6 +1383,13 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     });
     await openTree(backend);
     await act(async () => fireEvent.click(await screen.findByRole("treeitem", { name: "x.rs" })));
+    // ⌘L 前往第幾行：捲過去並閃一下
+    await act(async () => fireEvent.keyDown(window, { key: "l", metaKey: true }));
+    const go = screen.getByRole("textbox", { name: "前往第幾行" });
+    fireEvent.change(go, { target: { value: "2" } });
+    await act(async () => fireEvent.keyDown(go, { key: "Enter" }));
+    expect(document.querySelectorAll(".codeview .cl")[1].classList.contains("cl-flash")).toBe(true);
+    expect(screen.queryByRole("textbox", { name: "前往第幾行" })).toBeNull();
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "編輯" })));
     const box = screen.getByRole("textbox", { name: "編輯 x.rs" }) as HTMLTextAreaElement;
     box.setSelectionRange(9, 9);
