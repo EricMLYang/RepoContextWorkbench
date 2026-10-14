@@ -192,6 +192,8 @@ export interface AssistStep {
   why: string;
   danger: boolean;
   error?: string | null;
+  /** 復原這一步要做的（引擎照規劃當下的設定算；op 多一種 remove_group）。 */
+  undo?: { op: string; args: Record<string, unknown> } | null;
 }
 
 export interface AssistPlan {

@@ -72,6 +72,9 @@ pub struct Step {
     pub danger: bool,
     /// 驗證不過的原因；有值＝這步不能執行。
     pub error: Option<String>,
+    /// 執行後要復原時做的那一步（照規劃當下的設定算；畫面動作與沒有舊值可回的＝None）。
+    /// op 多一種 `remove_group`（只用來復原剛建的組）。
+    pub undo: Option<Value>,
 }
 
 /// 一份計畫。
@@ -325,6 +328,7 @@ pub fn validate(data: &RegistryData, raw: &Value, source: &'static str) -> Resul
                 .to_string();
             match check(data, &op, &args) {
                 Ok((args, text, danger)) => Step {
+                    undo: undo_of(data, &op, &args),
                     op,
                     args,
                     text,
@@ -343,6 +347,7 @@ pub fn validate(data: &RegistryData, raw: &Value, source: &'static str) -> Resul
                     why,
                     danger: false,
                     error: Some(e),
+                    undo: None,
                 },
             }
         })
@@ -352,6 +357,51 @@ pub fn validate(data: &RegistryData, raw: &Value, source: &'static str) -> Resul
         steps,
         source,
     })
+}
+
+/// 復原這一步要做什麼（`args` 已正規化）。照規劃當下的 registry 算舊值。
+fn undo_of(data: &RegistryData, op: &str, a: &Value) -> Option<Value> {
+    let s = |k: &str| a.get(k).and_then(Value::as_str).unwrap_or("");
+    let list = |k: &str| str_list(a.get(k)).unwrap_or_default();
+    match op {
+        "create_group" => Some(json!({"op": "remove_group", "args": {"name": s("name")}})),
+        "set_members" => {
+            let cur = data.group(s("group"))?.members();
+            Some(json!({"op": "set_members", "args": {"group": s("group"), "repos": cur}}))
+        }
+        "rename_group" => Some(
+            json!({"op": "rename_group", "args": {"group": s("new_name"), "new_name": s("group")}}),
+        ),
+        "set_goal" => {
+            let old = data.group(s("group"))?.goal()?;
+            Some(json!({"op": "set_goal", "args": {"group": s("group"), "text": old}}))
+        }
+        "tag" => {
+            let have = data.repo(s("id"))?.tags();
+            // 加了原本沒有的 → 拿掉；拿掉原本有的 → 加回去
+            let add: Vec<String> = list("remove")
+                .into_iter()
+                .filter(|t| have.contains(t))
+                .collect();
+            let remove: Vec<String> = list("add")
+                .into_iter()
+                .filter(|t| !have.contains(t))
+                .collect();
+            (!add.is_empty() || !remove.is_empty()).then(
+                || json!({"op": "tag", "args": {"id": s("id"), "add": add, "remove": remove}}),
+            )
+        }
+        "set_tier" => {
+            let r = data.repo(s("id"))?;
+            let mut args =
+                json!({"id": s("id"), "tier": r.tier_str().unwrap_or_else(|| "active".into())});
+            if let Some(w) = r.get_str("resume_when") {
+                args["resume_when"] = json!(w);
+            }
+            Some(json!({"op": "set_tier", "args": args}))
+        }
+        _ => None,
+    }
 }
 
 /// 一步的檢查：回（正規化的參數、人話、危險）或錯誤原因。
@@ -668,6 +718,36 @@ mod tests {
         assert!(s[2].error.as_deref().unwrap().contains("不在白名單"));
         assert!(s[3].error.as_deref().unwrap().contains("resume_when"));
         assert_eq!(s[4].args, json!({"tab": "notes"}));
+    }
+
+    #[test]
+    fn undo_restores_what_was_there() {
+        let (_t, d) = spine_with_repos();
+        let data = registry::load(&d).unwrap();
+        let p = validate(
+            &data,
+            &json!({"steps": [
+                {"op": "set_members", "args": {"group": "g1", "repos": ["repo-a"]}},
+                {"op": "create_group", "args": {"name": "新組", "repos": ["repo-b"]}},
+                {"op": "set_tier", "args": {"id": "repo-b", "tier": "archived"}},
+                {"op": "open_tab", "args": {"tab": "inbox"}},
+            ]}),
+            "mcp",
+        )
+        .unwrap();
+        let u: Vec<&Option<Value>> = p.steps.iter().map(|s| &s.undo).collect();
+        assert_eq!(
+            u[0],
+            &Some(
+                json!({"op": "set_members", "args": {"group": "g1", "repos": ["repo-a", "repo-b"]}})
+            )
+        );
+        assert_eq!(
+            u[1],
+            &Some(json!({"op": "remove_group", "args": {"name": "新組"}}))
+        );
+        assert_eq!(u[2].as_ref().unwrap()["args"]["tier"], json!("active"));
+        assert_eq!(u[3], &None);
     }
 
     #[test]

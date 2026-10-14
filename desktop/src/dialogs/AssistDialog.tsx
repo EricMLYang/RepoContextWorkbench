@@ -58,6 +58,10 @@ async function runStep(store: Store, ui: Ui, s: AssistStep): Promise<void> {
         ...(str(a.resume_when) ? { resume_when: str(a.resume_when) } : {}),
       });
       return;
+    case "remove_group":
+      // 只會出現在復原（剛建的組拿掉）
+      await store.action("remove_group", { name: str(a.name) });
+      return;
     default:
       throw new Error("App 不認得這個步驟：" + s.op);
   }
@@ -77,6 +81,11 @@ export function AssistDialog({ text }: { text: string }) {
   const [running, setRunning] = useState(-1);
   const [done, setDone] = useState<number[]>([]);
   const [failed, setFailed] = useState<{ i: number; msg: string } | null>(null);
+  // 執行前的範圍（復原「換範圍」用）；復原跑完沒有
+  const [prevScope, setPrevScope] = useState<ReturnType<Store["getSnapshot"]>["scope"] | null>(
+    null,
+  );
+  const [undoing, setUndoing] = useState<"" | "running" | "done">("");
 
   useEffect(() => {
     let live = true;
@@ -105,6 +114,7 @@ export function AssistDialog({ text }: { text: string }) {
       .filter(({ s, i }) => picked[i] && !s.error)
       // 開會話對話框會換掉這個對話框，放最後
       .sort((x, y) => Number(x.s.op === "open_session") - Number(y.s.op === "open_session"));
+    setPrevScope(store.getSnapshot().scope);
     const ok: number[] = [];
     let fail: { i: number; msg: string } | null = null;
     let session: AssistStep | null = null;
@@ -150,17 +160,65 @@ export function AssistDialog({ text }: { text: string }) {
       });
       return;
     }
-    store.toast("助手：完成 " + ok.length + " 步");
-    close();
+    store.toast("助手：完成 " + ok.length + " 步（可在對話框裡復原）");
+  };
+
+  // 做過、而且復原得了的步驟（倒著復原）
+  const undoable = plan
+    ? done.filter((i) => plan.steps[i].undo || plan.steps[i].op === "switch_scope").reverse()
+    : [];
+  const undo = async () => {
+    if (!plan || undoing) return;
+    setUndoing("running");
+    setError("");
+    const back: string[] = [];
+    try {
+      for (const i of undoable) {
+        const s = plan.steps[i];
+        if (s.op === "switch_scope") {
+          if (prevScope) store.setScope(prevScope);
+        } else if (s.undo) {
+          await runStep(store, ui, { ...s, op: s.undo.op, args: s.undo.args });
+        }
+        back.push(s.text);
+      }
+      setUndoing("done");
+      store.toast("已復原 " + back.length + " 步");
+    } catch (e) {
+      setUndoing("");
+      setError("復原到一半失敗：" + (e as Error).message);
+    } finally {
+      await store
+        .action("assist_log", {
+          text: "復原：" + plan.text,
+          done: back,
+          skipped: [],
+        })
+        .catch(() => {});
+      await store.refreshState().catch(() => {});
+    }
   };
 
   return (
     <DetailLayout
       actions={
         finished ? (
-          <button type="button" onClick={close}>
-            關閉
-          </button>
+          <>
+            {undoable.length && undoing !== "done" ? (
+              <button
+                type="button"
+                className="ghost"
+                disabled={undoing === "running"}
+                title="倒著把這次做過的改回去（照規劃當下的設定）"
+                onClick={() => void undo()}
+              >
+                {undoing === "running" ? "復原中…" : "復原這次的變更"}
+              </button>
+            ) : null}
+            <button type="button" onClick={close}>
+              關閉
+            </button>
+          </>
         ) : (
           <>
             <button type="button" className="ghost" disabled={running >= 0} onClick={close}>

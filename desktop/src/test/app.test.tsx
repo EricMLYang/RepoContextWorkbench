@@ -1975,6 +1975,7 @@ describe("⌘K 找 repo／牌組", () => {
           text: "a：加標籤「規格」",
           why: "",
           danger: false,
+          undo: { op: "tag", args: { id: "a", add: [], remove: ["規格"] } },
         },
         {
           op: "remove_group",
@@ -2025,6 +2026,18 @@ describe("⌘K 找 repo／牌組", () => {
       done: ["a：加標籤「規格」", "切到牌組「產品開發」"],
       skipped: ["remove_group"],
     });
+    // 復原：倒著做——先切回原本的範圍，再把標籤拿掉
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "復原這次的變更" })),
+    );
+    expect(store.getSnapshot().scope).toEqual({ group: null, repos: null });
+    expect(backend.action).toHaveBeenCalledWith("tag", { id: "a", add: [], remove: ["規格"] });
+    expect(backend.action).toHaveBeenCalledWith("assist_log", {
+      text: "復原：a 加標籤 規格 然後切到產品開發",
+      done: ["切到牌組「產品開發」", "a：加標籤「規格」"],
+      skipped: [],
+    });
+    expect(within(dialog).queryByRole("button", { name: "復原這次的變更" })).toBeNull();
   });
 
   it("一般搜尋也列「請助手」但放最後，不搶 Enter", async () => {
