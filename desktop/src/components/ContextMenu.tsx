@@ -22,9 +22,11 @@ export function ContextMenu(props: {
   items: MenuItem[];
   x: number;
   y: number;
+  /** 往上開：y 是選單的下緣（貼在畫面底部的按鈕用，照實際高度放）。 */
+  above?: boolean;
   onClose: () => void;
 }) {
-  const { id, title, items, x, y, onClose } = props;
+  const { id, title, items, x, y, above, onClose } = props;
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
 
@@ -35,10 +37,10 @@ export function ContextMenu(props: {
     const r = el.getBoundingClientRect();
     setPos({
       left: Math.max(4, Math.min(x, window.innerWidth - r.width - 4)),
-      top: Math.max(4, Math.min(y, window.innerHeight - r.height - 4)),
+      top: Math.max(4, Math.min(above ? y - r.height : y, window.innerHeight - r.height - 4)),
     });
     el.querySelector<HTMLButtonElement>("button")?.focus();
-  }, [x, y, title]);
+  }, [x, y, title, above]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {

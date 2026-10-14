@@ -1535,11 +1535,15 @@ dialog::backdrop {
 /* 新增檔案／資料夾的輸入列 */
 .trow.tnew {
   flex-wrap: wrap;
+  height: auto;
+  min-height: 26px;
 }
 .tnewinput {
   flex: 1;
   min-width: 0;
-  height: 20px;
+  min-height: 0;
+  box-sizing: border-box;
+  height: 22px;
   padding: 0 4px;
   font-size: 12px;
   color: var(--ink);

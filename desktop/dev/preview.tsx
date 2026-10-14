@@ -3,7 +3,8 @@
  * 給沒辦法開 App 實測時（使用者的 App 開著）用 headless 瀏覽器截圖看排版：
  *   npx vite --port 5199  →  http://localhost:5199/dev/preview.html?scene=editor
  * 場景：workspace（工作區＋右欄變更頁）、editor（md 分割編輯）、code（程式碼上色＋尋找）、
- *       assist（⌘K 請助手的計畫）、assist-empty（只打「?」）
+ *       assist（⌘K 請助手的計畫）、assist-empty（只打「?」）、tree-new（檔案樹新增檔案的輸入列）、
+ *       panel-info（右欄資訊頁）、term-menu（終端列的「⋯」）
  */
 import { createRoot } from "react-dom/client";
 import "../src/styles.css";
@@ -220,9 +221,13 @@ const backend: Backend = {
 };
 
 put("scope", { group: "產品開發", repos: null });
-if (scene === "workspace") {
+if (scene === "workspace" || scene === "panel-info") {
   put("panelRepo", "repo-a");
-  put("panelTab", "changes");
+  put("panelTab", scene === "workspace" ? "changes" : "info");
+}
+if (scene === "tree-new") {
+  put("panelRepo", "repo-a");
+  put("panelTab", "files");
 }
 if (scene === "editor") {
   put("openFiles", [
@@ -266,3 +271,12 @@ if (scene === "code") {
     later(200, () => typeInto(document.querySelector<HTMLInputElement>(".findbar input")!, "text"));
   });
 }
+
+const click = (sel: string) => document.querySelector<HTMLElement>(sel)?.click();
+if (scene === "tree-new")
+  later(800, () => click('#repopanel button[aria-label="新增檔案到 repo-a"]'));
+if (scene === "term-menu")
+  later(600, () => {
+    click(".gsessions button");
+    later(1200, () => click("#termmore"));
+  });

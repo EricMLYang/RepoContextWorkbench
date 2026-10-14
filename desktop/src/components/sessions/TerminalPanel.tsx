@@ -429,7 +429,7 @@ export function TerminalPanel(props: {
           disabled={!info}
           onClick={() => {
             const r = moreRef.current?.getBoundingClientRect();
-            setMenu(menu ? null : { x: r ? r.right - 200 : 0, y: r ? r.top - 90 : 0 });
+            setMenu(menu ? null : { x: r ? r.right - 200 : 0, y: r ? r.top - 4 : 0 });
           }}
         >
           ⋯
@@ -449,6 +449,7 @@ export function TerminalPanel(props: {
             ]}
             x={menu.x}
             y={menu.y}
+            above
             onClose={() => setMenu(null)}
           />
         ) : null}
