@@ -1071,6 +1071,20 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     expect(document.querySelector(".viewer")).toBeNull();
   });
 
+  it("md 大綱：列出標題，點了捲過去", async () => {
+    const backend = viewerBackend();
+    await openTree(backend);
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" })),
+    );
+    const h1 = document.querySelector(".viewer:not([hidden]) h1") as HTMLElement;
+    const scroll = vi.fn();
+    h1.scrollIntoView = scroll;
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "大綱" })));
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "說明" })));
+    expect(scroll).toHaveBeenCalled();
+  });
+
   it("看檔案時用 ⌘K 切分頁：回到工作區", async () => {
     const backend = viewerBackend();
     await openTree(backend);

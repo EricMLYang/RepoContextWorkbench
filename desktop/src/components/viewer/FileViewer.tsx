@@ -187,6 +187,30 @@ export function FileViewer({
   const showDiff = mode === "diff";
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
+  // md 大綱：從畫好的預覽讀標題（不另外解析），點了捲過去
+  const [outline, setOutline] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const outlineRef = useRef<HTMLButtonElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const openOutline = () => {
+    const hs = [
+      ...(bodyRef.current?.querySelectorAll<HTMLElement>(
+        ".markdown > h1, .markdown > h2, .markdown > h3, .markdown > h4",
+      ) ?? []),
+    ];
+    const r = outlineRef.current?.getBoundingClientRect();
+    setOutline({
+      x: r ? r.left : 0,
+      y: r ? r.bottom + 4 : 0,
+      items: hs.length
+        ? hs.map((h, i) => ({
+            key: String(i),
+            label: h.textContent || "",
+            indent: Number(h.tagName[1]) - 1,
+            run: () => h.scrollIntoView({ block: "start", behavior: "smooth" }),
+          }))
+        : [{ label: "（這份文件沒有標題）", run: () => {} }],
+    });
+  };
   const [wrap, setWrap] = useState(isProse(path));
   // 編輯：draft＝null 表示沒在編輯；editBase＝這份草稿是從哪個內容開始改的（LF）
   const [draft, setDraft] = useState<string | null>(null);
@@ -528,6 +552,29 @@ export function FileViewer({
           >
             {picked ? "已加入脈絡 ✓" : "加入脈絡"}
           </button>
+          {md && !editing && mode === "view" && content?.kind === "text" ? (
+            <button
+              ref={outlineRef}
+              type="button"
+              className="small ghost"
+              aria-haspopup="menu"
+              aria-expanded={!!outline}
+              title="跳到某個標題"
+              onClick={() => (outline ? setOutline(null) : openOutline())}
+            >
+              大綱
+            </button>
+          ) : null}
+          {outline ? (
+            <ContextMenu
+              id="outlinemenu"
+              title="大綱"
+              items={outline.items}
+              x={outline.x}
+              y={outline.y}
+              onClose={() => setOutline(null)}
+            />
+          ) : null}
           <button
             ref={moreRef}
             type="button"
@@ -580,7 +627,7 @@ export function FileViewer({
           ) : null}
         </p>
       ) : null}
-      <div className="viewerbody">
+      <div className="viewerbody" ref={bodyRef}>
         {showDiff && !editing ? (
           diffError ? (
             <p className="error viewererror" role="alert">

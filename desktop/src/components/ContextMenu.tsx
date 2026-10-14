@@ -6,6 +6,10 @@ export interface MenuItem {
   danger?: boolean;
   /** 右邊淡色提示（例：快捷鍵）。 */
   hint?: string;
+  /** 同名項目要分開時給（預設用 label）。 */
+  key?: string;
+  /** 縮排層級（大綱用）。 */
+  indent?: number;
 }
 
 /**
@@ -82,10 +86,11 @@ export function ContextMenu(props: {
       <div className="ctxtitle">{title}</div>
       {items.map((it) => (
         <button
-          key={it.label}
+          key={it.key ?? it.label}
           type="button"
           role="menuitem"
           className={"ghost" + (it.danger ? " danger" : "")}
+          style={it.indent ? { paddingLeft: 10 + it.indent * 14 } : undefined}
           onClick={() => {
             onClose();
             void it.run();
