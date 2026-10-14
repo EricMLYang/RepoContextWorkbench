@@ -582,6 +582,9 @@ export function FileViewer({
       return;
     }
     if (!e.altKey || !md || content?.kind !== "text") return;
+    // Windows／Linux 的 Ctrl+Alt＝AltGr（例：德文鍵盤 AltGr+E 打 €）：在輸入框裡不能搶，只認 macOS 的 ⌘⌥
+    const typing = (e.target as Element | null)?.closest?.("textarea, input");
+    if (typing && !e.metaKey) return;
     const want = ({ e: "edit", b: "split", v: "preview" } as Record<string, EditLayout>)[k];
     if (!want) return;
     e.preventDefault();

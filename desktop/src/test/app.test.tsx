@@ -1072,6 +1072,11 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
       fireEvent.keyDown(window, { key: "∫", code: "KeyB", metaKey: true, altKey: true }),
     );
     expect(screen.getByRole("button", { name: "分割" }).getAttribute("aria-pressed")).toBe("true");
+    // Windows 的 Ctrl+Alt（＝AltGr）在編輯區裡打字不能被搶走
+    await act(async () =>
+      fireEvent.keyDown(box, { key: "€", code: "KeyE", ctrlKey: true, altKey: true }),
+    );
+    expect(screen.getByRole("button", { name: "分割" }).getAttribute("aria-pressed")).toBe("true");
     // 編輯中的大綱：照草稿的標題，點了游標跳到那一行
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "大綱" })));
     await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "標題" })));
