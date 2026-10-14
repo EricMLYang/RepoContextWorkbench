@@ -299,3 +299,6 @@ CLI／MCP（ctx-cli）：
 - **CLI `ctx assist "<一句話>" [--yes]`**（2026-10-15，F-63；Python 沒有）：跟 ⌘K「?」、MCP `workbench_apply` 同一份白名單；
   先印計畫、問 y/N（`--json` 只回計畫不執行、`--yes` 不問），執行走 `workbench_apply`（source cli、人自己下的不受主場限制）；
   畫面動作標「只在 App 做」。
+- **claude provider 隔離**（2026-10-15；Python 版沒有）：`ClaudeProvider.build_cmd` 一律加 `--setting-sources project,local --strict-mcp-config`。
+  一次性的判定／問答／助手規劃不載使用者層設定（`ctx setup --claude` 裝的 SessionStart／SessionEnd hook 就在那裡）、不掛 MCP，
+  不然每次呼叫都被記成「agent 會話結束但沒有交接」灌進收件匣。

@@ -118,6 +118,9 @@ fn claude_build_cmd_read_only() {
             "q",
             "--output-format",
             "json",
+            "--setting-sources",
+            "project,local",
+            "--strict-mcp-config",
             "--model",
             "opus"
         ]

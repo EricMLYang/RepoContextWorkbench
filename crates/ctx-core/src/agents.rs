@@ -242,6 +242,10 @@ pub struct ClaudeProvider;
 impl ClaudeProvider {
     /// read_only：給「到別的 repo 開一個 agent 回答問題」（ask_repo）用——只准讀，不准改檔、不准跑指令。
     /// -p 模式下沒列在 allowedTools 的工具一律拒絕，再明列 disallowed 當第二道保險。
+    /// 不載使用者層設定（hook、權限、MCP 設定都在那裡）、不掛任何 MCP。
+    pub const ISOLATE_ARGS: [&'static str; 3] =
+        ["--setting-sources", "project,local", "--strict-mcp-config"];
+
     pub const READ_ONLY_ARGS: [&'static str; 10] = [
         "--allowedTools",
         "Read",
@@ -261,6 +265,10 @@ impl ClaudeProvider {
             .iter()
             .map(|s| s.to_string())
             .collect();
+        // 刻意差異（2026-10-15）：一次性的判定／問答不載使用者層設定、不掛 MCP——
+        // 不然使用者的 SessionStart／SessionEnd hook（`ctx setup --claude` 裝的）會把每次呼叫記成
+        // 「agent 會話結束但沒有交接」，灌進收件匣（碰撞判定、ask_repo、App 助手都中過）。
+        cmd.extend(Self::ISOLATE_ARGS.iter().map(|s| s.to_string()));
         if let Some(m) = model.filter(|m| !m.is_empty()) {
             cmd.push("--model".into());
             cmd.push(m.into());
