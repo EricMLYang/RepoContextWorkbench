@@ -42,7 +42,9 @@ const OPS: &str = r#"- switch_scope {group} 或 {repos: [id…]}：換 App 目�
 - open_session {repo? | group?, task}：打開「新建 Agent 會話」對話框（不會直接開）"#;
 
 const PROMPT: &str = r#"你是「工作台助手」：把使用者的一句話翻成工作台的設定步驟。只能用下面的動作，不能發明新的；
-看不懂、或需要刪除東西、或白名單做不到，就回空的 steps 並在「說明」講清楚。repo id 與牌組名稱要照【現況】裡的寫法。
+做得到的部分照做；看不懂的、要刪除東西的、白名單做不到的，不要硬湊步驟，在「說明」講清楚缺什麼。
+repo id 與牌組名稱要照【現況】裡的寫法；【現況】裡沒有的牌組或 repo 就是不存在，不要猜。
+「最近沒在動」之類的判斷看【現況】裡每個 repo 的「最近 commit」天數。
 
 【可用動作】
 {ops}
@@ -121,14 +123,35 @@ pub fn plan_with(
     let model = cfg.provider_model("assist").unwrap_or("haiku").to_string();
     let prompt = PROMPT
         .replacen("{ops}", OPS, 1)
-        .replacen("{snapshot}", &snapshot(&data, scope), 1)
+        .replacen(
+            "{snapshot}",
+            &snapshot(&data, scope, &activity(&data, spine_dir)),
+            1,
+        )
         .replacen("{text}", text, 1);
     let raw = provider.run_judgement(&prompt, spine_dir, Some(&model))?;
     validate(&data, &raw, "agent")
 }
 
-/// 給 provider 看的現況：牌組（成員、目標）、repo（標籤、分層）、目前範圍。
-fn snapshot(data: &RegistryData, scope: &Scope) -> String {
+/// 每個 repo 最近一次 commit 是幾天前（現場平行採集；只在要問 provider 時跑，跟 provider 的幾秒比可以忽略）。
+fn activity(data: &RegistryData, spine_dir: &Path) -> std::collections::HashMap<String, f64> {
+    let specs: Vec<crate::collect::RepoSpec> = data
+        .repos
+        .iter()
+        .map(crate::collect::RepoSpec::from)
+        .collect();
+    crate::collect::collect_group(&specs, Some(spine_dir))
+        .into_iter()
+        .filter_map(|s| s.last_commit_days.map(|d| (s.id, d)))
+        .collect()
+}
+
+/// 給 provider 看的現況：牌組（成員、目標）、repo（標籤、分層、最近 commit）、目前範圍。
+fn snapshot(
+    data: &RegistryData,
+    scope: &Scope,
+    days: &std::collections::HashMap<String, f64>,
+) -> String {
     let mut out = Vec::new();
     out.push(format!(
         "目前範圍：{}",
@@ -152,9 +175,13 @@ fn snapshot(data: &RegistryData, scope: &Scope) -> String {
     out.push("repo：".into());
     for r in &data.repos {
         let tags = r.tags();
+        let id = r.id();
         out.push(format!(
-            "- {}{}{}",
-            r.id(),
+            "- {}{}{}{}",
+            id,
+            days.get(&id)
+                .map(|d| format!("（最近 commit：{} 天前）", d.round()))
+                .unwrap_or_default(),
             r.tier_str()
                 .filter(|t| *t != "active")
                 .map(|t| format!(" [{t}]"))
@@ -522,7 +549,7 @@ fn check(
                     if resume.is_empty() {
                         String::new()
                     } else {
-                        format!("（{resume} 時恢復）")
+                        format!("（恢復條件：{resume}）")
                     }
                 ),
                 tier == Tier::Archived,
