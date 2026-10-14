@@ -1346,6 +1346,44 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     expect(backend.action).toHaveBeenCalledWith("read_file", { id: "a", path: "docs/guide.md" });
   });
 
+  it("程式碼檔編輯時 Tab 縮排（照檔案習慣），不讓焦點跳走", async () => {
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: { id?: string; path?: string }) => {
+        if (name === "repo_tree")
+          return {
+            ok: true,
+            id: p.id,
+            root: "/r/a",
+            dir: "",
+            more: 0,
+            entries: [{ name: "x.rs", path: "x.rs", abs: "/r/a/x.rs", dir: false }],
+          };
+        if (name === "read_file")
+          return {
+            ok: true,
+            id: p.id,
+            path: p.path,
+            abs: "/r/a/x.rs",
+            size: 10,
+            kind: "text",
+            text: "fn a() {\n}\n",
+            truncated: false,
+            editable: true,
+            version: "v1",
+          };
+        if (name === "palette") return { ok: true, query: "", repos: [], groups: [], files: [] };
+        return { ok: true };
+      }) as never,
+    });
+    await openTree(backend);
+    await act(async () => fireEvent.click(await screen.findByRole("treeitem", { name: "x.rs" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "編輯" })));
+    const box = screen.getByRole("textbox", { name: "編輯 x.rs" }) as HTMLTextAreaElement;
+    box.setSelectionRange(9, 9);
+    await act(async () => fireEvent.keyDown(box, { key: "Tab" }));
+    expect(box.value).toBe("fn a() {\n    }\n");
+  });
+
   it("md 大綱：列出標題，點了捲過去", async () => {
     const backend = viewerBackend();
     await openTree(backend);

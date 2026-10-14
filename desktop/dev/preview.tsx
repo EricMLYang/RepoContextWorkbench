@@ -5,7 +5,7 @@
  * 場景：workspace（工作區＋右欄變更頁）、editor（md 分割編輯）、code（程式碼上色＋尋找）、
  *       assist（⌘K 請助手的計畫）、assist-empty（只打「?」）、tree-new（檔案樹新增檔案的輸入列）、
  *       panel-info（右欄資訊頁）、term-menu（終端列的「⋯」）、md-view（md 預覽＋反向連結）、
- *       edit-find（編輯中的尋找取代）
+ *       edit-find（編輯中的尋找取代）、no-session（沒有會話、所有 repo）
  */
 import { createRoot } from "react-dom/client";
 import "../src/styles.css";
@@ -162,6 +162,11 @@ const stream: TermStream = {
   close() {},
   connected: false,
 };
+// no-session：沒有會話、所有 repo 範圍
+if (scene === "no-session") {
+  (state as { terms: unknown[] }).terms = [];
+  (state as { scope: unknown }).scope = { group: null, repos: null, members: ["repo-a", "repo-b"] };
+}
 const backend: Backend = {
   kind: "http",
   getState: async () => state as never,
@@ -232,7 +237,10 @@ const backend: Backend = {
   }) as never,
 };
 
-put("scope", { group: "產品開發", repos: null });
+put(
+  "scope",
+  scene === "no-session" ? { group: null, repos: null } : { group: "產品開發", repos: null },
+);
 if (scene === "workspace" || scene === "panel-info") {
   put("panelRepo", "repo-a");
   put("panelTab", scene === "workspace" ? "changes" : "info");
@@ -258,7 +266,10 @@ if (scene === "code") {
   put("activeFile", "repo-a\u0000src/main.rs");
 }
 
-const store = new WorkbenchStore(backend, { group: "產品開發", repos: null });
+const store = new WorkbenchStore(
+  backend,
+  scene === "no-session" ? { group: null, repos: null } : { group: "產品開發", repos: null },
+);
 createRoot(document.getElementById("root")!).render(<App store={store} />);
 
 // 需要互動的場景：等畫面好了再送鍵盤事件（只送給這一頁）

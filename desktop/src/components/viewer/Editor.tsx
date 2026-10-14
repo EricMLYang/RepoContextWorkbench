@@ -212,7 +212,15 @@ export function Editor(props: {
       onSave();
       return;
     }
-    if (!markdown || e.nativeEvent.isComposing) return;
+    if (e.nativeEvent.isComposing) return;
+    if (!markdown) {
+      // 程式碼檔：Tab 縮排（照檔案原本的習慣：行首有 tab 就用 tab，否則 4 個空白），不要讓焦點跳走
+      if (e.key === "Tab" && !mod && !e.altKey && !e.shiftKey) {
+        const unit = /^\t/m.test(value) ? "\t" : "    ";
+        if (run((t, a, b) => insert(t, a, b, unit))) e.preventDefault();
+      }
+      return;
+    }
     let handled = false;
     if (mod && !e.shiftKey && k === "b") handled = run((t, a, b) => wrap(t, a, b, "**"));
     else if (mod && !e.shiftKey && k === "i") handled = run((t, a, b) => wrap(t, a, b, "*"));
