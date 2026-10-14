@@ -833,13 +833,49 @@ pub fn read_from(
     cwd: Option<&Path>,
 ) -> Result<Value> {
     let w = where_am_i(spine_dir, cwd)?;
-    ref_call(crossref::read(
+    let mut v = ref_call(crossref::read(
         spine_dir,
         reference,
         w.repo_id(),
         lines,
         MAX_READ_CHARS,
-    ))
+    ))?;
+    add_linked_from(spine_dir, &mut v);
+    Ok(v)
+}
+
+/// `read_from` 讀到的是 md 時，附上「repo 裡哪些 md 連到這份」（前幾則；跟 App 的反向連結同一個引擎，F-69）。
+/// 沒有就不加這個鍵；找不到 repo 或讀失敗也不擋讀檔。Rust 才有（2026-10-15）。
+fn add_linked_from(spine_dir: &Path, v: &mut Value) {
+    const SHOWN: usize = 5;
+    let (Some(repo), Some(rel)) = (v["repo"].as_str(), v["rel"].as_str()) else {
+        return;
+    };
+    let low = rel.to_lowercase();
+    if v["kind"] != "file" || !(low.ends_with(".md") || low.ends_with(".markdown")) {
+        return;
+    }
+    let Ok(r) = registry::get_repo(spine_dir, repo) else {
+        return;
+    };
+    let Ok((hits, more)) = crate::filetree::backlinks(&r.path(), rel) else {
+        return;
+    };
+    if hits.is_empty() {
+        return;
+    }
+    let total = hits.len() + more;
+    let items: Vec<Value> = hits
+        .iter()
+        .take(SHOWN)
+        .map(|h| json!({"path": h.rel, "line": h.line, "text": h.text}))
+        .collect();
+    if let Some(o) = v.as_object_mut() {
+        o.insert("linked_from".into(), json!(items));
+        if total > SHOWN {
+            o.insert("linked_from_total".into(), json!(total));
+        }
+    }
 }
 
 /// 對應 `agentapi.ask_repo`：在對方 repo 開一個唯讀 agent 回答（L3）。provider＝agent provider 名。

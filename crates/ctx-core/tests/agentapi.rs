@@ -1379,3 +1379,19 @@ fn workbench_apply_guards_cross_scope() {
     let r = api::workbench_apply(&d, &steps, true, Some(&here), true, "agent").unwrap();
     assert_eq!(r["done"].as_array().unwrap().len(), 1);
 }
+
+/// F-69：read_from 讀 md 時附上「哪些 md 連到這份」；沒有就不加鍵。
+#[test]
+fn read_from_md_includes_linked_from() {
+    let (_t, d) = ctx_core::testkit::spine_with_repos();
+    let a = registry::get_repo(&d, "repo-a").unwrap().path();
+    std::fs::write(a.join("notes").join("x.md"), "回到 [說明](../README.md)\n").unwrap();
+    let here = registry::get_repo(&d, "repo-b").unwrap().path();
+    let v = api::read_from(&d, "repo-a:README.md", None, Some(&here)).unwrap();
+    assert_eq!(
+        v["linked_from"],
+        json!([{"path": "notes/x.md", "line": 1, "text": "回到 [說明](../README.md)"}])
+    );
+    let v = api::read_from(&d, "repo-a:notes/x.md", None, Some(&here)).unwrap();
+    assert!(v.get("linked_from").is_none());
+}

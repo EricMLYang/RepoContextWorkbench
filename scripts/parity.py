@@ -352,6 +352,10 @@ def strip_rust_only(v):
         if "open_loops" in v and "scope" in v and "roster" in v:  # context_for 的組員名冊（2026-10-13）
             del v["roster"]
             hit = True
+        if "rel" in v and "commit" in v and "linked_from" in v:  # read_from 的反向連結（F-69，2026-10-15）
+            del v["linked_from"]
+            v.pop("linked_from_total", None)
+            hit = True
         ac = v.get("additionalContext")
         if isinstance(ac, str):  # 開場注入：提醒段與新能力那一行（N-22）
             new = re.sub(r"\n## 提醒（[^\n]*\n(?:- [^\n]*\n)*\n?", "\n", ac)

@@ -302,3 +302,5 @@ CLI／MCP（ctx-cli）：
 - **claude provider 隔離**（2026-10-15；Python 版沒有）：`ClaudeProvider.build_cmd` 一律加 `--setting-sources project,local --strict-mcp-config`。
   一次性的判定／問答／助手規劃不載使用者層設定（`ctx setup --claude` 裝的 SessionStart／SessionEnd hook 就在那裡）、不掛 MCP，
   不然每次呼叫都被記成「agent 會話結束但沒有交接」灌進收件匣。
+- **`read_from` 附 `linked_from`**（2026-10-15，F-69；Python 沒有）：讀到 md 時附上那個 repo 裡連到這份的 md（前 5 則、
+  超過另給 `linked_from_total`）；沒有就不加鍵。對拍時拿掉（`strip_rust_only`）。
