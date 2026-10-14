@@ -1136,6 +1136,22 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     expect(document.querySelector(".viewer")).toBeNull();
   });
 
+  it("⌘F 在檔案中尋找：數量、Enter 下一筆、Esc 關", async () => {
+    const backend = viewerBackend();
+    await openTree(backend);
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" })),
+    );
+    await act(async () => fireEvent.keyDown(window, { key: "f", metaKey: true }));
+    const box = screen.getByRole("textbox", { name: "在檔案中尋找" });
+    await act(async () => fireEvent.change(box, { target: { value: "指南" } }));
+    expect(document.querySelector(".findcount")!.textContent).toBe("1 / 1");
+    await act(async () => fireEvent.change(box, { target: { value: "沒有這個字" } }));
+    expect(document.querySelector(".findcount")!.textContent).toBe("找不到");
+    await act(async () => fireEvent.keyDown(box, { key: "Escape" }));
+    expect(screen.queryByRole("textbox", { name: "在檔案中尋找" })).toBeNull();
+  });
+
   it("md 大綱：列出標題，點了捲過去", async () => {
     const backend = viewerBackend();
     await openTree(backend);

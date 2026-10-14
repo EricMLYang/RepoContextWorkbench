@@ -6,6 +6,7 @@ import { useStore, useUi } from "../../store/context";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 import { Editor, type EditLayout } from "./Editor";
+import { clearMatches, findRanges, showMatches } from "../../lib/findText";
 
 export interface OpenFile {
   repo: string;
@@ -117,6 +118,85 @@ function CodeView({ text, wrap }: { text: string; wrap: boolean }) {
   );
 }
 
+/**
+ * 檔案裡找字（⌘F）：Enter 下一筆、⇧Enter 上一筆、Esc 關。找的是畫面上看到的內容（預覽、程式碼、差異、
+ * 分割編輯的右邊預覽）；內容一變（agent 改檔、打字）就重找。
+ */
+function FindBar(props: {
+  root: () => Element | null;
+  /** 內容變了就重找（長度固定的陣列，逐項當 effect 的相依）。 */
+  watch: unknown[];
+  onClose: () => void;
+}) {
+  const { root, watch, onClose } = props;
+  const [q, setQ] = useState("");
+  const [cur, setCur] = useState(0);
+  const [count, setCount] = useState(0);
+  const ranges = useRef<Range[]>([]);
+  useEffect(() => {
+    const el = root();
+    ranges.current = el && q ? findRanges(el, q) : [];
+    setCount(ranges.current.length);
+    const i = Math.min(cur, Math.max(0, ranges.current.length - 1));
+    showMatches(ranges.current, i);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, cur, ...watch]);
+  useEffect(() => clearMatches, []);
+  const step = (d: number) => {
+    if (!count) return;
+    setCur((c) => (c + d + count) % count);
+  };
+  return (
+    <div className="findbar" role="search">
+      <input
+        autoFocus
+        aria-label="在檔案中尋找"
+        placeholder="在檔案中尋找"
+        value={q}
+        spellCheck={false}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setCur(0);
+        }}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            step(e.shiftKey ? -1 : 1);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+      />
+      <span className="small muted findcount" aria-live="polite">
+        {q ? (count ? Math.min(cur, count - 1) + 1 + " / " + count : "找不到") : ""}
+      </span>
+      <button
+        type="button"
+        className="small ghost"
+        aria-label="上一筆"
+        disabled={!count}
+        onClick={() => step(-1)}
+      >
+        ↑
+      </button>
+      <button
+        type="button"
+        className="small ghost"
+        aria-label="下一筆"
+        disabled={!count}
+        onClick={() => step(1)}
+      >
+        ↓
+      </button>
+      <button type="button" className="small ghost" aria-label="關閉尋找" onClick={onClose}>
+        ×
+      </button>
+    </div>
+  );
+}
+
 /** textarea 只會給 LF；比對「有沒有改」也用 LF（存檔時引擎會還原原檔的 CRLF／BOM）。 */
 const lf = (t: string) => t.replace(/\r\n/g, "\n").replace(/^\uFEFF/, "");
 
@@ -191,6 +271,20 @@ export function FileViewer({
   const [outline, setOutline] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const outlineRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const [finding, setFinding] = useState(false);
+  // ⌘F（Ctrl+F）：這個分頁看得到時打開尋找列；焦點在終端裡不搶
+  useEffect(() => {
+    if (hidden) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "f" || e.shiftKey || e.altKey)
+        return;
+      if ((e.target as Element | null)?.closest?.("#termpanel, .xterm")) return;
+      e.preventDefault();
+      setFinding(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [hidden]);
   const openOutline = () => {
     const hs = [
       ...(bodyRef.current?.querySelectorAll<HTMLElement>(
@@ -601,6 +695,16 @@ export function FileViewer({
           ) : null}
         </div>
       </div>
+      {finding && !hidden ? (
+        <FindBar
+          root={() =>
+            bodyRef.current?.querySelector(".editorpreview") ??
+            (draft !== null ? null : bodyRef.current)
+          }
+          watch={[content, draft, mode, diff, layout]}
+          onClose={() => setFinding(false)}
+        />
+      ) : null}
       {diskChanged ? (
         <div className="viewerconflict" role="alert">
           <span>磁碟上的檔在你編輯時被改了（可能是 agent）。</span>
