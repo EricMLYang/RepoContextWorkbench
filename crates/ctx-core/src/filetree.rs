@@ -486,6 +486,13 @@ pub fn rename_entry(root: &Path, from: &str, to: &str) -> Result<(PathBuf, bool)
     let meta = src
         .symlink_metadata()
         .map_err(|_| Error::invalid(format!("檔案不存在：{from}")))?;
+    // 資料夾不能搬進自己底下（先擋，免得 new_target 已經建了空的上層資料夾才失敗）
+    let to_p = checked_rel(to, "路徑")?;
+    if meta.is_dir() && to_p.starts_with(&from_p) {
+        return Err(Error::invalid(format!(
+            "不能把資料夾搬進自己底下：{from} → {to}"
+        )));
+    }
     let (target, abs) = new_target(root, to)?;
     std::fs::rename(&src, &target)?;
     Ok((abs, meta.is_dir()))
@@ -1190,6 +1197,9 @@ mod tests {
         assert!(rename_entry(&r, "", "x").is_err());
         assert!(rename_entry(&r, "docs/.git", "g").is_err());
         assert!(rename_entry(&r, "b.md", "../b.md").is_err());
+        // 資料夾搬進自己底下：擋下，而且不留下空資料夾
+        assert!(rename_entry(&r, "archive", "archive/sub/x").is_err());
+        assert!(!r.join("archive").join("sub").exists());
         assert!(rename_entry(&r, "../repo/b.md", "c.md").is_err());
         assert!(r.join("b.md").exists());
     }
