@@ -16,6 +16,7 @@ import {
   sessionPayload,
 } from "../lib/view";
 import { interruptCard, loopCard, makeScan, makeState } from "./fixtures";
+import { tabLabels } from "../components/viewer/FileTabs";
 
 describe("按鈕文案與主次", () => {
   it("主要動作照引擎標的 primary；有建議落點時文案是「存入〈repo〉」", () => {
@@ -209,5 +210,25 @@ describe("cardCounts（UX-04：未讀不算待辦）", () => {
       (kind, i) => ({ key: String(i), kind }) as never,
     );
     expect(cardCounts(cards)).toEqual({ loop: 2, decide: 2, unread: 2, pending: 1 });
+  });
+});
+
+describe("tabLabels（UX-08：分頁只顯示檔名，同名才補最短路徑）", () => {
+  it("不同名只有檔名；同名補上層目錄；路徑相同補 repo", () => {
+    expect(
+      tabLabels([
+        { repo: "a", path: "docs/README.md" },
+        { repo: "a", path: "src/README.md" },
+        { repo: "a", path: "src/main.rs" },
+        { repo: "b", path: "src/main.rs" },
+        { repo: "a", path: "x/y/z.md" },
+      ]),
+    ).toEqual([
+      ["README.md", "docs"],
+      ["README.md", "src"],
+      ["main.rs", "a › src"],
+      ["main.rs", "b › src"],
+      ["z.md", ""],
+    ]);
   });
 });

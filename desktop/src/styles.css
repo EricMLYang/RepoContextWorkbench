@@ -1857,6 +1857,14 @@ body.resizing .xterm {
 .filetab.on {
   border-bottom-color: var(--blue);
 }
+/* 開啟的檔案清單（▾ N）：貼在分頁列最右邊，分頁捲動時也看得到 */
+.tablistbtn {
+  position: sticky;
+  right: 0;
+  margin-left: auto;
+  flex-shrink: 0;
+  background: var(--bg);
+}
 .filetab button,
 button.filetab {
   background: none;
