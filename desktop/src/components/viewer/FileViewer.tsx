@@ -501,7 +501,8 @@ export function FileViewer({
     if (hidden) return;
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.shiftKey) return;
-      if ((e.target as Element | null)?.closest?.("#termpanel, .xterm")) return;
+      // 焦點在終端、⌘K 面板、對話框裡的不搶（那些自己有按鍵）
+      if ((e.target as Element | null)?.closest?.("#termpanel, .xterm, #palette, dialog")) return;
       keysRef.current(e);
     };
     window.addEventListener("keydown", onKey);
