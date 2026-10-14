@@ -152,6 +152,30 @@ describe("範圍", () => {
       repos: null,
     });
   });
+
+  it("新建牌組：在牌組裡按＋不預勾；臨時組才預勾；編輯牌組預勾成員", async () => {
+    const { store } = await mount();
+    const checked = () =>
+      [...document.querySelectorAll<HTMLInputElement>("#pickdialog input[type=checkbox]")]
+        .filter((c) => c.checked)
+        .map((c) => c.value || c.closest("label")!.textContent!.trim());
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "選擇牌組：產品開發" })),
+    );
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "建立臨時組" })));
+    expect(checked()).toEqual([]);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "關閉選擇 repo" })));
+
+    await act(async () => store.setScope({ group: null, repos: ["a"] }));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "建立臨時組" })));
+    expect(checked()).toHaveLength(1);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "關閉選擇 repo" })));
+
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "編輯牌組：產品開發" })),
+    );
+    expect(checked()).toHaveLength(2);
+  });
 });
 
 describe("關係建議（F-47）", () => {

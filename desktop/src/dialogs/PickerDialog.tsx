@@ -6,6 +6,7 @@ import { Modal } from "./Modal";
 
 /**
  * 「選擇 repo」：組臨時範圍或存成牌組；傳入 group＝編輯既有牌組（預勾成員、可改名、刪除）。
+ * 新建時只有目前是臨時組才預勾它的 repo；在牌組或「所有 repo」時一律不勾。
  * 搜尋＋tag 只影響顯示；「選取搜尋結果」「清除選取」「＋相關 repo」是明確動作；零選取不能套用。
  */
 export function PickerDialog(props: {
@@ -26,9 +27,11 @@ function PickerForm({ group, onClose }: { group: GroupInfo | null; onClose: () =
   const store = useStore();
   const ui = useUi();
   const { state } = useSnapshot();
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(group ? group.members : store.scopeRepos),
-  );
+  // 編輯牌組＝預勾成員；新建只在目前是臨時組時預勾（把它存成牌組），在牌組或全部 repo 時從空白開始
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    if (group) return new Set(group.members);
+    return new Set(Array.isArray(store.getSnapshot().scope.repos) ? store.scopeRepos : []);
+  });
   const [tags, setTags] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [name, setName] = useState(group ? group.name : "");
