@@ -4,6 +4,14 @@ import { continueList, indent, insert, toggleLinePrefix, wrap, type Edit } from 
 /** 編輯時的版面：只有編輯區／左右分割（左寫右看）／只看預覽。 */
 export type EditLayout = "edit" | "split" | "preview";
 
+/** 點到的是第幾個待辦方塊（照畫面順序）；不是就 -1。會擋掉瀏覽器自己的勾選（內容改了才換）。 */
+export function taskIndex(e: React.MouseEvent<HTMLElement>): number {
+  const box = (e.target as Element).closest?.("li.task > input[type=checkbox]");
+  if (!box) return -1;
+  e.preventDefault();
+  return [...e.currentTarget.querySelectorAll("li.task > input[type=checkbox]")].indexOf(box);
+}
+
 /** md 工具列：按鈕 → 對選取做什麼。 */
 const TOOLS: { label: string; title: string; run: (t: string, a: number, b: number) => Edit }[] = [
   { label: "B", title: "粗體（⌘B）", run: (t, a, b) => wrap(t, a, b, "**") },
@@ -56,8 +64,11 @@ export function Editor(props: {
   readOnly?: boolean;
   /** 預覽畫什麼（md 用；拿目前的草稿）。 */
   preview?: (text: string) => ReactNode;
+  /** 預覽裡點了第 i 個待辦方塊。 */
+  onToggleTask?: (i: number) => void;
 }) {
-  const { label, value, onChange, onSave, markdown, layout, readOnly, preview } = props;
+  const { label, value, onChange, onSave, markdown, layout, readOnly, preview, onToggleTask } =
+    props;
   const ref = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const pendingSel = useRef<[number, number] | null>(null);
@@ -180,7 +191,15 @@ export function Editor(props: {
           onScroll={syncScroll}
         />
         {markdown && layout !== "edit" && preview ? (
-          <div ref={previewRef} className="editorpreview" aria-label="即時預覽">
+          <div
+            ref={previewRef}
+            className="editorpreview"
+            aria-label="即時預覽"
+            onClick={(e) => {
+              const i = taskIndex(e);
+              if (i >= 0 && onToggleTask && !readOnly) onToggleTask(i);
+            }}
+          >
             {preview(value)}
           </div>
         ) : null}

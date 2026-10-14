@@ -5,7 +5,8 @@ import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
 import { useStore, useUi } from "../../store/context";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
-import { Editor, type EditLayout } from "./Editor";
+import { Editor, taskIndex, type EditLayout } from "./Editor";
+import { toggleTask } from "../../lib/mdedit";
 import { clearMatches, findRanges, showMatches } from "../../lib/findText";
 
 export interface OpenFile {
@@ -479,6 +480,32 @@ export function FileViewer({
     return () => clearTimeout(t);
   }, [autosave, dirty, saving, diskChanged, draft]);
 
+  // 預覽裡勾待辦（HackMD 式）：直接改檔存回去，帶讀檔時的 version；被別人改過就重讀，不蓋掉
+  const toggleTaskOnDisk = async (i: number) => {
+    if (content?.kind !== "text" || !content.editable || saving) return;
+    const next = toggleTask(lf(content.text), i);
+    if (next === null) return;
+    setSaving(true);
+    try {
+      const r = await store.action("write_file", {
+        id: repo,
+        path,
+        text: next,
+        base: content.version ?? "",
+      });
+      if (!r.ok) {
+        store.toast("檔案剛被改過，已重新讀取；再勾一次");
+        reload();
+        return;
+      }
+      setContent(r);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const loadDisk = () => {
     setDraft(null);
     setDiskChanged(false);
@@ -487,6 +514,8 @@ export function FileViewer({
   };
 
   const hooks: MdHooks = {
+    // 可編輯的檔，預覽裡的待辦方塊可以直接點
+    tasks: content?.kind === "text" && !!content.editable,
     onLink(href) {
       if (href.startsWith("#")) return;
       if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
@@ -762,6 +791,10 @@ export function FileViewer({
                 if (dirty) void save(false);
               }}
               preview={(text) => <Markdown text={text} hooks={hooks} />}
+              onToggleTask={(i) => {
+                const next = draft === null ? null : toggleTask(draft, i);
+                if (next !== null) setDraft(next);
+              }}
             />
           ) : (
             <>
@@ -772,7 +805,12 @@ export function FileViewer({
                 <div
                   className="mdpreview"
                   title={content.editable ? "雙擊進入編輯" : undefined}
-                  onDoubleClick={() => {
+                  onClick={(e) => {
+                    const i = taskIndex(e);
+                    if (i >= 0) void toggleTaskOnDisk(i);
+                  }}
+                  onDoubleClick={(e) => {
+                    if ((e.target as Element).closest?.("input")) return;
                     if (content.editable && !window.getSelection()?.toString()) startEdit();
                   }}
                 >

@@ -121,3 +121,39 @@ export function insert(t: string, start: number, end: number, s: string): Edit {
     end: start + s.length,
   };
 }
+
+const FENCE_LINE = /^\s{0,3}(```+|~~~+)/;
+const TASK_LINE = /^(\s*(?:>\s*)*(?:[-*+]|\d{1,9}[.)])\s+\[)( |x|X)(\]\s+)/;
+
+/**
+ * 預覽裡點了第 `index` 個待辦方塊（照文件順序，跟預覽畫出來的順序一樣）→ 把原文那一行的 [ ]／[x] 換過來。
+ * 程式碼區塊與 front matter 裡的不算。找不到回 null。
+ */
+export function toggleTask(text: string, index: number): string | null {
+  const lines = text.split("\n");
+  let fence: string | null = null;
+  let start = 0;
+  if (lines[0]?.replace(/\r$/, "").trim() === "---") {
+    const end = lines.findIndex(
+      (l, j) => j > 0 && ["---", "..."].includes(l.replace(/\r$/, "").trim()),
+    );
+    if (end > 0) start = end + 1;
+  }
+  let n = 0;
+  for (let i = start; i < lines.length; i++) {
+    const f = FENCE_LINE.exec(lines[i]);
+    if (f) {
+      if (!fence) fence = f[1][0];
+      else if (f[1][0] === fence) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const m = TASK_LINE.exec(lines[i]);
+    if (!m) continue;
+    if (n++ === index) {
+      lines[i] = lines[i].replace(TASK_LINE, (_, a, mark, b) => a + (mark === " " ? "x" : " ") + b);
+      return lines.join("\n");
+    }
+  }
+  return null;
+}

@@ -1157,6 +1157,61 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     expect(screen.queryByRole("textbox", { name: "在檔案中尋找" })).toBeNull();
   });
 
+  it("預覽裡點待辦方塊：改原文存回去，帶 version（HackMD 式）", async () => {
+    const disk = { text: "- [ ] 買牛奶\n- [x] 寫信\n", v: 1 };
+    const file = () => ({
+      ok: true,
+      id: "a",
+      path: "todo.md",
+      abs: "/r/a/todo.md",
+      size: disk.text.length,
+      kind: "text",
+      text: disk.text,
+      truncated: false,
+      editable: true,
+      version: "v" + disk.v,
+    });
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: { text?: string; base?: string; id?: string }) => {
+        if (name === "repo_tree")
+          return {
+            ok: true,
+            id: p.id,
+            root: "/r/a",
+            dir: "",
+            more: 0,
+            entries: [{ name: "todo.md", path: "todo.md", abs: "/r/a/todo.md", dir: false }],
+          };
+        if (name === "read_file") return file();
+        if (name === "write_file") {
+          disk.text = p.text!;
+          disk.v += 1;
+          return file();
+        }
+        return { ok: true };
+      }) as never,
+    });
+    await openTree(backend);
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("treeitem", { name: "todo.md" })),
+    );
+    const boxes = screen.getAllByRole("checkbox", { name: "勾選或取消這個待辦" });
+    expect(boxes.map((b) => (b as HTMLInputElement).checked)).toEqual([false, true]);
+    await act(async () => fireEvent.click(boxes[0]));
+    expect(backend.action).toHaveBeenCalledWith("write_file", {
+      id: "a",
+      path: "todo.md",
+      text: "- [x] 買牛奶\n- [x] 寫信\n",
+      base: "v1",
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getAllByRole("checkbox", { name: "勾選或取消這個待辦" })[0] as HTMLInputElement)
+          .checked,
+      ).toBe(true),
+    );
+  });
+
   it("md 大綱：列出標題，點了捲過去", async () => {
     const backend = viewerBackend();
     await openTree(backend);

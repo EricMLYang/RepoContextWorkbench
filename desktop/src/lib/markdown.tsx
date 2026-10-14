@@ -11,6 +11,8 @@ export interface MdHooks {
   onLink(href: string): void;
   /** 圖片（相對路徑由檢視器去讀；網址不載入）。 */
   image(src: string, alt: string, key: string): ReactNode;
+  /** 待辦方塊可以點（檢視器用事件委派處理，見 `toggleTask`）；沒給＝唯讀。 */
+  tasks?: boolean;
 }
 
 const FENCE = /^\s{0,3}(```+|~~~+)\s*([^`\s]*)?.*$/;
@@ -165,7 +167,15 @@ function blocks(lines: string[], hooks: MdHooks, key: string): ReactNode[] {
         const simple = !restLines.some((x) => x.trim());
         return (
           <li key={j} className={task ? "task" : undefined}>
-            {task ? <input type="checkbox" checked={task[1] !== " "} readOnly disabled /> : null}
+            {task ? (
+              <input
+                type="checkbox"
+                checked={task[1] !== " "}
+                readOnly
+                disabled={!hooks.tasks}
+                aria-label={hooks.tasks ? "勾選或取消這個待辦" : undefined}
+              />
+            ) : null}
             {simple
               ? inline(first, hooks, key + "l" + n + "-" + j)
               : blocks([first, ...restLines], hooks, key + "l" + n + "-" + j)}
