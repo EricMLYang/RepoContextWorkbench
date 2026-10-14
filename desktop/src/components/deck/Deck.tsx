@@ -1,7 +1,13 @@
 import { memo, type HTMLAttributes, type Ref } from "react";
 import type { GroupInfo, RepoState, TermInfo } from "../../api/types";
 import { Icon } from "../../lib/icons";
-import { groupMeta, sessionInGroup, sessionNeedsYou, type Scope } from "../../lib/view";
+import {
+  groupActivity,
+  groupMeta,
+  sessionInGroup,
+  sessionNeedsYou,
+  type Scope,
+} from "../../lib/view";
 import { useSortable } from "../../lib/useSortable";
 import { useSnapshot, useStore, useUi, useUiState } from "../../store/context";
 import { SessionRow } from "../sessions/SessionRow";
@@ -64,7 +70,7 @@ const GroupCard = memo(function GroupCard(props: {
           className="gselect"
           aria-label={"選擇牌組：" + title}
           aria-pressed={on}
-          title={title}
+          title={title + " · " + groupActivity(g.members, lastStates)}
           onClick={() => onSelect(g)}
         >
           <Icon name="stack" />

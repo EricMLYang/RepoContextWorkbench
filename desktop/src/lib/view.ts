@@ -279,16 +279,20 @@ export function bannerText(err: string): string {
 
 // ── 牌組卡 ──────────────────────────────────────────────────────────
 
+/** 牌組卡的一行說明（UX-09：導覽列只放 repo 數與要檢查的；commit 統計放 groupActivity 給提示用）。 */
 export function groupMeta(members: string[], lastStates: Record<string, RepoState>): string {
-  const count = members.reduce((a, r) => a + (lastStates[r]?.commits_7d || 0), 0);
   const bad = members.filter(
     (r) => lastStates[r]?.note || (lastStates[r] && !lastStates[r].exists),
   ).length;
+  return `${members.length} repo` + (bad ? " · " + bad + " 項需檢查" : "");
+}
+
+/** 牌組近 7 天的動靜（滑鼠提示用）。 */
+export function groupActivity(members: string[], lastStates: Record<string, RepoState>): string {
   const full = members.length && members.every((r) => lastStates[r]?.commits_7d != null);
-  return (
-    `${members.length} repo${full ? " · 7 天 " + count + " commits" : " · 尚未完整採集"}` +
-    (bad ? " · " + bad + " 項需檢查" : "")
-  );
+  if (!full) return "尚未完整採集";
+  const count = members.reduce((a, r) => a + (lastStates[r]?.commits_7d || 0), 0);
+  return "7 天 " + count + " commits";
 }
 
 // ── Repo 表 ─────────────────────────────────────────────────────────
