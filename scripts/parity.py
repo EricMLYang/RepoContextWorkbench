@@ -72,6 +72,7 @@ MCP_EXTRA_PARAMS = [
 MCP_EXTRA_TOOLS = {
     "describe_repo": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
     "registry_describe": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
+    "workbench_apply": "改工作台設定 workbench_apply（F-63 App 助手同一份白名單，2026-10-15，Rust 才有）",
 }
 
 

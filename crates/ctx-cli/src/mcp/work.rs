@@ -195,3 +195,15 @@ pub(super) fn w_describe(d: &Path, a: &Args, here: &Path) -> Result<Value> {
         arg_flag(a, "cross_scope_ok"),
     ))
 }
+
+/// Rust 才有（F-63）：改工作台設定（預覽／confirm 後執行）。
+pub(super) fn w_apply(d: &Path, a: &Args, here: &Path) -> Result<Value> {
+    need("workbench_apply", a, &["steps"])?;
+    agentapi::workbench_apply(
+        d,
+        a.get("steps").unwrap_or(&Value::Null),
+        arg_flag(a, "confirm"),
+        Some(&cwd_of(a, here)),
+        arg_flag(a, "cross_scope_ok"),
+    )
+}

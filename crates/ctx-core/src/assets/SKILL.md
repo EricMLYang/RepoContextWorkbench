@@ -49,6 +49,8 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 - 名片缺了或標「推測自 README」：手上的事做完，用 `describe_repo` 補一句介紹與角色（`role` 是一個短詞，
   例 知識庫、規格來源、實作；`keywords` 給搜尋用，別跟 tags 重複）。名片存在 spine，**不寫進任何 repo**；
   只能改主場（所在 repo＋同組成員）。
+- 使用者要你改工作台設定（建組、改組員、組改名、組目標、標籤、暫停／封存）：用 `workbench_apply`，
+  先不帶 `confirm` 拿預覽、把每一步給使用者看，同意後才帶 `confirm=true`；不要直接改 registry.yaml。
 
 ## 反芻推薦（別人替你先找好的）
 

@@ -204,6 +204,31 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
             w_describe,
         ),
         work(
+            "workbench_apply",
+            "改工作台設定（跟 App 助手同一份白名單）：建組 create_group、設組員 set_members、改名 rename_group、\
+             組目標 set_goal、標籤 tag、分層 set_tier。steps＝[{op, args}]；預設只回預覽，\
+             給使用者看過、同意後帶 confirm=true 才執行。碰到主場以外的 repo 要使用者同意（cross_scope_ok）。\
+             換範圍、切分頁等畫面動作只在 App 做。",
+            s_(
+                cat(vec![
+                    vec![
+                        (
+                            "steps",
+                            d_(
+                                json!({"type": "array", "items": {"type": "object"}}),
+                                "[{op, args}]，例 [{\"op\":\"tag\",\"args\":{\"id\":\"repo-a\",\"add\":[\"規格\"]}}]",
+                            ),
+                        ),
+                        ("confirm", d_(bool_t(), "使用者看過預覽並同意後才設 true")),
+                    ],
+                    cwd_props(),
+                    cross_props(),
+                ]),
+                &["steps"],
+            ),
+            w_apply,
+        ),
+        work(
             "search_knowledge",
             "找其他 repo 的相關內容（跨 repo 參考的第一步）：給一段文字（問題、想法、卡片內容），\
              回傳 files（md，附行號片段、why、可直接給 read_from 的 ref）、code（git grep 命中的程式碼）\

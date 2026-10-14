@@ -1330,3 +1330,52 @@ fn test_group_name_with_space_can_log_handoff_and_close() {
     let ctx = api::context_for(&sp, &at(&vms), false).unwrap();
     assert!(ctx["recent_events"].as_array().unwrap().len() >= 3);
 }
+
+/// F-63 MCP workbench_apply：預設只預覽；confirm 才執行；主場外要同意；畫面動作略過；記一筆。
+#[test]
+fn workbench_apply_previews_then_applies() {
+    let (_t, d) = ctx_core::testkit::spine_with_repos();
+    let here = registry::get_repo(&d, "repo-a").unwrap().path();
+    registry::add_group(&d, "other", &["repo-b"]).unwrap();
+    // repo-a 的主場＝g1（repo-a、repo-b），所以 repo-b 也在主場；另建一個只有外人的組測跨組
+    let steps = json!([
+        {"op": "tag", "args": {"id": "repo-a", "add": ["規格"]}},
+        {"op": "switch_scope", "args": {"group": "g1"}},
+        {"op": "set_goal", "args": {"group": "g1", "text": "把登入做完"}},
+    ]);
+    let pre = api::workbench_apply(&d, &steps, false, Some(&here), false).unwrap();
+    assert_eq!(pre["preview"], json!(true));
+    assert!(pre["steps"][1]["error"]
+        .as_str()
+        .unwrap()
+        .contains("只在 App"));
+    assert!(
+        registry::get_repo(&d, "repo-a").unwrap().tags().is_empty(),
+        "預覽不寫"
+    );
+
+    let r = api::workbench_apply(&d, &steps, true, Some(&here), false).unwrap();
+    assert_eq!(r["ok"], json!(true));
+    assert_eq!(r["done"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        registry::get_repo(&d, "repo-a").unwrap().tags(),
+        vec!["規格"]
+    );
+    let ev = spine_mod::iter_events(&d).unwrap().pop().unwrap();
+    assert!(ev.body.starts_with("助手（agent）") && ev.body.contains("略過：切到牌組「g1」"));
+}
+
+#[test]
+fn workbench_apply_guards_cross_scope() {
+    let (_t, d) = ctx_core::testkit::spine_with_repos();
+    let outside = d.parent().unwrap().join("outside-repo");
+    std::fs::create_dir_all(&outside).unwrap();
+    registry::add_repo(&d, "repo-x", &outside, AddRepo::default()).unwrap();
+    let here = registry::get_repo(&d, "repo-a").unwrap().path();
+    let steps = json!([{"op": "tag", "args": {"id": "repo-x", "add": ["x"]}}]);
+    let r = api::workbench_apply(&d, &steps, true, Some(&here), false).unwrap();
+    assert!(r["done"].as_array().unwrap().is_empty());
+    assert!(registry::get_repo(&d, "repo-x").unwrap().tags().is_empty());
+    let r = api::workbench_apply(&d, &steps, true, Some(&here), true).unwrap();
+    assert_eq!(r["done"].as_array().unwrap().len(), 1);
+}

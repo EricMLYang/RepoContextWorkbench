@@ -286,3 +286,6 @@ CLI／MCP（ctx-cli）：
   model `provider.models.assist`，沒設＝haiku——不跟 `provider.default` 走，因為 default 常是 mock）。引擎不執行計畫，
   App 照步驟呼叫原本的 action；執行完 `assist_log` 落 presented [assist]。設計見 `docs/APP_ASSISTANT.md`。
 - **新增檔案／資料夾 `create_entry`**（2026-10-15，F-65；Python 沒有）：見 `desktop/IPC.md`；不記 spine 事件。
+- **MCP `workbench_apply`**（2026-10-15，F-63；Python 沒有）：agent 改工作台設定，跟 App 助手同一份白名單與驗證；
+  預設只回預覽、`confirm=true` 才執行；碰到主場外的 repo 要 `cross_scope_ok`；畫面動作只在 App。
+  執行走 App 按鈕的同一組 action，落 presented（source agent）。對拍時從 tools/list 拿掉（`MCP_EXTRA_TOOLS`）。
