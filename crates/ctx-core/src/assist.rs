@@ -327,6 +327,39 @@ fn rules(data: &RegistryData, text: &str) -> Option<Value> {
             json!({"name": name, "repos": ids}),
         );
     }
+    // 把 <牌組> 改名為／改成 <新名>
+    if let Some(rest) = t.strip_prefix('把') {
+        for verb in ["改名為", "改名成", "改名叫", "重新命名為"] {
+            if let Some((old, new)) = rest.split_once(verb) {
+                let g = find_group(
+                    data,
+                    &unquote(old.trim_end_matches("牌組").trim_end_matches('組')),
+                )?;
+                let new = unquote(new);
+                if new.is_empty() {
+                    return None;
+                }
+                return one(
+                    format!("牌組「{g}」改名"),
+                    "rename_group",
+                    json!({"group": g, "new_name": new}),
+                );
+            }
+        }
+    }
+    // <牌組> 的目標（是／：）…
+    if let Some((g, goal)) = t.split_once("的目標") {
+        let goal = ["設成", "改成", "是", "：", ":"]
+            .iter()
+            .fold(goal.trim(), |g, p| g.strip_prefix(p).unwrap_or(g).trim());
+        if let (Some(g), false) = (find_group(data, &unquote(g)), goal.is_empty()) {
+            return one(
+                format!("設牌組「{g}」的目標"),
+                "set_goal",
+                json!({"group": g, "text": goal}),
+            );
+        }
+    }
     // 把 a、b 加進／移出 <牌組>
     if let Some(rest) = t.strip_prefix('把') {
         for (verb, add) in [
@@ -977,6 +1010,15 @@ mod tests {
         assert_eq!(
             bad.steps[2].args,
             json!({"key": "md_open_edit", "value": "true"})
+        );
+        // 改名、目標
+        assert_eq!(
+            p("把 g1 改名為 產品組").steps[0].args,
+            json!({"group": "g1", "new_name": "產品組"})
+        );
+        assert_eq!(
+            p("g1 的目標：月底前把登入做完").steps[0].args,
+            json!({"group": "g1", "text": "月底前把登入做完"})
         );
         // 暫停沒說條件：規則不猜，交給 provider
         let q = fixed(json!({"steps": []}));
