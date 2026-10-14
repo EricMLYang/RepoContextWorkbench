@@ -76,6 +76,7 @@
 | Windows 11 Settings agent | 平台（OS 設定） | — | 一句話描述想改的設定 → agent 提出變更 → Apply／Undo；確認後才套用 | 改 OS 設定，不是工作台；ctx 抄「先給計畫、人按確定」→ F-63 | 參考 | 🔗 | 2026-10-15 | R30 查詢「AI command bar … confirm」 | [pureinfotech](https://pureinfotech.com/windows-11-ai-agent-settings-app/) |
 | Stepsailor AI Command Bar | 元件（SaaS） | — | 自然語言 → 確定性動作，人留在迴圈裡 | 只看到產品介紹；ctx 自己做白名單＋驗證放引擎 → F-63 | 觀察 | 🔗 | 2026-10-15 | 同上 | [hunted.space](https://hunted.space/product/ai-command-bar) |
 | HackMD／HedgeDoc／MarkText | md 編輯器 | 文件（雲端或本機檔） | 左寫右看分割預覽、工具列；MarkText 本機檔即時預覽 | 要協作／雲端才用 HackMD；ctx 只做 repo 裡檔案的輕量編輯，不做協作 → F-64 | 參考 | 🔗 | 2026-10-15 | 使用者點名 HackMD；R30 查詢 | [比較](https://unmarkdown.com/blog/stackedit-vs-hedgedoc-vs-hackmd) |
+| Clearly | md 編輯器（開源、Mac） | 本機 md 資料夾 | wiki-link 自動完成、backlinks（含未連結的提及）、標題大綱、全文搜尋排序；**自帶 MCP server** | 不管 repo 與 agent 會話；ctx 抄 backlinks（F-69），MCP 已有 | 參考 | 🔗 | 2026-10-15 | R32 查詢「local markdown editor … backlinks」 | [介紹](https://notes.nicolasdeville.com/apps/clearly/) |
 
 ## 待查對標（下一輪處理）
 
@@ -151,6 +152,9 @@
 - R30：`AI command bar natural language change app settings plan confirm before execute 2026`
 - R30：`HackMD alternatives markdown editor split preview local files 2026`
 
+- R32：`HackMD editor features shortcuts split view sync scroll table of contents mermaid 2026`（三種模式、ToC 已有）
+- R32：`local markdown editor app features users love outline backlinks quick switcher 2026`
+
 ### 下一輪查詢
 2. `Conductor diff review workflow agent changes approve commit 2026`（F-62 之後：審完怎麼收）
 3. `AgDR tooling adoption 2026 decision records in repo agents read`（F-40 之後）
@@ -159,3 +163,4 @@
 6. `LLM tool use whitelist validate plan before execute desktop app settings undo 2026`（F-63：計畫驗證與復原的做法）
 7. `VS Code file explorer rename delete move to trash electron tauri trash crate`（F-66）
 8. `MarkText alternatives local markdown editor split preview scroll sync 2026`（F-64 之後：捲動同步做法）
+9. `Clearly markdown editor MCP server backlinks github`（F-69 之後：它的 MCP 給 agent 什麼工具）
