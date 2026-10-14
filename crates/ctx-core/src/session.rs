@@ -141,7 +141,7 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
     let refs: Vec<RepoRef> = entries.iter().map(RepoRef::from).collect();
     let text = format!(
         "{}\n{}",
-        context::build_context(spine_dir, group, repos, None, Some(now))?,
+        context::build_session_card(spine_dir, group, repos, Some(now))?,
         pack::pack_index(&refs, 80)
     );
     // 資料夾用登記的原名（只給組時 resolve_group 回的就是原名；給的可能是換寫過的 PM_Group）
@@ -196,8 +196,14 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
         Some(r) => registry::get_repo(spine_dir, r)?.path(),
         None => spine_dir.to_path_buf(),
     };
+    // 範圍只有一個 repo：不講「組」與成員角色（#73）
+    let (card, parts) = if entries.len() == 1 {
+        ("情境卡", "repo 現況")
+    } else {
+        ("組情境卡", "成員角色")
+    };
     let prompt = format!(
-        "組情境卡＋文件地圖已備好：{}——先讀情境卡（成員角色、脈動、未結、你的角色），\
+        "{card}＋文件地圖已備好：{}——先讀情境卡（{parts}、脈動、未結、你的角色），\
          需要細節再照地圖挑檔細讀，不要整包讀完。任務：{}",
         out.display(),
         task.unwrap_or(DEFAULT_TASK)

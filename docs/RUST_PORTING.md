@@ -289,3 +289,8 @@ CLI／MCP（ctx-cli）：
 - **MCP `workbench_apply`**（2026-10-15，F-63；Python 沒有）：agent 改工作台設定，跟 App 助手同一份白名單與驗證；
   預設只回預覽、`confirm=true` 才執行；碰到主場外的 repo 要 `cross_scope_ok`；畫面動作只在 App。
   執行走 App 按鈕的同一組 action，落 presented（source agent）。對拍時從 tools/list 拿掉（`MCP_EXTRA_TOOLS`）。
+- **會話料：單一 repo 的情境卡**（2026-10-15，#73；Python 沒有）：`session::build` 改用 `context::build_session_card`——
+  範圍只有一個 repo 時標題「情境卡 <repo>」、段名「這個 repo／本 repo」、角色換成 repo 管家（`ROLE_PROMPT_SOLO`），
+  屬於登記的牌組時多一行「屬於牌組「X」」；開場句改「情境卡＋文件地圖…（repo 現況、…）」。
+  CLI `group context`／MCP `group_context` 照舊（`build_context`，跟 Python 一樣）。對拍：會話料檔列允許差異、
+  `session --print` 比對前把兩種開場句換成同一個樣子。

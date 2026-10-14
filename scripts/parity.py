@@ -57,6 +57,8 @@ ALLOW_FILES = [
      "相關 repo 建議快取（F-33，Rust 才有：反芻時順便算，開場讀）"),
     (r"^\.state/review\.json$",
      "未結體檢結果快取（F-21／F-46，Rust 才有：開場與 scan 算好給桌面 App 收件匣讀）"),
+    (r"^groups/[^/]+/materials/session-[^/]+\.md$",
+     "會話料：範圍只有一個 repo 時情境卡改用 repo 的說法（標題、段名、repo 管家角色；#73，2026-10-15，Rust 才有）"),
     (r"^\.agent_logs/",
      "provider 原始紀錄（除錯用 log，含 prompt 全文與呼叫序號；MockProvider 計數改成實例層）"),
 ]
@@ -691,8 +693,11 @@ def main():
     C("timer --once 同日不重跑", ["timer", "--once"])
     C("commit", ["commit", "-m", "parity"])
     C("upstream 後", ["upstream"])
+    # 「產品」只有一個 repo：Rust 的開場句改講 repo（#73）——兩邊換成同一個樣子再比
+    solo = lambda s: re.sub(r'"?(組)?情境卡＋文件地圖已備好', "<CARD>已備好", s).replace(
+        "（repo 現況、", "（<PARTS>、").replace("（成員角色、", "（<PARTS>、").replace('任務：寫文"', "任務：寫文")
     C("session --print", ["session", "--group", "產品", "--task", "寫文", "--print"],
-      stdout_fix=lambda s: re.sub(r"<CTX>[^\n]*", "<CTX…>", s))
+      stdout_fix=lambda s: solo(re.sub(r"<CTX>[^\n]*", "<CTX…>", s)))
     C("setup --dry-run", ["setup", "--spine", "{R}/spine", "--dry-run"], spine=False)
     C("setup", ["setup", "--spine", "{R}/spine"], spine=False)
     bare = {"PATH": "/usr/bin:/bin"}  # 沒有 claude 指令：印手動註冊指令、不失敗

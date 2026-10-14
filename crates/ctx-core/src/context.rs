@@ -46,6 +46,35 @@ pub const ROLE_PROMPT: &str = "你是這組 repo 的**組管家**（group stewar
 - 無事不報：沒有異常就一句話帶過，不要把正常狀態講成待辦。
 ";
 
+/// 範圍只有一個 repo 時的角色說明（Rust 才有，2026-10-15，#73）：不講「組」與成員關係。
+/// 只用在會話料（`session::build`）；CLI `group context`／MCP `group_context` 照舊用 [`ROLE_PROMPT`]（跟 Python 對拍）。
+pub const ROLE_PROMPT_SOLO: &str = "你是這個 repo 的**repo 管家**——這次的工作範圍就是這一個 repo。
+
+## 開場先講三件事（各一行，講完再問我要做什麼）
+1. 你拿到的脈絡：repo 現況、脈動、未結、最近事件——有缺就直接說缺。
+2. 這次預計產出什麼：一句話講清楚交付物。
+3. 哪些動作要我先確認：改檔、動其他 repo、刪除、對外送出，一律先問。
+
+## 各階段的責任（同一個你，不同時機）
+- 開場：整理變化、接回上次工作 → 我要看到現況、來源、可繼續的任務。
+- 出現問題：查清楚、辨認缺漏 → 我要看到判斷理由、還不知道什麼、建議下一步。
+- 執行任務：在這個 repo 裡工作、遇到阻塞立刻回報 → 我要知道你在處理什麼、是否輪到我回應。
+- 結束工作：整理成果與未完成事項 → 我要能檢閱成果，並知道下次從哪接回。
+
+## 範圍
+- 本卡的 repo 就是這次的工作範圍；要讀別的 repo 用 `search_knowledge`／`read_from`（會留引用），要改先問。
+- 本卡不是工具層的權限限制；正因為沒有硬性阻擋，越界之前一定要先問。
+
+## 工作方式
+- 先讀完本情境卡再動手；需要細節再用文件地圖挑檔讀，不要整包吞。
+- 出手留痕（MCP repo-context 工具，或 `ctx <指令> --json`）：做了判斷 `log_decision`、
+  發現待辦 `add_todo`、處理完 `close_todo`、等我回應或卡住 `report_status`。
+  留痕是工作台唯一看得到你進度的依據——沒留痕＝沒回報。
+- 隨時可用 `context_for` 重抓脈絡、`next_work` 看該做什麼。
+- 收尾一定呼叫 `handoff`：完成了什麼、還剩什麼、下次從哪裡接回。
+- 無事不報：沒有異常就一句話帶過，不要把正常狀態講成待辦。
+";
+
 /// Python `f"{x:.0f}"`。
 fn f0(x: f64) -> String {
     format!("{x:.0}")
@@ -122,6 +151,28 @@ pub fn build_context(
     states: Option<Vec<RepoState>>,
     when: Option<NaiveDateTime>,
 ) -> Result<String> {
+    build_card(spine_dir, group, repos, states, when, false)
+}
+
+/// 會話料用的情境卡：範圍只有一個 repo 時改用 repo 的說法（標題、段名、角色），其餘同 [`build_context`]。
+/// Rust 才有（2026-10-15，#73）。
+pub fn build_session_card(
+    spine_dir: &Path,
+    group: Option<&str>,
+    repos: Option<&[String]>,
+    when: Option<NaiveDateTime>,
+) -> Result<String> {
+    build_card(spine_dir, group, repos, None, when, true)
+}
+
+fn build_card(
+    spine_dir: &Path,
+    group: Option<&str>,
+    repos: Option<&[String]>,
+    states: Option<Vec<RepoState>>,
+    when: Option<NaiveDateTime>,
+    solo_wording: bool,
+) -> Result<String> {
     let now = when.unwrap_or_else(|| Local::now().naive_local());
     let cfg = config::load(spine_dir)?;
     let (gname, entries) = registry::resolve_group(spine_dir, group, repos)?;
@@ -138,11 +189,27 @@ pub fn build_context(
             collect::collect_group(&specs, Some(spine_dir))
         }
     };
-    let mut out = vec![
-        format!("# 組情境卡 {gname}（{}）", now.format("%Y-%m-%d %H:%M")),
-        String::new(),
-        "## 成員與角色".to_string(),
-    ];
+    let solo = solo_wording && entries.len() == 1;
+    let unit = if solo { "本 repo" } else { "本組" };
+    let mut out = if solo {
+        let mut head = vec![format!(
+            "# 情境卡 {}（{}）",
+            ids[0],
+            now.format("%Y-%m-%d %H:%M")
+        )];
+        // 單一 repo 但屬於登記的牌組（例 MyProjects 只有它）：講一聲，留痕會掛在那個組
+        if group.is_some_and(|g| !g.is_empty()) {
+            head.push(format!("屬於牌組「{gname}」（這組目前只有它）"));
+        }
+        head.extend([String::new(), "## 這個 repo".to_string()]);
+        head
+    } else {
+        vec![
+            format!("# 組情境卡 {gname}（{}）", now.format("%Y-%m-%d %H:%M")),
+            String::new(),
+            "## 成員與角色".to_string(),
+        ]
+    };
     for e in &entries {
         let rels: Vec<RelationView> = registry::relations_of(spine_dir, &e.id())?
             .into_iter()
@@ -156,7 +223,15 @@ pub fn build_context(
         .filter(|ln| ln.contains("組外"))
         .collect();
     if !outside.is_empty() {
-        out.push(format!("- 指向組外的關係：{}", outside.join("；")));
+        out.push(format!(
+            "- {}：{}",
+            if solo {
+                "跟其他 repo 的關係"
+            } else {
+                "指向組外的關係"
+            },
+            outside.join("；")
+        ));
     }
     out.extend([
         String::new(),
@@ -168,7 +243,7 @@ pub fn build_context(
         .into_iter()
         .filter(|ev| in_scope_of(ev, scoped, &gkey, &ids))
         .collect();
-    out.extend([String::new(), "## 未結（open loops，本組）".into()]);
+    out.extend([String::new(), format!("## 未結（open loops，{unit}）")]);
     if loops.is_empty() {
         out.push("（無）".into());
     }
@@ -181,7 +256,7 @@ pub fn build_context(
             .unwrap_or_default();
         out.push(format!("- {num} {}{due}", ev.first_line()));
     }
-    out.extend([String::new(), "## 最近事件（本組，最多 8 則）".into()]);
+    out.extend([String::new(), format!("## 最近事件（{unit}，最多 8 則）")]);
     let evs: Vec<&Event> = events
         .iter()
         .filter(|ev| ev.etype != EventType::Presented && in_scope_of(ev, scoped, &gkey, &ids))
@@ -203,7 +278,7 @@ pub fn build_context(
     let role = cfg
         .str("session.role_prompt")
         .filter(|s| !s.is_empty())
-        .unwrap_or(ROLE_PROMPT);
+        .unwrap_or(if solo { ROLE_PROMPT_SOLO } else { ROLE_PROMPT });
     out.extend([
         String::new(),
         "## 你的角色".into(),

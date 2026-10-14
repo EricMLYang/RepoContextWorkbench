@@ -211,7 +211,13 @@ fn test_single_repo_session_in_solo_group_uses_group() {
         .pack_path
         .starts_with(d.join("groups").join("My Solo").join("materials")));
     let text = std::fs::read_to_string(&plan.pack_path).unwrap();
-    assert!(text.starts_with("# 組情境卡 My Solo") && !text.contains("臨時("));
+    // 範圍只有一個 repo：講 repo 不講組（#73），但說明它屬於哪個牌組
+    assert!(text.starts_with("# 情境卡 repo-b") && !text.contains("臨時("));
+    assert!(text.contains("屬於牌組「My Solo」") && text.contains("## 這個 repo"));
+    assert!(text.contains("**repo 管家**") && !text.contains("組管家"));
+    assert!(text.contains("## 未結（open loops，本 repo）"));
+    let prompt = plan.cmd.last().unwrap();
+    assert!(prompt.starts_with("情境卡＋文件地圖已備好") && prompt.contains("repo 現況"));
     assert_eq!(presented_group(&d).as_deref(), Some("My_Solo")); // 標頭空白換 _
     assert_eq!(plan.cwd, registry::get_repo(&d, "repo-b").unwrap().path());
 }
@@ -234,7 +240,11 @@ fn test_single_repo_session_in_shared_group_files_under_group() {
         .pack_path
         .starts_with(d.join("groups").join("g1").join("materials")));
     let text = std::fs::read_to_string(&plan.pack_path).unwrap();
-    assert!(text.contains("臨時(repo-a)") && !text.contains("## repo-b"));
+    assert!(text.starts_with("# 情境卡 repo-a") && !text.contains("## repo-b"));
+    assert!(
+        !text.contains("屬於牌組"),
+        "組裡還有別人：卡只講這個 repo，不說它就是那組"
+    );
     assert_eq!(presented_group(&d).as_deref(), Some("g1"));
 }
 
@@ -259,4 +269,24 @@ fn test_single_repo_session_ignores_bad_home_hint() {
             .starts_with(d.join("groups").join("adhoc").join("materials")));
         assert_eq!(presented_group(&d), None);
     }
+}
+
+/// 範圍是多個 repo 的組：照舊是組情境卡與組管家。
+#[test]
+fn test_group_session_keeps_group_wording() {
+    let (_t, d) = spine_with_repos();
+    let plan = build(
+        &d,
+        SessionOpts {
+            group: Some("g1"),
+            ..Default::default()
+        },
+    );
+    let text = std::fs::read_to_string(&plan.pack_path).unwrap();
+    assert!(text.starts_with("# 組情境卡 g1") && text.contains("組管家"));
+    assert!(plan
+        .cmd
+        .last()
+        .unwrap()
+        .starts_with("組情境卡＋文件地圖已備好"));
 }
