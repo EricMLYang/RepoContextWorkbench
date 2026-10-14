@@ -53,7 +53,12 @@ const GroupCard = memo(function GroupCard(props: {
   const on = adhoc
     ? Array.isArray(scope.repos)
     : !Array.isArray(scope.repos) && scope.group === g.name;
-  const title = adhoc ? "臨時工作組" : g.name || "所有 repo";
+  // 只有一個 repo 的臨時範圍＝就叫那個 repo（#73）
+  const title = adhoc
+    ? g.members.length === 1
+      ? g.members[0]
+      : "臨時工作組"
+    : g.name || "所有 repo";
   const sessions = props.sessions || [];
   const live = sessions.filter((s) => s.alive);
   const needs = live.filter(sessionNeedsYou).length;

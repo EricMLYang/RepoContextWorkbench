@@ -13,6 +13,8 @@ import {
   emptyState,
   primaryAction,
   scopedCards,
+  scopeKindLabel,
+  scopeLabel,
   sessionPayload,
 } from "../lib/view";
 import { interruptCard, loopCard, makeScan, makeState } from "./fixtures";
@@ -230,5 +232,14 @@ describe("tabLabels（UX-08：分頁只顯示檔名，同名才補最短路徑�
       ["main.rs", "b › src"],
       ["z.md", ""],
     ]);
+  });
+});
+
+describe("單一 repo 的範圍不講「組」（#73）", () => {
+  it("scopeLabel／scopeKindLabel：一個 repo 叫 repo 名", () => {
+    expect(scopeLabel({ group: null, repos: ["a"] })).toBe("a");
+    expect(scopeKindLabel({ group: null, repos: ["a"] })).toBe("單一 repo");
+    expect(scopeLabel({ group: null, repos: ["a", "b"] })).toBe("臨時工作組");
+    expect(scopeLabel({ group: "g", repos: null })).toBe("g");
   });
 });

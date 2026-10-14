@@ -67,11 +67,15 @@ export function scopePayload(
 }
 
 export function scopeLabel(scope: Scope): string {
-  return Array.isArray(scope.repos) ? "臨時工作組" : scope.group || "所有 repo";
+  // 只有一個 repo 的臨時範圍＝就叫那個 repo（不講「組」，#73）
+  if (Array.isArray(scope.repos)) return scope.repos.length === 1 ? scope.repos[0] : "臨時工作組";
+  return scope.group || "所有 repo";
 }
 
 export function scopeKindLabel(scope: Scope): string {
-  return scope.group ? "常用牌組" : Array.isArray(scope.repos) ? "臨時範圍" : "跨組總覽";
+  if (scope.group) return "常用牌組";
+  if (Array.isArray(scope.repos)) return scope.repos.length === 1 ? "單一 repo" : "臨時範圍";
+  return "跨組總覽";
 }
 
 /** 搜尋只比對畫面上看得到的文字：字串與數字的值（不含鍵名、不含動作的 payload）。 */
@@ -533,7 +537,11 @@ export function sessionTarget(payload: Record<string, unknown>): string {
   return (
     (payload.repo ? (home ? home + " › " : "") + (payload.repo as string) : "") ||
     (payload.group as string) ||
-    (repos ? "臨時工作組 · " + repos.length + " 個 repo" : "所有 repo")
+    (repos
+      ? repos.length === 1
+        ? repos[0]
+        : "臨時工作組 · " + repos.length + " 個 repo"
+      : "所有 repo")
   );
 }
 
