@@ -2640,3 +2640,18 @@ body.withpicks #main {
 ::highlight(find-current) {
   background-color: rgba(249, 115, 22, 0.75);
 }
+
+/* 輕量語法上色（檢視器的程式碼、md 程式碼區塊） */
+.tk-kw {
+  color: var(--violet);
+}
+.tk-str {
+  color: var(--green);
+}
+.tk-num {
+  color: var(--amber);
+}
+.tk-com {
+  color: var(--sub);
+  font-style: italic;
+}

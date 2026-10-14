@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { langOf, tokenizeLine, type HlState, type Lang } from "../../lib/highlight";
 import type { FileContent } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
@@ -88,12 +89,18 @@ function MdImage({ repo, path, alt }: { repo: string; path: string; alt: string 
   );
 }
 
-/** 文字檔：行號＋等寬字；可切換自動換行。 */
-function CodeView({ text, wrap }: { text: string; wrap: boolean }) {
+/** 文字檔：行號＋等寬字；可切換自動換行；認得的語言輕量上色。 */
+function CodeView({ text, wrap, lang }: { text: string; wrap: boolean; lang: Lang | null }) {
   const [all, setAll] = useState(false);
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
   const shown = all ? lines : lines.slice(0, LINE_CAP);
+  const toks = useMemo(() => {
+    if (!lang) return null;
+    const st: HlState = { block: null };
+    return shown.map((l) => tokenizeLine(l, lang, st));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, all, lang]);
   const width = String(lines.length).length;
   return (
     <>
@@ -106,7 +113,21 @@ function CodeView({ text, wrap }: { text: string; wrap: boolean }) {
             <span className="ln" aria-hidden="true">
               {i + 1}
             </span>
-            <span className="lc">{l || " "}</span>
+            <span className="lc">
+              {toks
+                ? toks[i].length
+                  ? toks[i].map((t, j) =>
+                      t.cls ? (
+                        <span key={j} className={"tk-" + t.cls}>
+                          {t.text}
+                        </span>
+                      ) : (
+                        t.text
+                      ),
+                    )
+                  : " "
+                : l || " "}
+            </span>
           </div>
         ))}
       </div>
@@ -927,7 +948,7 @@ export function FileViewer({
                   <Markdown text={content.text} hooks={hooks} />
                 </div>
               ) : (
-                <CodeView text={content.text} wrap={wrap} />
+                <CodeView text={content.text} wrap={wrap} lang={md ? null : langOf(path)} />
               )}
             </>
           )

@@ -1,4 +1,26 @@
 import type { ReactNode } from "react";
+import { langOf, tokenizeLine, type HlState } from "./highlight";
+
+/** 程式碼區塊：標了認得的語言就輕量上色，不然原樣。 */
+function highlighted(lines: string[], tag: string | undefined): ReactNode {
+  const lang = langOf(tag);
+  if (!lang) return lines.join("\n");
+  const st: HlState = { block: null };
+  return lines.map((l, i) => (
+    <span key={i}>
+      {tokenizeLine(l, lang, st).map((t, j) =>
+        t.cls ? (
+          <span key={j} className={"tk-" + t.cls}>
+            {t.text}
+          </span>
+        ) : (
+          t.text
+        ),
+      )}
+      {i < lines.length - 1 ? "\n" : null}
+    </span>
+  ));
+}
 
 /**
  * 唯讀檢視器用的 Markdown → React（只產生 React 元素，不用 innerHTML——repo 裡的 md 不能在 App 裡跑腳本）。
@@ -110,7 +132,7 @@ function blocks(lines: string[], hooks: MdHooks, key: string): ReactNode[] {
       i++;
       out.push(
         <pre key={k()} className="mdcode" data-lang={fence[2] || undefined}>
-          <code>{body.join("\n")}</code>
+          <code>{highlighted(body, fence[2])}</code>
         </pre>,
       );
       continue;
