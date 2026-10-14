@@ -301,13 +301,13 @@ svg {
 .deck {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
-/* 每個牌組是一個區塊：有底色、邊框，組員收在區塊裡 */
+/* 每個牌組是一個區塊：有底色、邊框，組員收在區塊裡（使用者 2026-10-11 要的；UX-09 只收緊間距，不改回清單列） */
 .gcard {
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 3px;
+  padding: 1px;
   min-width: 0;
   background: var(--panel);
   transition:
@@ -342,7 +342,7 @@ svg {
   min-width: 0;
   background: none;
   border: 0;
-  padding: 8px;
+  padding: 6px 8px;
   display: flex;
   gap: 9px;
   align-items: flex-start;
@@ -375,7 +375,7 @@ svg {
   font-size: 11px;
   color: var(--sub);
   font-weight: 400;
-  margin-top: 3px;
+  margin-top: 1px;
 }
 .gcard.on .gname {
   color: #d6e5ff;
