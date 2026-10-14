@@ -173,6 +173,35 @@ export interface TermInfo {
   home_group?: string;
 }
 
+/** App 助手的一步（引擎驗證過；error 有值＝不能執行）。 */
+export interface AssistStep {
+  op:
+    | "switch_scope"
+    | "open_tab"
+    | "open_repo"
+    | "create_group"
+    | "set_members"
+    | "rename_group"
+    | "set_goal"
+    | "tag"
+    | "set_tier"
+    | "open_session"
+    | (string & {});
+  args: Record<string, unknown>;
+  text: string;
+  why: string;
+  danger: boolean;
+  error?: string | null;
+}
+
+export interface AssistPlan {
+  ok: true;
+  text: string;
+  summary: string;
+  source: "rules" | "agent" | "mcp";
+  steps: AssistStep[];
+}
+
 // ── /api/state ──────────────────────────────────────────────────────
 
 export interface GroupInfo {
@@ -571,6 +600,15 @@ export interface ActionMap {
   write_file: {
     payload: { id: string; path: string; text: string; base: string };
     result: FileContent | { ok: false; conflict: true; id: string; path: string };
+  };
+  /** Rust 才有（F-63）：App 助手——一句話 → 驗證過的計畫（不執行）。 */
+  assist_plan: {
+    payload: { text: string } & ScanParams;
+    result: AssistPlan;
+  };
+  assist_log: {
+    payload: { text: string; group?: string; done: string[]; skipped: string[]; failed?: string };
+    result: { ok: true };
   };
   /** Rust 才有：新增空檔或資料夾（不覆蓋；上層沒有就一路建）。path 回相對 repo 根目錄。 */
   create_entry: {

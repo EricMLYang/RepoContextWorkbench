@@ -7,6 +7,7 @@ pub mod agentapi;
 pub mod agentmark;
 pub mod agents;
 pub mod agentsetup;
+pub mod assist;
 pub mod backfill;
 pub mod brief;
 pub mod collect;

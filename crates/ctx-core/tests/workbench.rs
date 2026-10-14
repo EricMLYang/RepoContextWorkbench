@@ -1485,6 +1485,8 @@ fn read_only_actions_leave_spine_untouched() {
             json!({"files": [{"id": "repo-a", "path": "README.md"}]}),
         ),
         ("scan_dir", json!({"dir": d.parent().unwrap()})),
+        // 本機規則對得上：不問 provider、不落事件
+        ("assist_plan", json!({"text": "切到 g1"})),
     ];
     let before = spine_files(&d);
     for (name, payload) in calls {
@@ -2432,4 +2434,34 @@ fn term_create_inserts_settings_after_wrapped_agent_command() {
     let argv = terms.0.lock().unwrap()[0].clone();
     assert_eq!(&argv[..2], ["npx", "claude"], "{argv:?}");
     assert!(argv[2].starts_with("--settings="), "{argv:?}");
+}
+
+/// F-63 App 助手：規則計畫照原樣給 App；執行完的紀錄落 presented [assist]（帶目前牌組）。
+#[test]
+fn assist_plan_and_log() {
+    let (_t, d) = spine_with_repos();
+    let p = act(
+        &d,
+        "assist_plan",
+        json!({"text": "repo-b 加標籤 規格", "group": "g1"}),
+    )
+    .unwrap();
+    assert_eq!(p["source"], json!("rules"));
+    assert_eq!(p["steps"][0]["op"], json!("tag"));
+    assert_eq!(p["steps"][0]["text"], json!("repo-b：加標籤「規格」"));
+    assert!(act(&d, "assist_plan", json!({"text": "  "})).is_err());
+
+    act(
+        &d,
+        "assist_log",
+        json!({"text": "repo-b 加標籤 規格", "group": "g1",
+               "done": ["repo-b：加標籤「規格」"], "skipped": []}),
+    )
+    .unwrap();
+    let ev = spine::iter_events(&d).unwrap().pop().unwrap();
+    assert_eq!(ev.source, "assist");
+    assert_eq!(ev.kv("group"), Some("g1"));
+    assert!(ev
+        .body
+        .starts_with("助手：repo-b 加標籤 規格\n做了：repo-b：加標籤「規格」"));
 }

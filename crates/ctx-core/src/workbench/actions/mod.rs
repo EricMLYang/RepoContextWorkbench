@@ -109,6 +109,8 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("review_brief", a_review_brief),
     ("write_file", a_write_file),
     ("create_entry", a_create_entry),
+    ("assist_plan", a_assist_plan),
+    ("assist_log", a_assist_log),
     ("group_notes", a_group_notes),
     ("note_add", a_note_add),
     ("note_remove", a_note_remove),
@@ -134,6 +136,7 @@ const READ_ONLY: &[&str] = &[
     "palette",
     "pick_brief",
     "profile_draft_brief",
+    "assist_plan",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -813,6 +816,47 @@ fn a_create_entry(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> 
         json!({"ok": true, "id": id, "path": rel, "abs": abs.to_string_lossy(),
               "dir": kind == crate::filetree::NewEntry::Dir}),
     )
+}
+
+/// Rust 才有（F-63）：App 助手——一句話 → 驗證過的計畫（不執行；App 照計畫呼叫原本的 action）。
+fn a_assist_plan(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let text = raw(p, "text").unwrap_or_default();
+    let scope = crate::assist::Scope {
+        group: s(p, "group"),
+        repos: list(p, "repos"),
+    };
+    let plan = crate::assist::plan(d, &text, &scope)?;
+    let mut v = serde_json::to_value(&plan)?;
+    if let Some(o) = v.as_object_mut() {
+        o.insert("ok".into(), json!(true));
+        o.insert("text".into(), json!(text.trim()));
+    }
+    Ok(v)
+}
+
+/// Rust 才有（F-63）：助手執行完落一筆 presented 事件（指令、做了哪些、略過哪些）。
+/// 各步驟本身的留痕由原本的 action 負責，這裡只記「誰用哪句話做了這些」。
+fn a_assist_log(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let text = raw(p, "text").unwrap_or_default();
+    let done = list(p, "done").unwrap_or_default();
+    let skipped = list(p, "skipped").unwrap_or_default();
+    let failed = s(p, "failed");
+    let mut toks = Vec::new();
+    if let Some(g) = s(p, "group") {
+        toks.push(format!("group:{g}"));
+    }
+    let mut body = vec![format!("助手：{}", text.trim())];
+    if !done.is_empty() {
+        body.push(format!("做了：{}", done.join("；")));
+    }
+    if !skipped.is_empty() {
+        body.push(format!("略過：{}", skipped.join("；")));
+    }
+    if let Some(f) = failed {
+        body.push(format!("失敗停下：{f}"));
+    }
+    spine::append_event(d, "presented", "assist", &toks, &body.join("\n"), None)?;
+    Ok(json!({"ok": true}))
 }
 
 fn notes_json(d: &Path, group: &str, notes: &[crate::notes::Note]) -> Value {

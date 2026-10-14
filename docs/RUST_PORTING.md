@@ -281,3 +281,8 @@ CLI／MCP（ctx-cli）：
   （卡名、`groups/<組>/materials/`、presented 事件的 `group:`）；組裡還有別的 repo＝卡只講這個 repo，但料夾與事件
   掛那個組。之前卡叫「臨時(…)」、落 `groups/adhoc/`、事件只標 `repo:`，跟開場注入（hook 從 cwd 推組）說的範圍不一致。
   CLI `ctx session` 不帶 `home_group`，行為不變，對拍不受影響。
+- **App 助手 `assist_plan`／`assist_log`**（2026-10-15，F-63；Python 沒有，新模組 `assist`）：一句話 → 白名單內的步驟，
+  每步由引擎驗證（repo／組存在、參數型別、危險標記）；常見說法走本機規則，其他問 config `provider.assist`（沒設＝claude，
+  model `provider.models.assist`，沒設＝haiku——不跟 `provider.default` 走，因為 default 常是 mock）。引擎不執行計畫，
+  App 照步驟呼叫原本的 action；執行完 `assist_log` 落 presented [assist]。設計見 `docs/APP_ASSISTANT.md`。
+- **新增檔案／資料夾 `create_entry`**（2026-10-15，F-65；Python 沒有）：見 `desktop/IPC.md`；不記 spine 事件。
