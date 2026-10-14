@@ -4,7 +4,7 @@
  *   npx vite --port 5199  →  http://localhost:5199/dev/preview.html?scene=editor
  * 場景：workspace（工作區＋右欄變更頁）、editor（md 分割編輯）、code（程式碼上色＋尋找）、
  *       assist（⌘K 請助手的計畫）、assist-empty（只打「?」）、tree-new（檔案樹新增檔案的輸入列）、
- *       panel-info（右欄資訊頁）、term-menu（終端列的「⋯」）
+ *       panel-info（右欄資訊頁）、term-menu（終端列的「⋯」）、md-view（md 預覽＋反向連結）
  */
 import { createRoot } from "react-dom/client";
 import "../src/styles.css";
@@ -211,6 +211,17 @@ const backend: Backend = {
       };
     if (name === "palette") return { ok: true, query: "", repos: [], groups: [], files: [] };
     if (name === "assist_plan") return plan;
+    if (name === "backlinks")
+      return {
+        ok: true,
+        id: p.id,
+        path: p.path,
+        items: [
+          { path: "README.md", line: 12, text: "夜裡做了什麼見 [筆記](docs/notes.md)" },
+          { path: "docs/plan.md", line: 4, text: "- [ ] 照 [筆記](notes.md#待辦) 重裝實測" },
+        ],
+        more: 0,
+      };
     if (name === "assist_recent")
       return { ok: true, texts: ["切到 產品開發", "repo-a 加標籤 規格"] };
     if (name === "repo_profile")
@@ -236,6 +247,10 @@ if (scene === "editor") {
   ]);
   put("activeFile", "repo-a\u0000docs/notes.md");
   put("editLayout", "split");
+}
+if (scene === "md-view") {
+  put("openFiles", [{ repo: "repo-a", path: "docs/notes.md" }]);
+  put("activeFile", "repo-a\u0000docs/notes.md");
 }
 if (scene === "code") {
   put("openFiles", [{ repo: "repo-a", path: "src/main.rs" }]);

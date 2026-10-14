@@ -111,6 +111,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("create_entry", a_create_entry),
     ("rename_entry", a_rename_entry),
     ("save_image", a_save_image),
+    ("backlinks", a_backlinks),
     ("assist_plan", a_assist_plan),
     ("assist_log", a_assist_log),
     ("assist_recent", a_assist_recent),
@@ -142,6 +143,7 @@ const READ_ONLY: &[&str] = &[
     "profile_draft_brief",
     "assist_plan",
     "assist_recent",
+    "backlinks",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -917,6 +919,19 @@ fn a_save_image(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
         .to_string_lossy()
         .into_owned();
     Ok(json!({"ok": true, "id": id, "path": rel, "abs": abs.to_string_lossy()}))
+}
+
+/// Rust 才有（F-69）：repo 裡哪些 md 連到這個檔（唯讀）。
+fn a_backlinks(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let id = raw(p, "id").unwrap_or_default();
+    let path = raw(p, "path").unwrap_or_default();
+    let root = registry::get_repo(d, &id)?.path();
+    let (hits, more) = crate::filetree::backlinks(&root, &path)?;
+    let items: Vec<Value> = hits
+        .iter()
+        .map(|h| json!({"path": h.rel, "line": h.line, "text": h.text}))
+        .collect();
+    Ok(json!({"ok": true, "id": id, "path": path, "items": items, "more": more}))
 }
 
 fn notes_json(d: &Path, group: &str, notes: &[crate::notes::Note]) -> Value {

@@ -1488,6 +1488,7 @@ fn read_only_actions_leave_spine_untouched() {
         // 本機規則對得上：不問 provider、不落事件
         ("assist_plan", json!({"text": "切到 g1"})),
         ("assist_recent", json!({})),
+        ("backlinks", json!({"id": "repo-a", "path": "README.md"})),
     ];
     let before = spine_files(&d);
     for (name, payload) in calls {

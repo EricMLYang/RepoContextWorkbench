@@ -742,9 +742,164 @@ pub fn find_files(root: &Path, query: &str, limit: usize) -> Vec<FileHit> {
     hits
 }
 
+/// 反向連結（2026-10-15，F-69）：一則「誰連到這份」。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Backlink {
+    /// 連過來的那份 md（相對 repo 根目錄，`/` 分隔）。
+    pub rel: String,
+    /// 第幾行（1 起算）。
+    pub line: usize,
+    /// 那一行（去頭尾空白，最多 [`BACKLINK_TEXT`] 個字）。
+    pub text: String,
+}
+
+/// 反向連結最多列幾則（其餘只給數量）。
+pub const BACKLINKS_MAX: usize = 50;
+/// 最多看幾份 md、每份最多讀多大（大 repo 也不會卡）。
+const BACKLINK_SCAN: usize = 3000;
+const BACKLINK_TEXT: usize = 120;
+
+/// md 連結的目標：`[字](目標)` 與 `![字](目標)`（可帶 `<…>`、標題）。
+static MD_LINK: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+    regex::Regex::new(r#"\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)"#).expect("固定 regex")
+});
+
+/// md 裡的相對連結 → repo 內路徑（同前端 `resolveRel`：`/` 開頭＝repo 根、去掉 #錨點與 ?查詢、解 %20；跳出 repo＝None）。
+fn resolve_link(from: &str, href: &str) -> Option<String> {
+    if href.contains("://") || href.starts_with("mailto:") || href.starts_with('#') {
+        return None;
+    }
+    let clean = href
+        .split(['#', '?'])
+        .next()
+        .unwrap_or("")
+        .replace("%20", " ");
+    if clean.is_empty() {
+        return None;
+    }
+    let mut parts: Vec<&str> = if clean.starts_with('/') {
+        Vec::new()
+    } else {
+        from.split('/').collect::<Vec<_>>()[..from.split('/').count() - 1].to_vec()
+    };
+    for seg in clean.trim_start_matches('/').split('/') {
+        match seg {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            s => parts.push(s),
+        }
+    }
+    Some(parts.join("/"))
+}
+
+/// 列出 repo 裡連到 `target`（相對路徑）的 md：照相對連結解析、跳過程式碼區塊與自己。回 (前 [`BACKLINKS_MAX`] 則, 其餘數量)。
+pub fn backlinks(root: &Path, target: &str) -> Result<(Vec<Backlink>, usize)> {
+    let target = target.replace('\\', "/");
+    let target = target.trim_start_matches("./");
+    let (_, root_real, _) = resolve_in(root, target, "檔案")?;
+    let name = target.rsplit('/').next().unwrap_or(target).to_string();
+    let mut out: Vec<Backlink> = Vec::new();
+    let mut more = 0usize;
+    let md = all_files(root)
+        .into_iter()
+        .filter(|f| {
+            let low = f.to_lowercase();
+            (low.ends_with(".md") || low.ends_with(".markdown") || low.ends_with(".mdx"))
+                && f != target
+        })
+        .take(BACKLINK_SCAN);
+    for rel in md {
+        let p = root_real.join(&rel);
+        let Ok(meta) = std::fs::metadata(&p) else {
+            continue;
+        };
+        if meta.len() > TEXT_MAX {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&p) else {
+            continue;
+        };
+        // 先用檔名粗篩：連結裡一定有檔名（空白可能寫成 %20）
+        if !text.contains(&name) && !text.contains(&name.replace(' ', "%20")) {
+            continue;
+        }
+        let mut fence: Option<char> = None;
+        for (i, line) in text.lines().enumerate() {
+            let t = line.trim_start();
+            if t.starts_with("```") || t.starts_with("~~~") {
+                let c = t.chars().next().unwrap_or('`');
+                fence = match fence {
+                    None => Some(c),
+                    Some(f) if f == c => None,
+                    f => f,
+                };
+                continue;
+            }
+            if fence.is_some() {
+                continue;
+            }
+            let hit = MD_LINK
+                .captures_iter(line)
+                .any(|c| resolve_link(&rel, &c[1]).as_deref() == Some(target));
+            if !hit {
+                continue;
+            }
+            if out.len() >= BACKLINKS_MAX {
+                more += 1;
+            } else {
+                out.push(Backlink {
+                    rel: rel.clone(),
+                    line: i + 1,
+                    text: line.trim().chars().take(BACKLINK_TEXT).collect(),
+                });
+            }
+        }
+    }
+    Ok((out, more))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backlinks_resolve_relative_links_and_skip_code() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path();
+        std::fs::create_dir_all(r.join("docs").join("sub")).unwrap();
+        std::fs::write(r.join("docs").join("VISION.md"), "# 願景").unwrap();
+        std::fs::write(
+            r.join("README.md"),
+            "看 [願景](docs/VISION.md#5-走到哪了)\n```\n[不算](docs/VISION.md)\n```\n外部 [x](https://a/VISION.md)",
+        )
+        .unwrap();
+        std::fs::write(
+            r.join("docs").join("sub").join("a.md"),
+            "上層的 [V](../VISION.md \"t\")",
+        )
+        .unwrap();
+        std::fs::write(
+            r.join("docs").join("b.md"),
+            "同名但別處 [V](sub/VISION.md)；根目錄 [V](/docs/VISION.md)",
+        )
+        .unwrap();
+        std::fs::write(r.join("notes.txt"), "[V](docs/VISION.md)").unwrap();
+        let (hits, more) = backlinks(r, "docs/VISION.md").unwrap();
+        let got: Vec<(String, usize)> = hits.iter().map(|h| (h.rel.clone(), h.line)).collect();
+        assert_eq!(
+            got,
+            vec![
+                ("README.md".to_string(), 1),
+                ("docs/b.md".to_string(), 1),
+                ("docs/sub/a.md".to_string(), 1)
+            ]
+        );
+        assert_eq!(more, 0);
+        assert!(hits[0].text.starts_with("看 [願景]"));
+        assert!(backlinks(r, "../x.md").is_err());
+    }
 
     fn names(l: &Listing) -> Vec<(String, bool)> {
         l.entries.iter().map(|e| (e.name.clone(), e.dir)).collect()

@@ -621,6 +621,17 @@ export interface ActionMap {
     payload: { id: string; path: string; base64: string };
     result: { ok: true; id: string; path: string; abs: string };
   };
+  /** Rust 才有（F-69）：repo 裡哪些 md 連到這個檔（照相對連結解析、跳過程式碼區塊；最多 50 則）。 */
+  backlinks: {
+    payload: { id: string; path: string };
+    result: {
+      ok: true;
+      id: string;
+      path: string;
+      items: { path: string; line: number; text: string }[];
+      more: number;
+    };
+  };
   /** Rust 才有（F-66）：改名或搬移（不覆蓋、不刪）。path 回新的相對路徑。 */
   rename_entry: {
     payload: { id: string; from: string; to: string };

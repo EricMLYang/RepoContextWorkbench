@@ -1306,6 +1306,34 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     expect(await screen.findByRole("textbox", { name: "編輯 README.md" })).toBeTruthy();
   });
 
+  it("md 預覽下面列出連到這份的文件，點了開那份（F-69）", async () => {
+    const base = viewerBackend();
+    const inner = base.action;
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: never) => {
+        if (name === "backlinks")
+          return {
+            ok: true,
+            id: "a",
+            path: "README.md",
+            items: [{ path: "docs/guide.md", line: 3, text: "回到 [說明](../README.md)" }],
+            more: 0,
+          };
+        return inner(name as never, p);
+      }) as never,
+    });
+    await openTree(backend);
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" })),
+    );
+    const sec = await screen.findByRole("region", { name: "連到這份的文件" });
+    expect(sec.textContent).toContain("連到這份的文件（1）");
+    await act(async () =>
+      fireEvent.click(within(sec).getByRole("button", { name: /docs\/guide\.md/ })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("read_file", { id: "a", path: "docs/guide.md" });
+  });
+
   it("md 大綱：列出標題，點了捲過去", async () => {
     const backend = viewerBackend();
     await openTree(backend);

@@ -219,6 +219,60 @@ function FindBar(props: {
   );
 }
 
+/**
+ * md 預覽下面的「連到這份的文件」（F-69，抄 Clearly 的 backlinks）：引擎照相對連結找，點了開那份。
+ * 換檔或重讀才重找；讀不到就不顯示（不擋看文件）。
+ */
+function Backlinks({ repo, path, nonce }: { repo: string; path: string; nonce: number }) {
+  const store = useStore();
+  const ui = useUi();
+  const [r, setR] = useState<{
+    items: { path: string; line: number; text: string }[];
+    more: number;
+  } | null>(null);
+  useEffect(() => {
+    let live = true;
+    store
+      .action("backlinks", { id: repo, path })
+      // 缺欄位（舊版殼、錯誤回應）就不顯示，不讓整個檢視器炸掉
+      .then(
+        (x) => live && setR(Array.isArray(x.items) ? { items: x.items, more: x.more ?? 0 } : null),
+      )
+      .catch(() => live && setR(null));
+    return () => {
+      live = false;
+    };
+  }, [store, repo, path, nonce]);
+  if (!r) return null;
+  return (
+    <section className="backlinks" aria-label="連到這份的文件">
+      <p className="eyebrow">
+        連到這份的文件{r.items.length ? "（" + (r.items.length + r.more) + "）" : ""}
+      </p>
+      {r.items.length ? (
+        <ul>
+          {r.items.map((b) => (
+            <li key={b.path + ":" + b.line}>
+              <button
+                type="button"
+                className="ghost"
+                title={b.path + " 第 " + b.line + " 行"}
+                onClick={() => ui.openFile(repo, b.path)}
+              >
+                <span className="blpath">{b.path}</span>
+                <span className="small muted">{b.text}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="small muted">這個 repo 裡還沒有其他 md 連到這份。</p>
+      )}
+      {r.more ? <p className="small muted">另有 {r.more} 則沒列出。</p> : null}
+    </section>
+  );
+}
+
 /** textarea 只會給 LF；比對「有沒有改」也用 LF（存檔時引擎會還原原檔的 CRLF／BOM）。 */
 const lf = (t: string) => t.replace(/\r\n/g, "\n").replace(/^\uFEFF/, "");
 
@@ -975,6 +1029,7 @@ export function FileViewer({
                   }}
                 >
                   <Markdown text={content.text} hooks={hooks} />
+                  <Backlinks repo={repo} path={path} nonce={nonce} />
                 </div>
               ) : (
                 <CodeView text={content.text} wrap={wrap} lang={md ? null : langOf(path)} />

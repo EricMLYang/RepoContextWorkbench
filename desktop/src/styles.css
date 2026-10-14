@@ -2666,3 +2666,29 @@ body.withpicks #main {
   color: var(--sub);
   font-style: italic;
 }
+
+/* md 預覽下面的反向連結（F-69） */
+.backlinks {
+  max-width: 820px;
+  margin-top: 32px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.backlinks ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.backlinks button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+}
+.blpath {
+  color: var(--blue);
+  font-size: 13px;
+}
