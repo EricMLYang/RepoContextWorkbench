@@ -2577,3 +2577,31 @@ body.withpicks #main {
 .pill.palettewait {
   color: var(--red);
 }
+
+/* App 助手（F-63）：計畫清單 */
+.assistask {
+  color: var(--sub);
+}
+.assiststeps {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+}
+.assiststeps label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.assiststeps li.danger label span:first-of-type {
+  color: var(--red);
+}
+.assiststeps li.bad label {
+  color: var(--sub);
+  text-decoration: line-through;
+}
+.assiststeps li.done label {
+  color: var(--green, #8dc149);
+}
+.assisterr {
+  color: var(--red);
+}

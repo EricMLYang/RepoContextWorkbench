@@ -1881,6 +1881,83 @@ describe("⌘K 找 repo／牌組", () => {
   const opts = () => within(screen.getByRole("listbox", { name: "結果" })).getAllByRole("option");
   const noBox = () => screen.queryByRole("combobox", { name: "搜尋或執行指令" });
 
+  it("「?」請助手：先給計畫、驗證不過的不能勾、執行走原本的 action、記一筆（F-63）", async () => {
+    const plan = {
+      ok: true,
+      text: "a 加標籤 規格 然後切到產品開發",
+      summary: "加標籤再切組",
+      source: "agent",
+      steps: [
+        {
+          op: "tag",
+          args: { id: "a", add: ["規格"], remove: [] },
+          text: "a：加標籤「規格」",
+          why: "",
+          danger: false,
+        },
+        {
+          op: "remove_group",
+          args: {},
+          text: "remove_group",
+          why: "",
+          danger: false,
+          error: "助手不能做「remove_group」（不在白名單）",
+        },
+        {
+          op: "switch_scope",
+          args: { group: "產品開發" },
+          text: "切到牌組「產品開發」",
+          why: "",
+          danger: false,
+        },
+      ],
+    };
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: { query?: string }) => {
+        if (name === "palette") return result(p.query ?? "");
+        if (name === "assist_plan") return plan;
+        return { ok: true };
+      }) as never,
+    });
+    const store = await mount(backend);
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    fireEvent.change(box(), { target: { value: "?a 加標籤 規格 然後切到產品開發" } });
+    expect(opts()).toHaveLength(1);
+    expect(opts()[0].textContent).toContain("請助手：a 加標籤 規格 然後切到產品開發");
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter" }));
+    expect(backend.action).toHaveBeenCalledWith("assist_plan", {
+      text: "a 加標籤 規格 然後切到產品開發",
+    });
+    const dialog = document.getElementById("detaildialog")!;
+    await waitFor(() => expect(dialog.textContent).toContain("加標籤再切組"));
+    const boxes = [...dialog.querySelectorAll<HTMLInputElement>("input[type=checkbox]")];
+    expect(boxes.map((b) => b.disabled)).toEqual([false, true, false]);
+    expect(dialog.textContent).toContain("不能執行：助手不能做");
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "執行 2 步" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("tag", { id: "a", add: ["規格"], remove: [] });
+    expect(store.getSnapshot().scope).toEqual({ group: "產品開發", repos: null });
+    expect(backend.action).toHaveBeenCalledWith("assist_log", {
+      text: "a 加標籤 規格 然後切到產品開發",
+      group: "產品開發",
+      done: ["a：加標籤「規格」", "切到牌組「產品開發」"],
+      skipped: ["remove_group"],
+    });
+  });
+
+  it("一般搜尋也列「請助手」但放最後，不搶 Enter", async () => {
+    const backend = backendWithPalette();
+    await mount(backend);
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    await waitFor(() => expect(opts()).toHaveLength(3));
+    fireEvent.change(box(), { target: { value: "知識" } });
+    await waitFor(() => expect(opts().length).toBeGreaterThan(1));
+    const all = opts();
+    expect(all[all.length - 1].textContent).toContain("請助手：知識");
+    expect(all[0].textContent).not.toContain("請助手");
+  });
+
   it("⌘K 開；空查詢列出 repo 與牌組；打字問引擎；Enter 在側欄開 repo；Esc 關", async () => {
     const backend = backendWithPalette();
     await mount(backend);

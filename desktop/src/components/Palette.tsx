@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { PaletteResult, TermInfo } from "../api/types";
 import { STATUS_TXT, sessionNeedsYou, sessionWhere } from "../lib/view";
+import { AssistDialog } from "../dialogs/AssistDialog";
 import { useSnapshot, useStore, useUi } from "../store/context";
 
 /** 打字後多久才問引擎（毫秒）——邊打邊找，不必每個字都問。 */
@@ -24,7 +25,11 @@ type Item =
   | { kind: "session"; key: string; term: TermInfo }
   | { kind: "repo"; key: string; hit: PaletteResult["repos"][number] }
   | { kind: "group"; key: string; group: PaletteResult["groups"][number] }
-  | { kind: "file"; key: string; file: FileHit };
+  | { kind: "file"; key: string; file: FileHit }
+  | { kind: "assist"; key: string; text: string };
+
+/** 「?」或「？」開頭＝只問助手。 */
+const ASSIST_PREFIX = /^[?？]\s*/;
 
 /**
  * 執行中的 agent 會話（畫面已經有的資料，只做文字過濾）：空查詢＝全部、在等你的在前；
@@ -178,17 +183,33 @@ export function Palette({ onClose }: { onClose: () => void }) {
       run: () => ui.showTab(tab),
     })),
   ];
-  // 「>」開頭＝只看指令（不列會話、repo、檔案）
+  // 「>」開頭＝只看指令（不列會話、repo、檔案）；「?」開頭＝只問助手
   const commandMode = query.trim().startsWith(">");
-  const items = commandMode
-    ? commandsOf(commands, query)
-    : itemsOf(result, sessionsOf(state.terms || [], query), commandsOf(commands, query));
+  const assistMode = ASSIST_PREFIX.test(query.trim());
+  const ask = query.trim().replace(ASSIST_PREFIX, "");
+  // 助手放最後：不搶一般搜尋的 Enter；什麼都沒找到時它就是第一個
+  const assist: Item[] =
+    !commandMode && [...ask].length >= 2 ? [{ kind: "assist", key: "a:" + ask, text: ask }] : [];
+  const items = assistMode
+    ? assist
+    : commandMode
+      ? commandsOf(commands, query)
+      : [
+          ...itemsOf(result, sessionsOf(state.terms || [], query), commandsOf(commands, query)),
+          ...assist,
+        ];
   const cur = items[Math.min(active, items.length - 1)];
 
   function choose(item: Item | undefined, session: boolean) {
     if (!item) return;
     onClose();
-    if (item.kind === "command") {
+    if (item.kind === "assist") {
+      ui.openDetail({
+        title: "請助手",
+        eyebrow: "ASSIST",
+        content: <AssistDialog text={item.text} />,
+      });
+    } else if (item.kind === "command") {
       void Promise.resolve(item.cmd.run()).catch((e: unknown) =>
         store.toast(e instanceof Error ? e.message : String(e)),
       );
@@ -280,13 +301,20 @@ export function Palette({ onClose }: { onClose: () => void }) {
                 <RepoRow hit={it.hit} />
               ) : it.kind === "group" ? (
                 <GroupRow group={it.group} />
+              ) : it.kind === "assist" ? (
+                <div className="paletterow">
+                  <span className="palettekind small muted">助手</span>
+                  <span className="palettename">請助手：{it.text}</span>
+                  <span className="spacer" />
+                  <span className="small muted">先給計畫，確認才執行</span>
+                </div>
               ) : (
                 <FileRow file={it.file} />
               )}
             </li>
           ))}
         </ul>
-        {result && !items.length ? (
+        {result && !assistMode && !items.some((i) => i.kind !== "assist") ? (
           <p className="muted small paletteempty">沒有符合「{query}」的會話、repo、牌組或檔案。</p>
         ) : null}
         <p className="palettehint small muted">
@@ -294,6 +322,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
           <span>Enter 切到會話／開 repo 側欄／切牌組／開檔</span>
           <span>⌘/Ctrl + Enter 開 Agent 會話／檔案加入挑選</span>
           <span>「&gt;」只看指令</span>
+          <span>「?」請助手（例：切到 PM Group、VMS 加標籤 規格）</span>
           <span>Esc 關閉</span>
         </p>
       </div>
