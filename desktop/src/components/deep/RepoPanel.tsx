@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { RepoRoot } from "./FileTree";
 import { RepoChanges } from "./RepoChanges";
@@ -23,6 +23,15 @@ export function RepoPanel({ id }: { id: string }) {
   const ui = useUi();
   const { lastStates, state, stateReady } = useSnapshot();
   const s = lastStates[id];
+  // 未提交：優先用「變更」段現場讀到的數字（掃描快照可能是幾分鐘前的），兩處才不會一個說乾淨、一個列出變更
+  const [live, setLive] = useState<{ id: string; n: number | null }>({ id, n: null });
+  const liveDirty = live.id === id ? live.n : null;
+  const dirty = liveDirty ?? s?.dirty ?? 0;
+  // 同一個值不換新物件（RepoChanges 每次重畫都會回報）
+  const onCount = useCallback(
+    (n: number | null) => setLive((cur) => (cur.id === id && cur.n === n ? cur : { id, n })),
+    [id],
+  );
 
   // repo 被移出工作台就收起
   useEffect(() => {
@@ -69,7 +78,11 @@ export function RepoPanel({ id }: { id: string }) {
       {s ? (
         <dl className="panelfacts">
           <Fact label="分支" value={s.branch || "—"} />
-          <Fact label="未提交" value={s.dirty ? s.dirty + " 檔" : "乾淨"} warn={s.dirty > 0} />
+          <Fact
+            label="未提交"
+            value={(dirty ? dirty + " 檔" : "乾淨") + (liveDirty == null ? "（上次掃描）" : "")}
+            warn={dirty > 0}
+          />
           <Fact
             label="未推送／落後"
             value={(s.ahead ?? "—") + " ／ " + (s.behind ?? "—")}
@@ -108,7 +121,7 @@ export function RepoPanel({ id }: { id: string }) {
           開啟 Agent 會話
         </button>
       </div>
-      <RepoChanges id={id} />
+      <RepoChanges id={id} onCount={onCount} />
       <RepoProfileCard id={id} />
       <div className="panelsection">
         <RepoRoot key={id} id={id} bare />

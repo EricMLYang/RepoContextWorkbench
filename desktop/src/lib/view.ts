@@ -95,6 +95,21 @@ export function scopedCards(
   return (scan.question_cards as InboxCard[]).concat(state.cards.filter((c) => c.lane === "scope"));
 }
 
+/**
+ * 收件匣的數字分類（只照引擎給的 kind 分，不新增判斷）：
+ * loop＝待跟進；decide＝要你判斷（打斷、問題、分析結果、該重看、回顧）；unread＝其他未讀與新料；pending＝分析中。
+ */
+export function cardCounts(cards: InboxCard[]) {
+  const n = { loop: 0, decide: 0, unread: 0, pending: 0 };
+  for (const c of cards) {
+    if (c.kind === "loop") n.loop++;
+    else if (c.kind === "pending") n.pending++;
+    else if (c.kind === "event" || c.kind === "fresh") n.unread++;
+    else n.decide++;
+  }
+  return n;
+}
+
 export interface CardSection {
   key: string;
   title: string;

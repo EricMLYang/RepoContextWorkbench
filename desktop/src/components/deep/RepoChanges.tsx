@@ -20,7 +20,14 @@ const MARK: Record<RepoChange["status"], [string, string]> = {
  * state 一變就重讀（agent 做完一輪會寫會話狀態 → state 更新），另有 ⟳；讀失敗保留上次的並顯示原因。
  * 不是 git repo 就整段不顯示。
  */
-export function RepoChanges({ id }: { id: string }) {
+export function RepoChanges({
+  id,
+  onCount,
+}: {
+  id: string;
+  /** 現場讀到的變更數（含沒列出的）；不是 git repo 或還沒讀到給 null。側欄的「未提交」用它，免得跟掃描快照打架。 */
+  onCount?: (n: number | null) => void;
+}) {
   const store = useStore();
   const ui = useUi();
   const view = useUiState();
@@ -52,6 +59,11 @@ export function RepoChanges({ id }: { id: string }) {
       live = false;
     };
   }, [store, id, state, dirty, nonce]);
+
+  const count = notGit || list?.id !== id ? null : list.changes.length + list.more;
+  useEffect(() => {
+    onCount?.(count);
+  }, [onCount, count]);
 
   if (notGit) return null;
   const shown = list?.id === id ? list : null;

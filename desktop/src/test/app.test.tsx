@@ -747,7 +747,10 @@ describe("repo 右側欄與右鍵選單", () => {
     expect(document.getElementById("detaildialog")!.hasAttribute("open")).toBe(false);
     expect(document.body.classList.contains("withpanel")).toBe(true);
     expect(panel.textContent).toContain("main");
-    expect(panel.textContent).toContain("3 檔");
+    // 未提交跟「變更」段同一個來源：現場讀到 0 個變更，就不再用掃描快照的 3 檔
+    expect(panel.textContent).toContain("未提交乾淨");
+    expect(panel.textContent).not.toContain("3 檔");
+    expect(panel.textContent).toContain("變更（0）");
     expect(panel.textContent).toContain("修好登入（2 天前）");
     expect(backend.action).toHaveBeenCalledWith("repo_tree", { id: "a", dir: "" });
     await act(async () => fireEvent.click(repoButton()));

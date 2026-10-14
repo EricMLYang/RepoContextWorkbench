@@ -8,6 +8,7 @@ import {
   pathForTerminal,
   actionLabel,
   actionToast,
+  cardCounts,
   cardSections,
   emptyState,
   primaryAction,
@@ -199,5 +200,14 @@ describe("會話在等你（Claude Code hook 自動寫）", () => {
     const dead = t("d", "blocked", "2026-10-14 00:10", false);
     expect((firstNeedingYou([w1, w0]) as { sid: string }).sid).toBe("w0");
     expect((firstNeedingYou([w1, w0, b, dead]) as { sid: string }).sid).toBe("b");
+  });
+});
+
+describe("cardCounts（UX-04：未讀不算待辦）", () => {
+  it("照 kind 分：待跟進、要你判斷、未讀、分析中", () => {
+    const cards = ["loop", "loop", "retro", "collision", "event", "fresh", "pending"].map(
+      (kind, i) => ({ key: String(i), kind }) as never,
+    );
+    expect(cardCounts(cards)).toEqual({ loop: 2, decide: 2, unread: 2, pending: 1 });
   });
 });

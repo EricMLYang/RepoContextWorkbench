@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { fullTextSpec } from "../dialogs/FullText";
 import { AckConfirm } from "../dialogs/misc";
-import { bannerText, scopeKindLabel, scopeLabel, scopedCards } from "../lib/view";
+import { bannerText, cardCounts, scopeKindLabel, scopeLabel, scopedCards } from "../lib/view";
 import { useSnapshot, useStore, useUi, type Tab } from "../store/context";
 import { AsyncButton } from "./AsyncButton";
 import { Composer } from "./Composer";
@@ -48,8 +48,9 @@ export function Workspace(props: {
   const q = query.trim().toLocaleLowerCase();
   const repos = store.scopeRepos;
   const local = scopedCards(state, scan);
-  const todo = local.filter((c) => c.kind !== "pending").length;
-  const pending = local.filter((c) => c.kind === "pending").length;
+  // 數字分開講（UX-04）：未讀不是待辦——待跟進／要你判斷的才算「要處理」
+  const counts = cardCounts(local);
+  const todo = counts.loop + counts.decide;
   const err = stateError || scanError;
   const noScope = !stateReady || !repos.length;
 
@@ -63,7 +64,15 @@ export function Workspace(props: {
           <h1 id="scopename">{scopeLabel(scope)}</h1>
           <p id="worksummary" className="muted">
             {stateReady
-              ? `${repos.length} 個 repo · 範圍內 ${todo} 件待處理 · ${pending} 件分析中`
+              ? [
+                  repos.length + " 個 repo",
+                  "待跟進 " + counts.loop,
+                  "要你判斷 " + counts.decide,
+                  "未讀 " + counts.unread,
+                  counts.pending ? "分析中 " + counts.pending : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
               : "正在載入工作空間…"}
           </p>
         </div>
@@ -119,7 +128,11 @@ export function Workspace(props: {
             {key === "inbox" ? (
               <>
                 {" "}
-                <span id="inboxcount" className="tabcount">
+                <span
+                  id="inboxcount"
+                  className="tabcount"
+                  title={"要處理 " + todo + "（待跟進＋要你判斷）；另有未讀 " + counts.unread}
+                >
                   {stateReady ? todo : "—"}
                 </span>
               </>
