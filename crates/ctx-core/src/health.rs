@@ -128,6 +128,25 @@ pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result
         })
         .count();
 
+    // 助手（F-63）：App 的「?」與 agent 的 workbench_apply 各用了幾次、幾次有做事、幾次中途失敗、幾次復原
+    let assists: Vec<&&spine::Event> = recent
+        .iter()
+        .filter(|e| {
+            e.etype == EventType::Presented
+                && (e.source == "assist" || e.body.starts_with("助手（agent）"))
+        })
+        .collect();
+    let assist = json!({
+        "runs": assists.iter().filter(|e| !e.body.starts_with("助手：復原：")).count(),
+        "from_agent": assists.iter().filter(|e| e.source != "assist").count(),
+        "did_something": assists
+            .iter()
+            .filter(|e| !e.body.starts_with("助手：復原：") && e.body.contains("\n做了："))
+            .count(),
+        "failed": assists.iter().filter(|e| e.body.contains("\n失敗停下：")).count(),
+        "undone": assists.iter().filter(|e| e.body.starts_with("助手：復原：")).count(),
+    });
+
     // 工具用量
     let mut tools: BTreeMap<String, (usize, u64, usize)> = BTreeMap::new();
     if let Ok(text) = std::fs::read_to_string(metrics_path(spine_dir)) {
@@ -179,5 +198,6 @@ pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result
                       "outcome_rate": ratio(with_outcome, with_outcome + due)},
         "loops": {"opened": opened, "closed": closed, "open_now": open_now.len(), "overdue": overdue},
         "tools": tool_rows,
+        "assist": assist,
     }))
 }

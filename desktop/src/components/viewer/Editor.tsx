@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { continueList, indent, insert, toggleLinePrefix, wrap, type Edit } from "../../lib/mdedit";
 import { FILE_DRAG_TYPE } from "../../lib/view";
 
@@ -86,6 +86,8 @@ export function Editor(props: {
     onPasteImage,
   } = props;
   const ref = useRef<HTMLTextAreaElement>(null);
+  // 預覽慢一拍沒關係，打字不能卡：大份 md 每個字都重畫預覽會拖慢輸入
+  const previewText = useDeferredValue(value);
   const previewRef = useRef<HTMLDivElement>(null);
   const pendingSel = useRef<[number, number] | null>(null);
 
@@ -244,7 +246,7 @@ export function Editor(props: {
               if (i >= 0 && onToggleTask && !readOnly) onToggleTask(i);
             }}
           >
-            {preview(value)}
+            {preview(previewText)}
           </div>
         ) : null}
       </div>

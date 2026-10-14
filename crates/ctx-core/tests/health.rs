@@ -115,3 +115,31 @@ fn health_reports_profile_coverage() {
     assert_eq!(p["undescribed"], serde_json::json!([]));
     assert_eq!(p["undescribed_more"], 0);
 }
+
+/// F-63 助手用量：App（source assist）與 agent（workbench_apply）都算；有做事、失敗、復原分開數。
+#[test]
+fn health_counts_assistant_use() {
+    let (_t, d) = spine();
+    let at = |m: i64| Some(Local::now().naive_local() - Duration::minutes(m));
+    let ev = |src: &str, body: &str, m: i64| {
+        append_event(&d, "presented", src, &[] as &[&str], body, at(m)).unwrap();
+    };
+    ev("assist", "助手：切到 g1\n做了：切到牌組「g1」", 30);
+    ev(
+        "assist",
+        "助手：a 加標籤 x\n做了：a：加標籤「x」\n失敗停下：…",
+        20,
+    );
+    ev("assist", "助手：復原：a 加標籤 x\n做了：a：加標籤「x」", 10);
+    ev(
+        "agent",
+        "助手（agent）：改工作台設定\n略過：切到牌組「g1」",
+        5,
+    );
+    ev("session", "組情境卡＋文件地圖：…", 5);
+    let r = health(&d, 14, None).unwrap();
+    assert_eq!(
+        r["assist"],
+        serde_json::json!({"runs": 3, "from_agent": 1, "did_something": 2, "failed": 1, "undone": 1})
+    );
+}

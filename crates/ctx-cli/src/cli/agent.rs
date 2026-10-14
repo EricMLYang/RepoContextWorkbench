@@ -1333,6 +1333,17 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
             ));
         }
         out.push(line);
+        let a = &r["assist"];
+        if a["runs"].as_u64().unwrap_or(0) + a["undone"].as_u64().unwrap_or(0) > 0 {
+            out.push(format!(
+                "- 助手：用了 {} 次（agent {} 次），有做事 {}、中途失敗 {}、復原 {}",
+                s(a, "runs"),
+                s(a, "from_agent"),
+                s(a, "did_something"),
+                s(a, "failed"),
+                s(a, "undone")
+            ));
+        }
         let tools = arr(r, "tools");
         if tools.is_empty() {
             out.push("- 工具用量：還沒有紀錄（MCP 呼叫才會記，`.state/metrics.jsonl`）".into());
