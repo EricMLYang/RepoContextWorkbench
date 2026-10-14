@@ -102,6 +102,9 @@ export function SessionForm({
 /** 記錄結果：載入交接草稿（脊椎留痕組成），人確認後存成一筆 decision。 */
 export function SessionResult({ term, after }: { term: TermInfo; after?: () => void }) {
   const store = useStore();
+  const ui = useUi();
+  // 存好之後留在對話框說記在哪、給「到活動看」（UX 檢討流程 C：不能只有一閃而過的提示）
+  const [saved, setSaved] = useState<{ date: string; time: string } | null>(null);
   const { setError, close } = useDetail();
   const ref = useAutoFocus<HTMLTextAreaElement>();
   const [text, setText] = useState("");
@@ -121,6 +124,35 @@ export function SessionResult({ term, after }: { term: TermInfo; after?: () => v
       live = false;
     };
   }, [store, term.sid]);
+  if (saved)
+    return (
+      <DetailLayout
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                close();
+                ui.showTab("activity");
+              }}
+            >
+              到活動分頁看
+            </button>
+            <button type="button" className="primary" onClick={close}>
+              關閉
+            </button>
+          </>
+        }
+      >
+        <p className="dialogmessage" role="status">
+          {"已記在活動：" +
+            saved.date +
+            " " +
+            saved.time +
+            "（記成一筆判斷 decision，下次開這組的會話時 agent 會讀到；不代表成果已被採納）"}
+        </p>
+      </DetailLayout>
+    );
   return (
     <DetailLayout
       actions={
@@ -131,11 +163,15 @@ export function SessionResult({ term, after }: { term: TermInfo; after?: () => v
               setError("請填寫結果。");
               return;
             }
-            await store.action("session_result", { sid: term.sid, text: text.trim() });
-            close();
-            store.toast("結果已儲存（記為 decision，不代表成果已被採納）");
+            const r = await store.action("session_result", { sid: term.sid, text: text.trim() });
             await store.refreshState();
-            after?.();
+            if (after) {
+              close();
+              store.toast("結果已儲存（記為 decision，不代表成果已被採納）");
+              after();
+              return;
+            }
+            setSaved({ date: r.date, time: r.time });
           }}
         >
           確認並儲存

@@ -1823,6 +1823,37 @@ describe("會話放進所屬牌組", () => {
     expect(document.getElementById("termtitle")!.textContent).toContain("等我的");
   });
 
+  it("記錄本次工作結果：存好後說記在哪、可以直接到活動看（UX 流程 C）", async () => {
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({ terms: [term({ sid: "t1", home_group: "產品開發" })] as never }),
+      ),
+      action: vi.fn(async (name: string) => {
+        if (name === "session_draft") return { ok: true, text: "草稿", note: "", traces: 1 };
+        if (name === "session_result") return { ok: true, date: "2026-10-15", time: "04:20" };
+        return { ok: true };
+      }) as never,
+    });
+    await mount(backend);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "回到會話" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "更多會話動作" })));
+    await act(async () =>
+      fireEvent.click(screen.getByRole("menuitem", { name: "記錄本次工作結果…" })),
+    );
+    const dialog = document.getElementById("detaildialog")!;
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "確認並儲存" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("session_result", { sid: "t1", text: "草稿" });
+    expect(within(dialog).getByRole("status").textContent).toContain(
+      "已記在活動：2026-10-15 04:20",
+    );
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "到活動分頁看" })),
+    );
+    expect(document.getElementById("tab-activity")!.classList.contains("on")).toBe(true);
+  });
+
   it("牌組的會話在牌組區塊裡（寫 repo），其他的在下面；終端標題寫「組 › repo」", async () => {
     const backend = mockBackend({
       getState: vi.fn(async () =>
