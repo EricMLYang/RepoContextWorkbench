@@ -4,13 +4,13 @@
 //! - 預設只回預覽（每步的人話、錯誤、危險）；agent 給使用者看過、同意後帶 `confirm=true` 才執行。
 //! - 畫面動作（換範圍、切分頁、開 repo、開會話對話框）只在 App 做，這裡標為略過。
 //! - 碰到主場（所在 repo＋同組成員）以外的 repo，要使用者同意後帶 `cross_scope_ok=true`。
-//! - 依序執行，失敗就停；落一筆 presented 事件（source agent）。
+//! - 依序執行，失敗就停；落一筆 presented 事件（source＝呼叫的人：MCP 是 agent、CLI `ctx assist` 是 cli）。
 
 use super::*;
 use crate::assist::{self, Step};
 
 /// 只在 App 做的畫面動作。
-const UI_ONLY: &[&str] = &["switch_scope", "open_tab", "open_repo", "open_session"];
+pub const UI_ONLY: &[&str] = &["switch_scope", "open_tab", "open_repo", "open_session"];
 
 /// 一步碰到哪些 repo（含牌組現在與之後的成員）。
 fn touched(data: &registry::RegistryData, s: &Step) -> Vec<String> {
@@ -71,6 +71,7 @@ pub fn workbench_apply(
     confirm: bool,
     cwd: Option<&Path>,
     cross_scope_ok: bool,
+    source: &str,
 ) -> Result<Value> {
     let data = registry::load(spine_dir)?;
     let mut plan = assist::validate(&data, &json!({"steps": steps}), "mcp")
@@ -132,7 +133,7 @@ pub fn workbench_apply(
         .filter(|s| failed.as_deref().is_none_or(|f| !f.starts_with(&s.text)))
         .map(|s| s.text.clone())
         .collect();
-    let mut body = vec!["助手（agent）：改工作台設定".to_string()];
+    let mut body = vec![format!("助手（{source}）：改工作台設定")];
     if !done.is_empty() {
         body.push(format!("做了：{}", done.join("；")));
     }
@@ -149,7 +150,7 @@ pub fn workbench_apply(
     spine::append_event(
         spine_dir,
         "presented",
-        "agent",
+        source,
         &toks,
         &body.join("\n"),
         None,

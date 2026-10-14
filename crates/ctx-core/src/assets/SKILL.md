@@ -51,6 +51,7 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
   只能改主場（所在 repo＋同組成員）。
 - 使用者要你改工作台設定（建組、改組員、組改名、組目標、標籤、暫停／封存）：用 `workbench_apply`，
   先不帶 `confirm` 拿預覽、把每一步給使用者看，同意後才帶 `confirm=true`；不要直接改 registry.yaml。
+  沒掛 MCP：`ctx assist "<一句話>" --json` 看計畫，使用者同意後加 `--yes`。
 
 ## 反芻推薦（別人替你先找好的）
 

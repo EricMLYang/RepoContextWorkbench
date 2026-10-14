@@ -1397,3 +1397,99 @@ pub fn cmd_decisions(ctx: &Ctx, cmd: &DecisionsCmd) -> CmdResult {
         }
     }
 }
+
+// ── assist（F-63，Rust 才有）─────────────────────────────────────────
+
+#[derive(clap::Args, Debug)]
+pub struct AssistArgs {
+    /// 要改什麼（一句話；例「切到 PM Group」「VMS_PM 加標籤 規格」「把 a 加進 MI3.0」）
+    pub text: String,
+    /// 不問就執行（預設先印計畫、問 y/N）
+    #[arg(long)]
+    pub yes: bool,
+}
+
+/// `ctx assist "<一句話>"`：跟 App 的 ⌘K「?」、MCP 的 workbench_apply 同一份白名單與驗證。
+/// 先印計畫；`--json` 只回計畫不執行（給腳本先看）；確認後走 App 按鈕用的同一組 action。
+/// 畫面動作（換範圍、切分頁）只在 App 做，這裡略過。人在終端裡自己下的指令，不受主場限制。
+pub fn cmd_assist(ctx: &Ctx, a: &AssistArgs) -> CmdResult {
+    let d = ctx.spine_dir()?;
+    let plan = ctx_core::assist::plan(&d, &a.text, &ctx_core::assist::Scope::default())?;
+    if ctx.json && !a.yes {
+        ctx.emit(&plan, |_| String::new());
+        return Ok(());
+    }
+    let ui_only = |s: &ctx_core::assist::Step| agentapi::UI_ONLY.contains(&s.op.as_str());
+    let runnable: Vec<&ctx_core::assist::Step> = plan
+        .steps
+        .iter()
+        .filter(|s| s.error.is_none() && !ui_only(s))
+        .collect();
+    if !ctx.json {
+        let mut out = vec![format!(
+            "# 助手（{}）：{}",
+            if plan.source == "rules" {
+                "本機規則"
+            } else {
+                "agent 規劃"
+            },
+            if plan.summary.is_empty() {
+                &a.text
+            } else {
+                &plan.summary
+            }
+        )];
+        for (i, s) in plan.steps.iter().enumerate() {
+            out.push(match &s.error {
+                Some(e) => format!("{}. ✗ {}（不能執行：{e}）", i + 1, s.text),
+                None if ui_only(s) => format!("{}. － {}（畫面動作，只在 App 做）", i + 1, s.text),
+                None => format!("{}. {}{}", i + 1, if s.danger { "⚠ " } else { "" }, s.text),
+            });
+        }
+        println!("{}", out.join("\n"));
+    }
+    if runnable.is_empty() {
+        if !ctx.json {
+            println!("沒有能做的步驟。");
+        }
+        return Ok(());
+    }
+    if !a.yes {
+        use std::io::Write;
+        print!("執行 {} 步？[y/N] ", runnable.len());
+        std::io::stdout().flush().ok();
+        let mut line = String::new();
+        std::io::stdin().read_line(&mut line).ok();
+        if !matches!(line.trim(), "y" | "Y" | "yes") {
+            println!("沒有執行。");
+            return Ok(());
+        }
+    }
+    let steps: Vec<Value> = runnable
+        .iter()
+        .map(|s| json!({"op": s.op, "args": s.args}))
+        .collect();
+    let cwd = std::env::current_dir().ok();
+    let r = ctx_core::agentapi::workbench_apply(
+        &d,
+        &Value::Array(steps),
+        true,
+        cwd.as_deref(),
+        true,
+        "cli",
+    )?;
+    ctx.emit(&r, |r| {
+        let mut out = Vec::new();
+        for t in arr(r, "done") {
+            out.push(format!("✓ {}", t.as_str().unwrap_or("")));
+        }
+        for t in arr(r, "skipped") {
+            out.push(format!("－ 略過：{}", t.as_str().unwrap_or("")));
+        }
+        if let Some(f) = r["failed"].as_str() {
+            out.push(format!("✗ 失敗停下：{f}"));
+        }
+        out.join("\n")
+    });
+    Ok(())
+}

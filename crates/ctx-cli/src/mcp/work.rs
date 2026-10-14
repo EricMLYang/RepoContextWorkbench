@@ -205,5 +205,6 @@ pub(super) fn w_apply(d: &Path, a: &Args, here: &Path) -> Result<Value> {
         arg_flag(a, "confirm"),
         Some(&cwd_of(a, here)),
         arg_flag(a, "cross_scope_ok"),
+        "agent",
     )
 }

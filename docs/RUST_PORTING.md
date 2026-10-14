@@ -296,3 +296,6 @@ CLI／MCP（ctx-cli）：
   `session --print` 比對前把兩種開場句換成同一個樣子。
 - **這組標為已讀 `ack_scope`**（2026-10-15，N-37；Python 沒有）：`.state/seen_scopes.json`（範圍鍵 → 時間），
   `build_state` 藏起該範圍在那之前的一般未讀卡；全域 `last_seen.txt`、`ack`、`unread` 清單都不變。
+- **CLI `ctx assist "<一句話>" [--yes]`**（2026-10-15，F-63；Python 沒有）：跟 ⌘K「?」、MCP `workbench_apply` 同一份白名單；
+  先印計畫、問 y/N（`--json` 只回計畫不執行、`--yes` 不問），執行走 `workbench_apply`（source cli、人自己下的不受主場限制）；
+  畫面動作標「只在 App 做」。

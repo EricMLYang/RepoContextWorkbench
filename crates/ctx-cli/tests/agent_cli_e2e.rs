@@ -229,3 +229,38 @@ fn test_session_status_hooks_write_only_with_app_env() {
     assert_eq!(r.code, 0);
     assert_eq!(read()["status"], "working");
 }
+
+/// F-63：`ctx assist`——`--json` 只回計畫不執行；`--yes` 執行並記一筆；畫面動作不做。
+#[test]
+fn test_assist_plans_then_applies() {
+    let e = env_spine();
+    let c = ctx(e.tmp()).cwd(&e.impl_).env("REPOENGINE_SPINE", &e.sp);
+    let plan = c
+        .clone()
+        .run(&["assist", "把 notes 加進 產品", "--json"])
+        .json();
+    assert_eq!(plan["source"], "rules");
+    assert_eq!(
+        plan["steps"][0]["args"],
+        json!({"group": "產品", "repos": ["impl", "notes"]})
+    );
+    let members = || {
+        c.clone()
+            .run(&["group", "list", "--json"])
+            .json()
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|g| g["name"] == "產品")
+            .unwrap()["members"]
+            .clone()
+    };
+    assert_eq!(members(), json!(["impl"]), "--json 不執行");
+    let r = c
+        .clone()
+        .run(&["assist", "把 notes 加進 產品", "--yes", "--json"]);
+    assert_eq!(r.json()["done"], json!(["牌組「產品」：加入 notes"]));
+    assert_eq!(members(), json!(["impl", "notes"]));
+    let r = c.clone().run(&["assist", "打開筆記分頁", "--yes"]);
+    assert!(r.code == 0 && r.stdout.contains("只在 App 做") && r.stdout.contains("沒有能做的步驟"));
+}

@@ -1343,7 +1343,7 @@ fn workbench_apply_previews_then_applies() {
         {"op": "switch_scope", "args": {"group": "g1"}},
         {"op": "set_goal", "args": {"group": "g1", "text": "把登入做完"}},
     ]);
-    let pre = api::workbench_apply(&d, &steps, false, Some(&here), false).unwrap();
+    let pre = api::workbench_apply(&d, &steps, false, Some(&here), false, "agent").unwrap();
     assert_eq!(pre["preview"], json!(true));
     assert!(pre["steps"][1]["error"]
         .as_str()
@@ -1354,7 +1354,7 @@ fn workbench_apply_previews_then_applies() {
         "預覽不寫"
     );
 
-    let r = api::workbench_apply(&d, &steps, true, Some(&here), false).unwrap();
+    let r = api::workbench_apply(&d, &steps, true, Some(&here), false, "agent").unwrap();
     assert_eq!(r["ok"], json!(true));
     assert_eq!(r["done"].as_array().unwrap().len(), 2);
     assert_eq!(
@@ -1373,9 +1373,9 @@ fn workbench_apply_guards_cross_scope() {
     registry::add_repo(&d, "repo-x", &outside, AddRepo::default()).unwrap();
     let here = registry::get_repo(&d, "repo-a").unwrap().path();
     let steps = json!([{"op": "tag", "args": {"id": "repo-x", "add": ["x"]}}]);
-    let r = api::workbench_apply(&d, &steps, true, Some(&here), false).unwrap();
+    let r = api::workbench_apply(&d, &steps, true, Some(&here), false, "agent").unwrap();
     assert!(r["done"].as_array().unwrap().is_empty());
     assert!(registry::get_repo(&d, "repo-x").unwrap().tags().is_empty());
-    let r = api::workbench_apply(&d, &steps, true, Some(&here), true).unwrap();
+    let r = api::workbench_apply(&d, &steps, true, Some(&here), true, "agent").unwrap();
     assert_eq!(r["done"].as_array().unwrap().len(), 1);
 }

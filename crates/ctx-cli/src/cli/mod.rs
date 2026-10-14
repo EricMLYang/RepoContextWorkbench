@@ -137,6 +137,8 @@ pub enum Cmd {
         #[command(subcommand)]
         cmd: agent::DecisionsCmd,
     },
+    /// 助手：一句話改工作台設定（建組、組員、標籤、分層、目標）；先印計畫、確認才做（Rust 才有）
+    Assist(agent::AssistArgs),
     /// 健康指標：交接率、推薦命中率、判斷結果記錄率、未結、工具用量（Rust 才有）
     Health {
         /// 看近幾天
@@ -205,6 +207,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Search(a) => agent::cmd_search(ctx, a),
         Fresh(a) => agent::cmd_fresh(ctx, a),
         Health { days } => agent::cmd_health(ctx, *days),
+        Assist(a) => agent::cmd_assist(ctx, a),
         Decisions { cmd } => agent::cmd_decisions(ctx, cmd),
         Backfill(a) => agent::cmd_backfill(ctx, a),
         Resolve { reference } => agent::cmd_resolve(ctx, reference),

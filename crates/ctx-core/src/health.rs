@@ -133,12 +133,12 @@ pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result
         .iter()
         .filter(|e| {
             e.etype == EventType::Presented
-                && (e.source == "assist" || e.body.starts_with("助手（agent）"))
+                && (e.source == "assist" || e.body.starts_with("助手（"))
         })
         .collect();
     let assist = json!({
         "runs": assists.iter().filter(|e| !e.body.starts_with("助手：復原：")).count(),
-        "from_agent": assists.iter().filter(|e| e.source != "assist").count(),
+        "from_agent": assists.iter().filter(|e| e.source == "agent").count(),
         "did_something": assists
             .iter()
             .filter(|e| !e.body.starts_with("助手：復原：") && e.body.contains("\n做了："))
