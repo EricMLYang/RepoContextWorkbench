@@ -62,6 +62,9 @@ function HealthLine() {
             `推薦命中 ${pct(h.fresh.hit_rate)}（${h.fresh.used}/${h.fresh.found}）· ` +
             `判斷有結果 ${pct(h.decisions.outcome_rate)}（待回顧 ${h.decisions.awaiting_retro}）· ` +
             `未結 開 ${h.loops.opened}／關 ${h.loops.closed}，逾期 ${h.loops.overdue}`}
+          {h.assist && h.assist.runs + h.assist.undone > 0
+            ? ` · 助手 ${h.assist.runs} 次（有做事 ${h.assist.did_something}、失敗 ${h.assist.failed}、復原 ${h.assist.undone}）`
+            : ""}
         </p>
         {p && p.repos ? (
           <p className="small muted healthprofiles">

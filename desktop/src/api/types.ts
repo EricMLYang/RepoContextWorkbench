@@ -277,6 +277,14 @@ export interface Health {
     undescribed: string[];
     undescribed_more: number;
   };
+  /** 助手用量（F-63）；舊引擎沒有這個鍵。 */
+  assist?: {
+    runs: number;
+    from_agent: number;
+    did_something: number;
+    failed: number;
+    undone: number;
+  };
 }
 
 /** 檔案清單的一列（path＝相對 repo 根目錄，abs＝絕對路徑；都由引擎給，前端不拼路徑）。 */
