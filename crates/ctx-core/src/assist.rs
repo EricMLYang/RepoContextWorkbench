@@ -39,7 +39,9 @@ const OPS: &str = r#"- switch_scope {group} 或 {repos: [id…]}：換 App 目�
 - set_goal {group, text}：設牌組目標（一句話）
 - tag {id, add?: [標籤…], remove?: [標籤…]}：repo 加／拿掉標籤
 - set_tier {id, tier, resume_when?}：tier ∈ active|paused|dormant|archived；paused 要給 resume_when
-- open_session {repo? | group?, task}：打開「新建 Agent 會話」對話框（不會直接開）"#;
+- open_session {repo? | group?, task}：打開「新建 Agent 會話」對話框（不會直接開）
+- set_pref {key, value}：App 偏好；key ∈ autosave（true|false，編輯時自動儲存）、md_open_edit（true|false，打開 md 直接編輯）、
+  edit_layout（edit|split|preview，編輯版面）"#;
 
 const PROMPT: &str = r#"你是「工作台助手」：把使用者的一句話翻成工作台的設定步驟。只能用下面的動作，不能發明新的；
 做得到的部分照做；看不懂的、要刪除東西的、白名單做不到的，不要硬湊步驟，在「說明」講清楚缺什麼。
@@ -220,9 +222,51 @@ fn snapshot(
     out.join("\n")
 }
 
+/// App 偏好（`set_pref` 的白名單）：鍵、人話名稱、可用的值。
+const PREFS: &[(&str, &str, &[&str])] = &[
+    ("autosave", "自動儲存", &["true", "false"]),
+    ("md_open_edit", "打開 md 直接編輯", &["true", "false"]),
+    ("edit_layout", "編輯版面", &["edit", "split", "preview"]),
+];
+
 /// 本機規則（只收最常見、不會誤會的說法）。對不上回 None。
 fn rules(data: &RegistryData, text: &str) -> Option<Value> {
     let t = text.trim().trim_end_matches(['。', '.', '！', '!']);
+    // App 偏好：打開／關掉自動儲存、打開 md 直接編輯、編輯預設分割…
+    for (words, key, value) in [
+        (
+            &["關掉自動儲存", "關閉自動儲存", "不要自動儲存"][..],
+            "autosave",
+            "false",
+        ),
+        (
+            &["打開自動儲存", "開啟自動儲存", "開自動儲存"][..],
+            "autosave",
+            "true",
+        ),
+        (
+            &["打開 md 直接編輯", "md 直接編輯", "打開md直接編輯"][..],
+            "md_open_edit",
+            "true",
+        ),
+        (
+            &["打開 md 先看預覽", "md 先看預覽", "md 不要直接編輯"][..],
+            "md_open_edit",
+            "false",
+        ),
+        (&["編輯預設分割", "編輯用分割"][..], "edit_layout", "split"),
+        (
+            &["編輯預設只編輯", "編輯不要預覽"][..],
+            "edit_layout",
+            "edit",
+        ),
+    ] {
+        if words.contains(&t) {
+            return Some(
+                json!({"說明": "改 App 偏好", "steps": [{"op": "set_pref", "args": {"key": key, "value": value}}]}),
+            );
+        }
+    }
     let one = |summary: String, op: &str, args: Value| {
         Some(json!({"說明": summary, "steps": [{"op": op, "args": args}]}))
     };
@@ -777,6 +821,37 @@ fn check(
                 false,
             ))
         }
+        "set_pref" => {
+            let key = s("key");
+            let (k, label, values) = PREFS.iter().find(|(k, _, _)| *k == key).ok_or_else(|| {
+                format!("沒有「{key}」這個偏好（可用：autosave、md_open_edit、edit_layout）")
+            })?;
+            // 值可能是 JSON 的 true/false 或字串
+            let value = match a.get("value") {
+                Some(Value::Bool(b)) => b.to_string(),
+                Some(Value::String(v)) => v.trim().to_string(),
+                _ => String::new(),
+            };
+            if !values.contains(&value.as_str()) {
+                return Err(format!(
+                    "「{label}」要是 {}（給了「{value}」）",
+                    values.join("／")
+                ));
+            }
+            let shown = match value.as_str() {
+                "true" => "開",
+                "false" => "關",
+                "edit" => "只編輯",
+                "split" => "分割",
+                "preview" => "只預覽",
+                v => v,
+            };
+            Ok((
+                json!({"key": k, "value": value}),
+                format!("App 偏好「{label}」：{shown}"),
+                false,
+            ))
+        }
         "" => Err("沒有動作".into()),
         other => Err(format!("助手不能做「{other}」（不在白名單）")),
     }
@@ -870,6 +945,38 @@ mod tests {
         assert_eq!(
             p("把 repo-a 從 g1 拿掉").steps[0].args,
             json!({"group": "g1", "repos": ["repo-b"]})
+        );
+        // App 偏好
+        let pref = p("關掉自動儲存");
+        assert_eq!(
+            pref.steps[0].args,
+            json!({"key": "autosave", "value": "false"})
+        );
+        assert_eq!(pref.steps[0].text, "App 偏好「自動儲存」：關");
+        let data = registry::load(&d).unwrap();
+        let bad = validate(
+            &data,
+            &json!({"steps": [
+                {"op": "set_pref", "args": {"key": "theme", "value": "dark"}},
+                {"op": "set_pref", "args": {"key": "edit_layout", "value": "wide"}},
+                {"op": "set_pref", "args": {"key": "md_open_edit", "value": true}},
+            ]}),
+            "mcp",
+        )
+        .unwrap();
+        assert!(bad.steps[0]
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("沒有「theme」"));
+        assert!(bad.steps[1]
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("edit／split／preview"));
+        assert_eq!(
+            bad.steps[2].args,
+            json!({"key": "md_open_edit", "value": "true"})
         );
         // 暫停沒說條件：規則不猜，交給 provider
         let q = fixed(json!({"steps": []}));

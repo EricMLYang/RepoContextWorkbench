@@ -1,12 +1,31 @@
 import { useEffect, useState } from "react";
 import type { AssistPlan, AssistStep } from "../api/types";
 import { useStore, useUi, type Tab } from "../store/context";
+import { load as loadPref, save as savePref } from "../lib/storage";
 import { DetailLayout, useDetail } from "./Modal";
 
 type Store = ReturnType<typeof useStore>;
 type Ui = ReturnType<typeof useUi>;
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
+
+/** 助手的偏好鍵 → App 本機偏好的鍵（lib/storage）；值的型別。 */
+const PREF_KEYS: Record<string, [string, "bool" | "string"]> = {
+  autosave: ["autosave", "bool"],
+  md_open_edit: ["mdOpenEdit", "bool"],
+  edit_layout: ["editLayout", "string"],
+};
+
+/** 寫 App 偏好，並通知開著的分頁（FileViewer 聽 `workbench:pref`）。回寫之前的值（復原用）。 */
+export function applyPref(key: string, value: unknown): unknown {
+  const [k, kind] = PREF_KEYS[key] ?? [];
+  if (!k) throw new Error("App 不認得這個偏好：" + key);
+  const prev = loadPref<unknown>(k, null);
+  const v = kind === "bool" ? value === true || value === "true" : value;
+  savePref(k, v);
+  window.dispatchEvent(new CustomEvent("workbench:pref", { detail: { key: k, value: v } }));
+  return prev;
+}
 const strs = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
 
 /**
@@ -58,6 +77,9 @@ async function runStep(store: Store, ui: Ui, s: AssistStep): Promise<void> {
         ...(str(a.resume_when) ? { resume_when: str(a.resume_when) } : {}),
       });
       return;
+    case "set_pref":
+      applyPref(str(a.key), a.value);
+      return;
     case "remove_group":
       // 只會出現在復原（剛建的組拿掉）
       await store.action("remove_group", { name: str(a.name) });
@@ -86,6 +108,8 @@ export function AssistDialog({ text }: { text: string }) {
     null,
   );
   const [undoing, setUndoing] = useState<"" | "running" | "done">("");
+  // 改偏好之前的值（復原用；引擎不知道 App 本機的偏好）
+  const [prevPrefs, setPrevPrefs] = useState<Record<number, unknown>>({});
 
   useEffect(() => {
     let live = true;
@@ -116,6 +140,7 @@ export function AssistDialog({ text }: { text: string }) {
       .sort((x, y) => Number(x.s.op === "open_session") - Number(y.s.op === "open_session"));
     setPrevScope(store.getSnapshot().scope);
     const ok: number[] = [];
+    const prefs: Record<number, unknown> = {};
     let fail: { i: number; msg: string } | null = null;
     let session: AssistStep | null = null;
     for (const { s, i } of order) {
@@ -126,7 +151,9 @@ export function AssistDialog({ text }: { text: string }) {
       }
       setRunning(i);
       try {
-        await runStep(store, ui, s);
+        if (s.op === "set_pref") {
+          prefs[i] = applyPref(str(s.args.key), s.args.value);
+        } else await runStep(store, ui, s);
         ok.push(i);
         setDone([...ok]);
       } catch (e) {
@@ -136,6 +163,7 @@ export function AssistDialog({ text }: { text: string }) {
       }
     }
     setRunning(-1);
+    setPrevPrefs(prefs);
     const scope = store.getSnapshot().scope;
     await store
       .action("assist_log", {
@@ -165,7 +193,14 @@ export function AssistDialog({ text }: { text: string }) {
 
   // 做過、而且復原得了的步驟（倒著復原）
   const undoable = plan
-    ? done.filter((i) => plan.steps[i].undo || plan.steps[i].op === "switch_scope").reverse()
+    ? done
+        .filter(
+          (i) =>
+            plan.steps[i].undo ||
+            plan.steps[i].op === "switch_scope" ||
+            (plan.steps[i].op === "set_pref" && i in prevPrefs),
+        )
+        .reverse()
     : [];
   const undo = async () => {
     if (!plan || undoing) return;
@@ -177,6 +212,17 @@ export function AssistDialog({ text }: { text: string }) {
         const s = plan.steps[i];
         if (s.op === "switch_scope") {
           if (prevScope) store.setScope(prevScope);
+        } else if (s.op === "set_pref") {
+          const prev = prevPrefs[i];
+          if (prev === null) {
+            // 原本沒設過：拿掉，回到預設
+            localStorage.removeItem("workbench:" + PREF_KEYS[str(s.args.key)][0]);
+            window.dispatchEvent(
+              new CustomEvent("workbench:pref", {
+                detail: { key: PREF_KEYS[str(s.args.key)][0], value: null },
+              }),
+            );
+          } else applyPref(str(s.args.key), prev);
         } else if (s.undo) {
           await runStep(store, ui, { ...s, op: s.undo.op, args: s.undo.args });
         }

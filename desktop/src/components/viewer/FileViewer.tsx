@@ -517,6 +517,18 @@ export function FileViewer({
     setMdOpenEditState(on);
   };
   const autoEdit = useRef(!!file.edit || (isMarkdown(path) && mdOpenEdit && !file.diff));
+  // 偏好被別處改了（助手、別的分頁）：開著的分頁跟著換；null＝回到預設
+  useEffect(() => {
+    const on = (e: Event) => {
+      const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
+      if (key === "autosave") setAutosaveState(value === null ? true : !!value);
+      else if (key === "mdOpenEdit") setMdOpenEditState(!!value);
+      else if (key === "editLayout")
+        setLayoutState(value === null ? "split" : (value as EditLayout));
+    };
+    window.addEventListener("workbench:pref", on);
+    return () => window.removeEventListener("workbench:pref", on);
+  }, []);
   useEffect(() => {
     if (autoEdit.current && content?.kind === "text" && content.editable && draft === null) {
       autoEdit.current = false;

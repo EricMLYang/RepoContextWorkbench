@@ -2210,6 +2210,45 @@ describe("⌘K 找 repo／牌組", () => {
     expect(within(dialog).queryByRole("button", { name: "復原這次的變更" })).toBeNull();
   });
 
+  it("助手改 App 偏好：寫進本機、復原回到預設", async () => {
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: { query?: string }) => {
+        if (name === "palette") return result(p.query ?? "");
+        if (name === "assist_plan")
+          return {
+            ok: true,
+            text: "關掉自動儲存",
+            summary: "改 App 偏好",
+            source: "rules",
+            steps: [
+              {
+                op: "set_pref",
+                args: { key: "autosave", value: "false" },
+                text: "App 偏好「自動儲存」：關",
+                why: "",
+                danger: false,
+              },
+            ],
+          };
+        return { ok: true };
+      }) as never,
+    });
+    await mount(backend);
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    fireEvent.change(box(), { target: { value: "?關掉自動儲存" } });
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter" }));
+    const dialog = document.getElementById("detaildialog")!;
+    await waitFor(() => expect(dialog.textContent).toContain("自動儲存」：關"));
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "執行 1 步" })),
+    );
+    expect(localStorage.getItem("workbench:autosave")).toBe("false");
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "復原這次的變更" })),
+    );
+    expect(localStorage.getItem("workbench:autosave")).toBeNull();
+  });
+
   it("只打「?」：列出最近用過的指令（Enter 再跑）＋例子", async () => {
     const backend = mockBackend({
       action: vi.fn(async (name: string, p: { query?: string }) => {

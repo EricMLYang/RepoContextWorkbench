@@ -10,7 +10,13 @@ use super::*;
 use crate::assist::{self, Step};
 
 /// 只在 App 做的畫面動作。
-pub const UI_ONLY: &[&str] = &["switch_scope", "open_tab", "open_repo", "open_session"];
+pub const UI_ONLY: &[&str] = &[
+    "switch_scope",
+    "open_tab",
+    "open_repo",
+    "open_session",
+    "set_pref",
+];
 
 /// 一步碰到哪些 repo（含牌組現在與之後的成員）。
 fn touched(data: &registry::RegistryData, s: &Step) -> Vec<String> {

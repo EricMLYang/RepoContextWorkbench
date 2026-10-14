@@ -60,6 +60,7 @@ App 顯示計畫：每步一行人話（「VMS_PM：加標籤『規格』」）�
 | `tag` | `{id, add?, remove?}` | `tag` | |
 | `set_tier` | `{id, tier, resume_when?}` | `tier` | 封存標紅 |
 | `open_session` | `{repo? group? task}` | 開「新建 Agent 會話」對話框（不直接開） | |
+| `set_pref` | `{key, value}`：`autosave`（true／false）、`md_open_edit`（true／false）、`edit_layout`（edit／split／preview） | App 本機偏好（2026-10-15 加；只在 App 做，MCP／CLI 略過）；復原回到之前的值 | |
 
 第一版**不收**：`remove_group`、`remove_repo`（刪除類先只給按鈕）、`write_file`、任何碰 spine 事件內容的動作。之後要加，先看真用資料。
 
