@@ -5,7 +5,8 @@
  * 場景：workspace（工作區＋右欄變更頁）、editor（md 分割編輯）、code（程式碼上色＋尋找）、
  *       assist（⌘K 請助手的計畫）、assist-empty（只打「?」）、tree-new（檔案樹新增檔案的輸入列）、
  *       panel-info（右欄資訊頁）、term-menu（終端列的「⋯」）、md-view（md 預覽＋反向連結）、
- *       edit-find（編輯中的尋找取代）、no-session（沒有會話、所有 repo）、palette（一般搜尋）、composer（請 Agent 分析想法）
+ *       edit-find（編輯中的尋找取代）、no-session（沒有會話、所有 repo）、palette（一般搜尋）、composer（請 Agent 分析想法）、
+ *       rename（檔案樹 F2 改名）、tablist（開啟的檔案清單）
  */
 import { createRoot } from "react-dom/client";
 import "../src/styles.css";
@@ -263,11 +264,11 @@ if (scene === "workspace" || scene === "panel-info") {
   put("panelRepo", "repo-a");
   put("panelTab", scene === "workspace" ? "changes" : "info");
 }
-if (scene === "tree-new") {
+if (scene === "tree-new" || scene === "rename") {
   put("panelRepo", "repo-a");
   put("panelTab", "files");
 }
-if (scene === "editor" || scene === "edit-find") {
+if (scene === "editor" || scene === "edit-find" || scene === "tablist") {
   put("openFiles", [
     { repo: "repo-a", path: "docs/notes.md", edit: true },
     { repo: "repo-b", path: "docs/notes.md" },
@@ -338,3 +339,11 @@ if (scene === "palette")
     later(200, () => typeInto(document.querySelector<HTMLInputElement>("#palette input")!, "repo"));
   });
 if (scene === "composer") later(700, () => click("#ideatoggle"));
+if (scene === "rename")
+  later(900, () => {
+    const row = document.querySelector<HTMLElement>(
+      '#repopanel [role="treeitem"][data-path="README.md"]',
+    );
+    row?.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true }));
+  });
+if (scene === "tablist") later(900, () => click('button[aria-label="開啟的檔案清單"]'));
