@@ -1,7 +1,15 @@
 import { useState } from "react";
 import { fullTextSpec } from "../dialogs/FullText";
 import { AckConfirm } from "../dialogs/misc";
-import { bannerText, cardCounts, scopeKindLabel, scopeLabel, scopedCards } from "../lib/view";
+import {
+  bannerText,
+  cardCounts,
+  scopeKindLabel,
+  scopeLabel,
+  scopeSessions,
+  scopedCards,
+  sessionNeedsYou,
+} from "../lib/view";
 import { useSnapshot, useStore, useUi, type Tab } from "../store/context";
 import { AsyncButton } from "./AsyncButton";
 import { Composer } from "./Composer";
@@ -52,6 +60,7 @@ export function Workspace(props: {
   const counts = cardCounts(local);
   const todo = counts.loop + counts.decide;
   const err = stateError || scanError;
+  const live = scopeSessions(state.terms, scope);
   const noScope = !stateReady || !repos.length;
 
   return (
@@ -99,14 +108,35 @@ export function Workspace(props: {
           >
             請 Agent 分析想法…
           </button>
+          {live.length ? (
+            <button
+              type="button"
+              id="resumeagent"
+              className="primary"
+              title={
+                "回到「" +
+                live[0].title +
+                "」" +
+                (sessionNeedsYou(live[0]) ? "（在等你）" : "") +
+                (live.length > 1 ? "；其他 " + (live.length - 1) + " 個在左側會話列" : "")
+              }
+              onClick={() => ui.selectTerm(live[0].sid)}
+            >
+              {sessionNeedsYou(live[0]) ? "回到會話（等你回覆）" : "回到會話"}
+              {live.length > 1 ? " · " + live.length : ""}
+            </button>
+          ) : null}
           <button
             type="button"
             id="newagent"
-            className="primary"
+            className={live.length ? "" : "primary"}
             disabled={noScope}
+            title={
+              "在「" + scopeLabel(scope) + "」開一個新的 Agent 會話（開之前會讓你確認範圍與任務）"
+            }
             onClick={() => ui.openSession({ origin: "group:" + scopeLabel(scope) })}
           >
-            開啟組會話 <span aria-hidden="true">↗</span>
+            新建 Agent 會話…
           </button>
         </div>
       </div>

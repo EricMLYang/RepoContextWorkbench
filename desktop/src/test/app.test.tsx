@@ -1347,6 +1347,34 @@ describe("會話放進所屬牌組", () => {
     ...over,
   });
 
+  it("範圍裡已有會話：主要按鈕是「回到會話」（等你的優先），新建降為次要（UX-01）", async () => {
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({
+          terms: [
+            term({ sid: "t1", home_group: "產品開發", started: "2026-10-12 10:00" }),
+            term({
+              sid: "t3",
+              title: "等我的",
+              home_group: "產品開發",
+              started: "2026-10-12 08:00",
+              agent_status: { status: "waiting", text: "等你", at: "x", event: "stop" },
+            }),
+            term({ sid: "t4", title: "結束了", alive: false, home_group: "產品開發" }),
+          ] as never,
+        }),
+      ),
+    });
+    await mount(backend);
+    const resume = screen.getByRole("button", { name: /回到會話（等你回覆） · 2/ });
+    expect(resume.className).toContain("primary");
+    expect(screen.getByRole("button", { name: "新建 Agent 會話…" }).className).not.toContain(
+      "primary",
+    );
+    await act(async () => fireEvent.click(resume));
+    expect(document.getElementById("termtitle")!.textContent).toContain("等我的");
+  });
+
   it("牌組的會話在牌組區塊裡（寫 repo），其他的在下面；終端標題寫「組 › repo」", async () => {
     const backend = mockBackend({
       getState: vi.fn(async () =>

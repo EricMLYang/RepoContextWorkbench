@@ -92,7 +92,7 @@ export function Summary() {
               })
             }
           >
-            接續上次工作
+            開新會話接續上次工作…
           </button>
           {s.next && s.next.text.startsWith("接續 #") ? (
             <button type="button" className="ghost small" onClick={() => ui.showTab("inbox")}>

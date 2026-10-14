@@ -463,6 +463,29 @@ export function sessionNeedsYou(s: TermInfo): boolean {
   return !!s.alive && !!s.agent_status && ["waiting", "blocked"].includes(s.agent_status.status);
 }
 
+/**
+ * 這個範圍裡還活著的 agent 會話（UX-01：有就先「回到會話」，不默默再開一個）。
+ * 牌組＝屬於這組的（見 sessionInGroup）；臨時範圍＝scope_repos 跟目前選的是同一批；所有 repo＝全部。
+ * 排序：在等你的優先，再來是最近開的。
+ */
+export function scopeSessions(terms: TermInfo[], scope: Scope): TermInfo[] {
+  const same = (a: string[], b: string[]) =>
+    a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n");
+  const inScope = (t: TermInfo) =>
+    scope.group
+      ? sessionInGroup(t, scope.group)
+      : Array.isArray(scope.repos)
+        ? !!t.scope_repos && same(t.scope_repos, scope.repos)
+        : true;
+  return terms
+    .filter((t) => t.kind === "agent" && t.alive && inScope(t))
+    .sort(
+      (a, b) =>
+        Number(sessionNeedsYou(b)) - Number(sessionNeedsYou(a)) ||
+        String(b.started ?? "").localeCompare(String(a.started ?? "")),
+    );
+}
+
 /** 最該先處理的在等你的會話：卡住（要你允許）優先，再來是等你回覆；同類取最早開始的。沒有＝null。 */
 export function firstNeedingYou(terms: TermInfo[]): TermInfo | null {
   const rank = (t: TermInfo) => (t.agent_status?.status === "blocked" ? 0 : 1);
