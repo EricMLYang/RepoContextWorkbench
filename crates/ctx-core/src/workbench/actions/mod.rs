@@ -108,6 +108,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("file_diff", a_file_diff),
     ("review_brief", a_review_brief),
     ("write_file", a_write_file),
+    ("create_entry", a_create_entry),
     ("group_notes", a_group_notes),
     ("note_add", a_note_add),
     ("note_remove", a_note_remove),
@@ -787,6 +788,30 @@ fn a_write_file(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
                 json!({"ok": false, "conflict": true, "id": id, "path": path})
             }
         },
+    )
+}
+
+/// Rust 才有（2026-10-15）：檢視器／檔案樹新增空檔或資料夾（見 [`crate::filetree::create_entry`]）。
+/// 不記 spine 事件——跟改檔一樣，痕跡在 git。
+#[derive(serde::Deserialize)]
+struct CreateEntryArgs {
+    id: String,
+    path: String,
+    kind: crate::filetree::NewEntry,
+}
+
+fn a_create_entry(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let CreateEntryArgs { id, path, kind } = parse("create_entry", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let abs = crate::filetree::create_entry(&root, &path, kind)?;
+    let rel = abs
+        .strip_prefix(&root)
+        .unwrap_or(&abs)
+        .to_string_lossy()
+        .into_owned();
+    Ok(
+        json!({"ok": true, "id": id, "path": rel, "abs": abs.to_string_lossy(),
+              "dir": kind == crate::filetree::NewEntry::Dir}),
     )
 }
 

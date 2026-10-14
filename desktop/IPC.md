@@ -94,6 +94,7 @@ Rust 端簽名建議：
 | `reorder`（Rust 才有） | `{kind: "groups"\|"members"\|"repos", order, group?}`（只換順序，不是同一批就拒絕） | — |
 | `read_file`（Rust 才有） | `{id, path}` | `path`, `abs`, `size`, `kind: "text"\|"image"\|"binary"\|"too_large"`（text 帶 `text`、`truncated`、`editable`（沒截斷且是合法 UTF-8）、`version`（內容版本，存檔時帶回）；image 帶 `mime`、`base64`） |
 | `write_file`（Rust 才有） | `{id, path, text, base}`（`base`＝讀檔時的 `version`） | 寫成功：同 `read_file` 的結果（新 `version`）；讀檔之後磁碟上已被改過：`{ok: false, conflict: true, id, path}`（沒有寫）。只改既有的 UTF-8 文字檔（≤1MB、不新增不刪除），先寫暫存檔再改名，保留原檔 CRLF／BOM；不記 spine 事件 |
+| `create_entry`（Rust 才有） | `{id, path, kind: "file"\|"dir"}` | `path`（相對 repo 根目錄）, `abs`, `dir`。新增空檔或資料夾：已存在就拒絕（不覆蓋），上層沒有就一路建（最近一個已存在的上層要在 repo 裡），不准碰 `.git`；不記 spine 事件 |
 | `repo_profile`（Rust 才有，唯讀） | `{id}` | 名片：`id`, `path`, `role?`, `description?`, `description_source?: "registry"\|"readme"`（沒填介紹時從 README 截的推測）, `keywords?`, `tags?` |
 | `describe_repo`（Rust 才有） | `{id, description, role, keywords}`（表單三欄的完整內容；`keywords` 是一串字，逗號、頓號、全形逗號或換行分隔） | 同 `repo_profile` ＋ `changed`。只寫跟 registry 不同的欄位（走 `registry_describe`，同 CLI／MCP 的留痕）；都沒變＝不寫、`changed: false` |
 | `palette`（Rust 才有，唯讀） | `{query, group?, repos?}`（query 空＝全部；group／repos＝找檔案的範圍，都沒有＝所有沒封存的 repo） | `query`, `repos: [{repo, score, why, role?, description?, groups}]`（名稱完全相同＞開頭＞包含＞詞首縮寫，加上名片欄位包含整串查詢、名片詞命中；最多 30 個）, `groups: [{name, members, goal}]`（名稱或目標包含查詢）, `files: [{repo, path, name, abs}]`（兩個字以上才找；git repo 用 `git ls-files`（含沒被忽略的未追蹤檔），否則往下走；檔名相同＞開頭＞包含＞路徑包含；最多 20 個）。App 的 ⌘K；排名在 `profile::quick_find`、`filetree::find_files` |

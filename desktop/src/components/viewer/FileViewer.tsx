@@ -3,13 +3,17 @@ import type { FileContent } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
 import { useStore, useUi } from "../../store/context";
+import { load as loadPref, save as savePref } from "../../lib/storage";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
+import { Editor, type EditLayout } from "./Editor";
 
 export interface OpenFile {
   repo: string;
   path: string;
   /** 開在「差異」模式（從變更清單點的）。 */
   diff?: boolean;
+  /** 一打開就進編輯（剛新增的檔）。 */
+  edit?: boolean;
 }
 
 export const fileKey = (f: OpenFile) => f.repo + "\u0000" + f.path;
@@ -188,6 +192,19 @@ export function FileViewer({
   const [draft, setDraft] = useState<string | null>(null);
   const [editBase, setEditBase] = useState("");
   const [saving, setSaving] = useState(false);
+  // HackMD 式：md 預設左寫右看；自動儲存（停手 1.5 秒存一次，衝突就停下來讓人選）
+  const [layout, setLayoutState] = useState<EditLayout>(() =>
+    loadPref<EditLayout>("editLayout", "split"),
+  );
+  const setLayout = (l: EditLayout) => {
+    savePref("editLayout", l);
+    setLayoutState(l);
+  };
+  const [autosave, setAutosaveState] = useState(() => loadPref<boolean>("autosave", true));
+  const setAutosave = (on: boolean) => {
+    savePref("autosave", on);
+    setAutosaveState(on);
+  };
   const [diskChanged, setDiskChanged] = useState(false);
   const [armDiscard, setArmDiscard] = useState(false);
   // 差異模式：看這個檔跟上一個 commit 差在哪（agent 改了什麼）
@@ -295,7 +312,7 @@ export function FileViewer({
     setDiskChanged(false);
   };
   /** 存檔；`overwrite`＝磁碟上已經變了也照樣用我的版本蓋過去。 */
-  const save = async (overwrite = false) => {
+  const save = async (overwrite = false, quiet = false) => {
     if (draft === null || saving || content?.kind !== "text") return;
     const sent = draft;
     setSaving(true);
@@ -317,13 +334,33 @@ export function FileViewer({
       setEditBase(sent);
       setDiskChanged(false);
       setArmDiscard(false);
-      store.toast("已儲存 " + path);
+      if (!quiet) store.toast("已儲存 " + path);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setSaving(false);
     }
   };
+  // 剛新增的檔：讀到內容就直接進編輯（只做一次）
+  const autoEdit = useRef(!!file.edit);
+  useEffect(() => {
+    if (autoEdit.current && content?.kind === "text" && content.editable && draft === null) {
+      autoEdit.current = false;
+      startEdit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content]);
+  // 自動儲存：有改、沒在存、磁碟沒被別人改過，停手 1.5 秒就存
+  const saveRef = useRef(save);
+  useEffect(() => {
+    saveRef.current = save;
+  });
+  useEffect(() => {
+    if (!autosave || !dirty || saving || diskChanged) return;
+    const t = setTimeout(() => void saveRef.current(false, true), 1500);
+    return () => clearTimeout(t);
+  }, [autosave, dirty, saving, diskChanged, draft]);
+
   const loadDisk = () => {
     setDraft(null);
     setDiskChanged(false);
@@ -415,8 +452,40 @@ export function FileViewer({
               </button>
             </div>
           ) : null}
+          {editing && md ? (
+            <div className="segmented" role="group" aria-label="編輯版面">
+              {(
+                [
+                  ["edit", "編輯"],
+                  ["split", "分割"],
+                  ["preview", "預覽"],
+                ] as [EditLayout, string][]
+              ).map(([k, l]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className="small ghost"
+                  aria-pressed={layout === k}
+                  onClick={() => setLayout(k)}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {editing ? (
             <>
+              <label
+                className="small autosave"
+                title="停手 1.5 秒自動存；磁碟上的檔被別人改過就停下來讓你選"
+              >
+                <input
+                  type="checkbox"
+                  checked={autosave}
+                  onChange={(e) => setAutosave(e.target.checked)}
+                />
+                自動儲存
+              </label>
               <button
                 type="button"
                 className="small primary"
@@ -528,22 +597,20 @@ export function FileViewer({
           ) : null
         ) : content.kind === "text" ? (
           editing ? (
-            <textarea
-              className="vieweredit"
-              aria-label={"編輯 " + path}
-              spellCheck={false}
+            <Editor
+              label={"編輯 " + path}
               value={draft}
               readOnly={saving}
-              onChange={(e) => {
-                setDraft(e.target.value);
+              markdown={md}
+              layout={layout}
+              onChange={(v) => {
+                setDraft(v);
                 setArmDiscard(false);
               }}
-              onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-                  e.preventDefault();
-                  if (dirty) void save(false);
-                }
+              onSave={() => {
+                if (dirty) void save(false);
               }}
+              preview={(text) => <Markdown text={text} hooks={hooks} />}
             />
           ) : (
             <>
@@ -551,7 +618,15 @@ export function FileViewer({
                 <p className="viewernote">檔案有 {fmtSize(content.size)}，只顯示前 1 MB。</p>
               ) : null}
               {md && mode === "view" ? (
-                <Markdown text={content.text} hooks={hooks} />
+                <div
+                  className="mdpreview"
+                  title={content.editable ? "雙擊進入編輯" : undefined}
+                  onDoubleClick={() => {
+                    if (content.editable && !window.getSelection()?.toString()) startEdit();
+                  }}
+                >
+                  <Markdown text={content.text} hooks={hooks} />
+                </div>
               ) : (
                 <CodeView text={content.text} wrap={wrap} />
               )}

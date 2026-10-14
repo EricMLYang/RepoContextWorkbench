@@ -81,7 +81,88 @@ function useCopy() {
 /** 畫面上的一列（攤平成一維，跟 VS Code 一樣用 aria-level 表示層級）。 */
 type Row =
   | { kind: "entry"; e: TreeEntry; depth: number }
-  | { kind: "note"; key: string; depth: number; text: string; error?: boolean };
+  | { kind: "note"; key: string; depth: number; text: string; error?: boolean }
+  | { kind: "new"; depth: number };
+
+/** 正在新增的檔案／資料夾（在 dir 底下第一列出現輸入框）。 */
+interface Creating {
+  dir: string;
+  kind: "file" | "dir";
+}
+
+/** 樹裡的路徑接上新名字（引擎兩種分隔符都收；顯示用 /）。 */
+const joinRel = (dir: string, name: string) =>
+  (dir ? dir.replace(/\\/g, "/") + "/" : "") + name.trim().replace(/^\/+/, "");
+
+/** 新增檔案／資料夾的輸入列：Enter 建立、Esc 取消；空白失焦也取消。失敗留在輸入框顯示原因。 */
+function NewEntryRow(props: {
+  creating: Creating;
+  pad: { paddingLeft: number };
+  guides: ReactNode;
+  onSubmit: (name: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const { creating, pad, guides, onSubmit, onCancel } = props;
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (busy) return;
+    if (!name.trim()) return onCancel();
+    setBusy(true);
+    setError("");
+    try {
+      await onSubmit(name);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="trow tnew" style={pad}>
+      {guides}
+      <span className="tchevspace" />
+      {creating.kind === "dir" ? (
+        <span className="ticon" aria-hidden="true">
+          ▸
+        </span>
+      ) : (
+        <FileIcon name={name || "x.md"} />
+      )}
+      <input
+        autoFocus
+        className="tnewinput"
+        aria-label={creating.kind === "dir" ? "新資料夾名稱" : "新檔名"}
+        placeholder={creating.kind === "dir" ? "資料夾名稱" : "檔名，例如 notes.md"}
+        value={name}
+        disabled={busy}
+        spellCheck={false}
+        onChange={(e) => {
+          setName(e.target.value);
+          setError("");
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            void submit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        onBlur={() => {
+          if (!name.trim() && !busy) onCancel();
+        }}
+      />
+      {error ? (
+        <span className="tnewerror" role="alert">
+          {error}
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 /**
  * 一個 repo 當根的檔案樹（VS Code 檔案總管風格）：展開資料夾才向引擎要下一層（action `repo_tree`）；
@@ -114,6 +195,7 @@ export function RepoRoot(props: {
   );
   const [focusPath, setFocusPath] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; e: TreeEntry } | null>(null);
+  const [creating, setCreating] = useState<Creating | null>(null);
   const treeRef = useRef<HTMLDivElement>(null);
 
   const setOpen = (next: Set<string>) => {
@@ -169,6 +251,29 @@ export function RepoRoot(props: {
     setOpen(next);
   };
 
+  /** 開始在 dir 底下新增（先展開它）。 */
+  const startCreate = (dir: string, kind: "file" | "dir") => {
+    const next = new Set(open);
+    next.add("");
+    next.add(dir);
+    if (next.size !== open.size) setOpen(next);
+    if (!dirs[dir]?.entries && !dirs[dir]?.loading) void load(dir);
+    setCreating({ dir, kind });
+  };
+  /** 工具列的新增：加在目前選的資料夾（選的是檔就加在它旁邊），沒選就加在根目錄。 */
+  const createTarget = () => {
+    const e = entries.find((x) => x.path === focusPath);
+    return e ? (e.dir ? e.path : parentDir(e.path)) : "";
+  };
+  const create = async (c: Creating, name: string) => {
+    const r = await store.action("create_entry", { id, path: joinRel(c.dir, name), kind: c.kind });
+    setCreating(null);
+    await load(c.dir);
+    setFocusPath(r.path);
+    if (r.dir) store.toast("已新增資料夾 " + r.path);
+    else ui.openFile(id, r.path, { edit: true });
+  };
+
   const reload = () => {
     for (const dir of open) void load(dir);
   };
@@ -182,7 +287,8 @@ export function RepoRoot(props: {
       rows.push({ kind: "note", key: dir + ":err", depth, text: st.error, error: true });
     if (!st?.entries && st?.loading)
       rows.push({ kind: "note", key: dir + ":ld", depth, text: "讀取中…" });
-    if (st?.entries && !st.entries.length)
+    if (creating?.dir === dir) rows.push({ kind: "new", depth });
+    if (st?.entries && !st.entries.length && creating?.dir !== dir)
       rows.push({ kind: "note", key: dir + ":empty", depth, text: "（空的）" });
     for (const e of st?.entries || []) {
       rows.push({ kind: "entry", e, depth });
@@ -265,6 +371,14 @@ export function RepoRoot(props: {
       hint: "⌘＋點",
       run: () => ui.togglePick(pickOf(e)),
     },
+    {
+      label: "新增檔案…",
+      run: () => startCreate(e.dir ? e.path : parentDir(e.path), "file"),
+    },
+    {
+      label: "新增資料夾…",
+      run: () => startCreate(e.dir ? e.path : parentDir(e.path), "dir"),
+    },
     { label: "複製路徑", hint: "⌥⌘C", run: () => copy(e.abs, "路徑") },
     { label: "複製相對路徑", hint: "⇧⌥⌘C", run: () => copy(e.path, "相對路徑") },
   ];
@@ -282,6 +396,17 @@ export function RepoRoot(props: {
           <span key={k} className="tguide" style={{ left: BASE + k * INDENT + 7 }} />
         ));
         const pad = { paddingLeft: BASE + r.depth * INDENT };
+        if (r.kind === "new")
+          return creating ? (
+            <NewEntryRow
+              key={"new:" + creating.dir + ":" + creating.kind}
+              creating={creating}
+              pad={pad}
+              guides={guides}
+              onSubmit={(name) => create(creating, name)}
+              onCancel={() => setCreating(null)}
+            />
+          ) : null;
         if (r.kind === "note")
           return (
             <div
@@ -368,6 +493,24 @@ export function RepoRoot(props: {
   const busy = Object.values(dirs).some((d) => d.loading);
   const tools = (
     <span className="ttools">
+      <button
+        type="button"
+        className="icon ghost"
+        title="新增檔案（加在選取的資料夾）"
+        aria-label={"新增檔案到 " + id}
+        onClick={() => startCreate(createTarget(), "file")}
+      >
+        ＋
+      </button>
+      <button
+        type="button"
+        className="icon ghost"
+        title="新增資料夾（加在選取的資料夾）"
+        aria-label={"新增資料夾到 " + id}
+        onClick={() => startCreate(createTarget(), "dir")}
+      >
+        ⊞
+      </button>
       <button
         type="button"
         className="icon ghost"

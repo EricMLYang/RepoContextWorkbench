@@ -988,6 +988,89 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     );
   }
 
+  it("檔案樹新增檔案：輸入檔名 Enter → create_entry → 直接開成分割編輯；清單按 Enter 自動延續", async () => {
+    const disk: Record<string, string> = { "README.md": "# 說明" };
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: { id?: string; dir?: string; path?: string }) => {
+        if (name === "repo_tree")
+          return {
+            ok: true,
+            id: p.id,
+            root: "/r/a",
+            dir: "",
+            more: 0,
+            entries: Object.keys(disk).map((k) => ({
+              name: k,
+              path: k,
+              abs: "/r/a/" + k,
+              dir: false,
+            })),
+          };
+        if (name === "create_entry") {
+          disk[p.path!] = "";
+          return { ok: true, id: "a", path: p.path, abs: "/r/a/" + p.path, dir: false };
+        }
+        if (name === "read_file")
+          return {
+            ok: true,
+            id: p.id,
+            path: p.path,
+            abs: "/r/a/" + p.path,
+            size: disk[p.path!].length,
+            kind: "text",
+            text: disk[p.path!],
+            truncated: false,
+            editable: true,
+            version: "v1",
+          };
+        return { ok: true };
+      }) as never,
+    });
+    await openTree(backend);
+    await screen.findByRole("treeitem", { name: "README.md" });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "新增檔案到 a" })));
+    const input = screen.getByRole("textbox", { name: "新檔名" });
+    fireEvent.change(input, { target: { value: "notes.md" } });
+    await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
+    expect(backend.action).toHaveBeenCalledWith("create_entry", {
+      id: "a",
+      path: "notes.md",
+      kind: "file",
+    });
+    const box = (await screen.findByRole("textbox", {
+      name: "編輯 notes.md",
+    })) as HTMLTextAreaElement;
+    // md 預設分割：右邊即時預覽
+    expect(screen.getByRole("button", { name: "分割" }).getAttribute("aria-pressed")).toBe("true");
+    await act(async () => fireEvent.change(box, { target: { value: "# 標題\n- 第一項" } }));
+    expect(document.querySelector(".editorpreview h1")!.textContent).toBe("標題");
+    box.setSelectionRange(box.value.length, box.value.length);
+    await act(async () => fireEvent.keyDown(box, { key: "Enter" }));
+    expect(box.value).toBe("# 標題\n- 第一項\n- ");
+    // 工具列：粗體包住選取
+    box.setSelectionRange(2, 4);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "粗體（⌘B）" })));
+    expect(box.value.startsWith("# **標題**")).toBe(true);
+  });
+
+  it("新增檔案失敗（同名）：錯誤留在輸入列，不開分頁", async () => {
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: { id?: string }) => {
+        if (name === "repo_tree")
+          return { ok: true, id: p.id, root: "/r/a", dir: "", more: 0, entries: [] };
+        if (name === "create_entry") throw new Error("已經有同名的檔案或資料夾：x.md");
+        return { ok: true };
+      }) as never,
+    });
+    await openTree(backend);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "新增資料夾到 a" })));
+    const input = screen.getByRole("textbox", { name: "新資料夾名稱" });
+    fireEvent.change(input, { target: { value: "x.md" } });
+    await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
+    expect(screen.getByRole("alert").textContent).toContain("已經有同名");
+    expect(document.querySelector(".viewer")).toBeNull();
+  });
+
   it("看檔案時用 ⌘K 切分頁：回到工作區", async () => {
     const backend = viewerBackend();
     await openTree(backend);

@@ -13,6 +13,9 @@
 //! 帶讀檔時的 `version`，磁碟上已經被改過（agent 寫得很快）就不寫、回 [`WriteOutcome::Conflict`]；
 //! 先寫暫存檔再改名；保留原檔的 CRLF 與 BOM（textarea 會把 CRLF 變 LF）。
 //!
+//! [`create_entry`]（2026-10-15）：檢視器／檔案樹新增空檔或資料夾。只新增、不覆蓋（已存在就拒絕）；
+//! 上層資料夾沒有就一路建（但最近一個已存在的上層必須在 repo 裡）；不准建在 `.git` 裡。
+//!
 //! [`changes`]／[`diff`]（2026-10-14）：還沒 commit 的變更與單檔差異（看 agent 改了什麼）。只讀，交給 git。
 //!
 //! [`find_files`]（2026-10-14）：⌘K 用檔名找檔。git repo 用 `git ls-files`（追蹤中＋沒被忽略的未追蹤檔，
@@ -334,6 +337,71 @@ pub fn write_file(root: &Path, rel: &str, text: &str, base: &str) -> Result<Writ
     // 寫到符號連結指向的實體檔（target 已 canonicalize），連結本身不動；暫存檔與權限見 write_atomic
     crate::fsutil::write_atomic(&target, out.as_bytes())?;
     Ok(WriteOutcome::Saved(read_file(root, rel)?))
+}
+
+/// [`create_entry`] 要建的是什麼。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NewEntry {
+    File,
+    Dir,
+}
+
+/// 在 repo 裡新增空檔或資料夾，回 `root/rel`（跟檔案樹的 `abs` 同一種寫法）。
+/// `rel` 不能是根目錄、不能跳出 repo、不能碰 `.git`；已存在（檔或資料夾都算）就拒絕，不覆蓋。
+pub fn create_entry(root: &Path, rel: &str, kind: NewEntry) -> Result<PathBuf> {
+    let rel_p = checked_rel(rel, "路徑")?;
+    let parts: Vec<&std::ffi::OsStr> = rel_p
+        .components()
+        .filter_map(|c| match c {
+            Component::Normal(n) => Some(n),
+            _ => None,
+        })
+        .collect();
+    if parts.is_empty() {
+        return Err(Error::invalid("請給檔名或資料夾名稱"));
+    }
+    if parts.iter().any(|n| *n == ".git") {
+        return Err(Error::invalid(format!("不能建在 .git 裡：{rel}")));
+    }
+    // 最近一個已存在的上層：必須是資料夾、在 repo 裡（符號連結跳出去也擋）
+    let mut have = parts.len() - 1;
+    let root_real = root
+        .canonicalize()
+        .map_err(|_| Error::invalid(format!("repo 路徑不存在：{}", root.display())))?;
+    while have > 0
+        && !root_real
+            .join(parts[..have].iter().collect::<PathBuf>())
+            .exists()
+    {
+        have -= 1;
+    }
+    let base: PathBuf = parts[..have].iter().collect();
+    let (_, _, base_real) = resolve_in(root, &base.to_string_lossy(), "資料夾")?;
+    if !base_real.is_dir() {
+        return Err(Error::invalid(format!(
+            "不是資料夾：{}",
+            base.to_string_lossy()
+        )));
+    }
+    let target = base_real.join(parts[have..].iter().collect::<PathBuf>());
+    if target.symlink_metadata().is_ok() {
+        return Err(Error::invalid(format!("已經有同名的檔案或資料夾：{rel}")));
+    }
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    match kind {
+        NewEntry::Dir => std::fs::create_dir(&target)?,
+        NewEntry::File => {
+            // create_new：剛好有人同時建了同名檔也不會蓋掉
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&target)?;
+        }
+    }
+    Ok(root.join(parts.iter().collect::<PathBuf>()))
 }
 
 /// 變更清單最多列幾個檔（其餘只給數量）。
@@ -805,6 +873,43 @@ mod tests {
             std::fs::read_to_string(t.path().join("secret.txt")).unwrap(),
             "x"
         );
+    }
+
+    #[test]
+    fn create_entry_makes_files_and_dirs_without_overwriting() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path().join("repo");
+        std::fs::create_dir_all(r.join(".git")).unwrap();
+        std::fs::write(r.join("a.md"), "keep").unwrap();
+
+        let abs = create_entry(&r, "notes/2026/new.md", NewEntry::File).unwrap();
+        assert_eq!(abs, r.join("notes").join("2026").join("new.md"));
+        assert_eq!(std::fs::read_to_string(&abs).unwrap(), "");
+        create_entry(&r, "docs", NewEntry::Dir).unwrap();
+        assert!(r.join("docs").is_dir());
+
+        // 已存在不覆蓋；檔案當上層不行；跳出 repo、.git、根目錄都擋
+        assert!(create_entry(&r, "a.md", NewEntry::File).is_err());
+        assert_eq!(std::fs::read_to_string(r.join("a.md")).unwrap(), "keep");
+        assert!(create_entry(&r, "docs", NewEntry::Dir).is_err());
+        assert!(create_entry(&r, "a.md/x.md", NewEntry::File).is_err());
+        assert!(create_entry(&r, "../out.md", NewEntry::File).is_err());
+        assert!(create_entry(&r, ".git/hooks/x", NewEntry::File).is_err());
+        assert!(create_entry(&r, "", NewEntry::Dir).is_err());
+        assert!(!t.path().join("out.md").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn create_entry_blocks_symlink_escape() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path().join("repo");
+        let outside = t.path().join("outside");
+        std::fs::create_dir_all(&r).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, r.join("link")).unwrap();
+        assert!(create_entry(&r, "link/x.md", NewEntry::File).is_err());
+        assert!(!outside.join("x.md").exists());
     }
 
     #[test]

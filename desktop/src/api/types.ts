@@ -572,6 +572,11 @@ export interface ActionMap {
     payload: { id: string; path: string; text: string; base: string };
     result: FileContent | { ok: false; conflict: true; id: string; path: string };
   };
+  /** Rust 才有：新增空檔或資料夾（不覆蓋；上層沒有就一路建）。path 回相對 repo 根目錄。 */
+  create_entry: {
+    payload: { id: string; path: string; kind: "file" | "dir" };
+    result: { ok: true; id: string; path: string; abs: string; dir: boolean };
+  };
   /** Rust 才有（F-57）：repo 名片（唯讀）與編輯——三欄送完整內容，引擎只寫有變的欄位。 */
   repo_profile: { payload: { id: string }; result: RepoProfile };
   palette: { payload: { query: string } & ScanParams; result: PaletteResult };
