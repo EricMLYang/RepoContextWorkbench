@@ -1111,11 +1111,11 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     await waitFor(() =>
       expect(backend.action).toHaveBeenCalledWith("save_image", {
         id: "a",
-        path: expect.stringMatching(/^assets\/notes-\d{8}-\d{6}\.png$/),
+        path: expect.stringMatching(/^assets\/notes-\d{8}-\d{9}\.png$/),
         base64: "iVBORw==",
       }),
     );
-    await waitFor(() => expect(box.value).toMatch(/!\[notes-\d{8}-\d{6}\.png\]\(assets\/notes-/));
+    await waitFor(() => expect(box.value).toMatch(/!\[notes-\d{8}-\d{9}\.png\]\(assets\/notes-/));
   });
 
   it("F2 改名：rename_entry、開著的分頁跟著換路徑", async () => {

@@ -1164,11 +1164,18 @@ export function FileViewer({
                       const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "png";
                       const dir = parentDir(path.replace(/\\/g, "/"));
                       const stem = (crumbs[crumbs.length - 1] || "image").replace(/\.[^.]+$/, "");
-                      const stamp = new Date()
-                        .toISOString()
-                        .replace(/[-:]/g, "")
-                        .replace("T", "-")
-                        .slice(0, 15);
+                      // 本機時間（不是 UTC）＋毫秒：連續貼兩張也不會撞名
+                      const d = new Date();
+                      const z = (n: number, w = 2) => String(n).padStart(w, "0");
+                      const stamp =
+                        d.getFullYear() +
+                        z(d.getMonth() + 1) +
+                        z(d.getDate()) +
+                        "-" +
+                        z(d.getHours()) +
+                        z(d.getMinutes()) +
+                        z(d.getSeconds()) +
+                        z(d.getMilliseconds(), 3);
                       const target =
                         (dir ? dir + "/" : "") + "assets/" + stem + "-" + stamp + "." + ext;
                       try {
