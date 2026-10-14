@@ -202,15 +202,74 @@ fn snapshot(
 /// 本機規則（只收最常見、不會誤會的說法）。對不上回 None。
 fn rules(data: &RegistryData, text: &str) -> Option<Value> {
     let t = text.trim().trim_end_matches(['。', '.', '！', '!']);
-    // 切到／切換到／換到／打開 <牌組>
-    for pre in ["切換到", "切到", "換到", "打開牌組", "開牌組"] {
-        if let Some(rest) = t.strip_prefix(pre) {
-            let name = rest.trim().trim_matches(['「', '」', '"', '\'']);
-            if let Some(g) = find_group(data, name) {
-                return Some(json!({"說明": format!("切到牌組「{g}」"),
-                    "steps": [{"op": "switch_scope", "args": {"group": g}}]}));
-            }
+    let one = |summary: String, op: &str, args: Value| {
+        Some(json!({"說明": summary, "steps": [{"op": op, "args": args}]}))
+    };
+    let unquote = |s: &str| {
+        s.trim()
+            .trim_matches(['「', '」', '"', '\''])
+            .trim()
+            .to_string()
+    };
+    // 切到／打開 <牌組｜repo｜分頁>
+    for pre in ["切換到", "切到", "換到", "打開", "開啟", "開"] {
+        let Some(rest) = t.strip_prefix(pre) else {
+            continue;
+        };
+        let name = unquote(rest.trim_start_matches("牌組"));
+        if let Some(g) = find_group(data, &name) {
+            return one(
+                format!("切到牌組「{g}」"),
+                "switch_scope",
+                json!({"group": g}),
+            );
         }
+        let tab = name.trim_end_matches("分頁").trim();
+        if let Some((k, label)) = TABS.iter().find(|(k, l)| *k == tab || *l == tab) {
+            return one(
+                format!("打開「{label}」分頁"),
+                "open_tab",
+                json!({"tab": k}),
+            );
+        }
+        if let Some(id) = find_repo(data, &name) {
+            // 「打開 X」＝在側欄看；「切到 X」＝只看這個 repo
+            return if pre.starts_with('開') || pre.starts_with("打開") {
+                one(format!("在右側欄打開 {id}"), "open_repo", json!({"id": id}))
+            } else {
+                one(format!("切到 {id}"), "switch_scope", json!({"repos": [id]}))
+            };
+        }
+    }
+    // 封存／休眠／恢復 X；暫停 X，直到／等 Y
+    for (verb, tier) in [
+        ("封存", "archived"),
+        ("休眠", "dormant"),
+        ("恢復", "active"),
+        ("啟用", "active"),
+        ("暫停", "paused"),
+    ] {
+        let Some(rest) = t.strip_prefix(verb) else {
+            continue;
+        };
+        let (who, resume) = match rest.split_once(['，', ',', '；']) {
+            Some((w, r)) => (w, r.trim()),
+            None => (rest, ""),
+        };
+        let id = find_repo(data, &unquote(who))?;
+        let mut args = json!({"id": id, "tier": tier});
+        if tier == "paused" {
+            let cond = ["直到", "等到", "等"]
+                .iter()
+                .find_map(|p| resume.strip_prefix(p))
+                .unwrap_or(resume)
+                .trim();
+            if cond.is_empty() {
+                return None; // 暫停要有復工條件：交給 agent 或讓驗證講清楚
+            }
+            args["resume_when"] = json!(cond);
+        }
+        return one(format!("{id}：{verb}"), "set_tier", args);
     }
     // <repo> 加標籤 a、b ／ <repo> 拿掉標籤 a
     for (verb, key) in [
@@ -681,6 +740,30 @@ mod tests {
             never.1.lock().unwrap().is_empty(),
             "規則對上就不問 provider"
         );
+    }
+
+    #[test]
+    fn more_rules_tabs_repos_and_tiers() {
+        let (_t, d) = spine_with_repos();
+        let never = fixed(json!({}));
+        let p = |t: &str| plan_with(&d, t, &Scope::default(), &never).unwrap();
+        assert_eq!(p("打開筆記分頁").steps[0].args, json!({"tab": "notes"}));
+        assert_eq!(p("切到 repo-a").steps[0].args, json!({"repos": ["repo-a"]}));
+        assert_eq!(p("打開 repo-b").steps[0].op, "open_repo");
+        assert_eq!(
+            p("封存 repo-b").steps[0].args,
+            json!({"id": "repo-b", "tier": "archived"})
+        );
+        assert!(p("封存 repo-b").steps[0].danger);
+        assert_eq!(
+            p("暫停 repo-a，等年底再看").steps[0].args,
+            json!({"id": "repo-a", "tier": "paused", "resume_when": "年底再看"})
+        );
+        assert!(never.1.lock().unwrap().is_empty());
+        // 暫停沒說條件：規則不猜，交給 provider
+        let q = fixed(json!({"steps": []}));
+        plan_with(&d, "暫停 repo-a", &Scope::default(), &q).unwrap();
+        assert!(!q.1.lock().unwrap().is_empty());
     }
 
     #[test]

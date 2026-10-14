@@ -314,6 +314,17 @@ export function Palette({ onClose }: { onClose: () => void }) {
             </li>
           ))}
         </ul>
+        {assistMode && !items.length ? (
+          <div className="paletteempty small muted">
+            <p>用一句話改工作台設定，先給你看計畫、確認才做、做完可以復原。例如：</p>
+            <ul>
+              <li>切到 PM Group／打開筆記分頁／打開 VMS_PM</li>
+              <li>VMS_PM 加標籤 規格、前端</li>
+              <li>暫停 MiCrawler，等年底再看／封存 old-notes</li>
+              <li>把 MI3.0 裡超過兩週沒在動的 repo 暫停（要問 Agent，幾秒鐘）</li>
+            </ul>
+          </div>
+        ) : null}
         {result && !assistMode && !items.some((i) => i.kind !== "assist") ? (
           <p className="muted small paletteempty">沒有符合「{query}」的會話、repo、牌組或檔案。</p>
         ) : null}
