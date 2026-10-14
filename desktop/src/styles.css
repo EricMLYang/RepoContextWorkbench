@@ -511,10 +511,16 @@ svg {
 }
 .workspacehead {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 12px 20px;
   margin-bottom: 24px;
+}
+/* 標題不被按鈕擠成直排：放不下時按鈕換到下一行 */
+.workspacehead > div:first-child {
+  flex: 1 1 260px;
+  min-width: 260px;
 }
 .workspacehead p {
   font-size: 13px;
@@ -522,8 +528,9 @@ svg {
 }
 .head-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  flex: none;
+  flex: 0 1 auto;
 }
 .head-actions button {
   min-height: 36px;
