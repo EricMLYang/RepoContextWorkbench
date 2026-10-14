@@ -1382,6 +1382,10 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     box.setSelectionRange(9, 9);
     await act(async () => fireEvent.keyDown(box, { key: "Tab" }));
     expect(box.value).toBe("fn a() {\n    }\n");
+    // Enter 保留縮排
+    box.setSelectionRange(13, 13);
+    await act(async () => fireEvent.keyDown(box, { key: "Enter" }));
+    expect(box.value).toBe("fn a() {\n    \n    }\n");
   });
 
   it("md 大綱：列出標題，點了捲過去", async () => {

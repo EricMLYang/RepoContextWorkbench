@@ -218,6 +218,14 @@ export function Editor(props: {
       if (e.key === "Tab" && !mod && !e.altKey && !e.shiftKey) {
         const unit = /^\t/m.test(value) ? "\t" : "    ";
         if (run((t, a, b) => insert(t, a, b, unit))) e.preventDefault();
+      } else if (e.key === "Enter" && !mod && !e.shiftKey && !e.altKey) {
+        // 換行保留上一行的縮排
+        const handled = run((t, a, b) => {
+          const start = t.lastIndexOf("\n", a - 1) + 1;
+          const lead = /^[ \t]*/.exec(t.slice(start, a))![0];
+          return lead ? insert(t, a, b, "\n" + lead) : null;
+        });
+        if (handled) e.preventDefault();
       }
       return;
     }
