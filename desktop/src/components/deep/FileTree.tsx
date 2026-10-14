@@ -94,6 +94,71 @@ interface Creating {
 const joinRel = (dir: string, name: string) =>
   (dir ? dir.replace(/\\/g, "/") + "/" : "") + name.trim().replace(/^\/+/, "");
 
+/** 改名的輸入框（取代那一列的檔名）：預設選起主檔名；Enter 改、Esc 取消；失敗留著說原因。 */
+function RenameInput(props: {
+  name: string;
+  onSubmit: (name: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const { name, onSubmit, onCancel } = props;
+  const [value, setValue] = useState(name);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    const v = value.trim();
+    if (busy) return;
+    if (!v || v === name) return onCancel();
+    setBusy(true);
+    setError("");
+    try {
+      await onSubmit(v);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <input
+        autoFocus
+        className="tnewinput"
+        aria-label={"新名稱：" + name}
+        value={value}
+        disabled={busy}
+        spellCheck={false}
+        onFocus={(e) => {
+          const dot = name.lastIndexOf(".");
+          e.currentTarget.setSelectionRange(0, dot > 0 ? dot : name.length);
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setError("");
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            void submit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        onBlur={() => {
+          if (!busy && !error) void submit();
+        }}
+      />
+      {error ? (
+        <span className="tnewerror" role="alert">
+          {error}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 /** 新增檔案／資料夾的輸入列：Enter 建立、Esc 取消；空白失焦也取消。失敗留在輸入框顯示原因。 */
 function NewEntryRow(props: {
   creating: Creating;
@@ -196,6 +261,7 @@ export function RepoRoot(props: {
   const [focusPath, setFocusPath] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; e: TreeEntry } | null>(null);
   const [creating, setCreating] = useState<Creating | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
   const treeRef = useRef<HTMLDivElement>(null);
 
   const setOpen = (next: Set<string>) => {
@@ -274,6 +340,23 @@ export function RepoRoot(props: {
     else ui.openFile(id, r.path, { edit: true });
   };
 
+  /** 改名：有開著沒存的分頁就先擋（不然草稿會跟舊路徑一起丟掉）。 */
+  const rename = async (e: TreeEntry, name: string) => {
+    if (ui.dirtyUnder(id, e.path)) throw new Error("有分頁還沒存，先存檔再改名");
+    const parent = parentDir(e.path);
+    const r = await store.action("rename_entry", { id, from: e.path, to: joinRel(parent, name) });
+    setRenaming(null);
+    // 展開狀態跟著換到新路徑
+    const moved = [...open].map((p) =>
+      p === e.path || p.startsWith(e.path + "/") ? r.path + p.slice(e.path.length) : p,
+    );
+    setOpen(new Set(moved));
+    await load(parent);
+    ui.renamePath(id, e.path, r.path);
+    setFocusPath(r.path);
+    store.toast("已改名為 " + r.path);
+  };
+
   const reload = () => {
     for (const dir of open) void load(dir);
   };
@@ -329,6 +412,9 @@ export function RepoRoot(props: {
       return;
     }
     switch (ev.key) {
+      case "F2":
+        setRenaming(e.path);
+        break;
       case "ArrowDown":
         go(i + 1);
         break;
@@ -375,6 +461,7 @@ export function RepoRoot(props: {
       label: "新增檔案…",
       run: () => startCreate(e.dir ? e.path : parentDir(e.path), "file"),
     },
+    { label: "重新命名…", hint: "F2", run: () => setRenaming(e.path) },
     {
       label: "新增資料夾…",
       run: () => startCreate(e.dir ? e.path : parentDir(e.path), "dir"),
@@ -469,7 +556,15 @@ export function RepoRoot(props: {
             {guides}
             {e.dir ? <Chevron open={!!isOpen} /> : <span className="tchevspace" />}
             {e.dir ? null : <FileIcon name={e.name} />}
-            <span className="tlabel">{e.name}</span>
+            {renaming === e.path ? (
+              <RenameInput
+                name={e.name}
+                onSubmit={(name) => rename(e, name)}
+                onCancel={() => setRenaming(null)}
+              />
+            ) : (
+              <span className="tlabel">{e.name}</span>
+            )}
             {picked ? (
               <span className="tpicked" aria-hidden="true">
                 ✓

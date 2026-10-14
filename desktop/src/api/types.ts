@@ -612,6 +612,11 @@ export interface ActionMap {
     payload: { text: string; group?: string; done: string[]; skipped: string[]; failed?: string };
     result: { ok: true };
   };
+  /** Rust 才有（F-66）：改名或搬移（不覆蓋、不刪）。path 回新的相對路徑。 */
+  rename_entry: {
+    payload: { id: string; from: string; to: string };
+    result: { ok: true; id: string; from: string; path: string; abs: string; dir: boolean };
+  };
   /** Rust 才有：新增空檔或資料夾（不覆蓋；上層沒有就一路建）。path 回相對 repo 根目錄。 */
   create_entry: {
     payload: { id: string; path: string; kind: "file" | "dir" };

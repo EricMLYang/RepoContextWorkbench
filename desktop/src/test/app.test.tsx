@@ -1053,6 +1053,71 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     expect(box.value.startsWith("# **標題**")).toBe(true);
   });
 
+  it("F2 改名：rename_entry、開著的分頁跟著換路徑", async () => {
+    const disk: Record<string, string> = { "README.md": "# 說明" };
+    const backend = mockBackend({
+      action: vi.fn(
+        async (name: string, p: { id?: string; path?: string; from?: string; to?: string }) => {
+          if (name === "repo_tree")
+            return {
+              ok: true,
+              id: p.id,
+              root: "/r/a",
+              dir: "",
+              more: 0,
+              entries: Object.keys(disk).map((k) => ({
+                name: k,
+                path: k,
+                abs: "/r/a/" + k,
+                dir: false,
+              })),
+            };
+          if (name === "rename_entry") {
+            disk[p.to!] = disk[p.from!];
+            delete disk[p.from!];
+            return { ok: true, id: "a", from: p.from, path: p.to, abs: "/r/a/" + p.to, dir: false };
+          }
+          if (name === "read_file") {
+            const text = disk[p.path!];
+            if (text == null) throw new Error("檔案不存在：" + p.path);
+            return {
+              ok: true,
+              id: p.id,
+              path: p.path,
+              abs: "/r/a/" + p.path,
+              size: text.length,
+              kind: "text",
+              text,
+              truncated: false,
+            };
+          }
+          return { ok: true };
+        },
+      ) as never,
+    });
+    await openTree(backend);
+    const item = await screen.findByRole("treeitem", { name: "README.md" });
+    await act(async () => fireEvent.click(item));
+    expect(screen.getByRole("region", { name: "檢視：a/README.md" })).toBeTruthy();
+    // 回工作區（檔案樹在那裡）再改名
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "工作區" })));
+    await act(async () =>
+      fireEvent.keyDown(screen.getByRole("treeitem", { name: "README.md" }), { key: "F2" }),
+    );
+    const input = screen.getByRole("textbox", { name: "新名稱：README.md" });
+    fireEvent.change(input, { target: { value: "GUIDE.md" } });
+    await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
+    expect(backend.action).toHaveBeenCalledWith("rename_entry", {
+      id: "a",
+      from: "README.md",
+      to: "GUIDE.md",
+    });
+    await screen.findByRole("treeitem", { name: "GUIDE.md" });
+    // 開著的分頁換成新路徑（分頁名也換）
+    expect(screen.getByRole("button", { name: "關閉 GUIDE.md" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "關閉 README.md" })).toBeNull();
+  });
+
   it("新增檔案失敗（同名）：錯誤留在輸入列，不開分頁", async () => {
     const backend = mockBackend({
       action: vi.fn(async (name: string, p: { id?: string }) => {

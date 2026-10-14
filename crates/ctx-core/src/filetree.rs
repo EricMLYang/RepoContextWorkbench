@@ -15,6 +15,7 @@
 //!
 //! [`create_entry`]（2026-10-15）：檢視器／檔案樹新增空檔或資料夾。只新增、不覆蓋（已存在就拒絕）；
 //! 上層資料夾沒有就一路建（但最近一個已存在的上層必須在 repo 裡）；不准建在 `.git` 裡。
+//! [`rename_entry`]（同日）：改名或搬移，新路徑同一套規則；不刪任何東西。
 //!
 //! [`changes`]／[`diff`]（2026-10-14）：還沒 commit 的變更與單檔差異（看 agent 改了什麼）。只讀，交給 git。
 //!
@@ -347,9 +348,10 @@ pub enum NewEntry {
     Dir,
 }
 
-/// 在 repo 裡新增空檔或資料夾，回 `root/rel`（跟檔案樹的 `abs` 同一種寫法）。
-/// `rel` 不能是根目錄、不能跳出 repo、不能碰 `.git`；已存在（檔或資料夾都算）就拒絕，不覆蓋。
-pub fn create_entry(root: &Path, rel: &str, kind: NewEntry) -> Result<PathBuf> {
+/// 新路徑的檢查（[`create_entry`]／[`rename_entry`] 共用）：不能是根目錄、不能跳出 repo、不能碰 `.git`、
+/// 不能已存在；最近一個已存在的上層要是資料夾且在 repo 裡（符號連結跳出去也擋）。
+/// 通過就把缺的上層資料夾建好，回（實體目標路徑, `root/rel` 寫法）。
+fn new_target(root: &Path, rel: &str) -> Result<(PathBuf, PathBuf)> {
     let rel_p = checked_rel(rel, "路徑")?;
     let parts: Vec<&std::ffi::OsStr> = rel_p
         .components()
@@ -364,7 +366,6 @@ pub fn create_entry(root: &Path, rel: &str, kind: NewEntry) -> Result<PathBuf> {
     if parts.iter().any(|n| *n == ".git") {
         return Err(Error::invalid(format!("不能建在 .git 裡：{rel}")));
     }
-    // 最近一個已存在的上層：必須是資料夾、在 repo 裡（符號連結跳出去也擋）
     let mut have = parts.len() - 1;
     let root_real = root
         .canonicalize()
@@ -391,6 +392,13 @@ pub fn create_entry(root: &Path, rel: &str, kind: NewEntry) -> Result<PathBuf> {
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    Ok((target, root.join(parts.iter().collect::<PathBuf>())))
+}
+
+/// 在 repo 裡新增空檔或資料夾，回 `root/rel`（跟檔案樹的 `abs` 同一種寫法）。
+/// `rel` 不能是根目錄、不能跳出 repo、不能碰 `.git`；已存在（檔或資料夾都算）就拒絕，不覆蓋。
+pub fn create_entry(root: &Path, rel: &str, kind: NewEntry) -> Result<PathBuf> {
+    let (target, abs) = new_target(root, rel)?;
     match kind {
         NewEntry::Dir => std::fs::create_dir(&target)?,
         NewEntry::File => {
@@ -401,7 +409,28 @@ pub fn create_entry(root: &Path, rel: &str, kind: NewEntry) -> Result<PathBuf> {
                 .open(&target)?;
         }
     }
-    Ok(root.join(parts.iter().collect::<PathBuf>()))
+    Ok(abs)
+}
+
+/// 改名或搬移（2026-10-15，F-66）：`from` 是 repo 裡已存在的檔或資料夾（符號連結改的是連結本身），
+/// `to` 照 [`create_entry`] 的規則（不覆蓋、上層一路建、不碰 .git）。回 (`root/to`, 是不是資料夾)。
+pub fn rename_entry(root: &Path, from: &str, to: &str) -> Result<(PathBuf, bool)> {
+    let from_p = checked_rel(from, "路徑")?;
+    let name = from_p
+        .file_name()
+        .ok_or_else(|| Error::invalid("不能改 repo 根目錄的名字"))?;
+    if from_p.components().any(|c| c.as_os_str() == ".git") {
+        return Err(Error::invalid(format!("不能改 .git 裡的東西：{from}")));
+    }
+    let parent = from_p.parent().unwrap_or(Path::new(""));
+    let (_, _, parent_real) = resolve_in(root, &parent.to_string_lossy(), "資料夾")?;
+    let src = parent_real.join(name);
+    let meta = src
+        .symlink_metadata()
+        .map_err(|_| Error::invalid(format!("檔案不存在：{from}")))?;
+    let (target, abs) = new_target(root, to)?;
+    std::fs::rename(&src, &target)?;
+    Ok((abs, meta.is_dir()))
 }
 
 /// 變更清單最多列幾個檔（其餘只給數量）。
@@ -897,6 +926,32 @@ mod tests {
         assert!(create_entry(&r, ".git/hooks/x", NewEntry::File).is_err());
         assert!(create_entry(&r, "", NewEntry::Dir).is_err());
         assert!(!t.path().join("out.md").exists());
+    }
+
+    #[test]
+    fn rename_entry_moves_without_overwriting() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path().join("repo");
+        std::fs::create_dir_all(r.join("docs").join(".git")).unwrap();
+        std::fs::write(r.join("a.md"), "A").unwrap();
+        std::fs::write(r.join("b.md"), "B").unwrap();
+
+        let (abs, dir) = rename_entry(&r, "a.md", "notes/a2.md").unwrap();
+        assert_eq!(abs, r.join("notes").join("a2.md"));
+        assert!(!dir && !r.join("a.md").exists());
+        assert_eq!(std::fs::read_to_string(&abs).unwrap(), "A");
+        let (_, dir) = rename_entry(&r, "notes", "archive").unwrap();
+        assert!(dir && r.join("archive").join("a2.md").exists());
+
+        // 不覆蓋、來源要存在、根目錄與 .git 擋、跳出 repo 擋
+        assert!(rename_entry(&r, "b.md", "archive/a2.md").is_err());
+        assert_eq!(std::fs::read_to_string(r.join("b.md")).unwrap(), "B");
+        assert!(rename_entry(&r, "nope.md", "x.md").is_err());
+        assert!(rename_entry(&r, "", "x").is_err());
+        assert!(rename_entry(&r, "docs/.git", "g").is_err());
+        assert!(rename_entry(&r, "b.md", "../b.md").is_err());
+        assert!(rename_entry(&r, "../repo/b.md", "c.md").is_err());
+        assert!(r.join("b.md").exists());
     }
 
     #[cfg(unix)]

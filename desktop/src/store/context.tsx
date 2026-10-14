@@ -53,6 +53,10 @@ export interface Ui {
   clearPicks(): void;
   /** 在主區開一個檔案分頁（已開就切過去）。 */
   openFile(repo: string, path: string, opts?: { diff?: boolean; edit?: boolean }): void;
+  /** 這個檔（或資料夾底下）有開著、還沒存的分頁嗎（改名前檢查，免得草稿丟掉）。 */
+  dirtyUnder(repo: string, path: string): boolean;
+  /** 檔案或資料夾改名後，開著的分頁跟著換路徑。 */
+  renamePath(repo: string, from: string, to: string): void;
   /** repo 的右鍵選單（x、y 是視窗座標）。 */
   repoMenu(id: string, x: number, y: number): void;
   showComposer(): void;

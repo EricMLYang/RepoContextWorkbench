@@ -109,6 +109,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("review_brief", a_review_brief),
     ("write_file", a_write_file),
     ("create_entry", a_create_entry),
+    ("rename_entry", a_rename_entry),
     ("assist_plan", a_assist_plan),
     ("assist_log", a_assist_log),
     ("ack_scope", a_ack_scope),
@@ -867,6 +868,27 @@ fn a_assist_log(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     }
     spine::append_event(d, "presented", "assist", &toks, &body.join("\n"), None)?;
     Ok(json!({"ok": true}))
+}
+
+/// Rust 才有（F-66）：檔案樹改名或搬移（見 [`crate::filetree::rename_entry`]）；不覆蓋、不刪；不記 spine 事件。
+#[derive(serde::Deserialize)]
+struct RenameEntryArgs {
+    id: String,
+    from: String,
+    to: String,
+}
+
+fn a_rename_entry(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let RenameEntryArgs { id, from, to } = parse("rename_entry", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let (abs, dir) = crate::filetree::rename_entry(&root, &from, &to)?;
+    let rel = abs
+        .strip_prefix(&root)
+        .unwrap_or(&abs)
+        .to_string_lossy()
+        .into_owned();
+    Ok(json!({"ok": true, "id": id, "from": from, "path": rel,
+              "abs": abs.to_string_lossy(), "dir": dir}))
 }
 
 fn notes_json(d: &Path, group: &str, notes: &[crate::notes::Note]) -> Value {

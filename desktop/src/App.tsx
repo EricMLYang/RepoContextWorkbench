@@ -158,6 +158,8 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     closeFile,
     setActiveFile,
     setFileDirty,
+    dirtyUnder,
+    renamePath,
   } = useFileTabs(toast);
 
   // ── 終端 ──
@@ -204,6 +206,8 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       closeRepo: () => setPanel(() => null),
       repoMenu: (id, x, y) => setMenu({ id, x, y }),
       openFile,
+      dirtyUnder,
+      renamePath,
       showComposer: () => {
         setActiveFile(null);
         showComposer();
@@ -239,6 +243,8 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       setPanel,
       choosePanelTab,
       openFile,
+      dirtyUnder,
+      renamePath,
       setActiveFile,
       updateOpen,
       updatePicks,

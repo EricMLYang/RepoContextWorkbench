@@ -78,6 +78,32 @@ export function useFileTabs(toast: (msg: string) => void) {
     [files, dirtyFiles, armedClose, toast],
   );
 
+  /** 改名後換掉開著的分頁（含資料夾底下的檔）；分頁的檔有未儲存修改就不能改名（見 dirtyUnder）。 */
+  const under = (f: OpenFile, repo: string, path: string) =>
+    f.repo === repo && (f.path === path || f.path.startsWith(path + "/"));
+  // 穩定的函式（給 Ui 用，Ui 整個生命週期不變）：讀 ref 拿最新的分頁
+  const filesRef = useRef(files);
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+  const dirtyUnder = useCallback(
+    (repo: string, path: string) =>
+      filesRef.current.some((f) => under(f, repo, path) && dirtyRef.current.has(fileKey(f))),
+    [],
+  );
+  const renamePath = useCallback((repo: string, from: string, to: string) => {
+    const move = (f: OpenFile): OpenFile =>
+      under(f, repo, from) ? { repo, path: to + f.path.slice(from.length) } : f;
+    setFiles((prev) => {
+      const next = prev.map(move);
+      setActiveFile((cur) => {
+        const i = prev.findIndex((f) => fileKey(f) === cur);
+        return i >= 0 ? fileKey(next[i]) : cur;
+      });
+      return next;
+    });
+  }, []);
+
   const shownFile = files.some((f) => fileKey(f) === activeFile) ? activeFile : null;
   const shownFileObj = useMemo(
     () => files.find((f) => fileKey(f) === shownFile) ?? null,
@@ -92,5 +118,7 @@ export function useFileTabs(toast: (msg: string) => void) {
     closeFile,
     setActiveFile,
     setFileDirty,
+    dirtyUnder,
+    renamePath,
   };
 }
