@@ -1481,7 +1481,7 @@ describe("檔案樹跟著磁碟變", () => {
 });
 
 describe("檔案簡單編輯", () => {
-  function editBackend() {
+  function editBackend(opts: { gate?: Promise<void> } = {}) {
     const subs = new Set<(id: string, paths: string[], rescan: boolean) => void>();
     const disk = { text: "原本\n", v: 1 };
     const backend = mockBackend({
@@ -1519,6 +1519,8 @@ describe("檔案簡單編輯", () => {
               return { ok: false, conflict: true, id: "a", path: "a.md" };
             disk.text = p.text!;
             disk.v += 1;
+            // 真的殼：磁碟事件可能比存檔的回應先到（自己的回音）——測試自己決定何時放行
+            if (opts.gate) await opts.gate;
             return file();
           }
           return { ok: true };
@@ -1530,7 +1532,8 @@ describe("檔案簡單編輯", () => {
       disk.v += 1;
       subs.forEach((cb) => cb("a", ["a.md"], false));
     };
-    return { backend, disk, agentWrites };
+    const echo = () => subs.forEach((cb) => cb("a", ["a.md"], false));
+    return { backend, disk, agentWrites, echo };
   }
 
   async function openEditor(backend: ReturnType<typeof mockBackend>) {
@@ -1544,6 +1547,24 @@ describe("檔案簡單編輯", () => {
     await act(async () => fireEvent.click(await screen.findByRole("button", { name: "編輯" })));
     return screen.getByRole("textbox", { name: "編輯 a.md" }) as HTMLTextAreaElement;
   }
+
+  it("存檔的回音比回應先到、還在繼續打字：不誤報「磁碟上的檔被改了」", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { backend, echo } = editBackend({ gate });
+    const box = await openEditor(backend);
+    await act(async () => fireEvent.change(box, { target: { value: "第一段\n" } }));
+    // 存檔送出（回應先卡住）
+    await act(async () => fireEvent.keyDown(box, { key: "s", metaKey: true }));
+    // 存檔途中又打了字，然後磁碟事件（自己的回音）先到
+    await act(async () => fireEvent.change(box, { target: { value: "第一段\n第二段\n" } }));
+    await act(async () => echo());
+    // 回應還沒到的這段時間也不能閃出衝突橫幅
+    expect(screen.queryByText(/磁碟上的檔在你編輯時被改了/)).toBeNull();
+    await act(async () => release());
+    expect(screen.queryByText(/磁碟上的檔在你編輯時被改了/)).toBeNull();
+    expect(box.value).toBe("第一段\n第二段\n");
+  });
 
   it("編輯後 ⌘S 存檔，帶讀檔時的 version；沒改東西時 agent 改檔會直接換上新內容", async () => {
     const { backend, disk, agentWrites } = editBackend();

@@ -336,6 +336,8 @@ export function FileViewer({
     if (file.diff) setMode("diff");
   }
   const dirty = draft !== null && draft !== editBase;
+  // 最近一次送去存的內容（LF）：磁碟事件可能比存檔的回應先到，內容一樣就是自己的回音
+  const sentRef = useRef<string | null>(null);
   // 給非同步回呼（讀檔回來、磁碟事件）看最新值
   const dirtyRef = useRef(dirty);
   const contentRef = useRef(content);
@@ -410,6 +412,7 @@ export function FileViewer({
       .then((r) => {
         const cur = contentRef.current;
         const v = (c: FileContent | null) => (c?.kind === "text" ? c.version : undefined);
+        if (r.kind === "text" && sentRef.current !== null && lf(r.text) === sentRef.current) return;
         if (v(r) !== v(cur)) setDiskChanged(true);
       })
       .catch(() => setDiskChanged(true));
@@ -434,6 +437,7 @@ export function FileViewer({
   const save = async (overwrite = false, quiet = false) => {
     if (draft === null || saving || content?.kind !== "text") return;
     const sent = draft;
+    sentRef.current = sent;
     setSaving(true);
     setError("");
     try {
