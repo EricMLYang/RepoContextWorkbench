@@ -1,4 +1,12 @@
-import { useDeferredValue, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+  type Ref,
+} from "react";
 import {
   continueList,
   indent,
@@ -12,6 +20,13 @@ import { FILE_DRAG_TYPE } from "../../lib/view";
 
 /** 編輯時的版面：只有編輯區／左右分割（左寫右看）／只看預覽。 */
 export type EditLayout = "edit" | "split" | "preview";
+
+/** 給外面（尋找取代列）用的操作：選一段並捲過去、套用一個編輯（走 insertText，⌘Z 記得住）、拿目前內容。 */
+export interface EditorHandle {
+  select(start: number, end: number): void;
+  apply(e: Edit): void;
+  value(): string;
+}
 
 /** 點到的是第幾個待辦方塊（照畫面順序）；不是就 -1。會擋掉瀏覽器自己的勾選（內容改了才換）。 */
 export function taskIndex(e: React.MouseEvent<HTMLElement>): number {
@@ -81,6 +96,8 @@ export function Editor(props: {
   onPasteImage?: (mime: string, base64: string) => Promise<string | null>;
   /** 跳到某一行（大綱用）：seq 變了就跳。 */
   jump?: { line: number; pos: number; seq: number };
+  /** 外面要用的操作（尋找取代）。 */
+  handle?: Ref<EditorHandle>;
 }) {
   const {
     label,
@@ -95,6 +112,7 @@ export function Editor(props: {
     onDropFile,
     onPasteImage,
     jump,
+    handle,
   } = props;
   const ref = useRef<HTMLTextAreaElement>(null);
   // 預覽慢一拍沒關係，打字不能卡：大份 md 每個字都重畫預覽會拖慢輸入
@@ -162,6 +180,20 @@ export function Editor(props: {
       onChange(e.text);
     }
   };
+
+  useImperativeHandle(handle, () => ({
+    select(a: number, b: number) {
+      const el = ref.current;
+      if (!el) return;
+      el.setSelectionRange(a, b);
+      // 不搶尋找列的焦點；捲到那一行附近
+      const line = el.value.slice(0, a).split("\n").length - 1;
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || 20;
+      el.scrollTop = Math.max(0, line * lh - el.clientHeight / 3);
+    },
+    apply: (e: Edit) => apply(e),
+    value: () => ref.current?.value ?? "",
+  }));
 
   const run = (f: (t: string, a: number, b: number) => Edit | null) => {
     const el = ref.current;

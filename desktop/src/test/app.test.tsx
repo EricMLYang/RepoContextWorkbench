@@ -1082,6 +1082,18 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "標題" })));
     expect(box.selectionStart).toBe(0);
     expect(document.querySelector(".editorstats")!.textContent).toMatch(/字 · \d+ 行/);
+    // 編輯中 ⌘F：找草稿、全部取代（F-70）
+    await act(async () => fireEvent.keyDown(window, { key: "f", metaKey: true }));
+    const q = screen.getByRole("textbox", { name: "在草稿中尋找" });
+    await act(async () => fireEvent.change(q, { target: { value: "標題" } }));
+    expect(document.querySelector(".editfind .findcount")!.textContent).toBe("1 / 1 · 第 1 行");
+    fireEvent.change(screen.getByRole("textbox", { name: "取代成" }), {
+      target: { value: "大標" },
+    });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "全部取代" })));
+    expect(box.value.startsWith("# **大標**")).toBe(true);
+    await act(async () => fireEvent.keyDown(q, { key: "Escape" }));
+    expect(screen.queryByRole("textbox", { name: "在草稿中尋找" })).toBeNull();
     // 貼上截圖：存到旁邊的 assets/、插入圖片連結
     const png = new File([new Uint8Array([137, 80, 78, 71])], "x.png", { type: "image/png" });
     box.setSelectionRange(box.value.length, box.value.length);

@@ -6,7 +6,7 @@ import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
 import { useStore, useUi } from "../../store/context";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
-import { Editor, taskIndex, type EditLayout } from "./Editor";
+import { Editor, taskIndex, type EditLayout, type EditorHandle } from "./Editor";
 import { lineOffset, linkForDrop, mdHeadings, relPath, slug, toggleTask } from "../../lib/mdedit";
 import { clearMatches, findRanges, showMatches } from "../../lib/findText";
 
@@ -273,6 +273,132 @@ function Backlinks({ repo, path, nonce }: { repo: string; path: string; nonce: n
   );
 }
 
+/** 草稿裡所有符合的位置（不分大小寫）。 */
+function textMatches(text: string, q: string): number[] {
+  if (!q) return [];
+  const t = text.toLocaleLowerCase();
+  const n = q.toLocaleLowerCase();
+  const out: number[] = [];
+  for (let i = t.indexOf(n); i >= 0; i = t.indexOf(n, i + n.length)) out.push(i);
+  return out;
+}
+
+/**
+ * 編輯中的尋找與取代（F-70）：找草稿、選起來捲過去、取代目前這筆或全部。
+ * 取代走編輯區的 insertText（⌘Z 記得住）；全部取代是一步。焦點留在這一列，打 Enter 不會打進編輯區。
+ */
+function EditFindBar(props: {
+  handle: { current: EditorHandle | null };
+  draft: string;
+  onClose: () => void;
+}) {
+  const { handle, draft, onClose } = props;
+  const [q, setQ] = useState("");
+  const [rep, setRep] = useState("");
+  const [cur, setCur] = useState(0);
+  const hits = textMatches(draft, q);
+  const i = hits.length ? Math.min(cur, hits.length - 1) : -1;
+  useEffect(() => {
+    if (i >= 0) handle.current?.select(hits[i], hits[i] + q.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, i, hits.length]);
+  const line = i >= 0 ? draft.slice(0, hits[i]).split("\n").length : 0;
+  const step = (d: number) =>
+    hits.length && setCur((c) => (Math.min(c, hits.length - 1) + d + hits.length) % hits.length);
+  const replaceOne = () => {
+    if (i < 0) return;
+    const a = hits[i];
+    handle.current?.apply({
+      text: draft.slice(0, a) + rep + draft.slice(a + q.length),
+      start: a,
+      end: a + rep.length,
+    });
+  };
+  const replaceAll = () => {
+    if (!hits.length) return;
+    let out = "";
+    let last = 0;
+    for (const a of hits) {
+      out += draft.slice(last, a) + rep;
+      last = a + q.length;
+    }
+    out += draft.slice(last);
+    handle.current?.apply({ text: out, start: 0, end: 0 });
+  };
+  return (
+    <div className="findbar editfind" role="search">
+      <input
+        autoFocus
+        aria-label="在草稿中尋找"
+        placeholder="尋找"
+        value={q}
+        spellCheck={false}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setCur(0);
+        }}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            step(e.shiftKey ? -1 : 1);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+      />
+      <input
+        aria-label="取代成"
+        placeholder="取代成"
+        value={rep}
+        spellCheck={false}
+        onChange={(e) => setRep(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            replaceOne();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+      />
+      <span className="small muted findcount" aria-live="polite">
+        {q ? (hits.length ? i + 1 + " / " + hits.length + " · 第 " + line + " 行" : "找不到") : ""}
+      </span>
+      <button
+        type="button"
+        className="small ghost"
+        aria-label="上一筆"
+        disabled={!hits.length}
+        onClick={() => step(-1)}
+      >
+        ↑
+      </button>
+      <button
+        type="button"
+        className="small ghost"
+        aria-label="下一筆"
+        disabled={!hits.length}
+        onClick={() => step(1)}
+      >
+        ↓
+      </button>
+      <button type="button" className="small ghost" disabled={i < 0} onClick={replaceOne}>
+        取代
+      </button>
+      <button type="button" className="small ghost" disabled={!hits.length} onClick={replaceAll}>
+        全部取代
+      </button>
+      <button type="button" className="small ghost" aria-label="關閉尋找" onClick={onClose}>
+        ×
+      </button>
+    </div>
+  );
+}
+
 /** textarea 只會給 LF；比對「有沒有改」也用 LF（存檔時引擎會還原原檔的 CRLF／BOM）。 */
 const lf = (t: string) => t.replace(/\r\n/g, "\n").replace(/^\uFEFF/, "");
 
@@ -348,6 +474,7 @@ export function FileViewer({
   const outlineRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [finding, setFinding] = useState(false);
+  const editorHandle = useRef<EditorHandle | null>(null);
   // 這個分頁的快捷鍵（每次重畫換成最新的，監聽只掛一次）：
   // ⌘F 尋找；HackMD 式 ⌘⌥E 編輯、⌘⌥B 分割、⌘⌥V 預覽（md）
   const keysRef = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -894,7 +1021,9 @@ export function FileViewer({
           ) : null}
         </div>
       </div>
-      {finding && !hidden ? (
+      {finding && !hidden && draft !== null ? (
+        <EditFindBar handle={editorHandle} draft={draft} onClose={() => setFinding(false)} />
+      ) : finding && !hidden ? (
         <FindBar
           root={() =>
             bodyRef.current?.querySelector(".editorpreview") ??
@@ -962,6 +1091,7 @@ export function FileViewer({
               }}
               preview={(text) => <Markdown text={text} hooks={hooks} />}
               jump={jump}
+              handle={editorHandle}
               onDropFile={
                 md
                   ? (raw) => {

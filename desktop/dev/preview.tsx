@@ -4,7 +4,8 @@
  *   npx vite --port 5199  →  http://localhost:5199/dev/preview.html?scene=editor
  * 場景：workspace（工作區＋右欄變更頁）、editor（md 分割編輯）、code（程式碼上色＋尋找）、
  *       assist（⌘K 請助手的計畫）、assist-empty（只打「?」）、tree-new（檔案樹新增檔案的輸入列）、
- *       panel-info（右欄資訊頁）、term-menu（終端列的「⋯」）、md-view（md 預覽＋反向連結）
+ *       panel-info（右欄資訊頁）、term-menu（終端列的「⋯」）、md-view（md 預覽＋反向連結）、
+ *       edit-find（編輯中的尋找取代）
  */
 import { createRoot } from "react-dom/client";
 import "../src/styles.css";
@@ -240,7 +241,7 @@ if (scene === "tree-new") {
   put("panelRepo", "repo-a");
   put("panelTab", "files");
 }
-if (scene === "editor") {
+if (scene === "editor" || scene === "edit-find") {
   put("openFiles", [
     { repo: "repo-a", path: "docs/notes.md", edit: true },
     { repo: "repo-b", path: "docs/notes.md" },
@@ -294,4 +295,11 @@ if (scene === "term-menu")
   later(600, () => {
     click(".gsessions button");
     later(1200, () => click("#termmore"));
+  });
+if (scene === "edit-find")
+  later(900, () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", metaKey: true, bubbles: true }));
+    later(200, () =>
+      typeInto(document.querySelector<HTMLInputElement>(".editfind input")!, "待辦"),
+    );
   });
