@@ -9,9 +9,11 @@ import {
   scopeSessions,
   scopedCards,
   sessionNeedsYou,
+  sessionWhere,
 } from "../lib/view";
 import { useSnapshot, useStore, useUi, type Tab } from "../store/context";
 import { AsyncButton } from "./AsyncButton";
+import { ContextMenu } from "./ContextMenu";
 import { Composer } from "./Composer";
 import { ActivityPane } from "./deep/ActivityPane";
 import { FilesPane } from "./deep/FilesPane";
@@ -61,6 +63,7 @@ export function Workspace(props: {
   const todo = counts.loop + counts.decide;
   const err = stateError || scanError;
   const live = scopeSessions(state.terms, scope);
+  const [pickMenu, setPickMenu] = useState<{ x: number; y: number } | null>(null);
   const noScope = !stateReady || !repos.length;
 
   return (
@@ -123,11 +126,33 @@ export function Workspace(props: {
                 (sessionNeedsYou(live[0]) ? "（在等你）" : "") +
                 (live.length > 1 ? "；其他 " + (live.length - 1) + " 個在左側會話列" : "")
               }
-              onClick={() => ui.selectTerm(live[0].sid)}
+              aria-haspopup={live.length > 1 ? "menu" : undefined}
+              aria-expanded={live.length > 1 ? !!pickMenu : undefined}
+              onClick={(e) => {
+                // 只有一個就直接回去；多個列出來選（在等你的在前）
+                if (live.length === 1) return ui.selectTerm(live[0].sid);
+                const r = e.currentTarget.getBoundingClientRect();
+                setPickMenu(pickMenu ? null : { x: r.left, y: r.bottom + 4 });
+              }}
             >
               {sessionNeedsYou(live[0]) ? "回到會話（等你回覆）" : "回到會話"}
-              {live.length > 1 ? " · " + live.length : ""}
+              {live.length > 1 ? " · " + live.length + " ▾" : ""}
             </button>
+          ) : null}
+          {pickMenu ? (
+            <ContextMenu
+              id="resumemenu"
+              title="回到哪個會話"
+              items={live.map((t) => ({
+                key: t.sid,
+                label: t.title + (sessionNeedsYou(t) ? "（等你）" : ""),
+                hint: sessionWhere(t).label,
+                run: () => ui.selectTerm(t.sid),
+              }))}
+              x={pickMenu.x}
+              y={pickMenu.y}
+              onClose={() => setPickMenu(null)}
+            />
           ) : null}
           <button
             type="button"

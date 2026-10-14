@@ -1819,7 +1819,11 @@ describe("會話放進所屬牌組", () => {
     expect(screen.getByRole("button", { name: "新建 Agent 會話…" }).className).not.toContain(
       "primary",
     );
+    // 兩個以上：列出來選，等你的在前
     await act(async () => fireEvent.click(resume));
+    const items = screen.getAllByRole("menuitem");
+    expect(items[0].textContent).toContain("等我的（等你）");
+    await act(async () => fireEvent.click(items[0]));
     expect(document.getElementById("termtitle")!.textContent).toContain("等我的");
   });
 
