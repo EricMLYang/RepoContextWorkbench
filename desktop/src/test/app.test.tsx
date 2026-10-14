@@ -114,6 +114,11 @@ describe("斷線", () => {
     expect(banner.textContent).toContain("目前可能顯示上次成功取得的資料");
     expect(screen.getByText("驗證 VDI")).toBeTruthy(); // 上次資料還在
     expect(document.getElementById("quietline")!.textContent).toBe("");
+    // 就地重試（UX-11）
+    vi.mocked(backend.getState).mockResolvedValue(makeState());
+    vi.mocked(backend.getScan).mockResolvedValue(makeScan());
+    await act(async () => fireEvent.click(within(banner).getByRole("button", { name: "重試" })));
+    expect(banner.hidden).toBe(true);
   });
 
   it("一開始就連不上：空狀態說無法載入", async () => {

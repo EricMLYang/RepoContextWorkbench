@@ -278,7 +278,7 @@ export function connectionText(v: {
 }
 
 export function bannerText(err: string): string {
-  return err ? err + " 目前可能顯示上次成功取得的資料。可按「更新狀態」重試。" : "";
+  return err ? err + " 目前可能顯示上次成功取得的資料。" : "";
 }
 
 // ── 牌組卡 ──────────────────────────────────────────────────────────

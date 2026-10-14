@@ -43,9 +43,10 @@ export function TopBar({ onHome }: { onHome: () => void }) {
         id="rescan"
         className="ghost"
         disabled={snap.scanLoading}
+        title="重新跑 git 採集目前範圍的 repo 狀態（平常 agent 做完一輪、檔案有變都會自己更新）"
         onClick={() => void store.refreshAll()}
       >
-        更新狀態
+        {snap.scanLoading ? "採集中…" : "重新採集"}
       </button>
     </header>
   );

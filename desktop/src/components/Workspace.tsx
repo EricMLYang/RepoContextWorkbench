@@ -142,7 +142,15 @@ export function Workspace(props: {
       </div>
       <Composer open={composerOpen} focusSeq={composerFocusSeq} onClose={closeComposer} />
       <div id="syncerror" className="errorbanner" role="alert" hidden={!err}>
-        {bannerText(err)}
+        {bannerText(err)} {/* UX-11：失敗時就地重試，不用去找頂列的按鈕 */}
+        <AsyncButton
+          className="small"
+          disabled={scanLoading}
+          onError={(m) => store.toast(m)}
+          run={() => store.refreshAll()}
+        >
+          重試
+        </AsyncButton>
       </div>
       <nav id="tabs" aria-label="工作區頁面">
         {TABS.map(([key, label]) => (
