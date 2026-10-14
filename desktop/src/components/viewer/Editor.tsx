@@ -1,5 +1,13 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
-import { continueList, indent, insert, toggleLinePrefix, wrap, type Edit } from "../../lib/mdedit";
+import {
+  continueList,
+  indent,
+  insert,
+  textStats,
+  toggleLinePrefix,
+  wrap,
+  type Edit,
+} from "../../lib/mdedit";
 import { FILE_DRAG_TYPE } from "../../lib/view";
 
 /** 編輯時的版面：只有編輯區／左右分割（左寫右看）／只看預覽。 */
@@ -71,6 +79,8 @@ export function Editor(props: {
   onDropFile?: (raw: string) => string | null;
   /** 貼上圖片（截圖）：存起來、回要插入的 md（失敗回 null，呼叫端自己說原因）。 */
   onPasteImage?: (mime: string, base64: string) => Promise<string | null>;
+  /** 跳到某一行（大綱用）：seq 變了就跳。 */
+  jump?: { line: number; pos: number; seq: number };
 }) {
   const {
     label,
@@ -84,6 +94,7 @@ export function Editor(props: {
     onToggleTask,
     onDropFile,
     onPasteImage,
+    jump,
   } = props;
   const ref = useRef<HTMLTextAreaElement>(null);
   // 預覽慢一拍沒關係，打字不能卡：大份 md 每個字都重畫預覽會拖慢輸入
@@ -103,6 +114,23 @@ export function Editor(props: {
   useEffect(() => {
     if (layout !== "preview") ref.current?.focus();
   }, [layout]);
+
+  // 大綱點了：游標放到那一行開頭、捲過去（行高照算好的樣式）
+  useEffect(() => {
+    const el = ref.current;
+    if (!jump || !el) return;
+    el.focus();
+    el.setSelectionRange(jump.pos, jump.pos);
+    const lh = parseFloat(getComputedStyle(el).lineHeight) || 20;
+    el.scrollTop = Math.max(0, jump.line * lh - 40);
+    const b = previewRef.current;
+    if (b && layout === "split") {
+      const ratio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
+      b.scrollTop = ratio * (b.scrollHeight - b.clientHeight);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jump?.seq]);
+  const stats = textStats(value);
 
   const apply = (e: Edit) => {
     const el = ref.current;
@@ -249,6 +277,9 @@ export function Editor(props: {
             {preview(previewText)}
           </div>
         ) : null}
+      </div>
+      <div className="editorstats small muted" aria-live="off">
+        {stats.chars} 字 · {stats.lines} 行
       </div>
     </div>
   );

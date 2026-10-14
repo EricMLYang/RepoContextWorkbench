@@ -1058,6 +1058,24 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     box.setSelectionRange(2, 4);
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "粗體（⌘B）" })));
     expect(box.value.startsWith("# **標題**")).toBe(true);
+    // HackMD 快捷鍵：⌘⌥E 只編輯、⌘⌥V 只預覽、⌘⌥B 分割（⌥ 會換字元，靠 code）
+    await act(async () =>
+      fireEvent.keyDown(window, { key: "´", code: "KeyE", metaKey: true, altKey: true }),
+    );
+    expect(screen.getByRole("button", { name: "編輯" }).getAttribute("aria-pressed")).toBe("true");
+    await act(async () =>
+      fireEvent.keyDown(window, { key: "√", code: "KeyV", metaKey: true, altKey: true }),
+    );
+    expect(screen.getByRole("button", { name: "預覽" }).getAttribute("aria-pressed")).toBe("true");
+    await act(async () =>
+      fireEvent.keyDown(window, { key: "∫", code: "KeyB", metaKey: true, altKey: true }),
+    );
+    expect(screen.getByRole("button", { name: "分割" }).getAttribute("aria-pressed")).toBe("true");
+    // 編輯中的大綱：照草稿的標題，點了游標跳到那一行
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "大綱" })));
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "標題" })));
+    expect(box.selectionStart).toBe(0);
+    expect(document.querySelector(".editorstats")!.textContent).toMatch(/字 · \d+ 行/);
     // 貼上截圖：存到旁邊的 assets/、插入圖片連結
     const png = new File([new Uint8Array([137, 80, 78, 71])], "x.png", { type: "image/png" });
     box.setSelectionRange(box.value.length, box.value.length);

@@ -192,3 +192,47 @@ export function linkForDrop(
   const rel = relPath(fromPath, f.path).replace(/ /g, "%20");
   return (IMAGE.test(name) ? "!" : "") + "[" + name + "](" + rel + ")";
 }
+
+/** md 的標題（編輯中的大綱用）：層級、文字、第幾行（0 起算）；程式碼區塊與 front matter 裡的不算。 */
+export function mdHeadings(text: string): { level: number; text: string; line: number }[] {
+  const lines = text.split("\n");
+  const out: { level: number; text: string; line: number }[] = [];
+  let fence: string | null = null;
+  let start = 0;
+  if (lines[0]?.trim() === "---") {
+    const end = lines.findIndex((l, j) => j > 0 && ["---", "..."].includes(l.trim()));
+    if (end > 0) start = end + 1;
+  }
+  for (let i = start; i < lines.length; i++) {
+    const f = FENCE_LINE.exec(lines[i]);
+    if (f) {
+      if (!fence) fence = f[1][0];
+      else if (f[1][0] === fence) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const m = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/.exec(lines[i]);
+    // 大綱顯示純文字：拿掉行內的粗斜體、刪除線、行內碼記號
+    if (m) out.push({ level: m[1].length, text: m[2].replace(/\*\*|__|~~|`|\*/g, ""), line: i });
+  }
+  return out;
+}
+
+/** 第 `line` 行（0 起算）開頭的字元位置。 */
+export function lineOffset(text: string, line: number): number {
+  let pos = 0;
+  for (let i = 0; i < line; i++) {
+    const j = text.indexOf("\n", pos);
+    if (j < 0) return text.length;
+    pos = j + 1;
+  }
+  return pos;
+}
+
+/** 字數（不算空白；中文一字一個）與行數。 */
+export function textStats(text: string): { chars: number; lines: number } {
+  return {
+    chars: [...text.replace(/\s/g, "")].length,
+    lines: text ? text.split("\n").length - (text.endsWith("\n") ? 1 : 0) : 0,
+  };
+}

@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   continueList,
   indent,
+  lineOffset,
   linkForDrop,
+  mdHeadings,
   relPath,
   slug,
+  textStats,
   toggleLinePrefix,
   toggleTask,
   wrap,
@@ -74,5 +77,17 @@ describe("slug：標題錨點", () => {
     expect(slug("3. 問題清單與優先序")).toBe("3-問題清單與優先序");
     expect(slug("Hello, World!")).toBe("hello-world");
     expect(slug("UX-01／P1")).toBe("ux-01p1");
+  });
+});
+
+describe("編輯中的大綱與字數", () => {
+  it("mdHeadings 跳過程式碼區塊；lineOffset 找行首；textStats 不算空白", () => {
+    const t = "# 一\n內容\n```\n# 不算\n```\n## 二 ##\n";
+    expect(mdHeadings(t)).toEqual([
+      { level: 1, text: "一", line: 0 },
+      { level: 2, text: "二", line: 5 },
+    ]);
+    expect(lineOffset(t, 5)).toBe(t.indexOf("## 二"));
+    expect(textStats("中文 ab\n第二行\n")).toEqual({ chars: 7, lines: 2 });
   });
 });

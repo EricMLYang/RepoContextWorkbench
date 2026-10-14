@@ -6,7 +6,7 @@ import { useStore, useUi } from "../../store/context";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 import { Editor, taskIndex, type EditLayout } from "./Editor";
-import { linkForDrop, relPath, slug, toggleTask } from "../../lib/mdedit";
+import { lineOffset, linkForDrop, mdHeadings, relPath, slug, toggleTask } from "../../lib/mdedit";
 import { clearMatches, findRanges, showMatches } from "../../lib/findText";
 
 export interface OpenFile {
@@ -273,20 +273,44 @@ export function FileViewer({
   const outlineRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [finding, setFinding] = useState(false);
-  // ⌘F（Ctrl+F）：這個分頁看得到時打開尋找列；焦點在終端裡不搶
+  // 這個分頁的快捷鍵（每次重畫換成最新的，監聽只掛一次）：
+  // ⌘F 尋找；HackMD 式 ⌘⌥E 編輯、⌘⌥B 分割、⌘⌥V 預覽（md）
+  const keysRef = useRef<(e: KeyboardEvent) => void>(() => {});
   useEffect(() => {
     if (hidden) return;
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "f" || e.shiftKey || e.altKey)
-        return;
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey) return;
       if ((e.target as Element | null)?.closest?.("#termpanel, .xterm")) return;
-      e.preventDefault();
-      setFinding(true);
+      keysRef.current(e);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [hidden]);
+  const [jump, setJump] = useState<{ line: number; pos: number; seq: number } | undefined>();
   const openOutline = () => {
+    // 編輯中：照草稿的標題，點了把游標跳到那一行
+    if (draft !== null) {
+      const hs = mdHeadings(draft);
+      const r = outlineRef.current?.getBoundingClientRect();
+      setOutline({
+        x: r ? r.left : 0,
+        y: r ? r.bottom + 4 : 0,
+        items: hs.length
+          ? hs.map((h, i) => ({
+              key: String(i),
+              label: h.text,
+              indent: h.level - 1,
+              run: () =>
+                setJump((j) => ({
+                  line: h.line,
+                  pos: lineOffset(draft, h.line),
+                  seq: (j?.seq ?? 0) + 1,
+                })),
+            }))
+          : [{ label: "（這份文件沒有標題）", run: () => {} }],
+      });
+      return;
+    }
     const hs = [
       ...(bodyRef.current?.querySelectorAll<HTMLElement>(
         ".markdown > h1, .markdown > h2, .markdown > h3, .markdown > h4",
@@ -510,6 +534,33 @@ export function FileViewer({
     }
   };
 
+  const onShortcut = (e: KeyboardEvent) => {
+    // ⌥ 會把字母換成特殊字元（macOS），用 code 判斷
+    const k = e.altKey ? e.code.replace(/^Key/, "").toLowerCase() : e.key.toLowerCase();
+    if (!e.altKey && k === "f") {
+      e.preventDefault();
+      setFinding(true);
+      return;
+    }
+    if (!e.altKey || !md || content?.kind !== "text") return;
+    const want = ({ e: "edit", b: "split", v: "preview" } as Record<string, EditLayout>)[k];
+    if (!want) return;
+    e.preventDefault();
+    if (want === "preview" && draft === null) {
+      setMode("view");
+      return;
+    }
+    if (draft === null) {
+      if (!content.editable) return;
+      startEdit();
+    }
+    setLayout(want);
+  };
+
+  useEffect(() => {
+    keysRef.current = onShortcut;
+  });
+
   const loadDisk = () => {
     setDraft(null);
     setDiskChanged(false);
@@ -690,7 +741,7 @@ export function FileViewer({
           >
             {picked ? "已加入脈絡 ✓" : "加入脈絡"}
           </button>
-          {md && !editing && mode === "view" && content?.kind === "text" ? (
+          {md && content?.kind === "text" && (editing || mode === "view") ? (
             <button
               ref={outlineRef}
               type="button"
@@ -806,6 +857,7 @@ export function FileViewer({
                 if (dirty) void save(false);
               }}
               preview={(text) => <Markdown text={text} hooks={hooks} />}
+              jump={jump}
               onDropFile={
                 md
                   ? (raw) => {
