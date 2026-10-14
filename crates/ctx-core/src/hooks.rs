@@ -290,7 +290,7 @@ pub fn render_start(c: &ContextFor) -> String {
             "- 工具（MCP repo-context）：{TOOLS_LINE}。沒掛 MCP 就用 `ctx <where|context|next|log|todo|status|handoff|search> --json`。"
         ),
         "- 做了判斷→log_decision；發現待辦→add_todo；等使用者或卡住→report_status。".into(),
-        "- 改掉舊判斷→log_decision 帶 supersedes；判斷後來怎樣→log_decision 帶 outcome_of；把一項待辦交給新會話→`ctx todo brief #N`。".into(),
+        "- 改掉舊判斷→log_decision 帶 supersedes；判斷後來怎樣→log_decision 帶 outcome_of；把一項待辦交給新會話→`ctx todo brief #N`；使用者要改工作台設定（建組、組員、標籤、暫停）→workbench_apply（先預覽給他看）。".into(),
         "- 要別的 repo 的資料：search_knowledge 找 → read_from 讀（會記引用）；要對方整理歸納才用 ask_repo（慢、花錢）。"
             .into(),
         "- 收尾一定呼叫 handoff（完成了什麼、剩什麼、下次從哪接）；沒交接的會話會被記成未交接。".into(),
