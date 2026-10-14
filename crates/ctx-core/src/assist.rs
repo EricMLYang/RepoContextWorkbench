@@ -327,6 +327,15 @@ fn rules(data: &RegistryData, text: &str) -> Option<Value> {
             json!({"name": name, "repos": ids}),
         );
     }
+    // 開會話：<任務>（只打開「新建 Agent 會話」對話框，任務帶好；開不開由人在對話框決定）
+    for pre in ["開會話", "開一個會話", "開 Agent 會話", "開agent會話"] {
+        if let Some(rest) = t.strip_prefix(pre) {
+            let task = rest.trim_start_matches(['：', ':', '，', ',', ' ']).trim();
+            if !task.is_empty() {
+                return one("開新會話".into(), "open_session", json!({"task": task}));
+            }
+        }
+    }
     // 把 <牌組> 改名為／改成 <新名>
     if let Some(rest) = t.strip_prefix('把') {
         for verb in ["改名為", "改名成", "改名叫", "重新命名為"] {
@@ -1010,6 +1019,13 @@ mod tests {
         assert_eq!(
             bad.steps[2].args,
             json!({"key": "md_open_edit", "value": "true"})
+        );
+        // 開會話
+        let s = p("開會話：整理 UI 檢討");
+        assert_eq!(s.steps[0].args, json!({"task": "整理 UI 檢討"}));
+        assert_eq!(
+            s.steps[0].text,
+            "打開「新建 Agent 會話」（目前範圍）：整理 UI 檢討"
         );
         // 改名、目標
         assert_eq!(

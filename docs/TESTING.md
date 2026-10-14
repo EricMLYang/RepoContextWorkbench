@@ -2,7 +2,8 @@
 
 > **2026-10-15 夜間迭代新增的看 8a、8b 兩節**（UI/UX 檢討落地、HackMD 式編輯、App 助手）。排版已用 `desktop/dev/preview.html`＋headless
 > 截圖看過（DEVELOPMENT.md「畫面預覽」），但**點擊、真的檔案監看、終端、選單列仍要你在 App 裡點**。
-> 自動檢查（R29 時：Rust 440、前端 83；2026-10-15：Rust 約 470、前端 117；對拍 153/153、parity_state）已全綠；真 Claude Code 的「開場注入 → context_for → handoff → 結束」
+> 自動檢查（R29 時：Rust 440、前端 83；2026-10-15：Rust 約 470、前端 118；對拍 153/153、parity_state）已全綠；
+> 2026-10-15 04:30 用新版 release 再跑一次 `scripts/e2e_claude.sh`（真 Claude Code、spine 副本）：E2E PASS（MCP 多了 workbench_apply 也載得起來）。真 Claude Code 的「開場注入 → context_for → handoff → 結束」
 > 由 `scripts/e2e_claude.sh` 在 spine 副本上跑過 PASS。這份只列**要人點才測得到**的部分（GUI 點擊、選單列、系統通知、互動式會話）。
 > 測完在框裡打勾；有問題記在「問題」欄或直接開 todo（`ctx todo add`）。Windows 欄沒測就留空。
 > 未結對應：#70（點擊類流程）、#71（N-35 要你決定）、#7（真 agent 全流程，可考慮關）。
