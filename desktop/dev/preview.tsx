@@ -5,7 +5,7 @@
  * 場景：workspace（工作區＋右欄變更頁）、editor（md 分割編輯）、code（程式碼上色＋尋找）、
  *       assist（⌘K 請助手的計畫）、assist-empty（只打「?」）、tree-new（檔案樹新增檔案的輸入列）、
  *       panel-info（右欄資訊頁）、term-menu（終端列的「⋯」）、md-view（md 預覽＋反向連結）、
- *       edit-find（編輯中的尋找取代）、no-session（沒有會話、所有 repo）
+ *       edit-find（編輯中的尋找取代）、no-session（沒有會話、所有 repo）、palette（一般搜尋）、composer（請 Agent 分析想法）
  */
 import { createRoot } from "react-dom/client";
 import "../src/styles.css";
@@ -215,7 +215,25 @@ const backend: Backend = {
         ],
         more: 0,
       };
-    if (name === "palette") return { ok: true, query: "", repos: [], groups: [], files: [] };
+    if (name === "palette")
+      return {
+        ok: true,
+        query: p.query,
+        repos: [
+          {
+            repo: "repo-a",
+            score: 100,
+            why: ["名稱開頭"],
+            role: "實作",
+            description: "登入服務",
+            groups: ["產品開發"],
+          },
+        ],
+        groups: [],
+        files: [
+          { repo: "repo-a", path: "docs/notes.md", name: "notes.md", abs: "/x/docs/notes.md" },
+        ],
+      };
     if (name === "assist_plan") return plan;
     if (name === "backlinks")
       return {
@@ -314,3 +332,9 @@ if (scene === "edit-find")
       typeInto(document.querySelector<HTMLInputElement>(".editfind input")!, "待辦"),
     );
   });
+if (scene === "palette")
+  later(600, () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+    later(200, () => typeInto(document.querySelector<HTMLInputElement>("#palette input")!, "repo"));
+  });
+if (scene === "composer") later(700, () => click("#ideatoggle"));
