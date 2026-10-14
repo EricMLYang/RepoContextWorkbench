@@ -276,3 +276,8 @@ CLI／MCP（ctx-cli）：
 - **`collide submit` 不給想法文字**：Python 炸 traceback；Rust 印「錯誤：collide submit 需要想法文字」、exit 1。
 - **MCP 工作層缺必填參數**：Python 是 `TypeError` 經 `except Exception` 變 `{ok:false,error:"failed",message:"<fn>() missing 1 required positional argument: 'text'"}`；
   Rust 照抄同一句訊息（不是依賴語言行為），形狀相同。
+- **單一 repo 開會話歸到所屬的組**（2026-10-14；Python 沒有）：App 從單一 repo 開 agent 會話時，`term_create` 由
+  `home_group_for` 算出的組也交給 `session::build`（`SessionOpts.home_group`）。組裡只有這個 repo＝情境卡就是那個組
+  （卡名、`groups/<組>/materials/`、presented 事件的 `group:`）；組裡還有別的 repo＝卡只講這個 repo，但料夾與事件
+  掛那個組。之前卡叫「臨時(…)」、落 `groups/adhoc/`、事件只標 `repo:`，跟開場注入（hook 從 cwd 推組）說的範圍不一致。
+  CLI `ctx session` 不帶 `home_group`，行為不變，對拍不受影響。

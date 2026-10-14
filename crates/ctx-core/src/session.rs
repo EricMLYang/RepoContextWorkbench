@@ -64,6 +64,9 @@ pub struct SessionOpts<'a> {
     pub repo: Option<&'a str>,
     pub task: Option<&'a str>,
     pub agent: Option<&'a str>,
+    /// 單一 repo 開會話時，呼叫端判定它屬於哪個登記的組（App 的 `term_create` 由 `home_group_for` 算）。
+    /// 見 [`scope_with_home`]。Rust 才有。
+    pub home_group: Option<&'a str>,
 }
 
 /// 組好的會話：在哪跑、跑什麼、會話料寫在哪。
@@ -77,6 +80,34 @@ pub struct SessionPlan {
     /// `cmd` 裡 agent 指令本身佔幾個元素（config 的 `cmd`，例 `["claude"]` 或 `["npx", "claude"]`）：
     /// 要另外加旗標就插在這個位置，不會插進包裝指令中間。
     pub flags_at: usize,
+}
+
+/// 單一 repo 開會話、而且它屬於某個登記的組（`home_group`）時的範圍——開場注入（hook 從 cwd 推組）
+/// 與情境卡才會是同一個組（2026-10-14 實測：建了只有一個 repo 的 MyProjects，情境卡卻叫「臨時(…)」、
+/// 落 `groups/adhoc/`，事件只標 `repo:`，按組回查漏掉）：
+/// - 組裡只有這個 repo＝就是那個組：卡名、資料夾、事件標頭都用組。
+/// - 組裡還有別的 repo：卡維持只講這個 repo（不把別人拉進範圍），資料夾與事件標頭掛那個組。
+///
+/// 回傳 (group, repos, 另掛的組)。`home_group` 只是提示：已經給了組、不是單一 repo、
+/// 組不存在或 repo 不在組裡，就照原本的範圍。
+fn scope_with_home<'a>(
+    spine_dir: &Path,
+    opts: &SessionOpts<'a>,
+) -> (Option<&'a str>, Option<&'a [String]>, Option<&'a str>) {
+    let group = opts.group.filter(|g| !g.is_empty());
+    let home = opts.home_group.filter(|g| !g.is_empty());
+    let (None, Some(h), Some([only])) = (group, home, opts.repos) else {
+        return (group, opts.repos, None);
+    };
+    let members: Vec<String> = match registry::resolve_group(spine_dir, Some(h), None) {
+        Ok((_, entries)) => entries.iter().map(registry::Repo::id).collect(),
+        Err(_) => return (group, opts.repos, None),
+    };
+    match members.as_slice() {
+        [m] if m == only => (Some(h), None, None),
+        ms if ms.contains(only) => (None, opts.repos, Some(h)),
+        _ => (group, opts.repos, None),
+    }
 }
 
 /// 對應 `session.build`：組會話——打包＋掛載＋指令。
@@ -102,23 +133,23 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
                 .join(", ")
         )));
     };
-    let (gname, entries) = registry::resolve_group(spine_dir, opts.group, opts.repos)?;
+    let (group, repos, home) = scope_with_home(spine_dir, &opts);
+    let (gname, entries) = registry::resolve_group(spine_dir, group, repos)?;
     let now = Local::now().naive_local();
     // 會話料＝組情境卡（成員角色／脈動／未結／最近事件／組管家角色）＋文件地圖
     // （L4 回饋「料太長」：地圖不是全文，agent 自己會讀檔，先挑再細讀）
     let refs: Vec<RepoRef> = entries.iter().map(RepoRef::from).collect();
     let text = format!(
         "{}\n{}",
-        context::build_context(spine_dir, opts.group, opts.repos, None, Some(now))?,
+        context::build_context(spine_dir, group, repos, None, Some(now))?,
         pack::pack_index(&refs, 80)
     );
-    let group = opts.group.filter(|g| !g.is_empty());
     // 資料夾用登記的原名（只給組時 resolve_group 回的就是原名；給的可能是換寫過的 PM_Group）
-    let by_group_only = opts.repos.is_none_or(<[String]>::is_empty);
+    let by_group_only = repos.is_none_or(<[String]>::is_empty);
     let dir = match group {
         Some(_) if by_group_only => gname.as_str(),
         Some(g) => g,
-        None => "adhoc",
+        None => home.unwrap_or("adhoc"),
     };
     let out = spine_dir
         .join("groups")
@@ -132,7 +163,7 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
     let task = opts.task.filter(|t| !t.is_empty());
     // 教練規格：開會話也是出手，留 presented（自己的留痕，不進收件匣）
     let mut toks: Vec<String> = Vec::new();
-    if let Some(g) = group {
+    if let Some(g) = group.or(home) {
         toks.push(format!("group:{g}"));
     }
     if let Some(r) = opts.repo.filter(|r| !r.is_empty()) {

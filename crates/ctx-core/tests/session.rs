@@ -181,3 +181,82 @@ fn test_session_with_rewritten_group_name_uses_registered_folder() {
         plan.pack_path
     );
 }
+
+/// 會話事件（presented）的 `group:` 值；沒有就 None。
+fn presented_group(d: &Path) -> Option<String> {
+    spine::iter_events(d)
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|ev| ev.etype == spine::EventType::Presented)
+        .and_then(|ev| ev.kv("group").map(str::to_string))
+}
+
+/// 單一 repo 開會話、它所屬的組只有它（2026-10-14 實測 MyProjects）：情境卡就是那個組，不是「臨時(…)」。
+#[test]
+fn test_single_repo_session_in_solo_group_uses_group() {
+    let (_t, d) = spine_with_repos();
+    registry::add_group(&d, "My Solo", &["repo-b"]).unwrap();
+    let repos = vec!["repo-b".to_string()];
+    let plan = build(
+        &d,
+        SessionOpts {
+            repos: Some(&repos),
+            repo: Some("repo-b"),
+            home_group: Some("My Solo"),
+            ..Default::default()
+        },
+    );
+    assert!(plan
+        .pack_path
+        .starts_with(d.join("groups").join("My Solo").join("materials")));
+    let text = std::fs::read_to_string(&plan.pack_path).unwrap();
+    assert!(text.starts_with("# 組情境卡 My Solo") && !text.contains("臨時("));
+    assert_eq!(presented_group(&d).as_deref(), Some("My_Solo")); // 標頭空白換 _
+    assert_eq!(plan.cwd, registry::get_repo(&d, "repo-b").unwrap().path());
+}
+
+/// 組裡還有別的 repo：卡只講這個 repo，但料夾與事件掛那個組（按組回查找得到）。
+#[test]
+fn test_single_repo_session_in_shared_group_files_under_group() {
+    let (_t, d) = spine_with_repos();
+    let repos = vec!["repo-a".to_string()];
+    let plan = build(
+        &d,
+        SessionOpts {
+            repos: Some(&repos),
+            repo: Some("repo-a"),
+            home_group: Some("g1"),
+            ..Default::default()
+        },
+    );
+    assert!(plan
+        .pack_path
+        .starts_with(d.join("groups").join("g1").join("materials")));
+    let text = std::fs::read_to_string(&plan.pack_path).unwrap();
+    assert!(text.contains("臨時(repo-a)") && !text.contains("## repo-b"));
+    assert_eq!(presented_group(&d).as_deref(), Some("g1"));
+}
+
+/// home_group 只是提示：組不存在、repo 不在組裡，就照原本的臨時範圍。
+#[test]
+fn test_single_repo_session_ignores_bad_home_hint() {
+    let (_t, d) = spine_with_repos();
+    registry::add_group(&d, "only-b", &["repo-b"]).unwrap();
+    let repos = vec!["repo-a".to_string()];
+    for hint in ["no-such-group", "only-b"] {
+        let plan = build(
+            &d,
+            SessionOpts {
+                repos: Some(&repos),
+                repo: Some("repo-a"),
+                home_group: Some(hint),
+                ..Default::default()
+            },
+        );
+        assert!(plan
+            .pack_path
+            .starts_with(d.join("groups").join("adhoc").join("materials")));
+        assert_eq!(presented_group(&d), None);
+    }
+}

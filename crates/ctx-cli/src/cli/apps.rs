@@ -42,6 +42,7 @@ pub fn cmd_session(ctx: &Ctx, a: &SessionArgs) -> CmdResult {
             repo: a.repo.as_deref().filter(|s| !s.is_empty()),
             task: a.task.as_deref().filter(|s| !s.is_empty()),
             agent: Some(a.agent.as_str()).filter(|s| !s.is_empty()),
+            home_group: None,
         },
     )?;
     println!("料：{}", plan.pack_path.display());

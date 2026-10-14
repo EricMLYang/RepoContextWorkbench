@@ -953,6 +953,7 @@ fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
                 repo: repo.as_deref(),
                 task: task.as_deref(),
                 agent: Some(&agent),
+                home_group: home.as_deref(),
             },
         )?;
         // 會話狀態（Rust 才有）：Claude Code 多帶一份只有三個 hook 的設定（做完／要你允許／你送出），
