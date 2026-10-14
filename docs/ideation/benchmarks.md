@@ -73,6 +73,9 @@
 | AiderDesk | agent 桌面殼 | 對話的脈絡檔清單 | 檔案瀏覽器每列一個「＋」加進脈絡——挑檔交給 agent 的直接做法 | 單 repo、檔清單綁在一個對話；ctx 的挑選跨 repo、交給新會話或貼到目前會話（F-59） | 參考 | 🔗 | 2026-10-14 | R29 查詢 4 | [aiderdesk 文件](https://aiderdesk.hotovo.com/docs/core/context-files) |
 | Qoder | IDE＋agent | 對話脈絡 | 從檔案總管把檔拖進對話框就加入脈絡 | 同上；ctx 拖到終端貼 @路徑（F-59） | 參考 | 🔗 | 2026-10-14 | R29 查詢 4 | [Qoder 文件](https://docs.qoder.com/user-guide/chat/context) |
 | cmdk | 元件庫 | — | ⌘K 指令面板（WAI-ARIA combobox、鍵盤優先） | 不加依賴：自己寫 combobox（F-58），排名放引擎 | 零件（不採用） | 🔗 | 2026-10-14 | R29 查詢 2 | [awesome-command-palette](https://awesome.ecosyste.ms/lists/gorkemcetin%2Fawesome-command-palette) |
+| Windows 11 Settings agent | 平台（OS 設定） | — | 一句話描述想改的設定 → agent 提出變更 → Apply／Undo；確認後才套用 | 改 OS 設定，不是工作台；ctx 抄「先給計畫、人按確定」→ F-63 | 參考 | 🔗 | 2026-10-15 | R30 查詢「AI command bar … confirm」 | [pureinfotech](https://pureinfotech.com/windows-11-ai-agent-settings-app/) |
+| Stepsailor AI Command Bar | 元件（SaaS） | — | 自然語言 → 確定性動作，人留在迴圈裡 | 只看到產品介紹；ctx 自己做白名單＋驗證放引擎 → F-63 | 觀察 | 🔗 | 2026-10-15 | 同上 | [hunted.space](https://hunted.space/product/ai-command-bar) |
+| HackMD／HedgeDoc／MarkText | md 編輯器 | 文件（雲端或本機檔） | 左寫右看分割預覽、工具列；MarkText 本機檔即時預覽 | 要協作／雲端才用 HackMD；ctx 只做 repo 裡檔案的輕量編輯，不做協作 → F-64 | 參考 | 🔗 | 2026-10-15 | 使用者點名 HackMD；R30 查詢 | [比較](https://unmarkdown.com/blog/stackedit-vs-hedgedoc-vs-hackmd) |
 
 ## 待查對標（下一輪處理）
 
@@ -144,9 +147,15 @@
 - R29：`select multiple files add to context coding agent desktop app file tree "add to chat" 2026`
 - R29：本機 `claude --help`（確認 `--settings <file-or-json>`）＋ `claude -p` 實測 Stop hook
 
+- R30：`Claude Code hooks Notification notification_type permission_prompt idle_prompt`（確認 `notification_type` 欄位；`session_status.rs` 已照它判斷）
+- R30：`AI command bar natural language change app settings plan confirm before execute 2026`
+- R30：`HackMD alternatives markdown editor split preview local files 2026`
+
 ### 下一輪查詢
-1. `Claude Code hooks Notification notification_type permission_prompt idle_prompt payload`（F-60 判斷「要你允許」用的欄位要查證）
 2. `Conductor diff review workflow agent changes approve commit 2026`（F-62 之後：審完怎麼收）
 3. `AgDR tooling adoption 2026 decision records in repo agents read`（F-40 之後）
 4. `Nx Polygraph synthetic monorepo agent memory`（R14 留下）
 5. `fast local full-text index Rust tantivy vs json cache small corpus startup time`（N-29）
+6. `LLM tool use whitelist validate plan before execute desktop app settings undo 2026`（F-63：計畫驗證與復原的做法）
+7. `VS Code file explorer rename delete move to trash electron tauri trash crate`（F-66）
+8. `MarkText alternatives local markdown editor split preview scroll sync 2026`（F-64 之後：捲動同步做法）
