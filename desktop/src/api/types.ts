@@ -610,6 +610,8 @@ export interface ActionMap {
     payload: { text: string } & ScanParams;
     result: AssistPlan;
   };
+  /** Rust 才有（F-68）：最近用過、真的做了事的助手指令（新的在前，最多 5 句）。 */
+  assist_recent: { payload: Record<string, never>; result: { ok: true; texts: string[] } };
   assist_log: {
     payload: { text: string; group?: string; done: string[]; skipped: string[]; failed?: string };
     result: { ok: true };

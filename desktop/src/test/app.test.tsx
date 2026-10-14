@@ -2153,6 +2153,26 @@ describe("⌘K 找 repo／牌組", () => {
     expect(within(dialog).queryByRole("button", { name: "復原這次的變更" })).toBeNull();
   });
 
+  it("只打「?」：列出最近用過的指令（Enter 再跑）＋例子", async () => {
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: { query?: string }) => {
+        if (name === "palette") return result(p.query ?? "");
+        if (name === "assist_recent")
+          return { ok: true, texts: ["切到 產品開發", "a 加標籤 規格"] };
+        return { ok: true };
+      }) as never,
+    });
+    await mount(backend);
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    await act(async () => fireEvent.change(box(), { target: { value: "?" } }));
+    await waitFor(() => expect(opts()).toHaveLength(2));
+    expect(opts()[0].textContent).toContain("請助手：切到 產品開發");
+    expect(document.querySelector(".paletteempty")!.textContent).toContain("最近用過的");
+    expect(
+      vi.mocked(backend.action).mock.calls.filter((c) => c[0] === "assist_recent"),
+    ).toHaveLength(1);
+  });
+
   it("一般搜尋也列「請助手」但放最後，不搶 Enter", async () => {
     const backend = backendWithPalette();
     await mount(backend);

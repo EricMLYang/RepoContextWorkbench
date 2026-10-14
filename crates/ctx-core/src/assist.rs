@@ -93,6 +93,27 @@ pub struct Scope {
     pub repos: Option<Vec<String>>,
 }
 
+/// 最近用過、而且真的做了事的指令（新的在前、同一句只留一次，最多 `n` 句；復原不算）。F-68。
+pub fn recent(spine_dir: &Path, n: usize) -> Result<Vec<String>> {
+    let mut out: Vec<String> = Vec::new();
+    for ev in crate::spine::iter_events(spine_dir)?.iter().rev() {
+        if ev.source != "assist" || !ev.body.contains("\n做了：") {
+            continue;
+        }
+        let Some(text) = ev.first_line().strip_prefix("助手：") else {
+            continue;
+        };
+        if text.starts_with("復原：") || out.iter().any(|t| t == text) {
+            continue;
+        }
+        out.push(text.to_string());
+        if out.len() >= n {
+            break;
+        }
+    }
+    Ok(out)
+}
+
 /// 一句話 → 計畫。規則對得上就不問 provider；provider 用 config `provider.assist`（沒設＝claude），
 /// model 用 `provider.models.assist`（沒設＝haiku）。
 pub fn plan(spine_dir: &Path, text: &str, scope: &Scope) -> Result<Plan> {
@@ -831,6 +852,22 @@ mod tests {
         );
         assert_eq!(u[2].as_ref().unwrap()["args"]["tier"], json!("active"));
         assert_eq!(u[3], &None);
+    }
+
+    #[test]
+    fn recent_lists_successful_commands_newest_first() {
+        let (_t, d) = spine_with_repos();
+        let log = |body: &str| {
+            crate::spine::append_event(&d, "presented", "assist", &[] as &[&str], body, None)
+                .unwrap();
+        };
+        log("助手：切到 g1\n做了：切到牌組「g1」");
+        log("助手：亂講\n略過：x");
+        log("助手：repo-a 加標籤 x\n做了：repo-a：加標籤「x」");
+        log("助手：復原：repo-a 加標籤 x\n做了：repo-a：加標籤「x」");
+        log("助手：切到 g1\n做了：切到牌組「g1」");
+        assert_eq!(recent(&d, 5).unwrap(), vec!["切到 g1", "repo-a 加標籤 x"]);
+        assert_eq!(recent(&d, 1).unwrap(), vec!["切到 g1"]);
     }
 
     #[test]

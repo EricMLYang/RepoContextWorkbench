@@ -99,6 +99,7 @@ Rust 端簽名建議：
 | `save_image`（Rust 才有） | `{id, path, base64}` | `path`, `abs`。md 編輯區貼上的圖片存成新檔：只收 png／jpg／gif／webp／bmp（svg 可帶腳本不收）、≤ 8MB、不覆蓋、路徑規則同 `create_entry`；不記 spine 事件。App 存到那份 md 旁邊的 `assets/<主檔名>-<時間>.<副檔名>` |
 | `rename_entry`（Rust 才有） | `{id, from, to}` | `from`, `path`（新的相對路徑）, `abs`, `dir`。改名或搬移：`from` 要存在（符號連結改連結本身），`to` 同 `create_entry` 的規則（不覆蓋、上層一路建、不碰 .git、不跳出 repo）；不刪任何東西、不記 spine 事件 |
 | `assist_plan`（Rust 才有，唯讀） | `{text, group?, repos?}`（目前範圍） | `text`, `summary`, `source: "rules"\|"agent"`, `steps: [{op, args, text, why, danger, error?}]`。一句話 → 白名單內的步驟（見 `docs/APP_ASSISTANT.md`）；常見說法本機規則直接翻，其他問 config `provider.assist`（沒設＝claude、model 預設 haiku）。**不執行**：App 照步驟呼叫原本的 action |
+| `assist_recent`（Rust 才有，唯讀） | `{}` | `texts`：最近用過、真的做了事的助手指令（新的在前、同一句只留一次、最多 5 句；復原不算） |
 | `assist_log`（Rust 才有） | `{text, group?, done: [人話], skipped: [人話], failed?}` | 落 presented [assist] 事件（指令、做了哪些、略過哪些、在哪步失敗） |
 | `repo_profile`（Rust 才有，唯讀） | `{id}` | 名片：`id`, `path`, `role?`, `description?`, `description_source?: "registry"\|"readme"`（沒填介紹時從 README 截的推測）, `keywords?`, `tags?` |
 | `describe_repo`（Rust 才有） | `{id, description, role, keywords}`（表單三欄的完整內容；`keywords` 是一串字，逗號、頓號、全形逗號或換行分隔） | 同 `repo_profile` ＋ `changed`。只寫跟 registry 不同的欄位（走 `registry_describe`，同 CLI／MCP 的留痕）；都沒變＝不寫、`changed: false` |

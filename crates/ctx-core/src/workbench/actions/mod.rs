@@ -113,6 +113,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("save_image", a_save_image),
     ("assist_plan", a_assist_plan),
     ("assist_log", a_assist_log),
+    ("assist_recent", a_assist_recent),
     ("ack_scope", a_ack_scope),
     ("group_notes", a_group_notes),
     ("note_add", a_note_add),
@@ -140,6 +141,7 @@ const READ_ONLY: &[&str] = &[
     "pick_brief",
     "profile_draft_brief",
     "assist_plan",
+    "assist_recent",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -844,6 +846,11 @@ fn a_assist_plan(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
         o.insert("text".into(), json!(text.trim()));
     }
     Ok(v)
+}
+
+/// Rust 才有（F-68）：最近用過、真的做了事的助手指令（⌘K「?」空白時列出來，一鍵再跑）。
+fn a_assist_recent(d: &Path, _p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    Ok(json!({"ok": true, "texts": crate::assist::recent(d, 5)?}))
 }
 
 /// Rust 才有（F-63）：助手執行完落一筆 presented 事件（指令、做了哪些、略過哪些）。

@@ -131,6 +131,21 @@ export function Palette({ onClose }: { onClose: () => void }) {
     };
   }, [store, query]);
 
+  // 「?」：最近用過、真的做了事的指令（進到助手模式才問一次；失敗就當沒有）
+  const [recent, setRecent] = useState<string[] | null>(null);
+  const wantRecent = ASSIST_PREFIX.test(query.trim()) && recent === null;
+  useEffect(() => {
+    if (!wantRecent) return;
+    let live = true;
+    store
+      .action("assist_recent", {})
+      .then((r) => live && setRecent(r.texts))
+      .catch(() => live && setRecent([]));
+    return () => {
+      live = false;
+    };
+  }, [store, wantRecent]);
+
   const { state } = useSnapshot();
   const commands: Command[] = [
     {
@@ -189,7 +204,11 @@ export function Palette({ onClose }: { onClose: () => void }) {
   const ask = query.trim().replace(ASSIST_PREFIX, "");
   // 助手放最後：不搶一般搜尋的 Enter；什麼都沒找到時它就是第一個
   const assist: Item[] =
-    !commandMode && [...ask].length >= 2 ? [{ kind: "assist", key: "a:" + ask, text: ask }] : [];
+    !commandMode && [...ask].length >= 2
+      ? [{ kind: "assist", key: "a:" + ask, text: ask }]
+      : assistMode
+        ? (recent || []).map((t) => ({ kind: "assist" as const, key: "r:" + t, text: t }))
+        : [];
   const items = assistMode
     ? assist
     : commandMode
@@ -314,8 +333,9 @@ export function Palette({ onClose }: { onClose: () => void }) {
             </li>
           ))}
         </ul>
-        {assistMode && !items.length ? (
+        {assistMode && [...ask].length < 2 ? (
           <div className="paletteempty small muted">
+            {recent?.length ? <p>上面是最近用過的，Enter 再跑一次。</p> : null}
             <p>用一句話改工作台設定，先給你看計畫、確認才做、做完可以復原。例如：</p>
             <ul>
               <li>切到 PM Group／打開筆記分頁／打開 VMS_PM</li>
