@@ -275,7 +275,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
           spellCheck={false}
           // macOS WebView 的行內輸入建議（灰字＋×）會蓋住結果
           {...{ writingsuggestions: "false" }}
-          placeholder="找會話、repo、牌組或檔案：名稱、角色、介紹、關鍵字、檔名…"
+          placeholder="找會話、repo、牌組或檔案；打「>」看指令、「?」請助手改設定"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -343,6 +343,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
               <li>VMS_PM 加標籤 規格、前端</li>
               <li>建牌組 前端組：web-app、design-system／把 MiCrawler 加進 MI3.0</li>
               <li>暫停 MiCrawler，等年底再看／封存 old-notes</li>
+              <li>開會話：整理這組的 UI 檢討／關掉自動儲存</li>
               <li>把 MI3.0 裡超過兩週沒在動的 repo 暫停（要問 Agent，幾秒鐘）</li>
             </ul>
           </div>
