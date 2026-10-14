@@ -157,3 +157,38 @@ export function toggleTask(text: string, index: number): string | null {
   }
   return null;
 }
+
+/** 標題 → 錨點（GitHub 的規則：小寫、拿掉標點、空白換 -；中文照留）。 */
+export function slug(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .replace(/\s/g, "-");
+}
+
+/** repo 裡從 `from` 這個檔看 `to` 的相對路徑（都用 `/`；同資料夾就是檔名）。 */
+export function relPath(from: string, to: string): string {
+  const a = from.replace(/\\/g, "/").split("/").slice(0, -1);
+  const b = to.replace(/\\/g, "/").split("/");
+  let i = 0;
+  while (i < a.length && i < b.length - 1 && a[i] === b[i]) i++;
+  return [...a.slice(i).map(() => ".."), ...b.slice(i)].join("/");
+}
+
+const IMAGE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
+
+/**
+ * 從檔案樹拖一個檔進 md 編輯區要插入的字：同一個 repo＝相對連結（圖片用 `![]()`）；
+ * 別的 repo 連不到，就寫 `repo/路徑` 當行內碼，至少看得出指的是哪個。
+ */
+export function linkForDrop(
+  fromRepo: string,
+  fromPath: string,
+  f: { repo: string; path: string },
+): string {
+  const name = f.path.replace(/\\/g, "/").split("/").pop() || f.path;
+  if (f.repo !== fromRepo) return "`" + f.repo + "/" + f.path.replace(/\\/g, "/") + "`";
+  const rel = relPath(fromPath, f.path).replace(/ /g, "%20");
+  return (IMAGE.test(name) ? "!" : "") + "[" + name + "](" + rel + ")";
+}

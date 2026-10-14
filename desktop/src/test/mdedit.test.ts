@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { continueList, indent, toggleLinePrefix, toggleTask, wrap } from "../lib/mdedit";
+import {
+  continueList,
+  indent,
+  linkForDrop,
+  relPath,
+  slug,
+  toggleLinePrefix,
+  toggleTask,
+  wrap,
+} from "../lib/mdedit";
 
 describe("mdedit：HackMD 式編輯的純文字操作", () => {
   it("wrap：包住選取、再按一次取消；沒選字插入預設字並選起來", () => {
@@ -39,5 +48,31 @@ describe("toggleTask：預覽點待辦方塊改原文", () => {
     expect(toggleTask(t, 2)).toContain("> - [x] 三");
     expect(toggleTask(t, 3)).toBeNull();
     expect(toggleTask(t, 0)).toContain("- [ ] 程式碼");
+  });
+});
+
+describe("拖檔進編輯區：插入連結", () => {
+  it("relPath：同資料夾、往下、往上", () => {
+    expect(relPath("docs/a.md", "docs/b.md")).toBe("b.md");
+    expect(relPath("README.md", "docs/guide.md")).toBe("docs/guide.md");
+    expect(relPath("docs/ideation/x.md", "docs/VISION.md")).toBe("../VISION.md");
+    expect(relPath("a/b/c.md", "x/y.png")).toBe("../../x/y.png");
+  });
+  it("linkForDrop：同 repo 相對連結、圖片用 ![]()、別的 repo 寫行內碼", () => {
+    expect(linkForDrop("a", "docs/a.md", { repo: "a", path: "docs/my file.md" })).toBe(
+      "[my file.md](my%20file.md)",
+    );
+    expect(linkForDrop("a", "README.md", { repo: "a", path: "img/logo.png" })).toBe(
+      "![logo.png](img/logo.png)",
+    );
+    expect(linkForDrop("a", "README.md", { repo: "b", path: "x.md" })).toBe("`b/x.md`");
+  });
+});
+
+describe("slug：標題錨點", () => {
+  it("小寫、拿掉標點、空白換 -、中文照留", () => {
+    expect(slug("3. 問題清單與優先序")).toBe("3-問題清單與優先序");
+    expect(slug("Hello, World!")).toBe("hello-world");
+    expect(slug("UX-01／P1")).toBe("ux-01p1");
   });
 });

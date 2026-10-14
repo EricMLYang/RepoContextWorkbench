@@ -6,7 +6,7 @@ import { useStore, useUi } from "../../store/context";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 import { Editor, taskIndex, type EditLayout } from "./Editor";
-import { toggleTask } from "../../lib/mdedit";
+import { linkForDrop, slug, toggleTask } from "../../lib/mdedit";
 import { clearMatches, findRanges, showMatches } from "../../lib/findText";
 
 export interface OpenFile {
@@ -517,7 +517,18 @@ export function FileViewer({
     // 可編輯的檔，預覽裡的待辦方塊可以直接點
     tasks: content?.kind === "text" && !!content.editable,
     onLink(href) {
-      if (href.startsWith("#")) return;
+      if (href.startsWith("#")) {
+        // 文件內的錨點：捲到同名的標題
+        const want = decodeURIComponent(href.slice(1)).toLowerCase();
+        const h = [
+          ...(bodyRef.current?.querySelectorAll<HTMLElement>(
+            ".markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6",
+          ) ?? []),
+        ].find((x) => slug(x.textContent || "") === want);
+        if (h) h.scrollIntoView({ block: "start", behavior: "smooth" });
+        else store.toast("找不到這個標題：" + href);
+        return;
+      }
       if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
         void copy(store, href, "連結（App 內不開外部網頁）");
         return;
@@ -791,6 +802,19 @@ export function FileViewer({
                 if (dirty) void save(false);
               }}
               preview={(text) => <Markdown text={text} hooks={hooks} />}
+              onDropFile={
+                md
+                  ? (raw) => {
+                      try {
+                        const f = JSON.parse(raw) as { repo?: unknown; path?: unknown };
+                        if (typeof f.repo !== "string" || typeof f.path !== "string") return null;
+                        return linkForDrop(repo, path, { repo: f.repo, path: f.path });
+                      } catch {
+                        return null;
+                      }
+                    }
+                  : undefined
+              }
               onToggleTask={(i) => {
                 const next = draft === null ? null : toggleTask(draft, i);
                 if (next !== null) setDraft(next);

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { continueList, indent, insert, toggleLinePrefix, wrap, type Edit } from "../../lib/mdedit";
+import { FILE_DRAG_TYPE } from "../../lib/view";
 
 /** 編輯時的版面：只有編輯區／左右分割（左寫右看）／只看預覽。 */
 export type EditLayout = "edit" | "split" | "preview";
@@ -66,9 +67,21 @@ export function Editor(props: {
   preview?: (text: string) => ReactNode;
   /** 預覽裡點了第 i 個待辦方塊。 */
   onToggleTask?: (i: number) => void;
+  /** 從檔案樹拖檔進來：拖曳資料 → 要插入的字（null＝不收）。 */
+  onDropFile?: (raw: string) => string | null;
 }) {
-  const { label, value, onChange, onSave, markdown, layout, readOnly, preview, onToggleTask } =
-    props;
+  const {
+    label,
+    value,
+    onChange,
+    onSave,
+    markdown,
+    layout,
+    readOnly,
+    preview,
+    onToggleTask,
+    onDropFile,
+  } = props;
   const ref = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const pendingSel = useRef<[number, number] | null>(null);
@@ -189,6 +202,18 @@ export function Editor(props: {
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           onScroll={syncScroll}
+          onDragOver={(e) => {
+            if (onDropFile && e.dataTransfer.types.includes(FILE_DRAG_TYPE)) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }
+          }}
+          onDrop={(e) => {
+            if (!onDropFile || readOnly || !e.dataTransfer.types.includes(FILE_DRAG_TYPE)) return;
+            e.preventDefault();
+            const text = onDropFile(e.dataTransfer.getData(FILE_DRAG_TYPE));
+            if (text) run((t, a, b) => insert(t, a, b, text));
+          }}
         />
         {markdown && layout !== "edit" && preview ? (
           <div
