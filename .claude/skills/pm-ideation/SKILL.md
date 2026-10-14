@@ -110,3 +110,14 @@ ls .github/workflows 2>/dev/null; grep -ro '#\[test\]' crates | wc -l   # 測試
    - spine 副本先 `git remote remove`，免得 autocommit 推到真的 remote。
    - 規模測試不只看秒數也看輸出大小：新舊版輸出不一樣大＝範圍判斷不同，不能直接比快慢。
    - 用 `claude -p` 驗 hook 時用 `scripts/e2e_claude.sh` 的隔離參數，不然會跑到使用者全域的 hook 和真的 spine。
+10. **2026-10-15 自動迭代學到的**（上一條又犯了兩次，寫得更死）：
+   - commit 一律寫成 `if check.sh > log 2>&1; then git commit …; else 印失敗; fi`。`check.sh | tail && commit` 跟
+     `check.sh > log; echo …; git commit`（分號）都會在檢查失敗時照樣 commit——這輪兩種各發生一次。
+   - 偶發失敗的測試先看假引擎回的格式：缺欄位的回應在某個時機被畫出來就炸（例：palette 假回 `{ok:true}`）。
+     修兩邊：前端對缺欄位容錯（真的殼回錯格式一樣會炸）、假資料改對；再補一個必現的回歸測試。
+   - 回歸測試要先拿掉修正跑一次、確認會失敗：這輪有一個「存檔回音」測試第一版不拿掉修正也會過（橫幅閃一下就被清掉），
+     要在競態的那個時間點斷言才抓得到。
+   - 會打真 provider 的功能（App 助手）：在 spine 副本上用一次性的 `examples/zz_tmp_*.rs` 跑一次、從使用者角度讀輸出，
+     跑完只刪自己那個檔（`examples/` 裡有別的檔，別 `rmdir`／`rm -rf`）。
+   - `git rm` 掉 `rounds/` 裡唯一的檔，資料夾會跟著消失；新輪次檔用寫檔工具建，別接在 `git rm` 後面用 shell 重導。
+   - 已經 push 的 commit 不要 amend＋force push（這輪為補一個漏掉的檔做過一次，改成補一個新 commit 才對）。
