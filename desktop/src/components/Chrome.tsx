@@ -30,10 +30,10 @@ export function TopBar({ onHome }: { onHome: () => void }) {
       <button
         type="button"
         className="ghost palettebtn"
-        title="找 repo 或牌組（名稱、角色、介紹、關鍵字）"
+        title="找 repo、牌組、檔案、會話，或輸入 > 執行指令"
         onClick={ui.openPalette}
       >
-        找 repo <kbd>⌘K</kbd>
+        搜尋或執行指令 <kbd>⌘K</kbd>
       </button>
       <span id="connection" role="status" className={err ? "offline" : ""}>
         {connectionText(snap)}

@@ -74,15 +74,21 @@ export function Workspace(props: {
             disabled={!stateReady || !scope.group}
             title={
               scope.group
-                ? "記一筆到這個牌組（不屬於任何 repo 的事）"
+                ? "寫一則筆記存進這個牌組（只保存，不會啟動 Agent）"
                 : "筆記記在牌組上；先選一個牌組"
             }
             onClick={() => ui.showTab("notes")}
           >
-            ＋ 記一筆
+            寫組筆記
           </button>
-          <button type="button" id="ideatoggle" disabled={noScope} onClick={ui.showComposer}>
-            ＋ 新增想法
+          <button
+            type="button"
+            id="ideatoggle"
+            disabled={noScope}
+            title="寫下想法，讓 Agent 對照這組 repo 分析；結果回到「待處理」"
+            onClick={ui.showComposer}
+          >
+            請 Agent 分析想法…
           </button>
           <button
             type="button"

@@ -13,6 +13,7 @@ import {
 import type { TermStream } from "../../api/backend";
 import type { TermInfo } from "../../api/types";
 import { AsyncButton } from "../AsyncButton";
+import { ContextMenu } from "../ContextMenu";
 import {
   draggedFileAbs,
   FILE_DRAG_TYPE,
@@ -264,6 +265,8 @@ export function TerminalPanel(props: {
   }, [ui, store, openShellFor]);
 
   const info: TermInfo | undefined = terms.find((s) => s.sid === activeSid);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
 
   // 貼到目前會話：走 xterm 的 paste（尊重 bracketed paste，換行不會被當成送出），不按 Enter
   const pasteActive = (text: string): string | null => {
@@ -377,7 +380,7 @@ export function TerminalPanel(props: {
                 onError={(m) => store.toast(m)}
                 run={() => openShellFor(pair.agent.sid)}
               >
-                Terminal
+                開啟終端
               </AsyncButton>
             )}
           </span>
@@ -412,27 +415,43 @@ export function TerminalPanel(props: {
             title={"在右側欄看 " + where.repo + " 還沒 commit 的變更（agent 改了什麼）"}
             onClick={() => where.repo && ui.showRepo(where.repo)}
           >
-            看變更
+            查看變更
           </button>
         ) : null}
         <button
+          ref={moreRef}
           type="button"
-          id="termresult"
+          id="termmore"
           className="ghost small"
+          aria-label="更多會話動作"
+          aria-haspopup="menu"
+          aria-expanded={!!menu}
           disabled={!info}
-          onClick={() => info && ui.openDetail(sessionResultSpec(info))}
+          onClick={() => {
+            const r = moreRef.current?.getBoundingClientRect();
+            setMenu(menu ? null : { x: r ? r.right - 200 : 0, y: r ? r.top - 90 : 0 });
+          }}
         >
-          記錄結果
+          ⋯
         </button>
-        <button
-          type="button"
-          id="termkill"
-          className="ghost small"
-          disabled={!info}
-          onClick={() => info && ui.openDetail(confirmKillSpec(info))}
-        >
-          結束程序…
-        </button>
+        {menu && info ? (
+          <ContextMenu
+            id="termmenu"
+            title={info.title || "會話"}
+            items={[
+              // 只打開紀錄表單；不會結束程序、也不會 commit
+              { label: "記錄本次工作結果…", run: () => ui.openDetail(sessionResultSpec(info)) },
+              {
+                label: "停止此會話程序…",
+                danger: true,
+                run: () => ui.openDetail(confirmKillSpec(info)),
+              },
+            ]}
+            x={menu.x}
+            y={menu.y}
+            onClose={() => setMenu(null)}
+          />
+        ) : null}
         <button
           type="button"
           id="termtoggle"

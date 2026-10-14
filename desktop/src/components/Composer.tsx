@@ -53,7 +53,7 @@ export function Composer(props: { open: boolean; focusSeq: number; onClose: () =
   return (
     <section id="composer" hidden={!open} aria-labelledby="composertitle">
       <div className="sechead">
-        <h2 id="composertitle">碰撞台 · 分析想法</h2>
+        <h2 id="composertitle">請 Agent 分析想法</h2>
         <button type="button" id="ideaclose" className="ghost small" onClick={onClose}>
           收起
         </button>
@@ -77,7 +77,11 @@ export function Composer(props: { open: boolean; focusSeq: number; onClose: () =
       />
       <div className="composerfoot">
         <span id="ideascope" className="small muted">
-          {"分析範圍：" + scopeLabel(scope) + " · " + repos.length + " 個 repo"}
+          {"分析範圍：" +
+            scopeLabel(scope) +
+            " · " +
+            repos.length +
+            " 個 repo · 送出後 Agent 在背景分析，結果回到「待處理」"}
         </span>
         <span className="spacer" />
         <span className="small muted">Ctrl / ⌘ + Enter 送出</span>
@@ -88,7 +92,7 @@ export function Composer(props: { open: boolean; focusSeq: number; onClose: () =
           disabled={sending === "sending"}
           onClick={() => void submit()}
         >
-          {sending === "sending" ? "正在送出…" : sending === "sent" ? "已送出" : "分析想法"}
+          {sending === "sending" ? "正在送出…" : sending === "sent" ? "已送出" : "開始分析"}
         </button>
       </div>
       <p id="ideaerror" className="error" role="alert" hidden={!error}>

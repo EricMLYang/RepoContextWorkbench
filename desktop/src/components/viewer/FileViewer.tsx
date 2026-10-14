@@ -3,6 +3,7 @@ import type { FileContent } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
 import { useStore, useUi } from "../../store/context";
+import { ContextMenu, type MenuItem } from "../ContextMenu";
 
 export interface OpenFile {
   repo: string;
@@ -177,7 +178,11 @@ export function FileViewer({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [nonce, setNonce] = useState(0);
-  const [source, setSource] = useState(false);
+  // 檢視模式：view＝md 預覽／程式碼；source＝md 原始碼；diff＝跟 HEAD 的差異
+  const [mode, setMode] = useState<"view" | "source" | "diff">(file.diff ? "diff" : "view");
+  const showDiff = mode === "diff";
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
   const [wrap, setWrap] = useState(isProse(path));
   // 編輯：draft＝null 表示沒在編輯；editBase＝這份草稿是從哪個內容開始改的（LF）
   const [draft, setDraft] = useState<string | null>(null);
@@ -186,14 +191,13 @@ export function FileViewer({
   const [diskChanged, setDiskChanged] = useState(false);
   const [armDiscard, setArmDiscard] = useState(false);
   // 差異模式：看這個檔跟上一個 commit 差在哪（agent 改了什麼）
-  const [showDiff, setShowDiff] = useState(!!file.diff);
   const [diff, setDiff] = useState<{ text: string; truncated: boolean } | null>(null);
   const [diffError, setDiffError] = useState("");
   // 從變更清單再點一次（已開著的分頁）：切到差異
   const [askedDiff, setAskedDiff] = useState(file.diff);
   if (askedDiff !== file.diff) {
     setAskedDiff(file.diff);
-    if (file.diff) setShowDiff(true);
+    if (file.diff) setMode("diff");
   }
   const dirty = draft !== null && draft !== editBase;
   // 給非同步回呼（讀檔回來、磁碟事件）看最新值
@@ -353,6 +357,14 @@ export function FileViewer({
   const md = isMarkdown(path);
   const editing = draft !== null;
   const crumbs = path.replace(/\\/g, "/").split("/");
+  // 低頻動作收進「⋯」：換行（看程式碼／原始碼時）、複製路徑、重新讀取（有未存修改時不給）
+  const moreItems: MenuItem[] = [];
+  if (!editing && content?.kind === "text" && (!md || mode === "source"))
+    moreItems.push({ label: wrap ? "關閉自動換行" : "自動換行", run: () => setWrap(!wrap) });
+  moreItems.push({ label: "複製相對路徑", run: () => copy(store, path, "相對路徑") });
+  if (content)
+    moreItems.push({ label: "複製絕對路徑", run: () => copy(store, content.abs, "絕對路徑") });
+  if (!dirty && !loading) moreItems.push({ label: "重新讀取", run: reload });
   return (
     <section className="viewer" hidden={hidden} aria-label={"檢視：" + repo + "/" + path}>
       <div className="viewerhead">
@@ -371,6 +383,38 @@ export function FileViewer({
           {dirty ? <span className="dirtymark"> · 未儲存</span> : null}
         </div>
         <div className="vieweractions">
+          {!editing ? (
+            // 刪掉的檔（讀不到）也要能看差異，所以沒有內容時一樣給
+            <div className="segmented" role="group" aria-label="檢視模式">
+              <button
+                type="button"
+                className="small ghost"
+                aria-pressed={mode === "view"}
+                onClick={() => setMode("view")}
+              >
+                {md && content?.kind === "text" ? "預覽" : "內容"}
+              </button>
+              {md && content?.kind === "text" ? (
+                <button
+                  type="button"
+                  className="small ghost"
+                  aria-pressed={mode === "source"}
+                  onClick={() => setMode("source")}
+                >
+                  原始碼
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="small ghost"
+                aria-pressed={mode === "diff"}
+                title="跟上一個 commit（HEAD）比，看 agent 改了什麼"
+                onClick={() => setMode(mode === "diff" ? "view" : "diff")}
+              >
+                差異
+              </button>
+            </div>
+          ) : null}
           {editing ? (
             <>
               <button
@@ -394,7 +438,7 @@ export function FileViewer({
           ) : content?.kind === "text" ? (
             <button
               type="button"
-              className="small ghost"
+              className="small"
               disabled={!content.editable}
               title={
                 content.editable
@@ -406,71 +450,39 @@ export function FileViewer({
               編輯
             </button>
           ) : null}
-          {!editing && md && content?.kind === "text" ? (
-            <button
-              type="button"
-              className="small ghost"
-              aria-pressed={source}
-              onClick={() => setSource(!source)}
-            >
-              {source ? "預覽" : "原始碼"}
-            </button>
-          ) : null}
-          {!editing && content?.kind === "text" && (!md || source) ? (
-            <button
-              type="button"
-              className="small ghost"
-              aria-pressed={wrap}
-              onClick={() => setWrap(!wrap)}
-            >
-              換行
-            </button>
-          ) : null}
           <button
             type="button"
             className="small ghost"
             aria-pressed={picked}
-            title="挑起來，跟其他檔一起交給 Agent（主區下緣的挑選列）"
+            title="放進主區下緣的挑選列，之後跟其他檔一起交給 Agent（不會自動送出）"
             onClick={() => ui.togglePick({ repo, path, name: crumbs[crumbs.length - 1] })}
           >
-            {picked ? "已挑" : "加入挑選"}
+            {picked ? "已加入脈絡 ✓" : "加入脈絡"}
           </button>
-          {!editing ? (
-            <button
-              type="button"
-              className="small ghost"
-              aria-pressed={showDiff}
-              title="跟上一個 commit 比（看 agent 改了什麼）"
-              onClick={() => setShowDiff(!showDiff)}
-            >
-              差異
-            </button>
+          <button
+            ref={moreRef}
+            type="button"
+            className="small ghost"
+            aria-label="更多檔案動作"
+            aria-haspopup="menu"
+            aria-expanded={!!menu}
+            onClick={() => {
+              const r = moreRef.current?.getBoundingClientRect();
+              setMenu(menu ? null : { x: r ? r.right - 180 : 0, y: r ? r.bottom + 4 : 0 });
+            }}
+          >
+            ⋯
+          </button>
+          {menu ? (
+            <ContextMenu
+              id="filemenu"
+              title={crumbs[crumbs.length - 1]}
+              items={moreItems}
+              x={menu.x}
+              y={menu.y}
+              onClose={() => setMenu(null)}
+            />
           ) : null}
-          <button
-            type="button"
-            className="small ghost"
-            onClick={() => void copy(store, path, "相對路徑")}
-          >
-            相對路徑
-          </button>
-          <button
-            type="button"
-            className="small ghost"
-            disabled={!content}
-            onClick={() => content && void copy(store, content.abs, "絕對路徑")}
-          >
-            絕對路徑
-          </button>
-          <button
-            type="button"
-            className="small ghost"
-            aria-label="重新讀取"
-            title={dirty ? "有未儲存的修改" : "重新讀取"}
-            disabled={loading || dirty}
-            onClick={reload}
-          >
-            ⟳
-          </button>
         </div>
       </div>
       {diskChanged ? (
@@ -491,7 +503,12 @@ export function FileViewer({
       ) : null}
       {showDiff && !editing ? null : error ? (
         <p className="error viewererror" role="alert">
-          {error}
+          {error}{" "}
+          {!dirty ? (
+            <button type="button" className="small" disabled={loading} onClick={reload}>
+              重新讀取
+            </button>
+          ) : null}
         </p>
       ) : null}
       <div className="viewerbody">
@@ -533,7 +550,7 @@ export function FileViewer({
               {content.truncated ? (
                 <p className="viewernote">檔案有 {fmtSize(content.size)}，只顯示前 1 MB。</p>
               ) : null}
-              {md && !source ? (
+              {md && mode === "view" ? (
                 <Markdown text={content.text} hooks={hooks} />
               ) : (
                 <CodeView text={content.text} wrap={wrap} />

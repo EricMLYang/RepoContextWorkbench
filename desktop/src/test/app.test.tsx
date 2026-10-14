@@ -70,7 +70,7 @@ describe("碰撞台草稿", () => {
     const idea = document.getElementById("idea") as HTMLTextAreaElement;
     expect(idea.value).toBe("一個想法"); // 本機保留的草稿自動帶回、碰撞台展開
     expect(document.getElementById("composer")!.hidden).toBe(false);
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "分析想法" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "開始分析" })));
     expect(backend.action).toHaveBeenCalledWith("collide", { idea: "一個想法" });
     expect(idea.value).toBe("一個想法");
     expect(JSON.parse(localStorage.getItem("workbench:draft")!)).toBe("一個想法");
@@ -80,7 +80,7 @@ describe("碰撞台草稿", () => {
   it("送出成功才清草稿", async () => {
     localStorage.setItem("workbench:draft", JSON.stringify("另一個想法"));
     const { backend } = await mount();
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "分析想法" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "開始分析" })));
     expect(backend.action).toHaveBeenCalledWith("collide", { idea: "另一個想法" });
     expect((document.getElementById("idea") as HTMLTextAreaElement).value).toBe("");
     expect(JSON.parse(localStorage.getItem("workbench:draft")!)).toBe("");
@@ -88,8 +88,8 @@ describe("碰撞台草稿", () => {
 
   it("空的想法不送出", async () => {
     const { backend } = await mount();
-    act(() => void fireEvent.click(screen.getByRole("button", { name: "＋ 新增想法" })));
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "分析想法" })));
+    act(() => void fireEvent.click(screen.getByRole("button", { name: "請 Agent 分析想法…" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "開始分析" })));
     expect(backend.action).not.toHaveBeenCalled();
     expect(document.getElementById("ideaerror")!.textContent).toBe("先寫下一個想法，再開始分析。");
   });
@@ -912,7 +912,7 @@ describe("repo 右側欄與右鍵選單", () => {
     // 差異模式不顯示讀檔錯誤（刪掉的檔讀不到，但差異看得到）
     expect(within(view).queryByText(/檔案不存在/)).toBeNull();
     // 切回內容：才看得到讀檔錯誤
-    await act(async () => fireEvent.click(within(view).getByRole("button", { name: "差異" })));
+    await act(async () => fireEvent.click(within(view).getByRole("button", { name: "內容" })));
     expect(within(view).getByRole("alert").textContent).toContain("檔案不存在");
   });
 
@@ -989,14 +989,14 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     );
     expect(document.getElementById("workspace")!.hidden).toBe(true);
     await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
-    const box = screen.getByRole("combobox", { name: "找 repo 或牌組" });
+    const box = screen.getByRole("combobox", { name: "搜尋或執行指令" });
     fireEvent.change(box, { target: { value: ">活動" } });
     await act(async () => fireEvent.keyDown(box, { key: "Enter" }));
     expect(document.getElementById("workspace")!.hidden).toBe(false);
     expect(document.getElementById("tab-activity")!.classList.contains("on")).toBe(true);
   });
 
-  it("檢視器「加入挑選」：挑起來、按鈕變「已挑」，再按取消", async () => {
+  it("檢視器「加入脈絡」：挑起來、按鈕變「已加入脈絡 ✓」，再按取消", async () => {
     const backend = viewerBackend();
     await openTree(backend);
     await act(async () =>
@@ -1004,16 +1004,18 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     );
     const viewer = () => document.querySelector(".viewer:not([hidden])") as HTMLElement;
     await act(async () =>
-      fireEvent.click(within(viewer()).getByRole("button", { name: "加入挑選" })),
+      fireEvent.click(within(viewer()).getByRole("button", { name: "加入脈絡" })),
     );
     expect(
-      within(viewer()).getByRole("button", { name: "已挑" }).getAttribute("aria-pressed"),
+      within(viewer()).getByRole("button", { name: "已加入脈絡 ✓" }).getAttribute("aria-pressed"),
     ).toBe("true");
     expect(document.getElementById("picktray")!.textContent).toContain("已挑 1 個檔案");
     expect(JSON.parse(localStorage.getItem("workbench:picks")!)).toEqual([
       { repo: "a", path: "README.md", name: "README.md" },
     ]);
-    await act(async () => fireEvent.click(within(viewer()).getByRole("button", { name: "已挑" })));
+    await act(async () =>
+      fireEvent.click(within(viewer()).getByRole("button", { name: "已加入脈絡 ✓" })),
+    );
     expect(document.getElementById("picktray")).toBeNull();
   });
 
@@ -1377,7 +1379,7 @@ describe("會話放進所屬牌組", () => {
     // 對單一 repo 開的會話：「看變更」在右側欄打開那個 repo
     await act(async () =>
       fireEvent.click(
-        within(document.getElementById("termbar")!).getByRole("button", { name: "看變更" }),
+        within(document.getElementById("termbar")!).getByRole("button", { name: "查看變更" }),
       ),
     );
     expect(document.getElementById("repopanel")!.getAttribute("aria-label")).toBe("Repo：a");
@@ -1414,7 +1416,7 @@ describe("會話放進所屬牌組", () => {
       "true",
     );
 
-    await act(async () => fireEvent.click(within(bar).getByRole("button", { name: "Terminal" })));
+    await act(async () => fireEvent.click(within(bar).getByRole("button", { name: "開啟終端" })));
     expect(action).toHaveBeenCalledWith("term_create", { kind: "shell", of: "t1" });
     expect(within(bar).getByRole("button", { name: "Terminal" }).getAttribute("aria-pressed")).toBe(
       "true",
@@ -1636,7 +1638,7 @@ describe("牌組筆記", () => {
     await act(async () => {
       await store.refreshAll();
     });
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "＋ 記一筆" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "寫組筆記" })));
     expect(backend.action).toHaveBeenCalledWith("group_notes", { group: "產品開發" });
     const pane = document.getElementById("tab-notes")!;
     expect((await within(pane).findByText("規格")).tagName).toBe("STRONG");
@@ -1671,7 +1673,7 @@ describe("牌組筆記", () => {
 
   it("所有 repo／臨時組：不能記，說明要先選牌組", async () => {
     await mount(notesBackend());
-    expect((screen.getByRole("button", { name: "＋ 記一筆" }) as HTMLButtonElement).disabled).toBe(
+    expect((screen.getByRole("button", { name: "寫組筆記" }) as HTMLButtonElement).disabled).toBe(
       true,
     );
     await act(async () => fireEvent.click(document.querySelector('[data-tab="notes"]')!));
@@ -1741,9 +1743,9 @@ describe("⌘K 找 repo／牌組", () => {
     });
     return store;
   }
-  const box = () => screen.getByRole("combobox", { name: "找 repo 或牌組" });
+  const box = () => screen.getByRole("combobox", { name: "搜尋或執行指令" });
   const opts = () => within(screen.getByRole("listbox", { name: "結果" })).getAllByRole("option");
-  const noBox = () => screen.queryByRole("combobox", { name: "找 repo 或牌組" });
+  const noBox = () => screen.queryByRole("combobox", { name: "搜尋或執行指令" });
 
   it("⌘K 開；空查詢列出 repo 與牌組；打字問引擎；Enter 在側欄開 repo；Esc 關", async () => {
     const backend = backendWithPalette();
@@ -1787,7 +1789,7 @@ describe("⌘K 找 repo／牌組", () => {
   it("選牌組切範圍；⌘Enter 對 repo 開會話對話框；失敗保留清單並顯示原因", async () => {
     const backend = backendWithPalette();
     const store = await mount(backend);
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: /找 repo/ })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: /搜尋或執行指令/ })));
     await waitFor(() => expect(opts()).toHaveLength(3));
     await act(async () => fireEvent.click(opts()[0]));
     expect(store.getSnapshot().scope.group).toBe("產品開發");
@@ -1896,9 +1898,9 @@ describe("⌘K 找 repo／牌組", () => {
     // 一般查詢：別名也找得到（note）
     fireEvent.change(box(), { target: { value: "note" } });
     await waitFor(() =>
-      expect(opts().some((o) => o.textContent === "指令記一筆到目前牌組")).toBe(true),
+      expect(opts().some((o) => o.textContent === "指令寫組筆記（目前牌組）")).toBe(true),
     );
-    const i = opts().findIndex((o) => o.textContent === "指令記一筆到目前牌組");
+    const i = opts().findIndex((o) => o.textContent === "指令寫組筆記（目前牌組）");
     for (let k = 0; k < i; k++) fireEvent.keyDown(box(), { key: "ArrowDown" });
     await act(async () => fireEvent.keyDown(box(), { key: "Enter" }));
     expect(noBox()).toBeNull();

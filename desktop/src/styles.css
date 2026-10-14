@@ -1921,8 +1921,25 @@ button.filetab.home {
 }
 .vieweractions {
   display: flex;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
+}
+/* 檢視模式（預覽／原始碼／差異）：一組互斥按鈕 */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.segmented button {
+  border-radius: 0;
+}
+.segmented button + button {
+  border-left: 1px solid var(--line);
+}
+.segmented button[aria-pressed="true"] {
+  background: var(--line);
 }
 .vieweractions button[aria-pressed="true"] {
   color: var(--blue);

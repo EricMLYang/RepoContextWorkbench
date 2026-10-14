@@ -130,13 +130,13 @@ export function Palette({ onClose }: { onClose: () => void }) {
   const commands: Command[] = [
     {
       id: "note",
-      label: "記一筆到目前牌組",
+      label: "寫組筆記（目前牌組）",
       keys: "note 筆記 capture",
       run: () => ui.showTab("notes"),
     },
     {
       id: "idea",
-      label: "新增想法（碰撞台）",
+      label: "請 Agent 分析想法…",
       keys: "idea collide 想法",
       run: () => ui.showComposer(),
     },
@@ -218,12 +218,12 @@ export function Palette({ onClose }: { onClose: () => void }) {
         if (e.target === e.currentTarget) cancel();
       }}
     >
-      <div className="palette" role="dialog" aria-modal="true" aria-label="找 repo 或牌組">
+      <div className="palette" role="dialog" aria-modal="true" aria-label="搜尋或執行指令">
         <input
           ref={input}
           type="text"
           role="combobox"
-          aria-label="找 repo 或牌組"
+          aria-label="搜尋或執行指令"
           aria-expanded="true"
           aria-controls={listId}
           aria-activedescendant={cur ? listId + "-" + cur.key : undefined}
