@@ -262,6 +262,74 @@ fn rules(data: &RegistryData, text: &str) -> Option<Value> {
             };
         }
     }
+    // 建牌組 X：a、b
+    for pre in ["建牌組", "新增牌組", "建一個牌組", "建組"] {
+        let Some(rest) = t.strip_prefix(pre) else {
+            continue;
+        };
+        let (name, list) = rest.split_once(['：', ':', '，', ','])?;
+        let name = unquote(name.trim_start_matches("叫"));
+        let ids: Option<Vec<String>> = split_list(list)
+            .iter()
+            .map(|n| find_repo(data, n))
+            .collect();
+        let ids = ids?;
+        if name.is_empty() || ids.is_empty() {
+            return None;
+        }
+        return one(
+            format!("建牌組「{name}」"),
+            "create_group",
+            json!({"name": name, "repos": ids}),
+        );
+    }
+    // 把 a、b 加進／移出 <牌組>
+    if let Some(rest) = t.strip_prefix('把') {
+        for (verb, add) in [
+            ("加進", true),
+            ("加到", true),
+            ("加入", true),
+            ("移出", false),
+            ("從", false),
+        ] {
+            let Some((who, group)) = rest.split_once(verb) else {
+                continue;
+            };
+            // 「把 a 從 X 移掉／拿掉」：牌組在「從」後面、動詞前面
+            let group = group
+                .trim_end_matches(['組'])
+                .split(['移', '拿', '刪'])
+                .next()
+                .unwrap_or("")
+                .trim_end_matches("牌組")
+                .trim_end_matches('組');
+            let g = find_group(data, &unquote(group))?;
+            let ids: Option<Vec<String>> =
+                split_list(who).iter().map(|n| find_repo(data, n)).collect();
+            let ids = ids?;
+            let cur = data.group(&g)?.members();
+            let next: Vec<String> = if add {
+                cur.iter()
+                    .cloned()
+                    .chain(ids.iter().filter(|i| !cur.contains(i)).cloned())
+                    .collect()
+            } else {
+                cur.iter().filter(|m| !ids.contains(m)).cloned().collect()
+            };
+            if next.is_empty() {
+                return None; // 移到一個都不剩：交給驗證／agent 講清楚
+            }
+            return one(
+                format!(
+                    "牌組「{g}」{}{}",
+                    if add { "加入 " } else { "移出 " },
+                    ids.join("、")
+                ),
+                "set_members",
+                json!({"group": g, "repos": next}),
+            );
+        }
+    }
     // 封存／休眠／恢復 X；暫停 X，直到／等 Y
     for (verb, tier) in [
         ("封存", "archived"),
@@ -781,6 +849,28 @@ mod tests {
             json!({"id": "repo-a", "tier": "paused", "resume_when": "年底再看"})
         );
         assert!(never.1.lock().unwrap().is_empty());
+        // 建組、加進／移出組員
+        assert_eq!(
+            p("建牌組 新組：repo-a、repo-b").steps[0].args,
+            json!({"name": "新組", "repos": ["repo-a", "repo-b"]})
+        );
+        registry::add_group(&d, "solo", &["repo-a"]).unwrap();
+        let add = p("把 repo-b 加進 solo");
+        assert_eq!(
+            add.steps[0].args,
+            json!({"group": "solo", "repos": ["repo-a", "repo-b"]})
+        );
+        assert_eq!(add.steps[0].text, "牌組「solo」：加入 repo-b");
+        let out = p("把 repo-a 移出 g1");
+        assert_eq!(
+            out.steps[0].args,
+            json!({"group": "g1", "repos": ["repo-b"]})
+        );
+        assert!(out.steps[0].danger);
+        assert_eq!(
+            p("把 repo-a 從 g1 拿掉").steps[0].args,
+            json!({"group": "g1", "repos": ["repo-b"]})
+        );
         // 暫停沒說條件：規則不猜，交給 provider
         let q = fixed(json!({"steps": []}));
         plan_with(&d, "暫停 repo-a", &Scope::default(), &q).unwrap();
