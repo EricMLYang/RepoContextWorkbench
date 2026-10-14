@@ -2031,7 +2031,7 @@ button.filetab.home {
   display: block;
   box-sizing: border-box;
   width: 100%;
-  min-height: calc(100vh - 220px);
+  min-height: calc(100vh - 300px);
   padding: 12px;
   resize: vertical;
   color: var(--ink);
@@ -2068,7 +2068,7 @@ button.filetab.home {
 }
 .editor.layout-split .vieweredit,
 .editorpreview {
-  height: calc(100vh - 230px);
+  height: calc(100vh - 300px);
   min-height: 240px;
   resize: none;
 }
@@ -2704,4 +2704,10 @@ body.withpicks #main {
 }
 .codeview .cl.cl-flash {
   animation: clflash 1.6s ease-out;
+}
+
+/* 編輯區下緣：字數、行數、存檔狀態 */
+.editorstats {
+  margin-top: 6px;
+  text-align: right;
 }
