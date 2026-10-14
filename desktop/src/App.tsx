@@ -24,6 +24,7 @@ import {
   UiStateContext,
   samePick,
   type DetailSpec,
+  type PanelTab,
   type Pick,
   type Tab,
   type Ui,
@@ -128,6 +129,11 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     });
   }, []);
   const closeMenu = useCallback(() => setMenu(null), []);
+  const [panelTab, setPanelTab] = useState<PanelTab>(() => load<PanelTab>("panelTab", "files"));
+  const choosePanelTab = useCallback((t: PanelTab) => {
+    save("panelTab", t);
+    setPanelTab(t);
+  }, []);
   // 挑選列疊在主區下緣：主區底下留空，最後幾列不會被蓋住
   const hasPicks = picks.length > 0;
   useEffect(() => {
@@ -182,7 +188,10 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
         openDetail({ title: "建立第一個工作範圍", eyebrow: "FIRST RUN", content: <Onboarding /> });
       },
       openRepo: (id) => setPanel((cur) => (cur === id ? null : id)),
-      showRepo: (id) => setPanel(() => id),
+      showRepo: (id, tab) => {
+        if (tab) choosePanelTab(tab);
+        setPanel(() => id);
+      },
       openPalette: () => setPaletteOpen(true),
       togglePick: (pick) =>
         updatePicks((cur) =>
@@ -228,6 +237,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       showComposer,
       setDraft,
       setPanel,
+      choosePanelTab,
       openFile,
       setActiveFile,
       updateOpen,
@@ -356,7 +366,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
             selectSeq={selectSeq}
             pasteRef={pasteRef}
           />
-          {panelRepo ? <RepoPanel id={panelRepo} /> : null}
+          {panelRepo ? <RepoPanel id={panelRepo} tab={panelTab} onTab={choosePanelTab} /> : null}
           {panelRepo ? <Resizer side="right" /> : null}
           <StatusBar />
           <Toast />

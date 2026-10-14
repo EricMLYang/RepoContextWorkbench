@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useSnapshot, useStore, useUi } from "../../store/context";
+import { useSnapshot, useStore, useUi, type PanelTab } from "../../store/context";
 import { RepoRoot } from "./FileTree";
 import { RepoChanges } from "./RepoChanges";
 import { RepoProfileCard } from "./RepoProfileCard";
@@ -14,11 +14,27 @@ function Fact({ label, value, warn }: { label: string; value: string; warn?: boo
   );
 }
 
+const TABS: [PanelTab, string][] = [
+  ["files", "檔案"],
+  ["changes", "變更"],
+  ["info", "資訊"],
+];
+
 /**
- * 右側欄：點 repo 打開，只放邊工作邊會看的（分支、未提交、未推送／落後、最近 commit、Agent、路徑、變更、名片、檔案）。
+ * 右側欄：點 repo 打開，分三個頁籤一次看一種（UX-07）——檔案（樹）／變更（還沒 commit 的）／
+ * 資訊（分支、未提交、未推送／落後、最近 commit、Agent、名片、開會話）。
  * 更多細節、標籤、移出工作台都在右鍵選單（或標題列「⋯」）裡，需要才跳視窗。
+ * 三頁都掛著、只切換顯示：變更頁不在畫面上也照樣讀，頁籤上的數字與「未提交」才是現場的。
  */
-export function RepoPanel({ id }: { id: string }) {
+export function RepoPanel({
+  id,
+  tab,
+  onTab,
+}: {
+  id: string;
+  tab: PanelTab;
+  onTab: (t: PanelTab) => void;
+}) {
   const store = useStore();
   const ui = useUi();
   const { lastStates, state, stateReady } = useSnapshot();
@@ -75,56 +91,93 @@ export function RepoPanel({ id }: { id: string }) {
           ×
         </button>
       </div>
-      {s ? (
-        <dl className="panelfacts">
-          <Fact label="分支" value={s.branch || "—"} />
-          <Fact
-            label="未提交"
-            value={(dirty ? dirty + " 檔" : "乾淨") + (liveDirty == null ? "（上次掃描）" : "")}
-            warn={dirty > 0}
-          />
-          <Fact
-            label="未推送／落後"
-            value={(s.ahead ?? "—") + " ／ " + (s.behind ?? "—")}
-            warn={!!s.ahead || !!s.behind}
-          />
-          <Fact
-            label="最近 commit"
-            value={
-              (s.last_subject || "—") +
-              (days == null ? "" : days < 1 ? "（今天）" : "（" + Math.round(days) + " 天前）")
-            }
-          />
-          {s.agents?.length ? <Fact label="Agent" value={s.agents.join("、")} /> : null}
-          {s.note ? <Fact label="注意" value={s.note} warn /> : null}
-        </dl>
-      ) : (
-        <p className="muted small panelnote">
-          還沒採集到這個 repo 的狀態（切到包含它的牌組會更新）。
-        </p>
-      )}
-      <div className="panelactions">
-        <button
-          type="button"
-          className="small"
-          disabled={!s?.path}
-          title={s?.path}
-          onClick={() => void copyPath()}
-        >
-          複製路徑
-        </button>
-        <button
-          type="button"
-          className="small primary"
-          onClick={() => ui.openSession({ repo: id, repos: [id], origin: "repo:" + id })}
-        >
-          開啟 Agent 會話
-        </button>
+      <div className="paneltabs" role="tablist" aria-label={id + " 的側欄頁籤"}>
+        {TABS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            id={"paneltab-" + key}
+            aria-selected={tab === key}
+            aria-controls={"panelpage-" + key}
+            className={"ghost small" + (tab === key ? " on" : "")}
+            onClick={() => onTab(key)}
+          >
+            {label}
+            {key === "changes" && liveDirty ? " " + liveDirty : ""}
+          </button>
+        ))}
       </div>
-      <RepoChanges id={id} onCount={onCount} />
-      <RepoProfileCard id={id} />
-      <div className="panelsection">
+      <div
+        role="tabpanel"
+        id="panelpage-files"
+        aria-labelledby="paneltab-files"
+        className="panelsection"
+        hidden={tab !== "files"}
+      >
         <RepoRoot key={id} id={id} bare />
+      </div>
+      <div
+        role="tabpanel"
+        id="panelpage-changes"
+        aria-labelledby="paneltab-changes"
+        hidden={tab !== "changes"}
+      >
+        <RepoChanges id={id} onCount={onCount} />
+      </div>
+      <div
+        role="tabpanel"
+        id="panelpage-info"
+        aria-labelledby="paneltab-info"
+        hidden={tab !== "info"}
+      >
+        {s ? (
+          <dl className="panelfacts">
+            <Fact label="分支" value={s.branch || "—"} />
+            <Fact
+              label="未提交"
+              value={(dirty ? dirty + " 檔" : "乾淨") + (liveDirty == null ? "（上次掃描）" : "")}
+              warn={dirty > 0}
+            />
+            <Fact
+              label="未推送／落後"
+              value={(s.ahead ?? "—") + " ／ " + (s.behind ?? "—")}
+              warn={!!s.ahead || !!s.behind}
+            />
+            <Fact
+              label="最近 commit"
+              value={
+                (s.last_subject || "—") +
+                (days == null ? "" : days < 1 ? "（今天）" : "（" + Math.round(days) + " 天前）")
+              }
+            />
+            {s.agents?.length ? <Fact label="Agent" value={s.agents.join("、")} /> : null}
+            {s.note ? <Fact label="注意" value={s.note} warn /> : null}
+          </dl>
+        ) : (
+          <p className="muted small panelnote">
+            還沒採集到這個 repo 的狀態（切到包含它的牌組會更新）。
+          </p>
+        )}
+        <div className="panelactions">
+          <button
+            type="button"
+            className="small"
+            disabled={!s?.path}
+            title={s?.path}
+            onClick={() => void copyPath()}
+          >
+            複製路徑
+          </button>
+          <button
+            type="button"
+            className="small primary"
+            onClick={() => ui.openSession({ repo: id, repos: [id], origin: "repo:" + id })}
+          >
+            開啟 Agent 會話
+          </button>
+        </div>
+        <RepoProfileCard id={id} />
       </div>
     </aside>
   );

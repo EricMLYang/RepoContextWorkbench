@@ -825,6 +825,8 @@ describe("repo 右側欄與右鍵選單", () => {
     });
     await mountGroup(backend);
     await act(async () => fireEvent.click(repoButton()));
+    // 側欄分頁（UX-07）：名片在「資訊」
+    await act(async () => fireEvent.click(screen.getByRole("tab", { name: "資訊" })));
     const card = within(document.getElementById("repopanel")!).getByRole("region", {
       name: "a 的名片",
     });
@@ -888,6 +890,8 @@ describe("repo 右側欄與右鍵選單", () => {
     });
     await mountGroup(backend);
     await act(async () => fireEvent.click(repoButton()));
+    await act(async () => fireEvent.click(screen.getByRole("tab", { name: /變更/ })));
+    expect(screen.getByRole("tab", { name: /變更/ }).getAttribute("aria-selected")).toBe("true");
     const sec = within(document.getElementById("repopanel")!).getByRole("region", {
       name: "a 還沒 commit 的變更",
     });
@@ -1386,6 +1390,8 @@ describe("會話放進所屬牌組", () => {
       ),
     );
     expect(document.getElementById("repopanel")!.getAttribute("aria-label")).toBe("Repo：a");
+    // 直接切到「變更」頁籤
+    expect(screen.getByRole("tab", { name: /變更/ }).getAttribute("aria-selected")).toBe("true");
   });
 
   it("agent 會話的終端標題能切到同目錄的 Terminal 再切回來；Terminal 不另列在會話列", async () => {

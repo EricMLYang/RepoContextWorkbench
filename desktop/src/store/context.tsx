@@ -25,6 +25,9 @@ export interface DetailSpec {
   content: ReactNode;
 }
 
+/** 右側欄的頁籤（UX-07）：一次只看一種。 */
+export type PanelTab = "files" | "changes" | "info";
+
 /**
  * 跨元件的畫面操作（開對話框、開會話、切分頁、選終端…）。
  * 整個 App 生命週期裡同一個物件，不會變——只用操作的元件不會因為畫面狀態變動而重畫。
@@ -38,8 +41,8 @@ export interface Ui {
   openOnboarding(): void;
   /** 點 repo：在右側欄打開（同一個再點＝收起）。 */
   openRepo(id: string): void;
-  /** 在右側欄打開這個 repo（已開著就不動；不像 openRepo 會收起）。 */
-  showRepo(id: string): void;
+  /** 在右側欄打開這個 repo（已開著就不動；不像 openRepo 會收起）；給 tab 就切到那一頁。 */
+  showRepo(id: string, tab?: PanelTab): void;
   closeRepo(): void;
   /** ⌘K：找 repo 或牌組。 */
   openPalette(): void;

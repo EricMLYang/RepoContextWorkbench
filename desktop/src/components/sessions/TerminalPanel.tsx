@@ -413,7 +413,7 @@ export function TerminalPanel(props: {
             type="button"
             className="ghost small"
             title={"在右側欄看 " + where.repo + " 還沒 commit 的變更（agent 改了什麼）"}
-            onClick={() => where.repo && ui.showRepo(where.repo)}
+            onClick={() => where.repo && ui.showRepo(where.repo, "changes")}
           >
             查看變更
           </button>

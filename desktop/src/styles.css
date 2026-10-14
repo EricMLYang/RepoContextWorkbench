@@ -1716,6 +1716,21 @@ dialog::backdrop {
   gap: 6px;
   flex-wrap: wrap;
 }
+/* 右側欄頁籤（檔案／變更／資訊） */
+.paneltabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+.paneltabs button {
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+}
+.paneltabs button.on {
+  border-bottom-color: var(--blue);
+  color: var(--ink);
+}
 .panelsection {
   border-top: 1px solid var(--line);
   padding-top: 10px;
