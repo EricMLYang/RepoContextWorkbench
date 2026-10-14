@@ -178,7 +178,7 @@ export function actionLabel(a: CardAction): string {
       {
         route_pick: "選擇儲存位置",
         ignore: "忽略並記錄",
-        collide_prefill: "分析這個問題",
+        collide_prefill: "請 Agent 分析這個問題…",
         close_loop: "完成跟進",
         collide_rerun: "重新分析",
       } as Record<string, string>

@@ -42,7 +42,7 @@ describe("按鈕文案與主次", () => {
 
   it("引擎沒標 primary 就沒有主要動作（前端不自己挑）", () => {
     expect(primaryAction(loopCard)!.action).toBe("collide_prefill");
-    expect(actionLabel(primaryAction(loopCard)!)).toBe("分析這個問題");
+    expect(actionLabel(primaryAction(loopCard)!)).toBe("請 Agent 分析這個問題…");
     const bare = {
       ...loopCard,
       actions: loopCard.actions.map((a) => ({ ...a, primary: undefined })),
