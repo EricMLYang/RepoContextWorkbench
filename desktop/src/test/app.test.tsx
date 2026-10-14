@@ -1136,6 +1136,20 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
       to: "GUIDE.md",
     });
     await screen.findByRole("treeitem", { name: "GUIDE.md" });
+    // Esc 取消後就算再失焦也不送出
+    await act(async () =>
+      fireEvent.keyDown(screen.getByRole("treeitem", { name: "GUIDE.md" }), { key: "F2" }),
+    );
+    const again = screen.getByRole("textbox", { name: "新名稱：GUIDE.md" });
+    fireEvent.change(again, { target: { value: "NOPE.md" } });
+    await act(async () => {
+      fireEvent.keyDown(again, { key: "Escape" });
+      fireEvent.blur(again);
+    });
+    expect(backend.action).not.toHaveBeenCalledWith(
+      "rename_entry",
+      expect.objectContaining({ to: "NOPE.md" }),
+    );
     // 開著的分頁換成新路徑（分頁名也換）
     expect(screen.getByRole("button", { name: "關閉 GUIDE.md" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "關閉 README.md" })).toBeNull();

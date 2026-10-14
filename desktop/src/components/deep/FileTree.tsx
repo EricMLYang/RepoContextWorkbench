@@ -104,7 +104,10 @@ function RenameInput(props: {
   const [value, setValue] = useState(name);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // 按了 Esc：之後的失焦（有些 WebView 拿掉輸入框時會補一個 blur）不能再送出
+  const cancelled = useRef(false);
   const submit = async () => {
+    if (cancelled.current) return;
     const v = value.trim();
     if (busy) return;
     if (!v || v === name) return onCancel();
@@ -143,6 +146,7 @@ function RenameInput(props: {
             void submit();
           } else if (e.key === "Escape") {
             e.preventDefault();
+            cancelled.current = true;
             onCancel();
           }
         }}
