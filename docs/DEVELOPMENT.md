@@ -97,6 +97,7 @@ desktop/src（React，只管畫面）── IPC ┘
   （workspace／editor／code／assist／assist-empty）。`cd desktop && npm run preview:screens`，再用 headless 瀏覽器
   （獨立的 `--user-data-dir`、`--headless=new`，不開視窗、不碰使用者的瀏覽器）截圖：
   `"…/Google Chrome" --headless=new --user-data-dir=<暫存> --window-size=1440,900 --virtual-time-budget=5000 --screenshot=<png> "http://localhost:5199/dev/preview.html?scene=editor"`。
+  一次截全部場景：`bash scripts/preview-shots.sh [輸出目錄] [寬,高] [場景…]`（自己起、關 dev server）。
   看得到排版與上色，看不到 Tauri 才有的東西（終端、檔案監看、原生對話框），那些仍要真 App 實測。
   滑鼠事件送 pid 不生效（視窗不是 key window），點擊流程要人來點。
 
