@@ -70,8 +70,9 @@ function itemsOf(r: PaletteResult | null, sessions: Item[], commands: Item[]): I
   return [
     ...commands,
     ...sessions,
-    ...r.groups.map((group) => ({ kind: "group" as const, key: "g:" + group.name, group })),
-    ...r.repos.map((hit) => ({ kind: "repo" as const, key: "r:" + hit.repo, hit })),
+    // 引擎回的缺欄位（舊版殼、錯誤回應）就當沒有，不讓整個面板炸掉
+    ...(r.groups || []).map((group) => ({ kind: "group" as const, key: "g:" + group.name, group })),
+    ...(r.repos || []).map((hit) => ({ kind: "repo" as const, key: "r:" + hit.repo, hit })),
     ...(r.files || []).map((file) => ({
       kind: "file" as const,
       key: "f:" + file.repo + ":" + file.path,

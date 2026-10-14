@@ -961,6 +961,7 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
               { name: "main.rs", path: "src/main.rs", abs: "/r/a/src/main.rs", dir: false },
             ],
           };
+        if (name === "palette") return { ok: true, query: "", repos: [], groups: [], files: [] };
         if (name === "read_file") {
           const text = files[p.path!];
           if (text == null) throw new Error("檔案不存在：" + p.path);
@@ -2189,6 +2190,22 @@ describe("⌘K 找 repo／牌組", () => {
     expect(
       vi.mocked(backend.action).mock.calls.filter((c) => c[0] === "assist_recent"),
     ).toHaveLength(1);
+  });
+
+  it("引擎回的結果缺欄位（舊版殼、錯誤回應）：面板不炸，指令照樣能用", async () => {
+    const backend = mockBackend({
+      action: vi.fn(async (name: string) => {
+        if (name === "palette") return { ok: true };
+        return { ok: true };
+      }) as never,
+    });
+    await mount(backend);
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    await waitFor(() => expect(backend.action).toHaveBeenCalledWith("palette", { query: "" }));
+    await act(async () => {});
+    expect(box()).toBeTruthy();
+    fireEvent.change(box(), { target: { value: ">活動" } });
+    expect(opts().some((o) => o.textContent?.includes("活動"))).toBe(true);
   });
 
   it("一般搜尋也列「請助手」但放最後，不搶 Enter", async () => {
