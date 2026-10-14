@@ -6,7 +6,7 @@ import { useStore, useUi } from "../../store/context";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 import { Editor, taskIndex, type EditLayout } from "./Editor";
-import { linkForDrop, slug, toggleTask } from "../../lib/mdedit";
+import { linkForDrop, relPath, slug, toggleTask } from "../../lib/mdedit";
 import { clearMatches, findRanges, showMatches } from "../../lib/findText";
 
 export interface OpenFile {
@@ -810,6 +810,36 @@ export function FileViewer({
                         if (typeof f.repo !== "string" || typeof f.path !== "string") return null;
                         return linkForDrop(repo, path, { repo: f.repo, path: f.path });
                       } catch {
+                        return null;
+                      }
+                    }
+                  : undefined
+              }
+              onPasteImage={
+                md
+                  ? async (mime, b64) => {
+                      // 存到這份 md 旁邊的 assets/，檔名＝md 主檔名＋時間
+                      const ext = mime.split("/")[1]?.replace("jpeg", "jpg") || "png";
+                      const dir = parentDir(path.replace(/\\/g, "/"));
+                      const stem = (crumbs[crumbs.length - 1] || "image").replace(/\.[^.]+$/, "");
+                      const stamp = new Date()
+                        .toISOString()
+                        .replace(/[-:]/g, "")
+                        .replace("T", "-")
+                        .slice(0, 15);
+                      const target =
+                        (dir ? dir + "/" : "") + "assets/" + stem + "-" + stamp + "." + ext;
+                      try {
+                        const r = await store.action("save_image", {
+                          id: repo,
+                          path: target,
+                          base64: b64,
+                        });
+                        store.toast("圖片存到 " + r.path);
+                        const name = r.path.replace(/\\/g, "/").split("/").pop() || "image";
+                        return "![" + name + "](" + relPath(path, r.path) + ")";
+                      } catch (e) {
+                        store.toast("圖片存不了：" + (e as Error).message);
                         return null;
                       }
                     }

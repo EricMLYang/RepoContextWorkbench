@@ -614,6 +614,11 @@ export interface ActionMap {
     payload: { text: string; group?: string; done: string[]; skipped: string[]; failed?: string };
     result: { ok: true };
   };
+  /** Rust 才有（F-64）：md 編輯區貼上的圖片存成新檔（png／jpg／gif／webp／bmp，≤ 8MB，不覆蓋）。 */
+  save_image: {
+    payload: { id: string; path: string; base64: string };
+    result: { ok: true; id: string; path: string; abs: string };
+  };
   /** Rust 才有（F-66）：改名或搬移（不覆蓋、不刪）。path 回新的相對路徑。 */
   rename_entry: {
     payload: { id: string; from: string; to: string };

@@ -69,6 +69,8 @@ export function Editor(props: {
   onToggleTask?: (i: number) => void;
   /** 從檔案樹拖檔進來：拖曳資料 → 要插入的字（null＝不收）。 */
   onDropFile?: (raw: string) => string | null;
+  /** 貼上圖片（截圖）：存起來、回要插入的 md（失敗回 null，呼叫端自己說原因）。 */
+  onPasteImage?: (mime: string, base64: string) => Promise<string | null>;
 }) {
   const {
     label,
@@ -81,6 +83,7 @@ export function Editor(props: {
     preview,
     onToggleTask,
     onDropFile,
+    onPasteImage,
   } = props;
   const ref = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -202,6 +205,22 @@ export function Editor(props: {
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           onScroll={syncScroll}
+          onPaste={(e) => {
+            if (!onPasteImage || readOnly) return;
+            const file = [...e.clipboardData.items]
+              .find((it) => it.kind === "file" && it.type.startsWith("image/"))
+              ?.getAsFile();
+            if (!file) return;
+            e.preventDefault();
+            const reader = new FileReader();
+            reader.onload = () => {
+              const b64 = String(reader.result).split(",")[1] ?? "";
+              void onPasteImage(file.type, b64).then((md) => {
+                if (md) run((t, a, b) => insert(t, a, b, md));
+              });
+            };
+            reader.readAsDataURL(file);
+          }}
           onDragOver={(e) => {
             if (onDropFile && e.dataTransfer.types.includes(FILE_DRAG_TYPE)) {
               e.preventDefault();

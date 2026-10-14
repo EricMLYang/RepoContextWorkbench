@@ -1015,6 +1015,8 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
           disk[p.path!] = "";
           return { ok: true, id: "a", path: p.path, abs: "/r/a/" + p.path, dir: false };
         }
+        if (name === "save_image")
+          return { ok: true, id: "a", path: p.path, abs: "/r/a/" + p.path };
         if (name === "read_file")
           return {
             ok: true,
@@ -1056,6 +1058,22 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     box.setSelectionRange(2, 4);
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "粗體（⌘B）" })));
     expect(box.value.startsWith("# **標題**")).toBe(true);
+    // 貼上截圖：存到旁邊的 assets/、插入圖片連結
+    const png = new File([new Uint8Array([137, 80, 78, 71])], "x.png", { type: "image/png" });
+    box.setSelectionRange(box.value.length, box.value.length);
+    await act(async () =>
+      fireEvent.paste(box, {
+        clipboardData: { items: [{ kind: "file", type: "image/png", getAsFile: () => png }] },
+      }),
+    );
+    await waitFor(() =>
+      expect(backend.action).toHaveBeenCalledWith("save_image", {
+        id: "a",
+        path: expect.stringMatching(/^assets\/notes-\d{8}-\d{6}\.png$/),
+        base64: "iVBORw==",
+      }),
+    );
+    await waitFor(() => expect(box.value).toMatch(/!\[notes-\d{8}-\d{6}\.png\]\(assets\/notes-/));
   });
 
   it("F2 改名：rename_entry、開著的分頁跟著換路徑", async () => {

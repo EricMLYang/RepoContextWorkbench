@@ -110,6 +110,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("write_file", a_write_file),
     ("create_entry", a_create_entry),
     ("rename_entry", a_rename_entry),
+    ("save_image", a_save_image),
     ("assist_plan", a_assist_plan),
     ("assist_log", a_assist_log),
     ("ack_scope", a_ack_scope),
@@ -889,6 +890,26 @@ fn a_rename_entry(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> 
         .into_owned();
     Ok(json!({"ok": true, "id": id, "from": from, "path": rel,
               "abs": abs.to_string_lossy(), "dir": dir}))
+}
+
+/// Rust 才有（F-64）：md 編輯區貼上圖片存成新檔（見 [`crate::filetree::save_image`]）；不覆蓋、不記 spine 事件。
+#[derive(serde::Deserialize)]
+struct SaveImageArgs {
+    id: String,
+    path: String,
+    base64: String,
+}
+
+fn a_save_image(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let SaveImageArgs { id, path, base64 } = parse("save_image", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let abs = crate::filetree::save_image(&root, &path, &base64)?;
+    let rel = abs
+        .strip_prefix(&root)
+        .unwrap_or(&abs)
+        .to_string_lossy()
+        .into_owned();
+    Ok(json!({"ok": true, "id": id, "path": rel, "abs": abs.to_string_lossy()}))
 }
 
 fn notes_json(d: &Path, group: &str, notes: &[crate::notes::Note]) -> Value {

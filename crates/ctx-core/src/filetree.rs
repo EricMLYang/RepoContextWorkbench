@@ -412,6 +412,64 @@ pub fn create_entry(root: &Path, rel: &str, kind: NewEntry) -> Result<PathBuf> {
     Ok(abs)
 }
 
+/// 存一張新圖片（2026-10-15，F-64：md 編輯區貼上截圖）。`rel` 要是圖片副檔名（svg 不收：可以帶腳本）、
+/// 內容不超過 [`IMAGE_MAX`]；路徑規則同 [`create_entry`]（不覆蓋、上層一路建）。回 `root/rel`。
+pub fn save_image(root: &Path, rel: &str, b64: &str) -> Result<PathBuf> {
+    let mime = image_mime(Path::new(rel));
+    if mime.is_none() || mime == Some("image/svg+xml") {
+        return Err(Error::invalid(format!(
+            "只收 png／jpg／gif／webp／bmp 圖片：{rel}"
+        )));
+    }
+    let bytes = unbase64(b64).ok_or_else(|| Error::invalid("圖片資料壞了（不是 base64）"))?;
+    if bytes.is_empty() || bytes.len() as u64 > IMAGE_MAX {
+        return Err(Error::invalid("圖片是空的或超過 8 MB"));
+    }
+    let (target, abs) = new_target(root, rel)?;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)?;
+    f.write_all(&bytes)?;
+    Ok(abs)
+}
+
+/// [`base64`] 的反向（忽略空白；壞字元回 None）。
+fn unbase64(s: &str) -> Option<Vec<u8>> {
+    let val = |c: u8| -> Option<u32> {
+        Some(match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return None,
+        } as u32)
+    };
+    let clean: Vec<u8> = s.bytes().filter(|c| !c.is_ascii_whitespace()).collect();
+    let body = clean
+        .strip_suffix(b"==")
+        .or_else(|| clean.strip_suffix(b"="))
+        .unwrap_or(&clean);
+    let mut out = Vec::with_capacity(body.len() * 3 / 4);
+    for chunk in body.chunks(4) {
+        let mut n = 0u32;
+        for (i, c) in chunk.iter().enumerate() {
+            n |= val(*c)? << (18 - 6 * i);
+        }
+        let take = match chunk.len() {
+            4 => 3,
+            3 => 2,
+            2 => 1,
+            _ => return None,
+        };
+        for i in 0..take {
+            out.push((n >> (16 - 8 * i)) as u8);
+        }
+    }
+    Some(out)
+}
+
 /// 改名或搬移（2026-10-15，F-66）：`from` 是 repo 裡已存在的檔或資料夾（符號連結改的是連結本身），
 /// `to` 照 [`create_entry`] 的規則（不覆蓋、上層一路建、不碰 .git）。回 (`root/to`, 是不是資料夾)。
 pub fn rename_entry(root: &Path, from: &str, to: &str) -> Result<(PathBuf, bool)> {
@@ -926,6 +984,33 @@ mod tests {
         assert!(create_entry(&r, ".git/hooks/x", NewEntry::File).is_err());
         assert!(create_entry(&r, "", NewEntry::Dir).is_err());
         assert!(!t.path().join("out.md").exists());
+    }
+
+    #[test]
+    fn save_image_roundtrips_and_guards() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path().join("repo");
+        std::fs::create_dir_all(&r).unwrap();
+        for raw in [
+            &b""[..],
+            b"a",
+            b"ab",
+            b"abc",
+            &[0x89, b'P', b'N', b'G', 0, 255],
+        ] {
+            assert_eq!(unbase64(&base64(raw)).unwrap(), raw);
+        }
+        let png = [0x89u8, b'P', b'N', b'G', 1, 2, 3];
+        let abs = save_image(&r, "assets/shot.png", &base64(&png)).unwrap();
+        assert_eq!(std::fs::read(&abs).unwrap(), png);
+        assert!(
+            save_image(&r, "assets/shot.png", &base64(&png)).is_err(),
+            "不覆蓋"
+        );
+        assert!(save_image(&r, "x.svg", &base64(b"<svg/>")).is_err());
+        assert!(save_image(&r, "x.txt", &base64(b"hi")).is_err());
+        assert!(save_image(&r, "y.png", "不是base64!").is_err());
+        assert!(save_image(&r, "../y.png", &base64(&png)).is_err());
     }
 
     #[test]
