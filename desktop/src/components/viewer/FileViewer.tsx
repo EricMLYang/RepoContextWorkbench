@@ -557,6 +557,8 @@ export function FileViewer({
   const [draft, setDraft] = useState<string | null>(null);
   const [editBase, setEditBase] = useState("");
   const [saving, setSaving] = useState(false);
+  // 上次存好的時間（編輯區下緣顯示；自動儲存不跳提示，靠這個知道存了沒）
+  const [savedAt, setSavedAt] = useState("");
   // HackMD 式：md 預設左寫右看；自動儲存（停手 1.5 秒存一次，衝突就停下來讓人選）
   const [layout, setLayoutState] = useState<EditLayout>(() =>
     loadPref<EditLayout>("editLayout", "split"),
@@ -704,6 +706,7 @@ export function FileViewer({
       setDiskChanged(false);
       setArmDiscard(false);
       if (!quiet) store.toast("已儲存 " + path);
+      setSavedAt(new Date().toTimeString().slice(0, 8));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1145,6 +1148,7 @@ export function FileViewer({
               preview={(text) => <Markdown text={text} hooks={hooks} />}
               jump={jump}
               handle={editorHandle}
+              status={saving ? "儲存中…" : dirty ? "未儲存" : savedAt ? "已儲存 " + savedAt : ""}
               onDropFile={
                 md
                   ? (raw) => {

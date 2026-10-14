@@ -98,6 +98,8 @@ export function Editor(props: {
   jump?: { line: number; pos: number; seq: number };
   /** 外面要用的操作（尋找取代）。 */
   handle?: Ref<EditorHandle>;
+  /** 存檔狀態（下緣顯示，例「已儲存 04:43:10」）。 */
+  status?: string;
 }) {
   const {
     label,
@@ -113,6 +115,7 @@ export function Editor(props: {
     onPasteImage,
     jump,
     handle,
+    status,
   } = props;
   const ref = useRef<HTMLTextAreaElement>(null);
   // 預覽慢一拍沒關係，打字不能卡：大份 md 每個字都重畫預覽會拖慢輸入
@@ -327,7 +330,7 @@ export function Editor(props: {
         ) : null}
       </div>
       <div className="editorstats small muted" aria-live="off">
-        {stats.chars} 字 · {stats.lines} 行
+        {stats.chars} 字 · {stats.lines} 行{status ? " · " + status : ""}
       </div>
     </div>
   );

@@ -1719,6 +1719,15 @@ describe("檔案簡單編輯", () => {
     return screen.getByRole("textbox", { name: "編輯 a.md" }) as HTMLTextAreaElement;
   }
 
+  it("編輯區下緣顯示存檔狀態：未儲存 → 已儲存 時間", async () => {
+    const { backend } = editBackend();
+    const box = await openEditor(backend);
+    await act(async () => fireEvent.change(box, { target: { value: "改了\n" } }));
+    expect(document.querySelector(".editorstats")!.textContent).toContain("未儲存");
+    await act(async () => fireEvent.keyDown(box, { key: "s", metaKey: true }));
+    expect(document.querySelector(".editorstats")!.textContent).toMatch(/已儲存 \d\d:\d\d:\d\d/);
+  });
+
   it("存檔的回音比回應先到、還在繼續打字：不誤報「磁碟上的檔被改了」", async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
