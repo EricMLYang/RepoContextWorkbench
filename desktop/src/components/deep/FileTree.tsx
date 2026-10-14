@@ -457,7 +457,7 @@ export function RepoRoot(props: {
       ? { label: open.has(e.path) ? "收合" : "展開", run: () => toggle(e.path) }
       : { label: "開啟", run: () => ui.openFile(id, e.path) },
     {
-      label: isPicked(e) ? "移出挑選" : "加入挑選（交給 Agent）",
+      label: isPicked(e) ? "移出脈絡" : "加入脈絡（交給 Agent）",
       hint: "⌘＋點",
       run: () => ui.togglePick(pickOf(e)),
     },
@@ -521,7 +521,7 @@ export function RepoRoot(props: {
             aria-level={r.depth + 1}
             aria-expanded={e.dir ? isOpen : undefined}
             aria-selected={!e.dir && e.path === active}
-            aria-label={picked ? e.name + "（已挑）" : e.name}
+            aria-label={picked ? e.name + "（已加入脈絡）" : e.name}
             data-path={e.path}
             tabIndex={e.path === tabStop ? 0 : -1}
             className={

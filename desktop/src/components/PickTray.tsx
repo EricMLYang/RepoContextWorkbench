@@ -75,7 +75,7 @@ export function PickTray() {
           aria-expanded={open}
           onClick={() => setOpen((o) => !o)}
         >
-          已挑 {picks.length} 個檔案 {open ? "▾" : "▸"}
+          脈絡 {picks.length} 個檔案 {open ? "▾" : "▸"}
         </button>
         <span className="spacer" />
         <button type="button" className="small" disabled={busy} onClick={() => void copyMentions()}>
@@ -89,7 +89,7 @@ export function PickTray() {
             title={"貼進「" + session.title + "」的輸入列，不會送出"}
             onClick={() => void pasteMentions()}
           >
-            貼到目前會話
+            貼到目前會話（不送出）
           </button>
         ) : null}
         <button

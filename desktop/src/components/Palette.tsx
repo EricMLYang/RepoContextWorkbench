@@ -241,7 +241,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
       const f = item.file;
       if (session) {
         ui.togglePick({ repo: f.repo, path: f.path, name: f.name });
-        store.toast("已加入挑選：" + f.repo + " / " + f.path);
+        store.toast("已加入脈絡：" + f.repo + " / " + f.path);
       } else ui.openFile(f.repo, f.path);
     } else if (session) {
       const id = item.hit.repo;
@@ -353,7 +353,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
         <p className="palettehint small muted">
           <span>↑↓ 選擇</span>
           <span>Enter 切到會話／開 repo 側欄／切牌組／開檔</span>
-          <span>⌘/Ctrl + Enter 開 Agent 會話／檔案加入挑選</span>
+          <span>⌘/Ctrl + Enter 開 Agent 會話／檔案加入脈絡</span>
           <span>「&gt;」只看指令</span>
           <span>「?」請助手（例：切到 PM Group、VMS 加標籤 規格）</span>
           <span>Esc 關閉</span>

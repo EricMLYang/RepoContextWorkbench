@@ -578,9 +578,11 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     await act(async () => fireEvent.click(readmes[1], { ctrlKey: true }));
     // 挑不會開檔
     expect(backend.action).not.toHaveBeenCalledWith("read_file", expect.anything());
-    expect(within(pane).getAllByRole("treeitem", { name: "README.md（已挑）" })).toHaveLength(2);
+    expect(within(pane).getAllByRole("treeitem", { name: "README.md（已加入脈絡）" })).toHaveLength(
+      2,
+    );
     const tray = document.getElementById("picktray")!;
-    expect(tray.textContent).toContain("已挑 2 個檔案");
+    expect(tray.textContent).toContain("脈絡 2 個檔案");
 
     await act(async () =>
       fireEvent.click(within(tray).getByRole("button", { name: "交給新會話…" })),
@@ -602,10 +604,14 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     expect(JSON.parse(localStorage.getItem("workbench:picks")!)).toHaveLength(2);
 
     // 右鍵移出挑選；清單展開可個別移除
-    fireEvent.contextMenu(within(pane).getAllByRole("treeitem", { name: "README.md（已挑）" })[0]);
-    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: /移出挑選/ })));
-    expect(tray.textContent).toContain("已挑 1 個檔案");
-    await act(async () => fireEvent.click(within(tray).getByRole("button", { name: /已挑/ })));
+    fireEvent.contextMenu(
+      within(pane).getAllByRole("treeitem", { name: "README.md（已加入脈絡）" })[0],
+    );
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: /移出脈絡/ })));
+    expect(tray.textContent).toContain("脈絡 1 個檔案");
+    await act(async () =>
+      fireEvent.click(within(tray).getByRole("button", { name: /脈絡 \d 個檔案/ })),
+    );
     await act(async () =>
       fireEvent.click(within(tray).getByRole("button", { name: "不挑 b 的 README.md" })),
     );
@@ -1430,7 +1436,7 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     expect(
       within(viewer()).getByRole("button", { name: "已加入脈絡 ✓" }).getAttribute("aria-pressed"),
     ).toBe("true");
-    expect(document.getElementById("picktray")!.textContent).toContain("已挑 1 個檔案");
+    expect(document.getElementById("picktray")!.textContent).toContain("脈絡 1 個檔案");
     expect(JSON.parse(localStorage.getItem("workbench:picks")!)).toEqual([
       { repo: "a", path: "README.md", name: "README.md" },
     ]);
@@ -1953,8 +1959,8 @@ describe("會話放進所屬牌組", () => {
     cleanup();
     await mount(backend);
     const tray = document.getElementById("picktray")!;
-    expect(tray.textContent).toContain("已挑 1 個檔案");
-    expect(within(tray).queryByRole("button", { name: "貼到目前會話" })).toBeNull();
+    expect(tray.textContent).toContain("脈絡 1 個檔案");
+    expect(within(tray).queryByRole("button", { name: "貼到目前會話（不送出）" })).toBeNull();
 
     const card = document.querySelector('.gcard[data-key="產品開發"]')!;
     await act(async () =>
@@ -1962,7 +1968,7 @@ describe("會話放進所屬牌組", () => {
     );
     await waitFor(() => expect(backend.openTerminal).toHaveBeenCalledWith("t1"));
     await act(async () =>
-      fireEvent.click(within(tray).getByRole("button", { name: "貼到目前會話" })),
+      fireEvent.click(within(tray).getByRole("button", { name: "貼到目前會話（不送出）" })),
     );
     await waitFor(() => expect(writes.join("")).toBe("@/r/a/README.md @/r/a/docs/x.md "));
     expect(within(tray).queryByRole("alert")).toBeNull();
@@ -2459,7 +2465,7 @@ describe("⌘K 找 repo／牌組", () => {
     for (let i = 0; i < fileIdx; i++) fireEvent.keyDown(box(), { key: "ArrowDown" });
     await act(async () => fireEvent.keyDown(box(), { key: "Enter", metaKey: true }));
     expect(noBox()).toBeNull();
-    expect(document.getElementById("picktray")!.textContent).toContain("已挑 1 個檔案");
+    expect(document.getElementById("picktray")!.textContent).toContain("脈絡 1 個檔案");
 
     await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
     fireEvent.change(box(), { target: { value: "plan" } });
