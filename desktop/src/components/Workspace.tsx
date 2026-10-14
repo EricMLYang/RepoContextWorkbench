@@ -217,6 +217,23 @@ export function Workspace(props: {
         >
           存成今日簡報
         </AsyncButton>
+        {scope.group || Array.isArray(scope.repos) ? (
+          <AsyncButton
+            id="ackscopebtn"
+            className="ghost small"
+            hidden={tab !== "inbox"}
+            title="只把這個範圍的未讀標為已讀；待跟進、要你判斷的照舊，別組不受影響"
+            disabled={!stateReady || !counts.unread}
+            onError={(m) => store.toast(m)}
+            run={async () => {
+              await store.action("ack_scope", store.scopePayload);
+              await store.refreshState();
+              store.toast("「" + scopeLabel(scope) + "」的未讀已標為已讀");
+            }}
+          >
+            這組標為已讀
+          </AsyncButton>
+        ) : null}
         <button
           type="button"
           id="ackbtn"

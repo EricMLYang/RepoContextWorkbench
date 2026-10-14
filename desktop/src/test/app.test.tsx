@@ -6,7 +6,7 @@ import { WorkbenchStore } from "../store/store";
 import type { Backend } from "../api";
 import type { StateCard } from "../api/types";
 import { FILE_DRAG_TYPE } from "../lib/view";
-import { makeScan, makeState, mockBackend } from "./fixtures";
+import { interruptCard, makeScan, makeState, mockBackend } from "./fixtures";
 
 async function mount(backend = mockBackend()) {
   const store = new WorkbenchStore(backend, { group: null, repos: null });
@@ -2130,5 +2130,27 @@ describe("⌘K 找 repo／牌組", () => {
     await act(async () => fireEvent.keyDown(ta, { key: "k", metaKey: true }));
     expect(box()).toBeTruthy();
     term.remove();
+  });
+});
+
+describe("這組標為已讀（N-37）", () => {
+  it("牌組範圍才出現；只送目前範圍；沒有未讀時停用", async () => {
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({
+          cards: [{ ...interruptCard, key: "e1", kind: "event", lane: "scope" }] as never,
+        }),
+      ),
+    });
+    const store = new WorkbenchStore(backend, { group: "產品開發", repos: null });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    const btn = screen.getByRole("button", { name: "這組標為已讀" }) as HTMLButtonElement;
+    expect(document.getElementById("worksummary")!.textContent).toContain("未讀 1");
+    expect(btn.disabled).toBe(false);
+    await act(async () => fireEvent.click(btn));
+    expect(backend.action).toHaveBeenCalledWith("ack_scope", { group: "產品開發" });
   });
 });

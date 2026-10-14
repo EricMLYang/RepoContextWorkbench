@@ -95,6 +95,7 @@ Rust 端簽名建議：
 | `read_file`（Rust 才有） | `{id, path}` | `path`, `abs`, `size`, `kind: "text"\|"image"\|"binary"\|"too_large"`（text 帶 `text`、`truncated`、`editable`（沒截斷且是合法 UTF-8）、`version`（內容版本，存檔時帶回）；image 帶 `mime`、`base64`） |
 | `write_file`（Rust 才有） | `{id, path, text, base}`（`base`＝讀檔時的 `version`） | 寫成功：同 `read_file` 的結果（新 `version`）；讀檔之後磁碟上已被改過：`{ok: false, conflict: true, id, path}`（沒有寫）。只改既有的 UTF-8 文字檔（≤1MB、不新增不刪除），先寫暫存檔再改名，保留原檔 CRLF／BOM；不記 spine 事件 |
 | `create_entry`（Rust 才有） | `{id, path, kind: "file"\|"dir"}` | `path`（相對 repo 根目錄）, `abs`, `dir`。新增空檔或資料夾：已存在就拒絕（不覆蓋），上層沒有就一路建（最近一個已存在的上層要在 repo 裡），不准碰 `.git`；不記 spine 事件 |
+| `ack_scope`（Rust 才有） | `{group?, repos?}`（目前範圍；全部範圍會被拒，那是 `ack`） | `at`。只把這個範圍的一般未讀（event 卡）標為已讀，記在 `.state/seen_scopes.json`；全域 `last_seen.txt` 不動，別組照舊；打斷、待跟進、回顧不受影響 |
 | `assist_plan`（Rust 才有，唯讀） | `{text, group?, repos?}`（目前範圍） | `text`, `summary`, `source: "rules"\|"agent"`, `steps: [{op, args, text, why, danger, error?}]`。一句話 → 白名單內的步驟（見 `docs/APP_ASSISTANT.md`）；常見說法本機規則直接翻，其他問 config `provider.assist`（沒設＝claude、model 預設 haiku）。**不執行**：App 照步驟呼叫原本的 action |
 | `assist_log`（Rust 才有） | `{text, group?, done: [人話], skipped: [人話], failed?}` | 落 presented [assist] 事件（指令、做了哪些、略過哪些、在哪步失敗） |
 | `repo_profile`（Rust 才有，唯讀） | `{id}` | 名片：`id`, `path`, `role?`, `description?`, `description_source?: "registry"\|"readme"`（沒填介紹時從 README 截的推測）, `keywords?`, `tags?` |

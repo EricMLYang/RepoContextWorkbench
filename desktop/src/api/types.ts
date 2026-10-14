@@ -478,6 +478,8 @@ export interface ScopePayload {
 
 export interface ActionMap {
   ack: { payload: Record<string, never>; result: { ok: true } };
+  /** Rust 才有（N-37）：只把目前範圍的一般未讀標為已讀。 */
+  ack_scope: { payload: ScanParams; result: { ok: true; at: string } };
   relate: {
     payload: { a: string; b: string; kind: string; note?: string };
     result: { ok: true; relation: Relation };

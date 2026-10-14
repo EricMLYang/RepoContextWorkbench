@@ -111,6 +111,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("create_entry", a_create_entry),
     ("assist_plan", a_assist_plan),
     ("assist_log", a_assist_log),
+    ("ack_scope", a_ack_scope),
     ("group_notes", a_group_notes),
     ("note_add", a_note_add),
     ("note_remove", a_note_remove),
@@ -309,6 +310,15 @@ fn judge_in_background(spine_dir: &Path, cid: &str) -> Result<()> {
 fn a_ack(d: &Path, _p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     spine::ack_unread(d, None)?;
     Ok(ok())
+}
+
+/// Rust 才有（N-37）：只把目前範圍的一般未讀標為已讀（`.state/seen_scopes.json`），別組不受影響。
+fn a_ack_scope(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let repos = list(p, "repos");
+    let group = s(p, "group");
+    let scope = super::state::StateScope::new(group.as_deref(), repos.as_deref());
+    let at = super::state::ack_scope(d, &scope, None)?;
+    Ok(json!({"ok": true, "at": at}))
 }
 
 fn a_relate(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {

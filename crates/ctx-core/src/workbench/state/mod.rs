@@ -201,6 +201,15 @@ impl StateScope {
     fn scoped(&self) -> bool {
         self.group.is_some() || self.repos.is_some()
     }
+    /// 這個範圍在 `.state/seen_scopes.json` 的鍵：`group:<名>`、`repos:<排序後逗號接>`；全部＝None。
+    pub fn seen_key(&self) -> Option<String> {
+        if let Some(r) = &self.repos {
+            let mut r = r.clone();
+            r.sort();
+            return Some(format!("repos:{}", r.join(",")));
+        }
+        self.group.as_ref().map(|g| format!("group:{g}"))
+    }
     /// 範圍已經不存在（組被刪或改名、臨時組合的 repo 全被移除）。Rust 才有（2026-10-13，原本前端判斷）。
     fn gone(&self, data: &RegistryData) -> bool {
         if let Some(repos) = &self.repos {
@@ -251,6 +260,44 @@ fn rel_kinds_json(kinds: &registry::RelationKinds) -> Value {
         m.insert(k.clone(), Value::Object(o));
     }
     Value::Object(m)
+}
+
+fn seen_scopes_path(spine_dir: &Path) -> std::path::PathBuf {
+    spine_dir.join(".state").join("seen_scopes.json")
+}
+
+/// 各範圍「標為已讀」到哪個時間（鍵見 [`StateScope::seen_key`]，值 `YYYY-MM-DD HH:MM`）。Rust 才有（N-37）。
+fn seen_scopes(spine_dir: &Path) -> std::collections::HashMap<String, String> {
+    std::fs::read_to_string(seen_scopes_path(spine_dir))
+        .ok()
+        .and_then(|s| serde_json::from_str::<std::collections::HashMap<String, String>>(&s).ok())
+        .unwrap_or_default()
+}
+
+/// 只把這個範圍的一般未讀標為已讀（N-37，2026-10-15；Rust 才有）。全域的 `last_seen.txt` 不動——
+/// 別組的未讀照舊。回傳記下的時間；範圍是「全部」就拒絕（那是 `ack`）。
+pub fn ack_scope(
+    spine_dir: &Path,
+    scope: &StateScope,
+    when: Option<chrono::NaiveDateTime>,
+) -> Result<String> {
+    let Some(key) = scope.seen_key() else {
+        return Err(crate::Error::invalid(
+            "要給牌組或 repo；全部標為已讀請用 ack",
+        ));
+    };
+    let at = when
+        .unwrap_or_else(|| chrono::Local::now().naive_local())
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    crate::locking::update_json_locked(
+        spine_dir,
+        &seen_scopes_path(spine_dir),
+        |m: &mut Map<String, Value>| {
+            m.insert(key.clone(), json!(at));
+        },
+    )?;
+    Ok(at)
 }
 
 /// 對應 `state.build_state`：輕量狀態（純檔案讀）。interrupt 先於 normal（打斷要掙得，其餘累積）。
@@ -304,6 +351,21 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
         if let Some(o) = c.as_object_mut() {
             o.insert("lane".into(), json!(l));
         }
+    }
+    // 「這組標為已讀」之後的範圍內未讀（N-37）：只藏一般未讀（event），打斷、待跟進、回顧都留著
+    if let Some(seen) = scope
+        .seen_key()
+        .and_then(|k| seen_scopes(spine_dir).remove(&k))
+    {
+        cards.retain(|c| {
+            !(c["kind"] == "event"
+                && c["lane"] == "scope"
+                && format!(
+                    "{} {}",
+                    c["date"].as_str().unwrap_or(""),
+                    c["time"].as_str().unwrap_or("")
+                ) <= seen)
+        });
     }
 
     let relations: Vec<Value> = registry::relations(spine_dir, None)?

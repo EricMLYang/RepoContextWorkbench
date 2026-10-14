@@ -2465,3 +2465,57 @@ fn assist_plan_and_log() {
         .body
         .starts_with("助手：repo-b 加標籤 規格\n做了：repo-b：加標籤「規格」"));
 }
+
+/// N-37「這組標為已讀」：只藏這個範圍、在標記之前的一般未讀；別組、全部、之後的新事件照舊；全域 last_seen 不動。
+#[test]
+fn ack_scope_hides_only_this_scope() {
+    let (_t, d) = spine_with_repos();
+    registry::add_group(&d, "only-b", &["repo-b"]).unwrap();
+    ev(
+        &d,
+        "decision",
+        "agent",
+        &["repo:repo-a"],
+        "a 的舊判斷",
+        ago(30),
+    );
+    ev(
+        &d,
+        "decision",
+        "agent",
+        &["repo:repo-b"],
+        "b 的舊判斷",
+        ago(30),
+    );
+    let titles = |v: &Value| -> Vec<String> {
+        cards_of(v, "event")
+            .iter()
+            .filter(|c| c["lane"] == "scope")
+            .map(|c| c["title"].as_str().unwrap_or("").to_string())
+            .collect()
+    };
+    let only_a = vec!["repo-a".to_string()];
+    assert_eq!(titles(&st_in(&d, None, Some(&only_a))), vec!["a 的舊判斷"]);
+
+    act(&d, "ack_scope", json!({"repos": ["repo-a"]})).unwrap();
+    assert!(titles(&st_in(&d, None, Some(&only_a))).is_empty());
+    // 別的範圍照舊
+    assert_eq!(titles(&st_in(&d, Some("only-b"), None)), vec!["b 的舊判斷"]);
+    assert_eq!(
+        st(&d)["unread"].as_array().unwrap().len(),
+        2,
+        "全域未讀不動"
+    );
+    // 標記之後的新事件照樣出現
+    ev(
+        &d,
+        "decision",
+        "agent",
+        &["repo:repo-a"],
+        "a 的新判斷",
+        Local::now().naive_local() + Duration::minutes(2),
+    );
+    assert_eq!(titles(&st_in(&d, None, Some(&only_a))), vec!["a 的新判斷"]);
+    // 全部範圍不能用這個
+    assert!(err(&d, "ack_scope", json!({})).contains("ack"));
+}

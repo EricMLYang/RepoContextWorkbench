@@ -294,3 +294,5 @@ CLI／MCP（ctx-cli）：
   屬於登記的牌組時多一行「屬於牌組「X」」；開場句改「情境卡＋文件地圖…（repo 現況、…）」。
   CLI `group context`／MCP `group_context` 照舊（`build_context`，跟 Python 一樣）。對拍：會話料檔列允許差異、
   `session --print` 比對前把兩種開場句換成同一個樣子。
+- **這組標為已讀 `ack_scope`**（2026-10-15，N-37；Python 沒有）：`.state/seen_scopes.json`（範圍鍵 → 時間），
+  `build_state` 藏起該範圍在那之前的一般未讀卡；全域 `last_seen.txt`、`ack`、`unread` 清單都不變。
