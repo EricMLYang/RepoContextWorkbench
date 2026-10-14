@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GroupNote } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
+import { continueList, indent } from "../../lib/mdedit";
 import { load, save } from "../../lib/storage";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
@@ -193,10 +194,26 @@ export function NotesPane({
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
+                if (e.nativeEvent.isComposing) return;
+                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                   e.preventDefault();
                   void submit();
+                  return;
                 }
+                // 跟檔案編輯一樣：清單按 Enter 自動延續、Tab／⇧Tab 縮排
+                const el = e.currentTarget;
+                const a = el.selectionStart;
+                const b = el.selectionEnd;
+                const r =
+                  e.key === "Enter" && !e.shiftKey && !e.altKey && a === b
+                    ? continueList(el.value, a)
+                    : e.key === "Tab" && !e.altKey && !e.metaKey && !e.ctrlKey
+                      ? indent(el.value, a, b, e.shiftKey)
+                      : null;
+                if (!r) return;
+                e.preventDefault();
+                setDraft(r.text);
+                requestAnimationFrame(() => box.current?.setSelectionRange(r.start, r.end));
               }}
             />
             <div className="composerfoot">

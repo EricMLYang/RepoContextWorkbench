@@ -2130,6 +2130,12 @@ describe("牌組筆記", () => {
     const box = document.getElementById("notebox") as HTMLTextAreaElement;
     expect(document.activeElement).toBe(box);
 
+    // 清單按 Enter 自動延續（跟檔案編輯一樣）
+    fireEvent.change(box, { target: { value: "- 第一件" } });
+    box.setSelectionRange(5, 5);
+    await act(async () => fireEvent.keyDown(box, { key: "Enter" }));
+    expect(box.value).toBe("- 第一件\n- ");
+
     fireEvent.change(box, { target: { value: "  明天跟設計對齊  " } });
     expect(JSON.parse(localStorage.getItem("workbench:noteDraft:產品開發")!)).toBe(
       "  明天跟設計對齊  ",
