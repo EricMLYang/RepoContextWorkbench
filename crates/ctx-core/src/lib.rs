@@ -21,6 +21,7 @@ pub mod exe;
 pub mod filetree;
 pub mod fsutil;
 pub mod health;
+pub mod history;
 pub mod hooks;
 pub mod init;
 pub mod knowledge;

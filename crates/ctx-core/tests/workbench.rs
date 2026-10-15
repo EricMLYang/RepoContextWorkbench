@@ -2537,3 +2537,35 @@ fn ack_scope_hides_only_this_scope() {
     // 全部範圍不能用這個
     assert!(err(&d, "ack_scope", json!({})).contains("ack"));
 }
+
+// ── 2026-10-16：接續過去的 Claude Code 會話（F-72）──
+
+#[test]
+fn term_create_resume_runs_claude_resume_in_the_session_dir() {
+    let (t, d) = spine_with_repos();
+    let ra = ctx_core::registry::get_repo(&d, "repo-a").unwrap().path();
+    let terms = ArgvTerms(Default::default());
+    let out = handle_action(
+        &d,
+        "term_create",
+        &json!({"kind": "agent", "resume": "aaaaaaaa-0001", "cwd": ra}),
+        Some(&terms),
+    )
+    .unwrap();
+    assert_eq!(out["sid"], "t8");
+    let argv = terms.0.lock().unwrap()[0].clone();
+    assert_eq!(argv[0], "claude");
+    assert!(argv[1].starts_with("--settings="), "{argv:?}");
+    assert_eq!(&argv[2..], ["--resume", "aaaaaaaa-0001"]);
+    // 不在登記的 repo 底下、id 不對：拒絕
+    for bad in [
+        json!({"kind": "agent", "resume": "aaaaaaaa-0001", "cwd": t.path()}),
+        json!({"kind": "agent", "resume": "x; rm -rf", "cwd": ra}),
+    ] {
+        assert!(handle_action(&d, "term_create", &bad, Some(&terms)).is_err());
+    }
+    // 清單是唯讀 action
+    assert!(ctx_core::workbench::actions::is_read_only("past_sessions"));
+    let r = handle_action(&d, "past_sessions", &json!({"group": "g1"}), None).unwrap();
+    assert!(r["sessions"].is_array());
+}

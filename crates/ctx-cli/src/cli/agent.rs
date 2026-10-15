@@ -405,6 +405,45 @@ pub fn cmd_next(ctx: &Ctx, sc: &Scoped, limit: i64) -> CmdResult {
     )
 }
 
+pub fn cmd_sessions(ctx: &Ctx, sc: &Scoped, limit: i64) -> CmdResult {
+    let t = sc.target();
+    agent_call(
+        ctx,
+        |d| agentapi::past_sessions(d, &t, limit.max(0) as usize),
+        h_sessions,
+    )
+}
+
+fn h_sessions(r: &Value) -> String {
+    let mut out = vec![format!("# 過去的會話（{}）", s(&r["scope"], "label"))];
+    let list = arr(r, "sessions");
+    if list.is_empty() {
+        out.push("（沒有找到 Claude Code 的互動會話）".into());
+    }
+    for it in list {
+        let live = if it["live"] == true {
+            "（可能還開著）"
+        } else {
+            ""
+        };
+        out.push(format!(
+            "- {}  {} · {}{live}",
+            s(it, "updated"),
+            s(it, "repo"),
+            s(it, "title")
+        ));
+        if has(it, "reply") {
+            out.push(format!("  最後回覆：{}", s(it, "reply")));
+        }
+        out.push(format!(
+            "  接續：cd {} && claude --resume {}",
+            s(it, "cwd"),
+            s(it, "id")
+        ));
+    }
+    out.join("\n")
+}
+
 #[derive(Args, Debug)]
 pub struct LogArgs {
     pub text: String,

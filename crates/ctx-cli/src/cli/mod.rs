@@ -120,6 +120,13 @@ pub enum Cmd {
         #[arg(long, default_value_t = 5)]
         limit: i64,
     },
+    /// 過去的 agent 會話：範圍內 repo 的 Claude Code 互動會話（標題、最後回覆、接續指令；Rust 才有）
+    Sessions {
+        #[command(flatten)]
+        scope: agent::Scoped,
+        #[arg(long, default_value_t = 10)]
+        limit: i64,
+    },
     /// 記一筆判斷（decision），回傳可引用的 ref
     Log(agent::LogArgs),
     /// 未結事項：add <文字> [--due] ／ close <#N> [--note] ／ review（體檢）／ brief <#N>（任務包）
@@ -200,6 +207,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Where { cwd } => agent::cmd_where(ctx, cwd),
         Context(s) => agent::cmd_context(ctx, s),
         Next { scope, limit } => agent::cmd_next(ctx, scope, *limit),
+        Sessions { scope, limit } => agent::cmd_sessions(ctx, scope, *limit),
         Log(a) => agent::cmd_log(ctx, a),
         Todo(a) => agent::cmd_todo(ctx, a),
         Status(a) => agent::cmd_status(ctx, a),

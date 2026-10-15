@@ -28,6 +28,8 @@ pub struct Head {
     pub first: Option<String>,
     pub prompt: Option<String>,
     pub branch: Option<String>,
+    /// 誰開的：`cli`＝互動、`sdk-cli`＝`claude -p` 程式化呼叫（取第一則使用者訊息上的）。
+    pub entrypoint: Option<String>,
 }
 
 /// 讀 `[start, start+len)` 的完整行（起點不在檔頭時丟掉第一個半行）。
@@ -131,10 +133,18 @@ pub fn head(path: &Path) -> Head {
         if h.branch.is_none() {
             h.branch = str_of(o, "gitBranch");
         }
+        if h.entrypoint.is_none() && o.get("type").and_then(Value::as_str) == Some("user") {
+            h.entrypoint = str_of(o, "entrypoint");
+        }
         if h.prompt.is_none() {
             h.prompt = user_text(o).map(str::to_string);
         }
-        if h.cwd.is_some() && h.first.is_some() && h.prompt.is_some() && h.branch.is_some() {
+        if h.cwd.is_some()
+            && h.first.is_some()
+            && h.prompt.is_some()
+            && h.branch.is_some()
+            && h.entrypoint.is_some()
+        {
             break;
         }
     }
@@ -190,6 +200,7 @@ mod tests {
                 first: Some("2026-10-16T01:00:00Z".into()),
                 prompt: Some("幫我修登入".into()),
                 branch: Some("main".into()),
+                entrypoint: None,
             }
         );
         assert_eq!(tail(&t.path().join("none.jsonl")), Tail::default());

@@ -112,6 +112,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("rename_entry", a_rename_entry),
     ("save_image", a_save_image),
     ("backlinks", a_backlinks),
+    ("past_sessions", finder::a_past_sessions),
     ("assist_plan", a_assist_plan),
     ("assist_log", a_assist_log),
     ("assist_recent", a_assist_recent),
@@ -144,6 +145,7 @@ const READ_ONLY: &[&str] = &[
     "assist_plan",
     "assist_recent",
     "backlinks",
+    "past_sessions",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -1082,7 +1084,31 @@ fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
         return Err(Error::invalid("本 server 未啟用 terminal"));
     };
     let kind = raw(p, "kind").unwrap_or_else(|| "shell".into());
-    let (sid, title) = if kind == "agent" {
+    let resume = s(p, "resume");
+    let (sid, title) = if let (true, Some(id)) = (kind == "agent", resume) {
+        // F-72：接續過去的 Claude Code 會話——在它原本的目錄跑 `claude --resume <id>`（目錄要在登記的 repo 底下）
+        let agent = s(p, "agent").unwrap_or_else(|| "claude".into());
+        let (rid, cwd) = crate::history::resume_target(d, &id, &s(p, "cwd").unwrap_or_default())?;
+        let (mut argv, at) = session::resume_argv(d, &agent, &id)?;
+        let file =
+            crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
+        if let Ok(f) = file {
+            argv.insert(at, format!("--settings={}", f.display()));
+        }
+        let home = home_group_for(d, s(p, "home_group"), Some(&rid))?;
+        terms.create_agent(AgentLaunch {
+            agent,
+            argv,
+            cwd,
+            env: Vec::new(),
+            group: None,
+            repos: Some(vec![rid.clone()]),
+            repo: Some(rid),
+            task: s(p, "task"),
+            origin: Some(format!("resume:{id}")),
+            home_group: home,
+        })?
+    } else if kind == "agent" {
         let group = s(p, "group");
         let repos = list(p, "repos");
         let repo = s(p, "repo");

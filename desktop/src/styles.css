@@ -2719,3 +2719,38 @@ body.withpicks #main {
   margin-top: 6px;
   text-align: right;
 }
+
+/* F-72 過去的會話 */
+.pastlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 60vh;
+  overflow: auto;
+}
+.pastrow {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.pasthead {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.pasttitle {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pastreply {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
+.pastacts {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}

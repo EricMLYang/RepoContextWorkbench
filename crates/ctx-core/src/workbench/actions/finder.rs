@@ -190,3 +190,30 @@ pub(super) fn a_file_diff(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result
     let (diff, truncated) = crate::filetree::diff(&root, &path)?;
     Ok(json!({"ok": true, "id": id, "path": path, "diff": diff, "truncated": truncated}))
 }
+
+#[derive(serde::Deserialize)]
+struct PastArgs {
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default)]
+    repos: Option<Vec<String>>,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+/// F-72（Rust 才有）：目前範圍過去的 Claude Code 互動會話（最近的在前），給「過去的會話」清單。
+pub(super) fn a_past_sessions(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let PastArgs {
+        group,
+        repos,
+        limit,
+    } = parse("past_sessions", p)?;
+    let list = crate::history::past_sessions(
+        d,
+        group.as_deref(),
+        repos.as_deref(),
+        limit.unwrap_or(20).min(100),
+        None,
+    )?;
+    Ok(json!({"ok": true, "sessions": list}))
+}

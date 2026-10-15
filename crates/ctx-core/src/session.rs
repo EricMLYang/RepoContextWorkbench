@@ -225,6 +225,30 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
     })
 }
 
+/// 接續一場過去的 Claude Code 會話（F-72，Rust 才有）：config 裡這個 agent 的指令＋`--resume <id>`。
+/// 回傳 (argv, flags_at)。只有 Claude Code（`mcp: mcp-config`）會接續；id 要先用
+/// [`crate::history::valid_session_id`] 驗過。不寫情境卡、不留 presented——是回到舊對話，不是開新工作。
+pub fn resume_argv(spine_dir: &Path, agent: &str, id: &str) -> Result<(Vec<String>, usize)> {
+    if !crate::history::valid_session_id(id) {
+        return Err(Error::invalid(format!("會話 id 不對：{id}")));
+    }
+    let cfg = config::load(spine_dir)?;
+    let agents = cfg.agents();
+    let spec = agents
+        .iter()
+        .find(|(k, _)| k == agent)
+        .map(|(_, s)| s)
+        .ok_or_else(|| Error::invalid(format!("未知 agent: {agent}")))?;
+    if spec.mcp != "mcp-config" {
+        return Err(Error::invalid(format!(
+            "{agent} 不是 Claude Code，不能接續舊會話"
+        )));
+    }
+    let mut cmd = spec.cmd.clone();
+    cmd.extend(["--resume".to_string(), id.to_string()]);
+    Ok((cmd, spec.cmd.len()))
+}
+
 /// Python `subprocess.list2cmdline`（Windows 命令列引號規則）。
 pub fn list2cmdline(args: &[String]) -> String {
     let mut out: Vec<String> = Vec::new();

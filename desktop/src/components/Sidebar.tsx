@@ -4,6 +4,7 @@ import { useSnapshot, useStore, useUi } from "../store/context";
 import { AsyncButton } from "./AsyncButton";
 import { Deck } from "./deck/Deck";
 import { SessionRow } from "./sessions/SessionRow";
+import { pastSessionsSpec } from "./sessions/PastSessions";
 
 /** 不屬於任何牌組的會話（Shell、臨時組、全部）；屬於牌組的放在牌組區塊裡。 */
 function looseSessions(all: TermInfo[], groups: string[]): TermInfo[] {
@@ -77,6 +78,15 @@ export function Sidebar() {
         >
           ＋ Shell
         </AsyncButton>
+        <button
+          type="button"
+          id="pastbtn"
+          className="ghost small"
+          title="這個範圍過去的 Claude Code 會話，可以接續"
+          onClick={() => ui.openDetail(pastSessionsSpec())}
+        >
+          過去的…
+        </button>
       </div>
       <SessionList all={all} list={list} />
       <div className="sidebottom">

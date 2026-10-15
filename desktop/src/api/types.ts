@@ -177,6 +177,21 @@ export interface TermInfo {
   last_reply?: string | null;
 }
 
+/** 過去的一場 Claude Code 會話（F-72，引擎 `history::PastSession`）。 */
+export interface PastSession {
+  id: string;
+  repo: string;
+  cwd: string;
+  title: string;
+  prompt: string | null;
+  reply: string | null;
+  branch: string | null;
+  started: string | null;
+  updated: string;
+  live: boolean;
+  path: string;
+}
+
 /** App 助手的一步（引擎驗證過；error 有值＝不能執行）。 */
 export interface AssistStep {
   op:
@@ -633,6 +648,11 @@ export interface ActionMap {
     payload: { id: string; path: string; base64: string };
     result: { ok: true; id: string; path: string; abs: string };
   };
+  /** Rust 才有（F-72）：目前範圍過去的 Claude Code 互動會話（最近的在前）。 */
+  past_sessions: {
+    payload: ScopePayload & { limit?: number };
+    result: { ok: true; sessions: PastSession[] };
+  };
   /** Rust 才有（F-69）：repo 裡哪些 md 連到這個檔（照相對連結解析、跳過程式碼區塊；最多 50 則）。 */
   backlinks: {
     payload: { id: string; path: string };
@@ -692,6 +712,8 @@ export interface ActionMap {
       of?: string;
       /** 所屬牌組（只給畫面歸類）。 */
       home_group?: string;
+      /** Rust 才有（F-72）：接續這場 Claude Code 會話（`claude --resume`；cwd 是它原本的目錄）。 */
+      resume?: string;
     } & ScopePayload;
     result: { ok: true; sid: string; title: string };
   };
