@@ -46,6 +46,7 @@ pub mod status;
 pub mod summary;
 pub mod term;
 pub mod timer;
+pub mod transcript;
 pub mod upstream;
 pub mod workbench;
 pub mod yamlout;

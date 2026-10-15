@@ -452,8 +452,14 @@ export function sessionMeta(s: TermInfo): string {
   return proc + " · " + work + " · " + sessionWhere(s).label;
 }
 
+/** 會話列的主標題：Claude Code 取的對話標題優先（多個會話同一個範圍時分得出誰是誰），沒有就用「組 › repo」。 */
+export function sessionHeadline(s: TermInfo): string {
+  return s.ai_title || s.title;
+}
+
 export function sessionTooltip(s: TermInfo): string {
   return (
+    (s.ai_title ? s.ai_title + "\n" : "") +
     s.title +
     "\n" +
     (s.task || "") +
@@ -462,7 +468,8 @@ export function sessionTooltip(s: TermInfo): string {
     "\n" +
     reportLine(s) +
     "\n依據：" +
-    (s.report_basis || "—")
+    (s.report_basis || "—") +
+    (s.last_reply ? "\n最後回覆：" + s.last_reply : "")
   );
 }
 

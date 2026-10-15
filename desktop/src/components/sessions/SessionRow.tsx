@@ -2,6 +2,7 @@ import type { TermInfo } from "../../api/types";
 import {
   STATUS_TXT,
   sessionDot,
+  sessionHeadline,
   sessionMeta,
   sessionNeedsYou,
   sessionTooltip,
@@ -11,7 +12,8 @@ import {
 import { useSnapshot, useUi, useUiState } from "../../store/context";
 
 /**
- * 會話一列：小圓點（綠＝有留痕、琥珀＝執行中尚無回報、紅＝等你／卡住、灰＝已結束）＋標題＋狀態。
+ * 會話一列：小圓點（綠＝有留痕、琥珀＝執行中尚無回報、紅＝等你／卡住、灰＝已結束）＋標題＋狀態；
+ * 在等你時多一行最後回覆（F-71：不切過去也知道它說了什麼）。
  * `inGroup`：放在牌組區塊裡時，位置只寫 repo（組名已經是區塊標題）。
  */
 export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: boolean }) {
@@ -33,7 +35,7 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
       >
         <span className={["dot", ...sessionDot(s)].join(" ")} />
         <span className="sessioncopy">
-          <span className="sessiontitle">{s.title}</span>
+          <span className="sessiontitle">{sessionHeadline(s)}</span>
           <span className="sessionmeta">
             {inGroup
               ? (s.alive ? "" : "已結束 · ") +
@@ -41,6 +43,9 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
                 (where.repo ? where.repo : "整組")
               : sessionMeta(s)}
           </span>
+          {sessionNeedsYou(s) && s.last_reply ? (
+            <span className="sessionpreview">{s.last_reply}</span>
+          ) : null}
         </span>
       </button>
     </div>

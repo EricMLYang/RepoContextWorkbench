@@ -96,6 +96,17 @@ pub(super) fn annotate_terms_with(
                 // agent 自己回報的（MCP）或 Claude Code hook 自動寫的，只認會話開始後的
                 let st = agent_status_of(spine_dir, t, group.as_deref(), ids.as_deref());
                 rec.insert("agent_status".into(), st.unwrap_or(Value::Null));
+                // F-71：Claude Code 取的對話標題、這一輪最後的回覆（hook 從逐字稿尾巴讀的）
+                let own = tget(t, "sid")
+                    .and_then(|sid| crate::session_status::read(spine_dir, sid))
+                    .filter(|s| {
+                        s.get("at").and_then(Value::as_str).unwrap_or("")
+                            >= tget(t, "started").unwrap_or("~")
+                    });
+                for (from, to) in [("title", "ai_title"), ("reply", "last_reply")] {
+                    let v = own.as_ref().and_then(|s| s.get(from)).cloned();
+                    rec.insert(to.into(), v.unwrap_or(Value::Null));
+                }
                 // 依據要說得出口：範圍認得出來就講範圍，認不出來就說沒再過濾
                 let basis = match (&group, &ids) {
                     (Some(g), _) => format!("會話開始後、範圍內（{g}）的脊椎留痕"),

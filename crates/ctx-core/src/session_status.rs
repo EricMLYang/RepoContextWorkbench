@@ -13,6 +13,10 @@
 //! hook 照路徑寫，不必找 spine。會話結束就刪；App 重開時全部清掉（sid 每次重開從頭編）。
 //!
 //! 檔案（`.state/session_status/<sid>.json`）：`{"status","text","at","event"}`，`at` 是 `YYYY-MM-DD HH:MM`。
+//! 2026-10-16（ideation F-71）多兩個選填欄位，會話列一眼分得出誰是誰、做完說了什麼：
+//! `title`＝Claude Code 自己取的對話標題（逐字稿的 `ai-title`，之後的事件沿用）、
+//! `reply`＝這一輪最後的回覆（一行、截 [`REPLY_MAX`] 字；`Stop` 才寫，你送出新訊息就清掉）。
+//! 都從 hook 給的 `transcript_path` 讀尾巴（只讀不寫）。
 
 use std::path::{Path, PathBuf};
 
@@ -25,6 +29,8 @@ use crate::Result;
 pub const ENV: &str = "REPO_CONTEXT_SESSION_STATUS";
 /// 訊息最多留幾個字元（Notification 的訊息可能很長）。
 const TEXT_MAX: usize = 120;
+/// 最後回覆預覽最多幾個字元。
+const REPLY_MAX: usize = 160;
 
 /// `.state/session_status`。
 pub fn dir(spine_dir: &Path) -> PathBuf {
@@ -167,13 +173,54 @@ pub fn record_hook(
         .unwrap_or_else(|| Local::now().naive_local())
         .format("%Y-%m-%d %H:%M")
         .to_string();
-    let rec = json!({"status": status, "text": text, "at": at, "event": event});
+    let mut rec = json!({"status": status, "text": text, "at": at, "event": event});
+    let (title, reply) = transcript_bits(event, &payload, &path);
+    if let Some(t) = title {
+        rec["title"] = json!(t);
+    }
+    if let Some(r) = reply {
+        rec["reply"] = json!(r);
+    }
     if let Some(parent) = path.parent() {
         if std::fs::create_dir_all(parent).is_err() {
             return false;
         }
     }
     crate::fsutil::write_atomic(&path, rec.to_string().as_bytes()).is_ok()
+}
+
+/// 標題與最後回覆：`Stop` 讀逐字稿尾巴（Claude Code 有給 `last_assistant_message` 就先用它）；
+/// 其他事件沿用上一筆的標題，回覆只留到你送出下一句（`prompt`）之前。
+fn transcript_bits(event: &str, payload: &Value, path: &Path) -> (Option<String>, Option<String>) {
+    let prev = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok());
+    let prev_of = |k: &str| {
+        prev.as_ref()
+            .and_then(|v| v.get(k))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    };
+    let tail = payload
+        .get("transcript_path")
+        .and_then(Value::as_str)
+        .map(Path::new)
+        .filter(|p| p.is_absolute() && p.extension().is_some_and(|x| x == "jsonl"))
+        .map(crate::transcript::tail)
+        .unwrap_or_default();
+    let title = tail.title.or_else(|| prev_of("title"));
+    let reply = match event {
+        "stop" => payload
+            .get("last_assistant_message")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_string)
+            .or(tail.reply)
+            .map(|r| crate::transcript::one_line(&r, REPLY_MAX)),
+        "prompt" => None,
+        _ => prev_of("reply"),
+    };
+    (title, reply)
 }
 
 #[cfg(test)]
@@ -245,6 +292,54 @@ mod tests {
         clear_all(sp);
         assert!(read(sp, "t3").is_none());
         assert!(dir(sp).join("keep.txt").exists());
+    }
+
+    #[test]
+    fn stop_keeps_title_and_last_reply_from_the_transcript() {
+        let t = tempfile::tempdir().unwrap();
+        let sp = t.path();
+        let tr = sp.join("abc.jsonl");
+        std::fs::write(
+            &tr,
+            [
+                r#"{"type":"ai-title","aiTitle":"修登入流程"}"#,
+                r#"{"type":"assistant","message":{"content":[{"type":"text","text":"改好了。\n\n測試都過，要 commit 嗎？"}]}}"#,
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+        let tp = path_for(sp, "t1");
+        let tps = tp.to_str().unwrap();
+        let payload = json!({"transcript_path": tr}).to_string();
+        assert!(record_hook("stop", &payload, Some(tps), None));
+        let v = read(sp, "t1").unwrap();
+        assert_eq!(v["title"], "修登入流程");
+        assert_eq!(v["reply"], "改好了。 測試都過，要 commit 嗎？");
+        // 等你允許：標題、回覆都沿用
+        assert!(record_hook(
+            "permission",
+            r#"{"message":"Allow Bash?"}"#,
+            Some(tps),
+            None
+        ));
+        let v = read(sp, "t1").unwrap();
+        assert_eq!(
+            (v["title"].as_str(), v["reply"].as_str()),
+            (
+                Some("修登入流程"),
+                Some("改好了。 測試都過，要 commit 嗎？")
+            )
+        );
+        // 你送出下一句：回覆清掉、標題留著
+        assert!(record_hook("prompt", "{}", Some(tps), None));
+        let v = read(sp, "t1").unwrap();
+        assert_eq!(v["title"], "修登入流程");
+        assert!(v.get("reply").is_none());
+        // Claude Code 直接給最後訊息就用它；相對路徑的逐字稿不讀
+        let p2 = json!({"transcript_path": "rel/x.jsonl", "last_assistant_message": "直接給的"})
+            .to_string();
+        assert!(record_hook("stop", &p2, Some(tps), None));
+        assert_eq!(read(sp, "t1").unwrap()["reply"], "直接給的");
     }
 
     #[test]

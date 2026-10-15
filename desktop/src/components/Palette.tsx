@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { PaletteResult, TermInfo } from "../api/types";
-import { STATUS_TXT, sessionNeedsYou, sessionWhere } from "../lib/view";
+import { STATUS_TXT, sessionHeadline, sessionNeedsYou, sessionWhere } from "../lib/view";
 import { AssistDialog } from "../dialogs/AssistDialog";
 import { useSnapshot, useStore, useUi } from "../store/context";
 
@@ -40,7 +40,7 @@ function sessionsOf(terms: TermInfo[], query: string): Item[] {
   const live = terms.filter((t) => t.alive && t.kind === "agent");
   const hit = q
     ? live.filter((t) =>
-        [t.title, t.task || "", sessionWhere(t).label].some((x) =>
+        [t.title, t.ai_title || "", t.task || "", sessionWhere(t).label].some((x) =>
           x.toLocaleLowerCase().includes(q),
         ),
       )
@@ -415,7 +415,7 @@ function SessionItem({ term }: { term: TermInfo }) {
     <>
       <div className="paletterow">
         <span className="palettekind small muted">會話</span>
-        <span className="palettename">{term.title}</span>
+        <span className="palettename">{sessionHeadline(term)}</span>
         {needs ? (
           <span className="pill palettewait">{STATUS_TXT[term.agent_status!.status]}</span>
         ) : null}

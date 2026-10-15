@@ -466,6 +466,14 @@ svg {
   font-size: 11px;
   color: var(--sub);
 }
+.sessionpreview {
+  font-size: 11px;
+  color: var(--sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
 .dot {
   display: inline-block;
   width: 6px;

@@ -2253,6 +2253,22 @@ fn session_hook_status_shows_on_its_own_session_and_newer_wins() {
     let old = json!({"sid": "t1", "kind": "agent", "scope": "repo-b",
                      "started": (now + Duration::minutes(10)).format("%Y-%m-%d %H:%M").to_string()});
     assert!(status_of(&old).is_null());
+    // F-71：標題與最後回覆跟著自己的會話走，agent 自己回報蓋過狀態時也還在
+    let tr = d.join("x.jsonl");
+    std::fs::write(
+        &tr,
+        "{\"type\":\"ai-title\",\"aiTitle\":\"修登入\"}\n\
+         {\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"好了\"}]}}\n",
+    )
+    .unwrap();
+    let payload = json!({"transcript_path": tr}).to_string();
+    assert!(record_hook("stop", &payload, Some(&target), Some(now)));
+    let rows = annotate_terms(&d, &[t1.clone(), t2.clone(), old.clone()]).unwrap();
+    assert_eq!(
+        (rows[0]["ai_title"].as_str(), rows[0]["last_reply"].as_str()),
+        (Some("修登入"), Some("好了"))
+    );
+    assert!(rows[1]["ai_title"].is_null() && rows[2]["ai_title"].is_null());
 }
 
 #[test]

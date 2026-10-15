@@ -171,6 +171,10 @@ export interface TermInfo {
   agent_status?: AgentStatus | null;
   /** Rust 才有：所屬牌組（畫面歸類用；從組裡對單一 repo 開的會話，scope 是 repo、這裡是組）。 */
   home_group?: string;
+  /** Rust 才有（F-71）：Claude Code 取的對話標題（逐字稿 ai-title）。 */
+  ai_title?: string | null;
+  /** Rust 才有（F-71）：這一輪最後的回覆（一行預覽；你送出下一句就清掉）。 */
+  last_reply?: string | null;
 }
 
 /** App 助手的一步（引擎驗證過；error 有值＝不能執行）。 */

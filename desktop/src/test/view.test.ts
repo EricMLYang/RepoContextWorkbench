@@ -5,6 +5,8 @@ import {
   firstNeedingYou,
   reportLine,
   sessionNeedsYou,
+  sessionHeadline,
+  sessionTooltip,
   pathForTerminal,
   actionLabel,
   actionToast,
@@ -188,6 +190,19 @@ describe("會話在等你（Claude Code hook 自動寫）", () => {
     expect(sessionNeedsYou(term({ ...hook, status: "working" }))).toBe(false);
     expect(sessionNeedsYou(term(hook, false))).toBe(false);
     expect(sessionNeedsYou(term(null))).toBe(false);
+  });
+  it("F-71：有 Claude Code 取的標題就當主標題，提示框帶最後回覆", () => {
+    const plain = term(null) as object;
+    expect(sessionHeadline(plain as never)).toBe("claude · a");
+    const named = {
+      ...plain,
+      ai_title: "修登入流程",
+      last_reply: "改好了，要 commit 嗎？",
+    } as never;
+    expect(sessionHeadline(named)).toBe("修登入流程");
+    const tip = sessionTooltip(named);
+    expect(tip.startsWith("修登入流程\nclaude · a\n")).toBe(true);
+    expect(tip.endsWith("\n最後回覆：改好了，要 commit 嗎？")).toBe(true);
   });
   it("最該先處理的：卡住的優先，同類取最早開始的；沒有＝null", () => {
     const t = (sid: string, status: string | null, started: string, alive = true) =>
