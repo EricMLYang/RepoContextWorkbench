@@ -146,10 +146,21 @@ fn tray_title(unread: Option<usize>, waiting: Option<usize>) -> Option<String> {
     }
 }
 
-/// 選單列：標題（[`tray_title`]）＋選單「未讀：N」「等你的會話：N」。`None`＝不知道（spine 未設定）。
+/// Dock 徽章（F-73）：只數在等你的會話——未讀是可以晚點看的，等你的是 agent 停在你這裡。0＝清掉。
+fn badge_count(waiting: Option<usize>) -> Option<i64> {
+    waiting
+        .filter(|n| *n > 0)
+        .map(|n| i64::try_from(n).unwrap_or(i64::MAX))
+}
+
+/// 選單列：標題（[`tray_title`]）＋選單「未讀：N」「等你的會話：N」＋Dock 徽章。`None`＝不知道（spine 未設定）。
 pub fn set_tray(app: &AppHandle, unread: Option<usize>, waiting: Option<usize>) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let _ = tray.set_title(tray_title(unread, waiting));
+    }
+    // macOS／Linux 才有；Windows 不支援（回錯就算了）
+    if let Some(w) = app.get_webview_window(MAIN) {
+        let _ = w.set_badge_count(badge_count(waiting));
     }
     let line = |label: &str, n: Option<usize>| match n {
         Some(n) => format!("{label}：{n}"),
@@ -412,6 +423,13 @@ mod tests {
         assert_eq!(spine_arg(&v(&["app", "--spine=/t"])).as_deref(), Some("/t"));
         assert_eq!(spine_arg(&v(&["app"])), None);
         assert_eq!(spine_arg(&v(&["app", "--spine"])), None);
+    }
+
+    #[test]
+    fn badge_counts_only_sessions_waiting_for_you() {
+        assert_eq!(badge_count(None), None);
+        assert_eq!(badge_count(Some(0)), None);
+        assert_eq!(badge_count(Some(2)), Some(2));
     }
 
     #[test]
