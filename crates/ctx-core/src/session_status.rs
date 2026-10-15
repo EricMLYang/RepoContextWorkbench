@@ -202,19 +202,27 @@ pub fn record_hook(
         .to_string();
     let mut rec = json!({"status": status, "text": text, "at": at, "event": event});
     let (title, reply) = transcript_bits(event, &payload, &path);
-    // F-78：接續用的 Claude Code 會話 id 與目錄（每個 hook 都帶）
-    if let Some(id) = payload
-        .get("session_id")
-        .and_then(Value::as_str)
-        .filter(|i| crate::history::valid_session_id(i))
-    {
+    // F-78：接續用的 Claude Code 會話 id 與目錄（每個 hook 都帶；這次沒帶就沿用上一筆）
+    let prev = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok());
+    // (hook 欄位, 狀態檔欄位, 合格條件)
+    let pick = |from: &str, kept: &str, ok: fn(&str) -> bool| {
+        payload
+            .get(from)
+            .and_then(Value::as_str)
+            .filter(|v| ok(v))
+            .or_else(|| prev.as_ref()?.get(kept)?.as_str().filter(|v| ok(v)))
+            .map(str::to_string)
+    };
+    if let Some(id) = pick(
+        "session_id",
+        "claude_session",
+        crate::history::valid_session_id,
+    ) {
         rec["claude_session"] = json!(id);
     }
-    if let Some(c) = payload
-        .get("cwd")
-        .and_then(Value::as_str)
-        .filter(|c| !c.is_empty())
-    {
+    if let Some(c) = pick("cwd", "cwd", |c| !c.is_empty()) {
         rec["cwd"] = json!(c);
     }
     if let Some(t) = title {
@@ -404,6 +412,19 @@ mod tests {
         assert_eq!(v["status"], "exited");
         assert_eq!(v["claude_session"], "aaaaaaaa-3333");
         assert!(v.get("reply").is_none());
+        // 之後的事件沒帶 id／cwd：沿用
+        let tp1 = path_for(sp, "t1");
+        assert!(record_hook(
+            "prompt",
+            "{}",
+            Some(tp1.to_str().unwrap()),
+            None
+        ));
+        let v = read(sp, "t1").unwrap();
+        assert_eq!(
+            (v["claude_session"].as_str(), v["cwd"].as_str()),
+            (Some("aaaaaaaa-3333"), Some("/r"))
+        );
         // 沒記到 id：照舊刪掉
         assert!(record_hook(
             "stop",
