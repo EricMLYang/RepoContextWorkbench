@@ -577,7 +577,7 @@ impl TermManager {
         Box::new(move || {
             if unmark_agent {
                 agentmark::unmark(&spine, &sid);
-                crate::session_status::clear(&spine, &sid);
+                crate::session_status::retire(&spine, &sid);
             }
             if let Some(l) = listener {
                 l(&sid);

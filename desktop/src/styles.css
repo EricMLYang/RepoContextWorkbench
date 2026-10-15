@@ -2809,3 +2809,10 @@ body.withpicks #main {
 .diffnotesbar {
   margin-bottom: 6px;
 }
+
+/* F-78 已結束的會話：接續 */
+.session > button.sessionresume {
+  align-self: center;
+  flex: none;
+  padding: 2px 8px;
+}

@@ -9,7 +9,8 @@ import {
   sessionWhere,
   shellOwner,
 } from "../../lib/view";
-import { useSnapshot, useUi, useUiState } from "../../store/context";
+import { useSnapshot, useStore, useUi, useUiState } from "../../store/context";
+import { AsyncButton } from "../AsyncButton";
 
 /**
  * 會話一列：小圓點（綠＝有留痕、琥珀＝執行中尚無回報、紅＝等你／卡住、灰＝已結束）＋標題＋狀態；
@@ -18,6 +19,7 @@ import { useSnapshot, useUi, useUiState } from "../../store/context";
  */
 export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: boolean }) {
   const ui = useUi();
+  const store = useStore();
   const view = useUiState();
   const { state } = useSnapshot();
   // 正在看它的 Terminal 也算選著這列
@@ -48,6 +50,26 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
           ) : null}
         </span>
       </button>
+      {!s.alive && s.claude_session && s.resume_cwd ? (
+        // F-78：程序結束了但 Claude Code 的對話還在——在原目錄接回去（像 Orca 的 Restart）
+        <AsyncButton
+          className="ghost small sessionresume"
+          title="在原目錄執行 claude --resume，接回這段對話"
+          onError={(m) => store.toast(m)}
+          run={async () => {
+            const r = await store.action("term_create", {
+              kind: "agent",
+              resume: s.claude_session!,
+              cwd: s.resume_cwd!,
+              task: "接續：" + sessionHeadline(s),
+            });
+            await store.refreshState();
+            ui.selectTerm(r.sid);
+          }}
+        >
+          接續
+        </AsyncButton>
+      ) : null}
     </div>
   );
 }

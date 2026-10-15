@@ -17,6 +17,8 @@
 //! `title`＝Claude Code 自己取的對話標題（逐字稿的 `ai-title`，之後的事件沿用）、
 //! `reply`＝這一輪最後的回覆（一行、截 [`REPLY_MAX`] 字；`Stop` 才寫，你送出新訊息就清掉）。
 //! 都從 hook 給的 `transcript_path` 讀尾巴（只讀不寫）。
+//! F-78：另記 `claude_session`（Claude Code 自己的會話 id）與 `cwd`；程序結束時不刪檔，改寫成
+//! `status: "exited"`（[`retire`]）——已結束的會話列據此給「接續」（`claude --resume`）。
 
 use std::path::{Path, PathBuf};
 
@@ -53,6 +55,31 @@ pub fn read(spine_dir: &Path, sid: &str) -> Option<Value> {
 /// 會話結束：刪掉它的狀態檔（沒有就算了）。
 pub fn clear(spine_dir: &Path, sid: &str) {
     let _ = std::fs::remove_file(path_for(spine_dir, sid));
+}
+
+/// 程序結束（F-78）：記得 Claude Code 會話 id 的就留一份 `exited`（標題、id、目錄）給「接續」用；
+/// 沒有 id（hook 從沒觸發）就照舊刪掉。App 重開時 [`clear_all`] 一起清。
+pub fn retire(spine_dir: &Path, sid: &str) {
+    let keep = read(spine_dir, sid).filter(|v| {
+        v.get("claude_session")
+            .and_then(Value::as_str)
+            .is_some_and(crate::history::valid_session_id)
+    });
+    let Some(mut v) = keep else {
+        clear(spine_dir, sid);
+        return;
+    };
+    v["status"] = json!("exited");
+    v["text"] = json!("程序已結束");
+    v["event"] = json!("exit");
+    v["at"] = json!(Local::now()
+        .naive_local()
+        .format("%Y-%m-%d %H:%M")
+        .to_string());
+    if let Some(o) = v.as_object_mut() {
+        o.remove("reply");
+    }
+    let _ = crate::fsutil::write_atomic(&path_for(spine_dir, sid), v.to_string().as_bytes());
 }
 
 /// App 重開：前一次的會話都不在了（sid 會重新從頭編），全部清掉，只刪 `*.json`。
@@ -175,6 +202,21 @@ pub fn record_hook(
         .to_string();
     let mut rec = json!({"status": status, "text": text, "at": at, "event": event});
     let (title, reply) = transcript_bits(event, &payload, &path);
+    // F-78：接續用的 Claude Code 會話 id 與目錄（每個 hook 都帶）
+    if let Some(id) = payload
+        .get("session_id")
+        .and_then(Value::as_str)
+        .filter(|i| crate::history::valid_session_id(i))
+    {
+        rec["claude_session"] = json!(id);
+    }
+    if let Some(c) = payload
+        .get("cwd")
+        .and_then(Value::as_str)
+        .filter(|c| !c.is_empty())
+    {
+        rec["cwd"] = json!(c);
+    }
     if let Some(t) = title {
         rec["title"] = json!(t);
     }
@@ -340,6 +382,37 @@ mod tests {
             .to_string();
         assert!(record_hook("stop", &p2, Some(tps), None));
         assert_eq!(read(sp, "t1").unwrap()["reply"], "直接給的");
+    }
+
+    #[test]
+    fn exit_keeps_what_resume_needs_only_when_the_session_id_is_known() {
+        let t = tempfile::tempdir().unwrap();
+        let sp = t.path();
+        let tp = path_for(sp, "t1");
+        let tps = tp.to_str().unwrap();
+        let p = json!({"session_id": "aaaaaaaa-3333", "cwd": "/r",
+                       "last_assistant_message": "好了"})
+        .to_string();
+        assert!(record_hook("stop", &p, Some(tps), None));
+        let v = read(sp, "t1").unwrap();
+        assert_eq!(
+            (v["claude_session"].as_str(), v["cwd"].as_str()),
+            (Some("aaaaaaaa-3333"), Some("/r"))
+        );
+        retire(sp, "t1");
+        let v = read(sp, "t1").unwrap();
+        assert_eq!(v["status"], "exited");
+        assert_eq!(v["claude_session"], "aaaaaaaa-3333");
+        assert!(v.get("reply").is_none());
+        // 沒記到 id：照舊刪掉
+        assert!(record_hook(
+            "stop",
+            r#"{"session_id":"bad id"}"#,
+            Some(path_for(sp, "t2").to_str().unwrap()),
+            None
+        ));
+        retire(sp, "t2");
+        assert!(read(sp, "t2").is_none());
     }
 
     #[test]

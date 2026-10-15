@@ -103,7 +103,12 @@ pub(super) fn annotate_terms_with(
                         s.get("at").and_then(Value::as_str).unwrap_or("")
                             >= tget(t, "started").unwrap_or("~")
                     });
-                for (from, to) in [("title", "ai_title"), ("reply", "last_reply")] {
+                for (from, to) in [
+                    ("title", "ai_title"),
+                    ("reply", "last_reply"),
+                    ("claude_session", "claude_session"),
+                    ("cwd", "resume_cwd"),
+                ] {
                     let v = own.as_ref().and_then(|s| s.get(from)).cloned();
                     rec.insert(to.into(), v.unwrap_or(Value::Null));
                 }

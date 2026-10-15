@@ -358,6 +358,7 @@ export const STATUS_TXT: Record<string, string> = {
   waiting: "等你回應",
   blocked: "卡住了",
   done: "已交接",
+  exited: "已結束",
 };
 
 /** 程序活著不等於工作在推進：回報狀態只認脊椎留痕，沒有留痕就說沒有。 */

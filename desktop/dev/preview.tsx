@@ -91,7 +91,19 @@ const state = {
   tiers: { "repo-a": "active", "repo-b": "active" },
   tags: { "repo-a": ["開發"], "repo-b": [] },
   agents: ["claude"],
-  terms: [term],
+  terms: [
+    term,
+    {
+      ...term,
+      sid: "t2",
+      alive: false,
+      ai_title: "快取改成分片",
+      last_reply: null,
+      agent_status: { status: "exited", text: "程序已結束", at: "00:40", event: "exit" },
+      claude_session: "02908d1e-7843",
+      resume_cwd: "/Users/me/repo-a",
+    },
+  ],
   cards: [
     card("loop:#1", "loop", "驗證 Windows 版"),
     card("e1", "event", "交接：夜間迭代完成"),
@@ -418,3 +430,4 @@ if (scene === "diff-notes")
       later(300, () => document.querySelectorAll<HTMLElement>(".dlnote")[4]?.click());
     });
   });
+if (scene === "ended-session") later(700, () => click(`button[aria-label="展開產品開發"]`));
