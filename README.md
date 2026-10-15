@@ -88,9 +88,12 @@ ctx app                                  # 找 Repo Context.app（ctx 同目錄�
   主區下緣的「脈絡 N 個檔案」可以「交給新會話」、「貼到目前會話（不送出）」或「複製 @路徑」。
 - **哪個 agent 在等你**：App 開的 Claude Code 會話會自動回報（做完一輪＝等你、要你允許工具＝卡住，視窗不在前面時發通知）；
   會話列紅點、牌組卡「N 個等你」、工作區「回到會話」（等你的優先）、選單列「等你 N」（點了切過去）。
-  不用另外設定（只掛在 App 開的會話，不動 `~/.claude/settings.json`）。
+  不用另外設定（只掛在 App 開的會話，不動 `~/.claude/settings.json`）。會話列的標題是 Claude Code 自己取的對話標題，
+  在等你時多一行最後回覆；Dock 圖示的數字＝在等你的會話數。
+- **過去的會話**：會話區「過去的…」列出這個範圍 Claude Code 談過的會話（標題、時間、分支、最後回覆），「接續」在原目錄開
+  `claude --resume`，「複製指令」給外面的終端。終端裡用 `ctx sessions`。
 - **看 agent 改了什麼**：右側欄「變更」頁籤（還沒 commit 的檔，點了看差異；「請 Agent 審…」先讓 agent 摘要風險）、
-  檔案分頁上方「這組的變更」、終端標題列「查看變更」。
+  檔案分頁上方「這組的變更」、終端標題列「查看變更」。差異裡滑過一行按「＋」留言，留好幾則再「貼給會話」一次送出。
 - **repo 名片**：右側欄「資訊」頁籤可直接寫介紹／角色／關鍵字；活動分頁的健康段列出還沒寫的（可「請 Agent 起草…」）。
 - **選單列「記一筆…」**：記到目前牌組的筆記（agent 開場也看得到）；待處理分頁「這組標為已讀」只清這組的未讀。
 
@@ -151,6 +154,7 @@ ctx log "結論…依據…" [--supersedes <ref>] [--reopen-when "…"] [--outco
 ctx todo add "要做的事" ／ close '#3' --note "…" ／ review ／ brief '#3'
 ctx status waiting "在等使用者決定 X"
 ctx handoff --done "…" --next "…" --remaining "…"
+ctx sessions                     # 這個範圍過去的 Claude Code 會話（標題、最後回覆、claude --resume 指令）
 
 # 跨 repo 與知識
 ctx search "快取失效"             # 知識 ↔ repo 相關度＋過去的判斷
@@ -161,7 +165,7 @@ ctx refs check                    # 失效的跨 repo 路徑＋上游變動
 ctx fresh [--run]                 # 反芻：別組新進的知識／判斷中，跟本組手上工作相關的
 
 # 回顧與維護
-ctx health                        # 交接率、推薦命中率、判斷結果記錄率、未結、名片覆蓋
+ctx health                        # 交接率、推薦命中率、判斷結果記錄率、未結、名片覆蓋；skill 不是這版的會提醒
 ctx decisions export docs/agdr    # 判斷寫成 AgDR md
 ctx backfill scan|run|review|accept   # 新 spine 冷啟動：從過去的 Claude Code 會話撈判斷／待辦／交接
 ctx pulse --group 產品            # 活動脈動；brief／collide／spawn／timer 等原語見 ctx --help
