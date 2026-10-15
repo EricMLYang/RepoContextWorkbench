@@ -2816,3 +2816,7 @@ body.withpicks #main {
   flex: none;
   padding: 2px 8px;
 }
+.pastsearch {
+  width: 100%;
+  margin-bottom: 8px;
+}

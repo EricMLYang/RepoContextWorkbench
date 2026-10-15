@@ -126,6 +126,9 @@ pub enum Cmd {
         scope: agent::Scoped,
         #[arg(long, default_value_t = 10)]
         limit: i64,
+        /// 只列標題／第一句／最後回覆／repo／分支含這些詞的（空白分開，都要有）
+        #[arg(long)]
+        query: Option<String>,
     },
     /// 記一筆判斷（decision），回傳可引用的 ref
     Log(agent::LogArgs),
@@ -207,7 +210,11 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Where { cwd } => agent::cmd_where(ctx, cwd),
         Context(s) => agent::cmd_context(ctx, s),
         Next { scope, limit } => agent::cmd_next(ctx, scope, *limit),
-        Sessions { scope, limit } => agent::cmd_sessions(ctx, scope, *limit),
+        Sessions {
+            scope,
+            limit,
+            query,
+        } => agent::cmd_sessions(ctx, scope, *limit, query.as_deref()),
         Log(a) => agent::cmd_log(ctx, a),
         Todo(a) => agent::cmd_todo(ctx, a),
         Status(a) => agent::cmd_status(ctx, a),

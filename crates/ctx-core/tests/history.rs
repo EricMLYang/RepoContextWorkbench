@@ -58,6 +58,16 @@ fn lists_interactive_sessions_of_the_scope_newest_first() {
             .len(),
         1
     );
+    // F-79：詞都要有；不分大小寫；查不到＝空
+    let hit: Vec<String> = group
+        .iter()
+        .filter(|x| ctx_core::history::matches(x, "repo-B 的"))
+        .map(|x| x.id.clone())
+        .collect();
+    assert_eq!(hit, ["bbbbbbbb-0001"]);
+    assert!(group
+        .iter()
+        .all(|x| !ctx_core::history::matches(x, "修登入 不存在")));
 }
 
 #[test]

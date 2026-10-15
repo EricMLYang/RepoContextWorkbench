@@ -20,24 +20,45 @@ export function PastSessions() {
   const [list, setList] = useState<PastSession[] | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
+  // F-79：找舊會話（標題、第一句、最後回覆、repo、分支）；停手 250ms 才查，舊結果先留著
+  const [query, setQuery] = useState("");
   const scope = JSON.stringify(store.scopePayload);
   useEffect(() => {
-    // 對話框每次開都重新掛載，不必先清錯誤
     let alive = true;
-    store
-      .action("past_sessions", { ...(JSON.parse(scope) as object), limit: 30 })
-      .then((r) => alive && setList(r.sessions))
-      .catch((e: Error) => alive && setError(e.message));
+    const timer = setTimeout(
+      () =>
+        store
+          .action("past_sessions", { ...(JSON.parse(scope) as object), limit: 30, query })
+          .then((r) => {
+            if (!alive) return;
+            setList(r.sessions);
+            setError("");
+          })
+          .catch((e: Error) => alive && setError(e.message)),
+      query ? 250 : 0,
+    );
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
-  }, [store, scope]);
+  }, [store, scope, query]);
   return (
     <DetailLayout actions={<button onClick={close}>關閉</button>}>
+      <input
+        className="pastsearch"
+        type="search"
+        autoFocus
+        value={query}
+        placeholder="找舊會話：標題、說過的話、repo、分支…"
+        aria-label="找過去的會話"
+        onChange={(e) => setQuery(e.target.value)}
+      />
       {error ? <p className="error">{"讀不到過去的會話：" + error}</p> : null}
       {list === null && !error ? <p className="muted">讀取中…</p> : null}
       {list && !list.length ? (
-        <p className="muted">這個範圍還沒有 Claude Code 的互動會話。</p>
+        <p className="muted">
+          {query ? "找不到含「" + query + "」的會話。" : "這個範圍還沒有 Claude Code 的互動會話。"}
+        </p>
       ) : null}
       <ul className="pastlist">
         {(list || []).map((s) => (

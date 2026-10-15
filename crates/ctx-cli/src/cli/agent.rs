@@ -405,11 +405,11 @@ pub fn cmd_next(ctx: &Ctx, sc: &Scoped, limit: i64) -> CmdResult {
     )
 }
 
-pub fn cmd_sessions(ctx: &Ctx, sc: &Scoped, limit: i64) -> CmdResult {
+pub fn cmd_sessions(ctx: &Ctx, sc: &Scoped, limit: i64, query: Option<&str>) -> CmdResult {
     let t = sc.target();
     agent_call(
         ctx,
-        |d| agentapi::past_sessions(d, &t, limit.max(0) as usize),
+        |d| agentapi::past_sessions(d, &t, limit.max(0) as usize, query),
         h_sessions,
     )
 }

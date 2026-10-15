@@ -130,3 +130,4 @@
 | F-76 | 流程 | 排程任務先跑便宜的 shell 探針，失敗就記一筆 skipped 不叫 agent | Orca automations `--precheck` | 留痕 | P2 | 構想 | R33 | R33 |
 | F-77 | 執行層 | 沒交接就結束的會話：hook 記下 `claude --resume <id>`，收件匣卡片給「接續補交接」——接回那場對話、第一句就請它 handoff；**2026-10-16 完成**（GUI 未實測） | VISION「有行動出口」；Orca restart chip／session resume | 留痕 | P1 | 完成 | R33 | R33 |
 | F-78 | 執行層 | 已結束的 App 會話列給「接續」：hook 另記 Claude Code 會話 id 與目錄，程序結束時狀態檔改寫成 exited（不刪），按了在原目錄 `claude --resume`；**2026-10-16 完成**（GUI 未實測，畫面預覽 `ended-session`） | Orca restart chip | 脈絡 | P2 | 完成 | R33 | R33 |
+| F-79 | 執行層 | 找舊會話：`ctx sessions --query`、「過去的會話」搜尋框（標題、第一句、最後回覆、repo、分支；空白分開的詞都要有）；**2026-10-16 完成** | Orca Session History 的搜尋框 | 脈絡 | P2 | 完成 | R33 | R33 |

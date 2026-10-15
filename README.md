@@ -154,7 +154,7 @@ ctx log "結論…依據…" [--supersedes <ref>] [--reopen-when "…"] [--outco
 ctx todo add "要做的事" ／ close '#3' --note "…" ／ review ／ brief '#3'
 ctx status waiting "在等使用者決定 X"
 ctx handoff --done "…" --next "…" --remaining "…"
-ctx sessions                     # 這個範圍過去的 Claude Code 會話（標題、最後回覆、claude --resume 指令）
+ctx sessions [--query 快取]      # 這個範圍過去的 Claude Code 會話（標題、最後回覆、claude --resume 指令）
 
 # 跨 repo 與知識
 ctx search "快取失效"             # 知識 ↔ repo 相關度＋過去的判斷

@@ -615,12 +615,17 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
 /// 其他未結 → 需要注意的 repo。每項都帶 why。Python 預設 `limit=5`。
 /// 範圍內過去的 Claude Code 互動會話（F-72，Rust 才有）：`{scope, sessions:[…], resume}`。
 /// 接續＝在該會話的 cwd 跑 `claude --resume <id>`。
-pub fn past_sessions(spine_dir: &Path, t: &Target, limit: usize) -> Result<Value> {
+pub fn past_sessions(
+    spine_dir: &Path,
+    t: &Target,
+    limit: usize,
+    query: Option<&str>,
+) -> Result<Value> {
     let w = where_am_i(spine_dir, t.cwd.as_deref())?;
     let s = scope_of(spine_dir, &w, t)?;
     let list = match &s.group {
-        Some(g) => crate::history::past_sessions(spine_dir, Some(g), None, limit, None)?,
-        None => crate::history::past_sessions(spine_dir, None, s.repos.as_deref(), limit, None)?,
+        Some(g) => crate::history::search_sessions(spine_dir, Some(g), None, query, limit)?,
+        None => crate::history::search_sessions(spine_dir, None, s.repos.as_deref(), query, limit)?,
     };
     Ok(json!({"scope": s, "sessions": list,
               "resume": "在會話的 cwd 跑 claude --resume <id>"}))

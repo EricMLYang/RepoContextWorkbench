@@ -154,6 +154,44 @@ pub fn past_sessions(
     Ok(found.into_iter().take(limit).map(|(_, s)| s).collect())
 }
 
+/// 這場會話合不合查詢（F-79）：空白分開的每個詞都要出現在標題、第一句、最後回覆、repo 或分支裡（不分大小寫）。
+pub fn matches(s: &PastSession, query: &str) -> bool {
+    let hay = [
+        Some(s.title.as_str()),
+        s.prompt.as_deref(),
+        s.reply.as_deref(),
+        Some(s.repo.as_str()),
+        s.branch.as_deref(),
+    ]
+    .iter()
+    .flatten()
+    .map(|x| x.to_lowercase())
+    .collect::<Vec<_>>()
+    .join("\n");
+    query
+        .split_whitespace()
+        .all(|w| hay.contains(&w.to_lowercase()))
+}
+
+/// [`past_sessions`]＋查詢：先全部列出再篩（每份只讀頭尾，範圍內全掃也便宜），最多 `limit` 筆。
+pub fn search_sessions(
+    spine_dir: &Path,
+    group: Option<&str>,
+    repos: Option<&[String]>,
+    query: Option<&str>,
+    limit: usize,
+) -> Result<Vec<PastSession>> {
+    let q = query.map(str::trim).filter(|q| !q.is_empty());
+    let Some(q) = q else {
+        return past_sessions(spine_dir, group, repos, limit, None);
+    };
+    Ok(past_sessions(spine_dir, group, repos, usize::MAX, None)?
+        .into_iter()
+        .filter(|s| matches(s, q))
+        .take(limit)
+        .collect())
+}
+
 /// 接續一場會話要在哪跑：逐字稿裡的 cwd，而且要在某個登記的 repo 底下、目錄還在（不在任意路徑開 agent）。
 /// 回傳 (repo id, cwd)。
 pub fn resume_target(spine_dir: &Path, id: &str, cwd: &str) -> Result<(String, PathBuf)> {

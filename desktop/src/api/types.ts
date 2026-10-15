@@ -661,7 +661,7 @@ export interface ActionMap {
   };
   /** Rust 才有（F-72）：目前範圍過去的 Claude Code 互動會話（最近的在前）。 */
   past_sessions: {
-    payload: ScopePayload & { limit?: number };
+    payload: ScopePayload & { limit?: number; query?: string };
     result: { ok: true; sessions: PastSession[] };
   };
   /** Rust 才有（F-69）：repo 裡哪些 md 連到這個檔（照相對連結解析、跳過程式碼區塊；最多 50 則）。 */
