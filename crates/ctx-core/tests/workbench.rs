@@ -2644,3 +2644,19 @@ fn missed_handoff_card_offers_resume_with_handoff_prompt() {
     assert_eq!(argv[2..4], ["--resume", "aaaaaaaa-1111"]);
     assert!(argv[4].contains("handoff"));
 }
+
+#[test]
+fn group_notes_never_keep_secrets() {
+    let (_t, d) = spine_with_repos();
+    let r = handle_action(
+        &d,
+        "note_add",
+        &json!({"group": "g1", "text": "部署用 ghp_abcdefghijklmnop1234 先頂著"}),
+        None,
+    )
+    .unwrap();
+    let text = std::fs::read_to_string(ctx_core::notes::path(&d, "g1")).unwrap();
+    assert!(!text.contains("ghp_abcdef"), "{text}");
+    assert!(text.contains("[REDACTED TOKEN]"));
+    assert!(r.to_string().contains("[REDACTED TOKEN]"));
+}

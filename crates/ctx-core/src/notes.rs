@@ -144,7 +144,8 @@ pub fn list(spine_dir: &Path, group: &str) -> Result<Vec<Note>> {
 /// 記一筆（放最上面）。回寫進去的那一則。
 pub fn add(spine_dir: &Path, group: &str, text: &str, when: Option<NaiveDateTime>) -> Result<Note> {
     let group = check_group(spine_dir, group)?;
-    let text = escape(text);
+    // N-39：筆記也在 spine（會進 git），秘密不落地
+    let text = escape(&crate::redact::redact_secrets(text).0);
     if text.is_empty() {
         return Err(Error::invalid("先寫點內容再記"));
     }
