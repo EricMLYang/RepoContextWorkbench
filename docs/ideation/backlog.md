@@ -125,6 +125,6 @@
 | F-71 | 執行層 | App 會話列帶標題（Claude Code 的 ai-title）＋做完一輪後的最後回覆預覽：Stop hook 從 `transcript_path` 讀尾巴寫進會話狀態檔；**2026-10-16 完成**（`transcript` 只讀頭尾；GUI 未實測） | Orca Agent Dashboard 卡片（會話名稱＋最後訊息）、agents feed | 脈絡 | P1 | 完成 | R33 | R33 |
 | F-72 | 執行層 | 過去的會話：`ctx sessions`（範圍內 repo 的 Claude Code 逐字稿，只讀頭尾：標題、時間、輪數、有沒有交接）＋App 列表＋「接續」開 `claude --resume <id>`；**2026-10-16 完成**（`ctx sessions`、App 會話區「過去的…」、`term_create` 帶 resume；真資料 3 repo 約 0.1s；GUI 未實測） | Orca Agent Session History（Resume／複製 resume 指令）、BAT statusline 會話 ID→resume | 脈絡、同介面 | P1 | 完成 | R33 | R33 |
 | F-73 | 執行層 | Dock 徽章＝等你／卡住的會話數（沒有就清掉）；**2026-10-16 完成**（殼 `set_tray` 一起更新；macOS 未實機看、Windows 不支援） | Orca、BAT 都把未讀同步到 Dock | 脈絡 | P2 | 完成 | R33 | R33 |
-| F-74 | 同介面 | 已裝的 repo-context skill 跟執行檔內建版不一致時，`ctx health` 標出、提示 `ctx setup --claude` | Orca hybrid skills（stub＋版本相符的 `skills get`、App 提示更新） | 同介面 | P2 | 排入 | R33 | R33 |
+| F-74 | 同介面 | 已裝的 repo-context skill 跟執行檔內建版不一致時，`ctx health` 標出、提示 `ctx setup --claude`；**2026-10-16 完成**（`agentsetup::skill_status`，`ctx health` 只在 stale／missing 時講一行） | Orca hybrid skills（stub＋版本相符的 `skills get`、App 提示更新） | 同介面 | P2 | 完成 | R33 | R33 |
 | F-75 | 執行層 | 差異逐行留言→整批貼給會話（一次思考、一次修改） | Orca Annotate AI Diff | 同介面 | P2 | 構想 | R33 | R33 |
 | F-76 | 流程 | 排程任務先跑便宜的 shell 探針，失敗就記一筆 skipped 不叫 agent | Orca automations `--precheck` | 留痕 | P2 | 構想 | R33 | R33 |

@@ -283,6 +283,17 @@ pub fn install_skill(claude_home: &Path) -> Result<StepResult> {
     Ok(StepResult::ok(format!("已寫入 {}", p.display())))
 }
 
+/// 已裝的 skill 跟這個執行檔內建的一不一樣（F-74，Rust 才有）：`current`／`stale`（重裝 App 後沒重跑
+/// setup，agent 讀到的是舊說明）／`missing`。參考 Orca 的「skill 有新版」提示。
+pub fn skill_status(claude_home: &Path) -> &'static str {
+    let p = claude_home.join("skills").join(MCP_NAME).join("SKILL.md");
+    match std::fs::read_to_string(&p) {
+        Err(_) => "missing",
+        Ok(t) if t == skill_text(true) => "current",
+        Ok(_) => "stale",
+    }
+}
+
 /// 外部指令的結果（[`install_mcp_with`] 的注入點用）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CmdOutput {

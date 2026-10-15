@@ -1310,7 +1310,10 @@ pub fn cmd_refs(ctx: &Ctx, a: &RefsArgs) -> CmdResult {
 /// 健康指標（Rust 才有，F-36／N-07）：真用一陣子後，用數字看行為有沒有改變。
 pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
     let d = ctx.spine_dir()?;
-    let v = ctx_core::health::health(&d, days, None)?;
+    let mut v = ctx_core::health::health(&d, days, None)?;
+    // F-74：agent 讀到的 skill 是不是這版的（讀 ~/.claude，所以不放在引擎的 health 裡）
+    let skill = ctx_core::agentsetup::skill_status(&ctx_core::agentsetup::claude_home());
+    v["setup"] = serde_json::json!({"skill": skill});
     ctx.emit(&v, |r| {
         let pct = |x: &Value| {
             x.as_f64()
@@ -1397,6 +1400,16 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                     s(t, "errors")
                 ));
             }
+        }
+        // 無事不報：skill 是最新的就不講
+        match r["setup"]["skill"].as_str() {
+            Some("stale") => out.push(
+                "- skill 不是這版的（重裝 App 後還沒重跑）：agent 讀到舊說明——跑 `ctx setup --claude` 更新".into(),
+            ),
+            Some("missing") => out.push(
+                "- 沒裝 repo-context skill：agent 不知道何時該用工具——跑 `ctx setup --claude`".into(),
+            ),
+            _ => {}
         }
         out.join("\n")
     });

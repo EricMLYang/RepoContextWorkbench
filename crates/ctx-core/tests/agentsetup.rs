@@ -148,3 +148,15 @@ fn test_setup_mcp_failure_is_nonzero() {
     assert_eq!(calls[0], ["claude", "mcp", "get", "repo-context"]);
     assert_eq!(calls[1][..3], ["claude", "mcp", "add"]);
 }
+
+#[test]
+fn skill_status_tells_missing_stale_and_current() {
+    use ctx_core::agentsetup::{install_skill, skill_status};
+    let t = tempfile::tempdir().unwrap();
+    assert_eq!(skill_status(t.path()), "missing");
+    install_skill(t.path()).unwrap();
+    assert_eq!(skill_status(t.path()), "current");
+    let p = t.path().join("skills/repo-context/SKILL.md");
+    std::fs::write(&p, "舊版說明").unwrap();
+    assert_eq!(skill_status(t.path()), "stale");
+}
