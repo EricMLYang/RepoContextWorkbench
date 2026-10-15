@@ -9,7 +9,8 @@
 
 | 名稱 | 類型 | 把 repo 當成什麼 | 可抄 | 不抄／差異 | 狀態 | 查證 | 最後查證 | 發現途徑 | 連結 |
 |---|---|---|---|---|---|---|---|---|---|
-| Orca | 平行執行台 | 工作區（每任務一個 worktree） | 同一題分給多個 agent 比較、合併；每個 worktree 內嵌瀏覽器 Design Mode | 不管跨 repo 脈絡、不留判斷；終端機不跟它拼 → F-28、F-31 | 標竿 | 🔗 | 2026-10-09 | 使用者點名 | [onorca.dev](https://onorca.dev/) |
+| Orca | 平行執行台 | 工作區（每任務一個 worktree） | 同一題分給多個 agent 比較、合併；Agent Dashboard（會話名稱＋最後訊息、Needs You 染色）、Agent Session History（掃逐字稿、Resume）、Dock 徽章、Annotate AI Diff 整批送回、混合式 skill（stub＋版本相符指南）；R33 讀原始碼 | 不管跨 repo 脈絡、不留判斷；終端機不跟它拼 → F-28、F-31、F-71～F-76 | 標竿 | 🔗 | 2026-10-16 | 使用者點名；R33 讀 `reference_repo/orca` | [onorca.dev](https://onorca.dev/) |
+| Better Agent Terminal | 終端聚合器（Tauri＋Rust，跟我們同棧） | 資料夾＝工作區 | 轉交前遮蔽秘密（transfer-redaction）、Rust crate 拆分（不依賴 Tauri）、IPC 只加不改、互動 CLI＋讀逐字稿（避開 `-p` 程式化計費） | 內建 SDK 面板、auto-continue、遠端 QR 不抄 → N-39、F-72 | 參考 | 🔗 | 2026-10-16 | 使用者點名；R33 讀 `reference_repo/better-agent-terminal` | [GitHub](https://github.com/tony1223/better-agent-terminal) |
 | Conductor | 平行執行台 | 工作區（macOS、worktree） | diff／PR 審查流程、串 Linear／GitHub | 同上 → F-30 | 參考 | 🔗 | 2026-10-09 | R01 平行 agent 比較文 | [nimbalyst 比較](https://nimbalyst.com/compare/nimbalyst-vs-conductor-vs-vibe-kanban/) |
 | Vibe Kanban | 平行執行台 | issue 看板＋工作區 | 看板形狀的規劃與審查 | bloop 2026-04 關門，改社群維護 | 觀察 | 🔗 | 2026-10-09 | 同上 | [aq.dev](https://aq.dev/alternatives/vibe-kanban/) |
 | Sculptor | 平行執行台 | Docker 容器 | 隔離本機 repo，核准後才把改動搬進來 | — | 觀察 | 🔗 | 2026-10-09 | 同上 | [augmentcode 整理](https://www.augmentcode.com/tools/open-source-agent-orchestrators) |

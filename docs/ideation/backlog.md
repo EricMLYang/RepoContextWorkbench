@@ -121,3 +121,10 @@
 | N-38 | 可維護 | 夜間自動迭代的程式碼自我審查：GUI 都還沒實測時，至少把風險高的路徑（自動儲存與衝突、改名與分頁、助手執行順序與復原、尋找列的 effect）讀一遍找 bug | R30–R31 共 25 個 commit 只有單元測試 | 留痕 | P1 | 排入 | R31 | R31 |
 | F-69 | 知識庫 | 反向連結：看一份 md 時列出「repo 裡哪些 md 連到這份」（照相對連結解析、跳過程式碼區塊），點了開那份；更快拿到周邊脈絡；**2026-10-15 完成**（card_notes 2,874 份 md：120–340ms） | Clearly（開源 Mac md 編輯器：wiki-link、backlinks、自帶 MCP）| 脈絡 | P1 | 完成 | R32 | R32 |
 | F-70 | 執行層 | 編輯區尋找與取代（⌘⌥F）：在草稿裡找、逐一或全部取代，保留復原；**2026-10-15 完成**（編輯中 ⌘F 就是它；沒有 regex） | MarkNode 有 regex 尋找取代；HackMD 走 CodeMirror 的 Sublime 鍵位 | 同介面 | P2 | 完成 | R32 | R32 |
+| N-39 | 資料安全 | 寫進 spine 的事件文字遮蔽秘密：私鑰、`sk-ant-`／`ghp_`／`github_pat_` 類 token、`Authorization: Bearer`、`api_key=`／`password=` 換成 `[REDACTED…]`；引擎單點（CLI／MCP／App／hook 一起受益） | spine 是 git repo、可能推遠端（#8），agent 的 log／handoff／todo 文字原樣落地；BAT `shared/transfer-redaction.mjs` | 留痕 | P1 | 排入 | R33 | R33 |
+| F-71 | 執行層 | App 會話列帶標題（Claude Code 的 ai-title）＋做完一輪後的最後回覆預覽：Stop hook 從 `transcript_path` 讀尾巴寫進會話狀態檔 | Orca Agent Dashboard 卡片（會話名稱＋最後訊息）、agents feed | 脈絡 | P1 | 排入 | R33 | R33 |
+| F-72 | 執行層 | 過去的會話：`ctx sessions`（範圍內 repo 的 Claude Code 逐字稿，只讀頭尾：標題、時間、輪數、有沒有交接）＋App 列表＋「接續」開 `claude --resume <id>` | Orca Agent Session History（Resume／複製 resume 指令）、BAT statusline 會話 ID→resume | 脈絡、同介面 | P1 | 排入 | R33 | R33 |
+| F-73 | 執行層 | Dock 徽章＝等你／卡住的會話數（沒有就清掉） | Orca、BAT 都把未讀同步到 Dock | 脈絡 | P2 | 排入 | R33 | R33 |
+| F-74 | 同介面 | 已裝的 repo-context skill 跟執行檔內建版不一致時，`ctx health` 標出、提示 `ctx setup --claude` | Orca hybrid skills（stub＋版本相符的 `skills get`、App 提示更新） | 同介面 | P2 | 排入 | R33 | R33 |
+| F-75 | 執行層 | 差異逐行留言→整批貼給會話（一次思考、一次修改） | Orca Annotate AI Diff | 同介面 | P2 | 構想 | R33 | R33 |
+| F-76 | 流程 | 排程任務先跑便宜的 shell 探針，失敗就記一筆 skipped 不叫 agent | Orca automations `--precheck` | 留痕 | P2 | 構想 | R33 | R33 |
