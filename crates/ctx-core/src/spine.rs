@@ -317,6 +317,8 @@ pub fn append_event_or_dead_letter<S: AsRef<str>>(
 
 fn write_event(spine_dir: &Path, mut ev: Event, now: NaiveDateTime) -> Result<Event> {
     ev.date = now.format("%Y-%m-%d").to_string();
+    // N-39：秘密不落地（spine 會進 git、可能推遠端）
+    ev.body = crate::redact::redact_secrets(&ev.body).0;
     let day_file = events_dir(spine_dir).join(format!("{}.md", ev.date));
     let _g = FileLock::new(spine_dir.join(LOCK_NAME)).acquire()?;
     if let Some(parent) = day_file.parent() {
@@ -346,6 +348,7 @@ fn write_dead_letter(
     let dl_dir = spine_dir.join("spine").join("dead-letter");
     std::fs::create_dir_all(&dl_dir)?;
     let p = dl_dir.join(format!("{}.md", now.format("%Y-%m-%d-%H%M%S-%6f")));
+    let body = crate::redact::redact_secrets(body).0;
     std::fs::write(
         &p,
         format!("<!-- validator 拒寫: {error} -->\n{header}\n{body}\n"),

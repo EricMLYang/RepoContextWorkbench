@@ -120,6 +120,11 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   （`ruminate::push_links`）；舊規則的推薦視為被取代——不推、不擋新規則重推、資料保留（`ctx fresh --all` 看得到）。
   對拍時比對前拿掉推薦的 `rules` 鍵，記為允許差異。
 
+- **事件文字寫入前遮蔽秘密**（2026-10-16，ideation N-39；Python 沒有）：`spine::write_event`（與 dead-letter）在落地前
+  跑 `redact::redact_secrets`——私鑰區塊、`sk-ant-`／`sk-`／`ghp_`／`github_pat_`／`xox?-` 類 token、AWS `AKIA…`、
+  `Authorization: Bearer …`、`*api_key=`／`*_token=`／`secret`／`password`／`cookie` 後面 6 字元以上的 ASCII 值，換成
+  `[REDACTED…]`。標頭不動；只影響含秘密的內文（對拍 fixture 沒有，不需要允許差異）。
+
 - **未結事項體檢 `ctx todo review`**（2026-10-10，ideation F-21；Python 沒有）：每項看 opened 之後範圍內的 commit 與
   判斷／交接的「完成：」行，算證據蓋住事項文字的比例（中文用連續命中的片段，不數零散 bigram）；≥45%＝可能已處理，
   逾期或開了 14 天以上、期間沒人提到 `#N` 也沒相關動靜＝擱置。提到 `#N` 的只算「有人提到」不算證據，開出這項的交接
