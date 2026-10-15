@@ -72,6 +72,8 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 - **交辦給新會話**：`ctx todo brief '#N'` 產生任務包（目標／背景／輸入／限制／完成條件）。
 - **關係建議**：`ctx registry suggest --json`；使用者同意才 `ctx registry relate`。
 - **新料拿來試**：`ctx fresh --try <id>` 在推薦所屬的組開一個帶出處的待辦。
+- **之前談過的會話**：使用者提到「上次那個…」時，`ctx sessions --query <詞> --json` 找範圍內過去的 Claude Code 會話
+  （標題、最後回覆、`claude --resume` 指令、逐字稿 `path`）；交接沒寫到的細節再去逐字稿找，別憑印象。
 
 ## 範圍規則
 
