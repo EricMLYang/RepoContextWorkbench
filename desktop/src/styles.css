@@ -2754,3 +2754,58 @@ body.withpicks #main {
   gap: 6px;
   margin-top: 4px;
 }
+
+/* F-75 差異逐行留言 */
+.diffview .dl {
+  position: relative;
+  padding-left: 18px;
+}
+.dlnote {
+  position: absolute;
+  left: -2px;
+  top: 0;
+  padding: 0 3px;
+  font-size: 11px;
+  line-height: inherit;
+  border: 0;
+  background: var(--blue);
+  color: var(--bg);
+  border-radius: 3px;
+  opacity: 0;
+  cursor: pointer;
+}
+.dl:hover .dlnote,
+.dlnote:focus-visible {
+  opacity: 1;
+}
+.dlcomment {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 2px 0 4px 16px;
+  padding: 4px 8px;
+  border-left: 3px solid var(--blue);
+  background: var(--panel2);
+  font-family: inherit;
+  white-space: pre-wrap;
+}
+.dlcomment.editing {
+  flex-direction: column;
+  align-items: stretch;
+}
+.dlcomment textarea {
+  width: 100%;
+  font: inherit;
+}
+.dlcommenttext {
+  flex: 1;
+}
+.dlcommentacts,
+.diffnotesbar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.diffnotesbar {
+  margin-bottom: 6px;
+}

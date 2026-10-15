@@ -67,6 +67,9 @@ const term = {
   report_basis: "",
   agent_status: { status: "waiting", text: "這一輪做完了，等你回覆", at: "01:30", event: "stop" },
   home_group: "產品開發",
+  // F-71：Claude Code 取的標題＋最後回覆
+  ai_title: "整理登入頁的 UI",
+  last_reply: "改好了：按鈕對齊、錯誤訊息改成紅字。要我順便補測試嗎？",
 };
 const card = (key: string, kind: string, title: string) => ({
   key,
@@ -236,6 +239,57 @@ const backend: Backend = {
         ],
       };
     if (name === "assist_plan") return plan;
+    if (name === "file_diff")
+      return {
+        ok: true,
+        id: p.id,
+        path: p.path,
+        truncated: false,
+        diff: [
+          "diff --git a/src/main.rs b/src/main.rs",
+          "--- a/src/main.rs",
+          "+++ b/src/main.rs",
+          "@@ -1,4 +1,5 @@",
+          " //! 範例",
+          "-fn main() {}",
+          "+fn main() {",
+          '+    println!("hi");',
+          "+}",
+          " ",
+        ].join("\n"),
+      };
+    if (name === "past_sessions")
+      return {
+        ok: true,
+        sessions: [
+          {
+            id: "8d110180-5810",
+            repo: "repo-a",
+            cwd: "/Users/me/repo-a",
+            title: "整理登入頁的 UI",
+            prompt: "情境卡＋文件地圖已備好…",
+            reply: "改好了：按鈕對齊、錯誤訊息改成紅字。要我順便補測試嗎？",
+            branch: "main",
+            started: "2026-10-16T01:00:00Z",
+            updated: "2026-10-16 01:30",
+            live: true,
+            path: "/x.jsonl",
+          },
+          {
+            id: "02908d1e-7843",
+            repo: "repo-b",
+            cwd: "/Users/me/repo-b",
+            title: "快取改成分片",
+            prompt: "幫我看一下快取",
+            reply: "已經 commit：快取拆成 16 片，查詢 450ms → 120ms。",
+            branch: "cache",
+            started: "2026-10-15T20:00:00Z",
+            updated: "2026-10-15 22:37",
+            live: false,
+            path: "/y.jsonl",
+          },
+        ],
+      };
     if (name === "backlinks")
       return {
         ok: true,
@@ -275,6 +329,10 @@ if (scene === "editor" || scene === "edit-find" || scene === "tablist") {
   ]);
   put("activeFile", "repo-a\u0000docs/notes.md");
   put("editLayout", "split");
+}
+if (scene === "diff-notes") {
+  put("openFiles", [{ repo: "repo-a", path: "src/main.rs", diff: true }]);
+  put("activeFile", "repo-a\u0000src/main.rs");
 }
 if (scene === "md-view") {
   put("openFiles", [{ repo: "repo-a", path: "docs/notes.md" }]);
@@ -347,3 +405,16 @@ if (scene === "rename")
     row?.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true }));
   });
 if (scene === "tablist") later(900, () => click('button[aria-label="開啟的檔案清單"]'));
+if (scene === "past-sessions") later(700, () => click("#pastbtn"));
+if (scene === "diff-notes")
+  later(900, () => {
+    document.querySelectorAll<HTMLElement>(".dlnote")[2]?.click();
+    later(200, () => {
+      const ta = document.querySelector<HTMLTextAreaElement>(".dlcomment textarea")!;
+      const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      set.call(ta, "改成回傳 Result，錯誤往上丟");
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      later(100, () => click(".dlcommentacts button"));
+      later(300, () => document.querySelectorAll<HTMLElement>(".dlnote")[4]?.click());
+    });
+  });

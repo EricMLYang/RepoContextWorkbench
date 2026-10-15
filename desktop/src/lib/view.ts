@@ -590,3 +590,50 @@ export function draggedFileAbs(raw: string): string | null {
     return null;
   }
 }
+
+/** 差異上的一則留言（F-75）：`where` 是畫面算的位置、`code` 是那一行 diff 文字（換位置時靠它重新找回）。 */
+export interface DiffNote {
+  where: string;
+  code: string;
+  note: string;
+}
+
+/**
+ * 差異每一行的位置說法（F-75）：加的「第 N 行（新增）」、刪的「原第 M 行（刪除）」、沒變的「第 N 行」；
+ * 標頭與 hunk 行是 null（不能留言）。照 `@@ -a,b +c,d @@` 往下數。
+ */
+export function diffLineRefs(lines: string[]): (string | null)[] {
+  let oldNo = 0;
+  let newNo = 0;
+  let inHunk = false;
+  return lines.map((l) => {
+    const h = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(l);
+    if (h) {
+      oldNo = Number(h[1]);
+      newNo = Number(h[2]);
+      inHunk = true;
+      return null;
+    }
+    if (!inHunk || l.startsWith("\\")) return null;
+    if (l.startsWith("+")) return `第 ${newNo++} 行（新增）`;
+    if (l.startsWith("-")) return `原第 ${oldNo++} 行（刪除）`;
+    if (l.startsWith(" ") || l === "") {
+      oldNo++;
+      return `第 ${newNo++} 行`;
+    }
+    inHunk = false; // 下一個檔的 diff 標頭
+    return null;
+  });
+}
+
+/**
+ * 留言現在掛在哪一行（差異重讀後行會移動）：先找位置與內容都一樣的，再找內容一樣、離原位置最近的；
+ * 都找不到＝-1（那一行已經不在差異裡）。
+ */
+export function anchorNotes(notes: DiffNote[], lines: string[], refs: (string | null)[]): number[] {
+  return notes.map((n) => {
+    const exact = lines.findIndex((l, i) => l === n.code && refs[i] === n.where);
+    if (exact >= 0) return exact;
+    return lines.findIndex((l, i) => l === n.code && refs[i] !== null);
+  });
+}

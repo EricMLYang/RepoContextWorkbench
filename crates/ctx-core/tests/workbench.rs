@@ -2569,3 +2569,37 @@ fn term_create_resume_runs_claude_resume_in_the_session_dir() {
     let r = handle_action(&d, "past_sessions", &json!({"group": "g1"}), None).unwrap();
     assert!(r["sessions"].is_array());
 }
+
+#[test]
+fn diff_notes_brief_batches_line_notes_into_one_message() {
+    let (_t, d) = spine_with_repos();
+    let notes = json!([
+        {"where": "第 12 行（新增）", "code": "+    let x = 1;", "note": "改名叫 count\n順便加註解"},
+        {"where": "原第 3 行（刪除）", "code": "-old()", "note": "  "},
+        {"where": "第 20 行", "code": " fn main() {", "note": "這裡要處理錯誤"},
+    ]);
+    let r = handle_action(
+        &d,
+        "diff_notes_brief",
+        &json!({"id": "repo-a", "path": "src/a.rs", "notes": notes}),
+        None,
+    )
+    .unwrap();
+    assert_eq!(r["count"], 2);
+    let text = r["text"].as_str().unwrap();
+    assert!(
+        text.contains("src/a.rs") && text.contains("留了 2 則意見"),
+        "{text}"
+    );
+    assert!(
+        text.contains("1. 第 12 行（新增）：`+ let x = 1;`\n   改名叫 count\n   順便加註解"),
+        "{text}"
+    );
+    assert!(
+        text.contains("2. 第 20 行：`fn main() {`\n   這裡要處理錯誤"),
+        "{text}"
+    );
+    assert!(!text.contains("old()"));
+    let empty = json!({"id": "repo-a", "path": "a", "notes": [{"where": "x", "note": ""}]});
+    assert!(handle_action(&d, "diff_notes_brief", &empty, None).is_err());
+}

@@ -9,6 +9,8 @@ import { ContextMenu, type MenuItem } from "../ContextMenu";
 import { Editor, taskIndex, type EditLayout, type EditorHandle } from "./Editor";
 import { lineOffset, linkForDrop, mdHeadings, relPath, slug, toggleTask } from "../../lib/mdedit";
 import { clearMatches, findRanges, showMatches } from "../../lib/findText";
+import type { DiffNote } from "../../lib/view";
+import { DiffView } from "./DiffNotes";
 
 export interface OpenFile {
   repo: string;
@@ -409,42 +411,6 @@ const lf = (t: string) => t.replace(/\r\n/g, "\n").replace(/^\uFEFF/, "");
  * - 有未存的修改時不重讀（不洗掉使用者打的字），改成提示「磁碟上的檔變了」，讓人選載入或覆蓋；
  * - 存檔帶讀檔時的 version，引擎發現被改過就不寫（conflict）。
  */
-/** 差異的一行屬於哪種（上色用）。 */
-function diffLineKind(l: string): string {
-  if (l.startsWith("+++") || l.startsWith("---")) return "meta";
-  if (l.startsWith("+")) return "add";
-  if (l.startsWith("-")) return "del";
-  if (l.startsWith("@@")) return "hunk";
-  if (/^(diff |index |new file|deleted file|similarity|rename |old mode|new mode)/.test(l))
-    return "meta";
-  return "ctx";
-}
-
-/** 差異（git diff 的文字）：加的綠、刪的紅、段落標頭藍；太長先畫前 LINE_CAP 行。 */
-function DiffView({ text, truncated }: { text: string; truncated: boolean }) {
-  const [all, setAll] = useState(false);
-  if (!text) return <p className="viewernote">這個檔沒有還沒 commit 的變更。</p>;
-  const lines = text.split("\n");
-  const shown = all ? lines : lines.slice(0, LINE_CAP);
-  return (
-    <>
-      {truncated ? <p className="viewernote">差異太長，只顯示前 512 KB。</p> : null}
-      <pre className="diffview" aria-label="差異">
-        {shown.map((l, i) => (
-          <div key={i} className={"dl " + diffLineKind(l)}>
-            {l || " "}
-          </div>
-        ))}
-      </pre>
-      {lines.length > shown.length ? (
-        <button type="button" className="small" onClick={() => setAll(true)}>
-          顯示全部 {lines.length} 行
-        </button>
-      ) : null}
-    </>
-  );
-}
-
 export function FileViewer({
   file,
   hidden,
@@ -577,6 +543,8 @@ export function FileViewer({
   // 差異模式：看這個檔跟上一個 commit 差在哪（agent 改了什麼）
   const [diff, setDiff] = useState<{ text: string; truncated: boolean } | null>(null);
   const [diffError, setDiffError] = useState("");
+  // F-75：差異上的逐行留言（切去預覽再回來還在；關分頁就沒了）
+  const [diffNotes, setDiffNotes] = useState<DiffNote[]>([]);
   // 從變更清單再點一次（已開著的分頁）：切到差異
   const [askedDiff, setAskedDiff] = useState(file.diff);
   if (askedDiff !== file.diff) {
@@ -1122,7 +1090,14 @@ export function FileViewer({
               {diffError}
             </p>
           ) : diff ? (
-            <DiffView text={diff.text} truncated={diff.truncated} />
+            <DiffView
+              repo={repo}
+              path={path}
+              text={diff.text}
+              truncated={diff.truncated}
+              notes={diffNotes}
+              setNotes={setDiffNotes}
+            />
           ) : (
             <p className="muted">讀取差異中…</p>
           )

@@ -648,6 +648,11 @@ export interface ActionMap {
     payload: { id: string; path: string; base64: string };
     result: { ok: true; id: string; path: string; abs: string };
   };
+  /** Rust 才有（F-75）：差異上的逐行留言 → 一段給 agent 的話（空白留言略過；全空回錯）。 */
+  diff_notes_brief: {
+    payload: { id: string; path: string; notes: { where: string; code: string; note: string }[] };
+    result: { ok: true; text: string; count: number };
+  };
   /** Rust 才有（F-72）：目前範圍過去的 Claude Code 互動會話（最近的在前）。 */
   past_sessions: {
     payload: ScopePayload & { limit?: number };

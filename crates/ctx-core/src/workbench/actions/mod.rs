@@ -113,6 +113,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("save_image", a_save_image),
     ("backlinks", a_backlinks),
     ("past_sessions", finder::a_past_sessions),
+    ("diff_notes_brief", finder::a_diff_notes_brief),
     ("assist_plan", a_assist_plan),
     ("assist_log", a_assist_log),
     ("assist_recent", a_assist_recent),
@@ -146,6 +147,7 @@ const READ_ONLY: &[&str] = &[
     "assist_recent",
     "backlinks",
     "past_sessions",
+    "diff_notes_brief",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。

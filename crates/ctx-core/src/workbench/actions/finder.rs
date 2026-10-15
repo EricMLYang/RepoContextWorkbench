@@ -217,3 +217,49 @@ pub(super) fn a_past_sessions(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Re
     )?;
     Ok(json!({"ok": true, "sessions": list}))
 }
+
+#[derive(serde::Deserialize)]
+struct DiffNote {
+    /// 畫面算好的位置（「第 12 行（新增）」）。
+    #[serde(rename = "where")]
+    at: String,
+    /// 那一行的 diff 文字（含 +／- 前綴）。
+    #[serde(default)]
+    code: String,
+    note: String,
+}
+
+#[derive(serde::Deserialize)]
+struct DiffNotesArgs {
+    id: String,
+    path: String,
+    notes: Vec<DiffNote>,
+}
+
+/// 一則留言最多帶幾個字元的程式碼（一行 diff 可能很長）。
+const NOTE_CODE_MAX: usize = 160;
+
+/// F-75（Rust 才有）：差異上的逐行留言 → 一段給 agent 的話（一次改完再回報，不要一則一則來回）。
+/// 前端只負責收留言與貼進會話；文字怎麼寫在這裡（參考 Orca Annotate AI Diff 的整批送回）。
+pub(super) fn a_diff_notes_brief(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let DiffNotesArgs { id, path, notes } = parse("diff_notes_brief", p)?;
+    let notes: Vec<&DiffNote> = notes.iter().filter(|n| !n.note.trim().is_empty()).collect();
+    if notes.is_empty() {
+        return Err(Error::invalid("還沒有留言"));
+    }
+    let abs = registry::get_repo(d, &id)?.path().join(&path);
+    let mut lines = vec![format!(
+        "我看了 {} 還沒 commit 的差異，留了 {} 則意見。請一次全部處理完再回報（哪則改了什麼、哪則不改和理由）：",
+        abs.display(),
+        notes.len()
+    )];
+    for (i, n) in notes.iter().enumerate() {
+        let code = crate::transcript::one_line(n.code.trim_end(), NOTE_CODE_MAX);
+        lines.push(String::new());
+        lines.push(format!("{}. {}：`{}`", i + 1, n.at.trim(), code));
+        for l in n.note.trim().lines() {
+            lines.push(format!("   {l}"));
+        }
+    }
+    Ok(json!({"ok": true, "text": lines.join("\n"), "count": notes.len()}))
+}
