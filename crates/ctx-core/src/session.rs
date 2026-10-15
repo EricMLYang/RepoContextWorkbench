@@ -228,7 +228,12 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
 /// 接續一場過去的 Claude Code 會話（F-72，Rust 才有）：config 裡這個 agent 的指令＋`--resume <id>`。
 /// 回傳 (argv, flags_at)。只有 Claude Code（`mcp: mcp-config`）會接續；id 要先用
 /// [`crate::history::valid_session_id`] 驗過。不寫情境卡、不留 presented——是回到舊對話，不是開新工作。
-pub fn resume_argv(spine_dir: &Path, agent: &str, id: &str) -> Result<(Vec<String>, usize)> {
+pub fn resume_argv(
+    spine_dir: &Path,
+    agent: &str,
+    id: &str,
+    prompt: Option<&str>,
+) -> Result<(Vec<String>, usize)> {
     if !crate::history::valid_session_id(id) {
         return Err(Error::invalid(format!("會話 id 不對：{id}")));
     }
@@ -246,6 +251,10 @@ pub fn resume_argv(spine_dir: &Path, agent: &str, id: &str) -> Result<(Vec<Strin
     }
     let mut cmd = spec.cmd.clone();
     cmd.extend(["--resume".to_string(), id.to_string()]);
+    // 接回時順便說第一句（例：請它補交接）；`claude --resume <id> "<話>"`
+    if let Some(p) = prompt.map(str::trim).filter(|p| !p.is_empty()) {
+        cmd.push(p.to_string());
+    }
     Ok((cmd, spec.cmd.len()))
 }
 

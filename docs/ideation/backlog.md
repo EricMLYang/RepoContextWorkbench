@@ -128,3 +128,4 @@
 | F-74 | 同介面 | 已裝的 repo-context skill 跟執行檔內建版不一致時，`ctx health` 標出、提示 `ctx setup --claude`；**2026-10-16 完成**（`agentsetup::skill_status`，`ctx health` 只在 stale／missing 時講一行） | Orca hybrid skills（stub＋版本相符的 `skills get`、App 提示更新） | 同介面 | P2 | 完成 | R33 | R33 |
 | F-75 | 執行層 | 差異逐行留言→整批貼給會話（一次思考、一次修改）；**2026-10-16 完成**（引擎 `diff_notes_brief` 組文字、前端算行號與重新錨定、bracketed paste 不送出；GUI 未實測，畫面預覽 `diff-notes`） | Orca Annotate AI Diff | 同介面 | P2 | 完成 | R33 | R33 |
 | F-76 | 流程 | 排程任務先跑便宜的 shell 探針，失敗就記一筆 skipped 不叫 agent | Orca automations `--precheck` | 留痕 | P2 | 構想 | R33 | R33 |
+| F-77 | 執行層 | 沒交接就結束的會話：hook 記下 `claude --resume <id>`，收件匣卡片給「接續補交接」——接回那場對話、第一句就請它 handoff；**2026-10-16 完成**（GUI 未實測） | VISION「有行動出口」；Orca restart chip／session resume | 留痕 | P1 | 完成 | R33 | R33 |

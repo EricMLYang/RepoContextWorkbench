@@ -125,6 +125,10 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   `Authorization: Bearer …`、`*api_key=`／`*_token=`／`secret`／`password`／`cookie` 後面 6 字元以上的 ASCII 值，換成
   `[REDACTED…]`。標頭不動；只影響含秘密的內文（對拍 fixture 沒有，不需要允許差異）。
 
+- **「沒交接就結束」記下怎麼接回**（2026-10-16，ideation F-77；Python 沒有）：SessionEnd hook 寫的 suggestion 內文最後多一行
+  `接續：claude --resume <id>（目錄 <cwd>）`（id 要是英數與 `-`、8–64 字；對拍用的 `abc` 不合格所以不寫，不需要允許差異）。
+  收件匣卡片據此多「接續補交接」（`session_resume`：App 在原目錄開 `claude --resume <id> "<請補交接>"`）。
+
 - **未結事項體檢 `ctx todo review`**（2026-10-10，ideation F-21；Python 沒有）：每項看 opened 之後範圍內的 commit 與
   判斷／交接的「完成：」行，算證據蓋住事項文字的比例（中文用連續命中的片段，不數零散 bigram）；≥45%＝可能已處理，
   逾期或開了 14 天以上、期間沒人提到 `#N` 也沒相關動靜＝擱置。提到 `#N` 的只算「有人提到」不算證據，開出這項的交接

@@ -23,6 +23,22 @@ export function useRunAction(): RunAction {
         });
         return;
       }
+      if (a.action === "session_resume") {
+        // F-77：接回那場會話（引擎檢查目錄在登記的 repo 底下），開好就切過去
+        store.setBusy(c.key, true);
+        store.setCardError(c.key, "");
+        try {
+          const r = await store.action("term_create", { kind: "agent", ...a.payload });
+          ui.closeDetail();
+          await store.refreshState();
+          ui.selectTerm(r.sid);
+        } catch (e) {
+          store.setCardError(c.key, (e as Error).message);
+        } finally {
+          store.setBusy(c.key, false);
+        }
+        return;
+      }
       if (a.action === "brief_session") {
         // 任務包（Rust 引擎 F-42）：先請引擎組好 markdown，再用它當新會話的任務
         store.setBusy(c.key, true);

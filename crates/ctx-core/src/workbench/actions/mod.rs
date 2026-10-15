@@ -1091,7 +1091,7 @@ fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
         // F-72：接續過去的 Claude Code 會話——在它原本的目錄跑 `claude --resume <id>`（目錄要在登記的 repo 底下）
         let agent = s(p, "agent").unwrap_or_else(|| "claude".into());
         let (rid, cwd) = crate::history::resume_target(d, &id, &s(p, "cwd").unwrap_or_default())?;
-        let (mut argv, at) = session::resume_argv(d, &agent, &id)?;
+        let (mut argv, at) = session::resume_argv(d, &agent, &id, s(p, "prompt").as_deref())?;
         let file =
             crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
         if let Ok(f) = file {

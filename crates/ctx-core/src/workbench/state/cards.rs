@@ -11,6 +11,10 @@ pub(super) struct CardBuilder<'a> {
     by_record: HashMap<(String, String, String), &'a Prov>,
 }
 
+/// 接回沒交接的會話時，一開場就請它補交接的話（F-77）。
+const RESUME_HANDOFF_TASK: &str =
+    "這場會話結束時沒有交接。請呼叫 handoff 補上：完成了什麼、還剩什麼、下次從哪接。";
+
 impl CardBuilder<'_> {
     fn provenance(&self, ev: &Event, m: &mut Map<String, Value>) {
         match self
@@ -125,6 +129,19 @@ impl CardBuilder<'_> {
         if interrupt {
             if let Some(c) = &cid {
                 actions.insert(0, act("重跑判定", "collide_rerun", json!({"cid": c})));
+            }
+        }
+        // F-77：沒交接就結束的會話——接回那場對話請它補交接（行動出口，不是只叫人下次記得）
+        if ev.source == "hook" {
+            if let Some((id, dir)) = crate::hooks::resume_line(&ev.body) {
+                actions.insert(
+                    0,
+                    act(
+                        "接續補交接",
+                        "session_resume",
+                        json!({"resume": id, "cwd": dir, "prompt": RESUME_HANDOFF_TASK, "task": "補交接"}),
+                    ),
+                );
             }
         }
         let mut m = Map::new();

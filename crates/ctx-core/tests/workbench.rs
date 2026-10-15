@@ -2603,3 +2603,44 @@ fn diff_notes_brief_batches_line_notes_into_one_message() {
     let empty = json!({"id": "repo-a", "path": "a", "notes": [{"where": "x", "note": ""}]});
     assert!(handle_action(&d, "diff_notes_brief", &empty, None).is_err());
 }
+
+// ── 2026-10-16：沒交接就結束的會話，卡片給「接續補交接」（F-77）──
+
+#[test]
+fn missed_handoff_card_offers_resume_with_handoff_prompt() {
+    let (_t, d) = spine_with_repos();
+    let ra = ctx_core::registry::get_repo(&d, "repo-a").unwrap().path();
+    let body = format!(
+        "agent 會話結束但沒有交接（2026-10-16 01:00 開始，exit）\n期間 1 個 commit\n下次開場先補交接。\n{}aaaaaaaa-1111（目錄 {}）",
+        ctx_core::hooks::RESUME_PREFIX,
+        ra.display()
+    );
+    assert_eq!(
+        ctx_core::hooks::resume_line(&body),
+        Some(("aaaaaaaa-1111".to_string(), ra.display().to_string()))
+    );
+    assert_eq!(
+        ctx_core::hooks::resume_line("接續：claude --resume x;rm（目錄 /a）"),
+        None
+    );
+    ctx_core::spine::append_event(&d, "suggestion", "hook", &["repo:repo-a"], &body, None).unwrap();
+    let st = st(&d);
+    let card = st["cards"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["title"].as_str().is_some_and(|t| t.contains("沒有交接")))
+        .expect("沒交接的卡");
+    let a = &card["actions"][0];
+    assert_eq!(a["action"], "session_resume");
+    assert_eq!(a["payload"]["resume"], "aaaaaaaa-1111");
+    assert!(a["payload"]["prompt"].as_str().unwrap().contains("handoff"));
+    // 接續時帶第一句
+    let terms = ArgvTerms(Default::default());
+    let mut p = a["payload"].clone();
+    p["kind"] = json!("agent");
+    handle_action(&d, "term_create", &p, Some(&terms)).unwrap();
+    let argv = terms.0.lock().unwrap()[0].clone();
+    assert_eq!(argv[2..4], ["--resume", "aaaaaaaa-1111"]);
+    assert!(argv[4].contains("handoff"));
+}

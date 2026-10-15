@@ -36,10 +36,13 @@ export interface SpineEvent {
 
 // ── 卡片動作（每個按鈕＝一個 action 名稱＋payload）──────────────────
 
-/** 卡片上的按鈕。action 是 ACTIONS 的鍵，或前端自己處理的 route_pick／collide_prefill／brief_session。 */
+/**
+ * 卡片上的按鈕。action 是 ACTIONS 的鍵，或前端自己處理的 route_pick／collide_prefill／brief_session／
+ * session_resume（F-77：接回一場 Claude Code 會話，payload 是 term_create 的 resume／cwd／prompt）。
+ */
 export interface CardAction {
   label: string;
-  action: ActionName | "route_pick" | "collide_prefill" | "brief_session";
+  action: ActionName | "route_pick" | "collide_prefill" | "brief_session" | "session_resume";
   payload: Record<string, unknown>;
   /** 畫面上的主按鈕（引擎標；一張卡最多一個）。 */
   primary?: boolean;
@@ -719,6 +722,8 @@ export interface ActionMap {
       home_group?: string;
       /** Rust 才有（F-72）：接續這場 Claude Code 會話（`claude --resume`；cwd 是它原本的目錄）。 */
       resume?: string;
+      /** Rust 才有（F-77）：接續時的第一句（例：請它補交接）。 */
+      prompt?: string;
     } & ScopePayload;
     result: { ok: true; sid: string; title: string };
   };

@@ -1395,3 +1395,27 @@ fn read_from_md_includes_linked_from() {
     let v = api::read_from(&d, "repo-a:notes/x.md", None, Some(&here)).unwrap();
     assert!(v.get("linked_from").is_none());
 }
+
+#[test]
+fn session_end_records_how_to_resume_when_the_id_is_valid() {
+    let w = two_groups();
+    let start = Local::now().naive_local() - chrono::Duration::minutes(5);
+    let id = "aaaaaaaa-2222";
+    hooks::session_start(
+        &w.sp,
+        &json!({"session_id": id, "cwd": w.impl_.to_string_lossy()}),
+        Some(start),
+    );
+    std::fs::write(w.impl_.join("f.md"), "x\n").unwrap();
+    let ev = hooks::session_end(
+        &w.sp,
+        &json!({"session_id": id, "cwd": w.impl_.to_string_lossy()}),
+        None,
+    )
+    .unwrap();
+    let body = ev["body"].as_str().unwrap();
+    assert_eq!(
+        hooks::resume_line(body),
+        Some((id.to_string(), w.impl_.to_string_lossy().into_owned()))
+    );
+}

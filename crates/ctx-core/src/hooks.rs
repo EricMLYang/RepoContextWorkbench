@@ -415,6 +415,17 @@ fn has_session_id(payload: &Value) -> bool {
 }
 
 /// 對應 `hooks.session_end`：會話結束——沒交接但有事發生 → suggestion [hook]。回傳寫入的事件 dict 或 None。
+/// 「沒交接就結束」事件裡接回那場會話的一行：`接續：claude --resume <id>（目錄 <cwd>）`。
+pub const RESUME_PREFIX: &str = "接續：claude --resume ";
+
+/// 從事件內文找回 (會話 id, 目錄)。格式見 [`RESUME_PREFIX`]；id 不合格＝None。
+pub fn resume_line(body: &str) -> Option<(String, String)> {
+    let rest = body.lines().find_map(|l| l.strip_prefix(RESUME_PREFIX))?;
+    let (id, dir) = rest.split_once("（目錄 ")?;
+    let dir = dir.strip_suffix('）')?;
+    crate::history::valid_session_id(id).then(|| (id.to_string(), dir.to_string()))
+}
+
 pub fn session_end(spine_dir: &Path, payload: &Value, now: Option<NaiveDateTime>) -> Option<Value> {
     session_end_inner(spine_dir, payload, now).ok().flatten()
 }
@@ -503,10 +514,23 @@ fn session_end_inner(
         .filter(|r| !r.is_null() && r.as_str() != Some(""))
         .map(py_str)
         .unwrap_or_else(|| "結束".into());
-    let body = format!(
+    let mut body = format!(
         "agent 會話結束但沒有交接（{started} 開始，{reason}）\n{}\n下次開場先補交接：做到哪、剩什麼、下次從哪接。",
         facts.join("；")
     );
+    // F-77（Rust 才有）：記下怎麼接回那場會話——收件匣卡片據此給「接續補交接」，人也能自己貼到終端
+    let sid = payload
+        .get("session_id")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let dir = payload
+        .get("cwd")
+        .and_then(Value::as_str)
+        .filter(|c| !c.is_empty())
+        .unwrap_or(repo_path);
+    if crate::history::valid_session_id(sid) && !dir.is_empty() {
+        body.push_str(&format!("\n{RESUME_PREFIX}{sid}（目錄 {dir}）"));
+    }
     let ev = spine::append_event(spine_dir, "suggestion", "hook", &toks, &body, now)?;
     Ok(Some(agentapi::event_dict(&ev)))
 }
