@@ -308,6 +308,18 @@ CLI／MCP（ctx-cli）：
   屬於登記的牌組時多一行「屬於牌組「X」」；開場句改「情境卡＋文件地圖…（repo 現況、…）」。
   CLI `group context`／MCP `group_context` 照舊（`build_context`，跟 Python 一樣）。對拍：會話料檔列允許差異、
   `session --print` 比對前把兩種開場句換成同一個樣子。
+- **程式化呼叫看得見**（2026-10-16，ideation F-84；Python 沒有）：`ClaudeProvider` 每次 `claude -p`（碰撞判定、ask_repo、
+  App 助手、backfill）在 `.state/agent_calls.jsonl` 記一行 `{at, ms, ok, read_only, model}`；`health` 多 `agent_calls`
+  （期間次數、今天、平均毫秒、失敗、policy），`ctx health` 與 App 活動分頁各一行並註明「另計額度」。config
+  `provider.programmatic: "off"`（裸 `off` 在 YAML 是 false，也認）＝引擎在 spawn 前就拒絕（`Error::External`）；預設 allow。
+  mock provider 不記。對拍不受影響（parity 一律 mock）。
+- **額度餘光**（2026-10-16，ideation F-83；Python 沒有，新模組 `usage`）：App 開的 Claude Code 會話的 `--settings` 多一條
+  `statusLine` → `ctx hook statusline`，從 Claude Code 每輪餵給 statusline 的 JSON 取 `rate_limits.five_hour／seven_day`
+  （`used_percentage`，也認 `utilization`；`resets_at` epoch 或 ISO）、`context_window.used_percentage`、`model.display_name`，
+  寫 `.state/usage.json`（內容沒變不重寫；原始 payload 留 `.state/usage_raw.json` 查欄位）；`api_state` 帶 `usage`，
+  App 狀態列「5h 62%（23:10 重置） · 7d 31%」、≥80% 變琥珀，`ctx health` 也印一行。這條指令不印東西，所以 App 開的會話
+  終端沒有 statusline（使用者接受；他機器上原本的 statusline 是 Orca 裝的、也不輸出）。**欄位名照 Orca 的解析器寫，還沒抓過
+  真 payload 驗證**（🔗）——第一次真用後看 `usage_raw.json`。
 - **這組標為已讀 `ack_scope`**（2026-10-15，N-37；Python 沒有）：`.state/seen_scopes.json`（範圍鍵 → 時間），
   `build_state` 藏起該範圍在那之前的一般未讀卡；全域 `last_seen.txt`、`ack`、`unread` 清單都不變。
 - **CLI `ctx assist "<一句話>" [--yes]`**（2026-10-15，F-63；Python 沒有）：跟 ⌘K「?」、MCP `workbench_apply` 同一份白名單；

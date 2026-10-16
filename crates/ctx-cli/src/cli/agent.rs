@@ -1386,6 +1386,45 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                 s(a, "undone")
             ));
         }
+        // F-84：程式化呼叫另計額度——先看得見
+        let c = &r["agent_calls"];
+        if c["calls"].as_u64().unwrap_or(0) > 0 || s(c, "policy") == "off" {
+            out.push(format!(
+                "- 程式化呼叫（claude -p：碰撞判定、ask_repo、助手、backfill；另計額度）：期間 {} 次（今天 {}、平均 {:.1} 秒、失敗 {}）；config provider.programmatic＝{}",
+                s(c, "calls"),
+                s(c, "today"),
+                c["avg_ms"].as_f64().unwrap_or(0.0) / 1000.0,
+                s(c, "errors"),
+                s(c, "policy")
+            ));
+        }
+        // F-83：額度餘光（App 會話的 statusLine 回報）
+        if let Some(u) = ctx_core::usage::read(&d) {
+            let win = |k: &str, label: &str| {
+                u[k].as_object().map(|w| {
+                    format!(
+                        "{label} {}%{}",
+                        w["used"].as_u64().unwrap_or(0),
+                        w["resets"]
+                            .as_str()
+                            .map(|r| format!("（{r} 重置）"))
+                            .unwrap_or_default()
+                    )
+                })
+            };
+            let parts: Vec<String> = [win("five_hour", "5h"), win("seven_day", "7d")]
+                .into_iter()
+                .flatten()
+                .collect();
+            if !parts.is_empty() {
+                out.push(format!(
+                    "- Claude Code 額度：{}（{} 更新{}）",
+                    parts.join("、"),
+                    s(&u, "at"),
+                    if u["warn"] == true { "；已過 80%" } else { "" }
+                ));
+            }
+        }
         let tools = arr(r, "tools");
         if tools.is_empty() {
             out.push("- 工具用量：還沒有紀錄（MCP 呼叫才會記，`.state/metrics.jsonl`）".into());

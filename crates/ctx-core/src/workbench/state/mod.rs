@@ -492,6 +492,10 @@ pub fn api_state(
     if let Some(o) = st.as_object_mut() {
         o.insert("terms".into(), json!(annotated));
         o.insert("agents".into(), json!(agents));
+        // Rust 才有（F-83）：額度餘光；沒收過 statusLine 就沒有這個鍵
+        if let Some(u) = crate::usage::read(spine_dir) {
+            o.insert("usage".into(), u);
+        }
     }
     Ok(st)
 }

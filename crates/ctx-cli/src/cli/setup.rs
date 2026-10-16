@@ -22,6 +22,8 @@ pub enum HookEvent {
     Permission,
     /// Rust 才有（F-81）：要你允許哪個工具、做什麼（Claude Code `PermissionRequest`）→「卡住了：Bash：cargo test」；只記錄、不回決定
     PermissionRequest,
+    /// Rust 才有（F-83）：Claude Code 的 statusLine 指令——把 rate_limits（5h／7d 額度）寫到 .state/usage.json；不印東西
+    Statusline,
 }
 
 impl HookEvent {
@@ -34,6 +36,7 @@ impl HookEvent {
             HookEvent::Prompt => "prompt",
             HookEvent::Permission => "permission",
             HookEvent::PermissionRequest => "permission-request",
+            HookEvent::Statusline => "statusline",
         }
     }
 }
@@ -43,6 +46,12 @@ pub fn cmd_hook(ctx: &Ctx, event: HookEvent) -> CmdResult {
     let mut buf = Vec::new();
     let _ = std::io::stdin().read_to_end(&mut buf);
     let stdin = String::from_utf8_lossy(&buf);
+    if event == HookEvent::Statusline {
+        // 額度餘光（F-83）：跟會話狀態同一個環境變數找 .state；不是 App 開的會話就什麼都不做
+        let target = std::env::var(ctx_core::session_status::ENV).ok();
+        ctx_core::usage::record(&stdin, target.as_deref(), None);
+        return Ok(());
+    }
     if matches!(
         event,
         HookEvent::Stop

@@ -111,7 +111,7 @@ pub fn clear_all(spine_dir: &Path) {
     }
 }
 
-/// 寫 App 會話用的 Claude Code 設定檔（只有三個 hook），回傳路徑。每次開會話都重寫（`ctx` 位置可能變了）。
+/// 寫 App 會話用的 Claude Code 設定檔（會話狀態 hook＋額度餘光的 statusLine），回傳路徑。每次開會話都重寫（`ctx` 位置可能變了）。
 pub fn settings_file(spine_dir: &Path, ctx: &Path) -> Result<PathBuf> {
     let p = spine_dir.join(".state").join("session_hooks.json");
     if let Some(parent) = p.parent() {
@@ -125,12 +125,17 @@ pub fn settings_file(spine_dir: &Path, ctx: &Path) -> Result<PathBuf> {
         .map(|m| json!({"matcher": m, "hooks": cmd("permission")}))
         .collect();
     notification.push(json!({"matcher": "idle_prompt", "hooks": cmd("notification")}));
-    let v = json!({"hooks": {
-        "Stop": [{"hooks": cmd("stop")}],
-        "Notification": notification,
-        "PermissionRequest": [{"hooks": cmd("permission-request")}],
-        "UserPromptSubmit": [{"hooks": cmd("prompt")}],
-    }});
+    let v = json!({
+        "hooks": {
+            "Stop": [{"hooks": cmd("stop")}],
+            "Notification": notification,
+            "PermissionRequest": [{"hooks": cmd("permission-request")}],
+            "UserPromptSubmit": [{"hooks": cmd("prompt")}],
+        },
+        // F-83：額度餘光——statusLine 每輪給的 rate_limits 寫到 .state/usage.json；這條不印東西，
+        // 那場會話的終端就沒有 statusline（使用者 2026-10-16 接受）
+        "statusLine": {"type": "command", "command": crate::agentsetup::hook_command(ctx, "statusline")},
+    });
     crate::fsutil::write_atomic(&p, serde_json::to_string_pretty(&v)?.as_bytes())?;
     Ok(p)
 }
@@ -219,7 +224,7 @@ fn pending_action(payload: &Value) -> String {
 }
 
 /// 環境變數給的路徑像不像我們的狀態檔：`…/.state/session_status/<名稱>.json`。不像就不寫（不往任意路徑寫檔）。
-fn valid_target(p: &Path) -> bool {
+pub(crate) fn valid_target(p: &Path) -> bool {
     let name_ok = p
         .file_name()
         .and_then(|n| n.to_str())
@@ -611,5 +616,11 @@ mod tests {
             ]
         );
         assert!(v["hooks"].get("SessionStart").is_none());
+        // F-83：statusLine 也指到 ctx
+        let sl = v["statusLine"]["command"].as_str().unwrap();
+        assert!(
+            sl.contains("/opt/ctx") && sl.ends_with("hook statusline"),
+            "{sl}"
+        );
     }
 }

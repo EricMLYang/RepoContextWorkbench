@@ -90,6 +90,9 @@ ctx app                                  # 找 Repo Context.app（ctx 同目錄�
   會話列紅點、牌組卡「N 個等你」、工作區「回到會話」（等你的優先）、選單列「等你 N」（點了切過去）。
   不用另外設定（只掛在 App 開的會話，不動 `~/.claude/settings.json`）。會話列的標題是 Claude Code 自己取的對話標題，
   在等你或做完沒看時多一行最後回覆；小點紅＝要你允許／回答、亮綠＝做完沒看、暗綠＝看過了；Dock 圖示的數字＝這兩種的會話數。
+- **額度餘光**：狀態列右下「5h 62%（23:10 重置） · 7d 31%」＝Claude Code 訂閱額度（App 開的會話每輪回報，不花額度），
+  過 80% 變琥珀。活動分頁的健康段與 `ctx health` 另列「程式化呼叫」（碰撞判定、ask_repo、助手、backfill 用的 `claude -p`，
+  走另計額度）次數；不想花就在 spine `config.yaml` 設 `provider: {programmatic: "off"}`。
 - **過去的會話**：會話區「過去的…」列出這個範圍 Claude Code 談過的會話（標題、時間、分支、最後回覆），「接續」在原目錄開
   `claude --resume`，「複製指令」給外面的終端。終端裡用 `ctx sessions`。
 - **看 agent 改了什麼**：右側欄「變更」頁籤（還沒 commit 的檔，點了看差異；「請 Agent 審…」先讓 agent 摘要風險）、
