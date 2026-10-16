@@ -2362,7 +2362,8 @@ fn session_attention_counts_live_agents_waiting_blocked_or_unseen_finished() {
         session_attention(&d, &terms).unwrap(),
         Attention {
             needs_you: 2,
-            finished_unseen: 1
+            finished_unseen: 1,
+            working: 1,
         }
     );
     assert_eq!(sessions_needing_you(&d, &terms).unwrap(), 2);

@@ -189,11 +189,14 @@ fn agent_status_of(
 
 /// 活著的 agent 會話裡要你看的有幾個（選單列、Dock 徽章用；Rust 才有）。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Attention {
     /// 在等你：要你允許／回答（blocked）或 agent 說在等你（waiting）。
     pub needs_you: usize,
     /// 做完一輪、你還沒看（F-80：`finished` 且沒記 `seen`）。
     pub finished_unseen: usize,
+    /// 處理中（F-86：殼據此擋機器睡眠）。
+    pub working: usize,
 }
 
 impl Attention {
@@ -207,6 +210,7 @@ impl Attention {
             .and_then(AgentStatus::parse);
         match parsed {
             Some(st) if st.needs_you() => self.needs_you += 1,
+            Some(AgentStatus::Working) => self.working += 1,
             Some(AgentStatus::Finished) if s.get("seen") != Some(&Value::Bool(true)) => {
                 self.finished_unseen += 1
             }

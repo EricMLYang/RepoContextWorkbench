@@ -169,13 +169,14 @@ Rust 端簽名建議：
 - `WorkbenchState`：`groups[{name, members, goal, goal_at}]`、`repos[]`、`tiers{}`、`tags{}`、`tag_vocab[]`、`relations[{from,to,kind,note?,exports?,in_scope,task}]`、`rel_kinds{kind:{forward,inverse,symmetric?}}`、`unread[]`、`loops[]`、`cards[]`、`recent[]`（事件＋`scope_kind/scope_label/scope_repos`＋`lane`，依事件時間新→舊，最多 200）、`stats{collisions, collisions_with_outcome, hit_rate, spawned, alive, survival_rate}`、`scope{group, repos, members, gone}`（這份 state 是照哪個範圍算的；`gone`＝範圍已不存在，Rust 才有）、`terms[]`、`agents[]`。
 - 卡片 `cards[]`：共同欄位 `key, kind, title, lines, actions[{label, action, payload, primary?}]（`primary: true`＝主按鈕，一張卡最多一個，Rust 才有）, date, time, scope_kind, scope_label, scope_repos, lane`；`collision` 多 `cid, verdict, judgement{}`；`interrupt/event` 多 `etype, source`；`pending` 多 `cid`；`loop` 多 `num, due`。
 - `lane`（卡片與 `recent[]` 事件）：`scope`＝屬於目前範圍、`global`＝全域與未分類（卡片另含：範圍外的打斷）、`other`＝不顯示。前端照它分欄，不自己判斷範圍。
-- `attention{needs_you, finished_unseen}`（Rust 才有，F-80）：活著的 agent 會話裡「在等你」（waiting／blocked）與「做完沒看」（finished 且沒 `seen`）各幾個——殼的選單列與 Dock 徽章直接讀這個，不自己比狀態字串（分類只在引擎 `workbench::Attention`）。
+- `attention{needs_you, finished_unseen, working}`（Rust 才有，F-80／F-86）：活著的 agent 會話裡「在等你」（waiting／blocked）與「做完沒看」（finished 且沒 `seen`）各幾個——殼的選單列與 Dock 徽章直接讀這個，不自己比狀態字串（分類只在引擎 `workbench::Attention`）。
 - `usage{at, five_hour{used,resets}|null, seven_day{…}|null, context|null, model|null, warn}|（沒收過就沒有這個鍵）`（Rust 才有，F-83）：Claude Code 額度餘光，從 App 會話的 statusLine 來（`ctx hook statusline` → `.state/usage.json`）。
 - `terms[]`：`sid, title, alive, kind, origin, scope, scope_repos, started, task, report{text,type,source,at}|null, report_basis`，agent 會話另有 `agent_status{status,text,at,…}|null`、`ai_title`、`last_reply`、`claude_session`、`resume_cwd`（F-71／F-78）。
   Rust 才有（2026-10-14）：`agent_status` 也可能來自 Claude Code hook——`term_create` 開 Claude Code（config `mcp: mcp-config`）時多帶
   `--settings=<spine>/.state/session_hooks.json`（只掛 `Stop` → `ctx hook stop`、`UserPromptSubmit` → `prompt`、`Notification` 依 matcher：`permission_prompt`／`elicitation_dialog`／`elicitation_url_dialog`／`agent_needs_input` → `permission`、`idle_prompt` → `notification`，
   不動使用者的 `~/.claude/settings.json`）與環境變數 `REPO_CONTEXT_SESSION_STATUS=<spine>/.state/session_status/<sid>.json`；
-  （2026-10-16 起另掛 `PermissionRequest` → `permission-request`、`statusLine` → `statusline`；事件名只在引擎 `session_status::StatusHook` 定義一次。）
+  （2026-10-16 起另掛 `PermissionRequest` → `permission-request`、`PreToolUse`／`PostToolUse` → `tool-start`／`tool-end`、`statusLine` → `statusline`；事件名只在引擎 `session_status::StatusHook` 定義一次。）
+  `terms[]` 另有 `tool{label, minutes, stalled}|null`（F-82：處理中正在用的工具、跑了幾分、超過 10 分＝可能卡住；引擎算好）。
   hook 照這個路徑寫 `{status, text, at, event}`（做完一輪＝**finished**（F-80，不算等你；App 看過後多 `seen: true`）、要你允許工具＝blocked＋「Bash：cargo test」這種一句（F-81）、閒著等輸入＝waiting＋訊息、你送出＝working；程序結束＝exited）。
   階段字串只在引擎 `status::AgentStatus` 定義（MCP `report_status` 仍只收 working／waiting／blocked／done）。
   `blocked` 的（agent 停住了）殼會在視窗不在前面時發系統通知「<會話> 要你允許」，同一次請求只發一次（`workbench::fresh_permission_asks`）。這種的多一個 `event` 鍵。

@@ -7,6 +7,7 @@
 
 pub mod app_state;
 pub mod env_path;
+pub mod keep_awake;
 pub mod terminal;
 pub mod tree_watch;
 pub mod watch;
@@ -23,6 +24,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 use tauri_plugin_notification::NotificationExt;
 
 use app_state::{persist_spine, spine_json, AppState, Notifier};
+use keep_awake::KeepAwake;
 
 /// 前端監聽的事件名（IPC.md「事件」）。
 pub const EVENT_CHANGED: &str = "workbench://changed";
@@ -204,6 +206,11 @@ fn refresh_unread(app: &AppHandle) {
             .map(|p| p.count);
         let att = st.as_ref().and_then(|s| workbench::attention_now(s));
         set_tray(&app, n, att);
+        // F-86：有會話在處理中就不讓機器睡（macOS caffeinate；使用者層 keep_awake: false 可關）
+        if let Some(k) = app.try_state::<KeepAwake>() {
+            let want = KeepAwake::enabled_by_user() && att.is_some_and(|a| a.working > 0);
+            k.sync(want);
+        }
         // agent 停在「要你允許工具」：打斷是掙來的——視窗不在前面就發系統通知（同一次請求只發一次）
         let asks = st
             .as_ref()
@@ -377,6 +384,7 @@ pub fn run() {
             }
             build_tray(&handle)?;
             app.manage(NotifiedAsks::default());
+            app.manage(KeepAwake::default());
             refresh_unread(&handle);
             Ok(())
         })
@@ -407,7 +415,12 @@ pub fn run() {
         .expect("建立 Tauri app 失敗");
 
     app.run(|app, ev| match ev {
-        RunEvent::ExitRequested { .. } => app.state::<AppState>().shutdown(),
+        RunEvent::ExitRequested { .. } => {
+            if let Some(k) = app.try_state::<KeepAwake>() {
+                k.stop();
+            }
+            app.state::<AppState>().shutdown()
+        }
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => show_main(app),
         _ => {}
@@ -441,6 +454,7 @@ mod tests {
             Some(Attention {
                 needs_you: n,
                 finished_unseen: f,
+                ..Default::default()
             })
         };
         assert_eq!(badge_count(None), None);
@@ -455,6 +469,7 @@ mod tests {
             Some(Attention {
                 needs_you: n,
                 finished_unseen: f,
+                ..Default::default()
             })
         };
         assert_eq!(tray_title(None, None), None);

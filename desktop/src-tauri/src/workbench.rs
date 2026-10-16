@@ -223,7 +223,8 @@ mod tests {
             attention_of(&st),
             Attention {
                 needs_you: 2,
-                finished_unseen: 1
+                finished_unseen: 1,
+                ..Default::default()
             }
         );
         // 舊引擎沒有這個鍵、或形狀不對：當 0，不炸

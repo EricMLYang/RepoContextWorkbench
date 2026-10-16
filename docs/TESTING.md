@@ -157,6 +157,9 @@
 | 8c-12 | 切到會話 A，再切走 | 小點退成暗綠、數字消失；再讓它做完一輪又變亮綠 | [ ] | [ ] |
 | 8c-13 | 讓 agent 跑一個要核准的指令（例：`rm -rf dist`），不要切過去（F-81） | 會話列紅點、狀態文字是「卡住了 · Bash：rm -rf dist」（不是「needs your permission」）；系統通知也是這句；在 TUI 核准後照常 | [ ] | [ ] |
 | 8c-14 | 開一個 Agent 會話、送一句話（F-83） | 幾秒內 App 右下狀態列出現「5h N%（HH:MM 重置） · 7d N%」；`ctx health` 最後幾行也有「Claude Code 額度」；那場會話的終端底部沒有 statusline（刻意）。順便看 `<spine>/.state/usage_raw.json` 欄位名對不對 | [ ] | [ ] |
+| 8c-16 | 讓 agent 跑一個久的指令（例：`sleep 90`），看會話列（F-82） | 狀態「處理中：Bash：sleep 90（1 分）」；結束後回到「處理中」；跑超過 10 分的會變「可能卡住：…」、小點加紅圈 | [ ] | [ ] |
+| 8c-17 | 會話在等你（紅點）時按那列的「回答…」，打一句、Enter（F-85） | 下方終端切到那個會話、那句話貼在輸入框裡**沒送出**；Esc 收起；要你允許工具的那種不會自動按 y（還是得在終端按） | [ ] | [ ] |
+| 8c-18 | 有 Agent 會話在處理中時 `pgrep -fl caffeinate`（F-86） | 有一個 App 開的 `caffeinate -i`；會話都做完／結束後幾秒內消失；結束 App 也消失。`~/.config/repo-context/config.json` 加 `"keep_awake": false` 重開 App 就不會開 | [ ] | 不支援 |
 | 8c-15 | 在 App 用一次「請 Agent 分析想法…」（碰撞判定）後看活動分頁健康段與 `ctx health`（F-84） | 多一行「程式化呼叫 N 次（今天 M…；另計額度）」；把 spine `config.yaml` 加 `provider: {programmatic: "off"}` 再試＝立刻被拒、不花額度 | [ ] | [ ] |
 
 ## 9. 要你決定

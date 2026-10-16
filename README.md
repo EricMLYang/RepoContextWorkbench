@@ -93,6 +93,10 @@ ctx app                                  # 找 Repo Context.app（ctx 同目錄�
 - **額度餘光**：狀態列右下「5h 62%（23:10 重置） · 7d 31%」＝Claude Code 訂閱額度（App 開的會話每輪回報，不花額度），
   過 80% 變琥珀。活動分頁的健康段與 `ctx health` 另列「程式化呼叫」（碰撞判定、ask_repo、助手、backfill 用的 `claude -p`，
   走另計額度）次數；不想花就在 spine `config.yaml` 設 `provider: {programmatic: "off"}`。
+- **有 agent 在跑就不讓機器睡**（macOS）：App 開的會話處理中時自動 `caffeinate -i`，都做完就收掉；
+  不要的話在 `~/.config/repo-context/config.json` 加 `"keep_awake": false`。
+- **在等你的會話直接回**：會話列紅點那列有「回答…」，打一句 Enter 就切到該會話並貼進輸入框（不送出，看一眼再按 Enter）；
+  處理中的會話寫出正在用的工具與跑了幾分，超過 10 分沒結束標「可能卡住」。
 - **過去的會話**：會話區「過去的…」列出這個範圍 Claude Code 談過的會話（標題、時間、分支、最後回覆），「接續」在原目錄開
   `claude --resume`，「複製指令」給外面的終端。終端裡用 `ctx sessions`。
 - **看 agent 改了什麼**：右側欄「變更」頁籤（還沒 commit 的檔，點了看差異；「請 Agent 審…」先讓 agent 摘要風險）、

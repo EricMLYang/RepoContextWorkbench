@@ -275,7 +275,9 @@ CLI／MCP（ctx-cli）：
 - **App 開的 Claude Code 會話自動回報「等你／處理中」**（2026-10-14，Rust 才有）：`ctx hook` 多四個事件
   `stop｜notification｜prompt｜permission｜permission-request`（Notification 依 matcher 分：要你允許／回答＝permission，閒著＝notification；
   `PermissionRequest`＝permission-request，2026-10-16 F-81：寫「Bash：cargo test」這種看得出是哪個工具、做什麼的一句，只記錄、不回決定、提示照常交回 TUI；
-  同一分鐘跟著來的 Notification 不蓋掉它），只照環境變數 `REPO_CONTEXT_SESSION_STATUS` 給的路徑寫 `.state/session_status/<sid>.json`
+  同一分鐘跟著來的 Notification 不蓋掉它；`PreToolUse`／`PostToolUse`＝tool-start／tool-end，2026-10-16 F-82：working＋`tool: {label, since}`
+  「處理中：Bash：cargo test」、工具結束就拿掉，`annotate_terms` 算成 `tool: {label, minutes, stalled}`（≥10 分＝可能卡住）；
+  PreToolUse 每次工具呼叫都 spawn 一次 `ctx`，不印東西＝不擋），只照環境變數 `REPO_CONTEXT_SESSION_STATUS` 給的路徑寫 `.state/session_status/<sid>.json`
   （沒有環境變數＝不是 App 開的會話，什麼都不做；不印東西、永遠 exit 0）。只由 App 開會話時的 `--settings` 掛上，
   `ctx setup --claude` 不裝這三個 hook（setup 輸出與對拍不變）。
   （2026-10-16，ideation F-80）`Stop` 寫的是 `finished`「這一輪做完了」不是 waiting：做完不等於等你，紅點只留給要你允許／回答；
@@ -308,6 +310,8 @@ CLI／MCP（ctx-cli）：
   屬於登記的牌組時多一行「屬於牌組「X」」；開場句改「情境卡＋文件地圖…（repo 現況、…）」。
   CLI `group context`／MCP `group_context` 照舊（`build_context`，跟 Python 一樣）。對拍：會話料檔列允許差異、
   `session --print` 比對前把兩種開場句換成同一個樣子。
+- **不讓機器睡**（2026-10-16，ideation F-86；殼才有）：`get_state` 的 `attention` 多 `working`（處理中的會話數），殼 `keep_awake.rs`
+  在 >0 時開 `caffeinate -i`、歸零或 App 結束就收；使用者層設定 `keep_awake: false` 關。Windows／Linux 沒做（`sync` 不開）。
 - **程式化呼叫看得見**（2026-10-16，ideation F-84；Python 沒有）：`ClaudeProvider` 每次 `claude -p`（碰撞判定、ask_repo、
   App 助手、backfill）在 `.state/agent_calls.jsonl` 記一行 `{at, ms, ok, read_only, model}`；`health` 多 `agent_calls`
   （期間次數、今天、平均毫秒、失敗、policy），`ctx health` 與 App 活動分頁各一行並註明「另計額度」。config
