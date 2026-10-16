@@ -31,5 +31,14 @@ if [ "$what" != rust ]; then
   step lint npm run -s lint
   step prettier npm run -s format:check
 fi
+# 磁碟衛生（docs/DEVELOPMENT.md §7）：build 產物只留最近 7 天用到的；沒裝 cargo-sweep 就提醒一句、不算失敗。
+if [ "$what" != front ]; then
+  cd "$(dirname "$0")/.." || exit 2
+  if command -v cargo-sweep >/dev/null 2>&1; then
+    cargo sweep -q --time 7 >/dev/null 2>&1 || echo "（cargo sweep 失敗，略過）"
+  else
+    echo "（沒裝 cargo-sweep：target/ 會越長越大，cargo install cargo-sweep 後這裡會自動掃）"
+  fi
+fi
 echo "exit=$fail"
 exit $fail
