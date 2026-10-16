@@ -208,7 +208,7 @@ pub fn sessions_asking_permission(spine_dir: impl AsRef<Path>, terms: &[Value]) 
             let asking = st.get("status").and_then(Value::as_str) == Some("blocked")
                 && matches!(
                     st.get("event").and_then(Value::as_str),
-                    Some("notification" | "permission")
+                    Some("notification" | "permission" | "permission-request")
                 )
                 && at >= tget(t, "started").unwrap_or("~");
             asking.then(|| {

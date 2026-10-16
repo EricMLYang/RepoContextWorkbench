@@ -273,7 +273,9 @@ CLI／MCP（ctx-cli）：
   對拍的 fixture 沒有空白名字，不受影響。
 - **讀到壞標頭的錯誤訊息多了位置**（2026-10-14）：照舊整份失敗（同 Python），訊息尾巴多「（spine/events/<檔> 第 N 行；修好這行 spine 才讀得了）」。
 - **App 開的 Claude Code 會話自動回報「等你／處理中」**（2026-10-14，Rust 才有）：`ctx hook` 多四個事件
-  `stop｜notification｜prompt｜permission`（Notification 依 matcher 分：要你允許／回答＝permission，閒著＝notification），只照環境變數 `REPO_CONTEXT_SESSION_STATUS` 給的路徑寫 `.state/session_status/<sid>.json`
+  `stop｜notification｜prompt｜permission｜permission-request`（Notification 依 matcher 分：要你允許／回答＝permission，閒著＝notification；
+  `PermissionRequest`＝permission-request，2026-10-16 F-81：寫「Bash：cargo test」這種看得出是哪個工具、做什麼的一句，只記錄、不回決定、提示照常交回 TUI；
+  同一分鐘跟著來的 Notification 不蓋掉它），只照環境變數 `REPO_CONTEXT_SESSION_STATUS` 給的路徑寫 `.state/session_status/<sid>.json`
   （沒有環境變數＝不是 App 開的會話，什麼都不做；不印東西、永遠 exit 0）。只由 App 開會話時的 `--settings` 掛上，
   `ctx setup --claude` 不裝這三個 hook（setup 輸出與對拍不變）。
   （2026-10-16，ideation F-80）`Stop` 寫的是 `finished`「這一輪做完了」不是 waiting：做完不等於等你，紅點只留給要你允許／回答；
