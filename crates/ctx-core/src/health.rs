@@ -46,6 +46,45 @@ pub fn record_call(spine_dir: &Path, tool: &str, ms: u128, ok: bool) {
     }
 }
 
+fn agent_calls_path(spine_dir: &Path) -> PathBuf {
+    spine_dir.join(".state").join("agent_calls.jsonl")
+}
+
+/// 程式化呼叫 `claude -p` 每次記一行（F-84；`{"at","ms","ok","read_only","model"}`）——碰撞判定、ask_repo、
+/// 助手、backfill 都走這裡，另計額度，先讓它看得見。寫不進去就算了。
+pub fn record_agent_call(
+    spine_dir: &Path,
+    ms: u128,
+    ok: bool,
+    read_only: bool,
+    model: Option<&str>,
+) {
+    let p = agent_calls_path(spine_dir);
+    if let Some(parent) = p.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let line = json!({
+        "at": Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        "ms": ms as u64, "ok": ok, "read_only": read_only, "model": model,
+    });
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&p)
+    {
+        let _ = writeln!(f, "{line}");
+    }
+}
+
+/// config `provider.programmatic`：`allow`（預設）或 `off`（引擎拒絕所有 `claude -p`）。YAML 的裸 `off` 會變 false，也認。
+pub fn programmatic_policy(cfg: &crate::config::Config) -> &'static str {
+    match cfg.get("provider.programmatic") {
+        Some(Value::Bool(false)) => "off",
+        Some(Value::String(s)) if s.trim().eq_ignore_ascii_case("off") => "off",
+        _ => "allow",
+    }
+}
+
 /// 「還沒寫介紹」最多列幾個 id（其餘只給數字）。
 const UNDESCRIBED_SHOWN: usize = 10;
 
@@ -172,6 +211,36 @@ pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result
         .map(|(t, (n, ms, err))| json!({"tool": t, "calls": n, "avg_ms": ms / (*n as u64).max(1), "errors": err}))
         .collect();
 
+    // 程式化呼叫（F-84）：期間幾次、今天幾次、平均多久、失敗幾次
+    let mut calls = (0usize, 0usize, 0u64, 0usize);
+    if let Ok(text) = std::fs::read_to_string(agent_calls_path(spine_dir)) {
+        for v in text
+            .lines()
+            .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        {
+            let Some(at) = v["at"].as_str() else { continue };
+            if at < since.as_str() {
+                continue;
+            }
+            calls.0 += 1;
+            if at.starts_with(&today) {
+                calls.1 += 1;
+            }
+            calls.2 += v["ms"].as_u64().unwrap_or(0);
+            if v["ok"] != true {
+                calls.3 += 1;
+            }
+        }
+    }
+    let policy = crate::config::load(spine_dir)
+        .map(|c| programmatic_policy(&c))
+        .unwrap_or("allow");
+    let agent_calls = json!({
+        "calls": calls.0, "today": calls.1,
+        "avg_ms": calls.2 / (calls.0 as u64).max(1), "errors": calls.3,
+        "policy": policy,
+    });
+
     // 名片覆蓋：repo 多了以後靠名片找、agent 開場靠名冊認組員；沒寫的列出來（給行動出口）
     let data = crate::registry::load(spine_dir)?;
     let live: Vec<&crate::registry::Repo> = data
@@ -198,6 +267,7 @@ pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result
                       "outcome_rate": ratio(with_outcome, with_outcome + due)},
         "loops": {"opened": opened, "closed": closed, "open_now": open_now.len(), "overdue": overdue},
         "tools": tool_rows,
+        "agent_calls": agent_calls,
         "assist": assist,
     }))
 }

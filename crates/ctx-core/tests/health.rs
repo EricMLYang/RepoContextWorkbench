@@ -1,7 +1,7 @@
 //! Rust 才有（F-36／N-07）：健康指標。
 
 use chrono::{Duration, Local};
-use ctx_core::health::{health, record_call};
+use ctx_core::health::{health, record_agent_call, record_call};
 use ctx_core::spine::append_event;
 use ctx_core::testkit::spine;
 
@@ -61,7 +61,21 @@ fn health_counts_handoffs_loops_outcomes_and_tools() {
     record_call(&d, "context_for", 120, true);
     record_call(&d, "context_for", 80, true);
     record_call(&d, "close_todo", 1, false);
+    record_agent_call(&d, 4000, true, false, Some("haiku"));
+    record_agent_call(&d, 2000, false, true, None);
     let h = health(&d, 14, None).unwrap();
+    // F-84：程式化呼叫
+    let c = &h["agent_calls"];
+    assert_eq!(
+        (
+            c["calls"].as_u64(),
+            c["today"].as_u64(),
+            c["avg_ms"].as_u64(),
+            c["errors"].as_u64(),
+            c["policy"].as_str()
+        ),
+        (Some(2), Some(2), Some(3000), Some(1), Some("allow"))
+    );
     assert_eq!(h["handoff"]["handoffs"], 1);
     assert_eq!(h["handoff"]["missed"], 1);
     assert_eq!(h["handoff"]["rate"], 0.5);
@@ -141,5 +155,31 @@ fn health_counts_assistant_use() {
     assert_eq!(
         r["assist"],
         serde_json::json!({"runs": 3, "from_agent": 1, "did_something": 2, "failed": 1, "undone": 1})
+    );
+}
+
+/// F-84：config `provider.programmatic: off` 時，引擎在 spawn 前就拒絕 `claude -p`（不花額度、不找 claude）。
+#[test]
+fn programmatic_off_refuses_claude_before_spawning() {
+    use ctx_core::agents::{AgentProvider, ClaudeProvider};
+    let (_t, d) = spine();
+    std::fs::write(
+        d.join("config.yaml"),
+        "provider:\n  programmatic: \"off\"\n",
+    )
+    .unwrap();
+    let err = ClaudeProvider
+        .run_text("hi", &d, None, None, true)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("programmatic"), "{err}");
+    let h = health(&d, 14, None).unwrap();
+    assert_eq!(h["agent_calls"]["policy"], "off");
+    assert_eq!(h["agent_calls"]["calls"], 0);
+    // YAML 裸 off 會變成 false，也要認
+    std::fs::write(d.join("config.yaml"), "provider:\n  programmatic: off\n").unwrap();
+    assert_eq!(
+        health(&d, 14, None).unwrap()["agent_calls"]["policy"],
+        "off"
     );
 }

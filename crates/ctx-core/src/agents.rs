@@ -289,6 +289,14 @@ impl ClaudeProvider {
         cwd: Option<&Path>,
         read_only: bool,
     ) -> Result<String> {
+        // F-84：config `provider.programmatic: off`＝不准程式化呼叫（另計額度）；判定／問答走這裡都會被擋
+        if let Ok(cfg) = crate::config::load(spine_dir) {
+            if crate::health::programmatic_policy(&cfg) == "off" {
+                return Err(Error::External(
+                    "程式化呼叫（claude -p）已關：config provider.programmatic 是 off".into(),
+                ));
+            }
+        }
         let cmd = self.build_cmd(prompt, model, read_only);
         let mut c = Command::new(&cmd[0]);
         c.args(&cmd[1..])
@@ -299,7 +307,17 @@ impl ClaudeProvider {
         if let Some(d) = cwd {
             c.current_dir(d);
         }
-        let (rc, stdout, stderr) = run_with_timeout(c, CLAUDE_TIMEOUT)?;
+        let started = Instant::now();
+        let ran = run_with_timeout(c, CLAUDE_TIMEOUT);
+        // F-84：每次程式化呼叫記一行（成功＝跑完且 rc 0），`ctx health` 與 App 活動分頁據此顯示
+        crate::health::record_agent_call(
+            spine_dir,
+            started.elapsed().as_millis(),
+            matches!(&ran, Ok((0, _, _))),
+            read_only,
+            model.filter(|m| !m.is_empty()),
+        );
+        let (rc, stdout, stderr) = ran?;
         let mut shown: Vec<String> = cmd[..2].to_vec();
         shown.push("<prompt>".into());
         shown.extend(cmd[3..].iter().cloned());
