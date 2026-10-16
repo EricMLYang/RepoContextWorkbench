@@ -2224,8 +2224,8 @@ fn session_hook_status_shows_on_its_own_session_and_newer_wins() {
     let now = Local::now().naive_local();
     assert!(record_hook("stop", "{}", Some(&target), Some(now)));
     // 只掛在自己的會話上（同範圍的另一個會話看不到）
-    assert_eq!(status_of(&t1)["status"], "waiting");
-    assert_eq!(status_of(&t1)["text"], "這一輪做完了，等你回覆");
+    assert_eq!(status_of(&t1)["status"], "finished");
+    assert_eq!(status_of(&t1)["text"], "這一輪做完了");
     assert!(status_of(&t2).is_null());
     // agent 自己回報、時間較早：hook 的比較新就用 hook 的
     let rec = |at: String| StatusRecord {
@@ -2244,7 +2244,7 @@ fn session_hook_status_shows_on_its_own_session_and_newer_wins() {
             .to_string()),
     )
     .unwrap();
-    assert_eq!(status_of(&t1)["status"], "waiting");
+    assert_eq!(status_of(&t1)["status"], "finished");
     assert_eq!(status_of(&t2)["status"], "blocked");
     // 同一分鐘：取 agent 自己回報的
     save_status(&d, &rec(now.format("%Y-%m-%d %H:%M").to_string())).unwrap();
@@ -2272,9 +2272,9 @@ fn session_hook_status_shows_on_its_own_session_and_newer_wins() {
 }
 
 #[test]
-fn sessions_needing_you_counts_only_live_agents_waiting_or_blocked() {
-    use ctx_core::session_status::{path_for, record_hook};
-    use ctx_core::workbench::sessions_needing_you;
+fn session_attention_counts_live_agents_waiting_blocked_or_unseen_finished() {
+    use ctx_core::session_status::{mark_seen, path_for, record_hook};
+    use ctx_core::workbench::{session_attention, sessions_needing_you, Attention};
     let (_t, d) = spine_with_repos();
     let started = (Local::now() - Duration::minutes(5))
         .format("%Y-%m-%d %H:%M")
@@ -2287,20 +2287,38 @@ fn sessions_needing_you_counts_only_live_agents_waiting_or_blocked() {
     for (sid, ev) in [
         ("t1", "stop"),
         ("t2", "prompt"),
-        ("t3", "notification"),
+        ("t3", "permission"),
         ("t4", "stop"),
+        ("t6", "stop"),
+        ("t7", "notification"),
     ] {
         let p = path_for(&d, sid).to_string_lossy().into_owned();
         assert!(record_hook(ev, "{}", Some(&p), now));
     }
+    assert!(mark_seen(&d, "t6"));
     let terms = [
-        t("t1", true, "agent"),  // 等你
+        t("t1", true, "agent"),  // 做完沒看
         t("t2", true, "agent"),  // 處理中
         t("t3", true, "agent"),  // 要你允許
         t("t4", false, "agent"), // 已結束
         t("t5", true, "shell"),
+        t("t6", true, "agent"), // 做完看過了
+        t("t7", true, "agent"), // 閒著等你
     ];
+    assert_eq!(
+        session_attention(&d, &terms).unwrap(),
+        Attention {
+            needs_you: 2,
+            finished_unseen: 1
+        }
+    );
     assert_eq!(sessions_needing_you(&d, &terms).unwrap(), 2);
+    // 看過之後徽章少一個；再做完一輪又算沒看
+    assert!(mark_seen(&d, "t1"));
+    assert_eq!(session_attention(&d, &terms).unwrap().finished_unseen, 0);
+    let p = path_for(&d, "t1").to_string_lossy().into_owned();
+    assert!(record_hook("stop", "{}", Some(&p), now));
+    assert_eq!(session_attention(&d, &terms).unwrap().finished_unseen, 1);
 }
 
 #[test]

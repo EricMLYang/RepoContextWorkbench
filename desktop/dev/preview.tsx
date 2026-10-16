@@ -65,7 +65,8 @@ const term = {
   task: "整理 UI",
   report: null,
   report_basis: "",
-  agent_status: { status: "waiting", text: "這一輪做完了，等你回覆", at: "01:30", event: "stop" },
+  // F-80：做完一輪、還沒看（亮綠點、牌組「1 個做完沒看」）
+  agent_status: { status: "finished", text: "這一輪做完了", at: "01:30", event: "stop" },
   home_group: "產品開發",
   // F-71：Claude Code 取的標題＋最後回覆
   ai_title: "整理登入頁的 UI",
@@ -91,6 +92,15 @@ const state = {
   tiers: { "repo-a": "active", "repo-b": "active" },
   tags: { "repo-a": ["開發"], "repo-b": [] },
   agents: ["claude"],
+  // F-83：額度餘光（狀態列右下）
+  usage: {
+    at: "2026-10-16 20:50",
+    five_hour: { used: 62, resets: "23:10" },
+    seven_day: { used: 31, resets: "10-20 09:00" },
+    context: 41,
+    model: "Opus",
+    warn: false,
+  },
   terms: [
     term,
     {

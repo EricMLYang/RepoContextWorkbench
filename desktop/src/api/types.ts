@@ -137,10 +137,12 @@ export type InboxCard = StateCard | QuestionCard;
 
 // ── 會話清冊（term.TermManager.list ＋ state.annotate_terms）────────
 
-export type AgentStatusName = "working" | "waiting" | "blocked" | "done";
+export type AgentStatusName = "working" | "waiting" | "blocked" | "done" | "finished" | "exited";
 
 export interface AgentStatus {
   status: AgentStatusName | (string & {});
+  /** Rust 才有（F-80）：`finished` 之後你看過那個會話了（App 呼叫 `session_seen` 記的；下一個 hook 事件就消失）。 */
+  seen?: boolean;
   text: string;
   at: string; // "YYYY-MM-DD HH:MM"
   scope?: string;
@@ -310,6 +312,33 @@ export interface Health {
     failed: number;
     undone: number;
   };
+  /** 程式化呼叫 `claude -p`（F-84；碰撞判定、ask_repo、助手、backfill——另計額度）；舊引擎沒有這個鍵。 */
+  agent_calls?: {
+    calls: number;
+    today: number;
+    avg_ms: number;
+    errors: number;
+    /** config `provider.programmatic`：allow｜off */
+    policy: string;
+  };
+}
+
+/** Claude Code 額度餘光（F-83；引擎從 statusLine 的 `rate_limits` 寫 `.state/usage.json`，這裡只排版）。 */
+export interface UsageWindow {
+  /** 已用百分比（0–100，整數） */
+  used: number;
+  /** 什麼時候重置（引擎排好的本地時間字串）；不知道＝null */
+  resets: string | null;
+}
+export interface Usage {
+  at: string; // "YYYY-MM-DD HH:MM"
+  five_hour: UsageWindow | null;
+  seven_day: UsageWindow | null;
+  /** 這場會話的 context 用了幾 %；沒有＝null */
+  context: number | null;
+  model: string | null;
+  /** 任一視窗 ≥ 80% */
+  warn: boolean;
 }
 
 /** 檔案清單的一列（path＝相對 repo 根目錄，abs＝絕對路徑；都由引擎給，前端不拼路徑）。 */
@@ -395,6 +424,8 @@ export interface WorkbenchState {
   rel_kinds: Record<string, RelationKind>;
   /** 健康指標（舊版引擎沒有這個鍵）。 */
   health?: Health;
+  /** Rust 才有（F-83）：Claude Code 額度餘光；沒收過 statusLine 就沒有這個鍵。 */
+  usage?: Usage | null;
   /** 碰到目前範圍、還沒設的關係建議；沒有建議時引擎不給這個鍵。 */
   relation_suggestions?: RelationSuggestion[];
   unread: (SpineEvent & { interrupt?: boolean })[];
@@ -731,6 +762,8 @@ export interface ActionMap {
     result: { ok: true; sid: string; title: string };
   };
   term_kill: { payload: { sid: string }; result: { ok: true } };
+  /** Rust 才有（F-80）：你看過這個會話了（做完沒看→看過了）。沒狀態檔或已記過＝`changed: false`。 */
+  session_seen: { payload: { sid: string }; result: { ok: true; changed: boolean } };
   session_result: {
     payload: { sid: string; text: string };
     result: { ok: true; date: string; time: string };
@@ -766,5 +799,6 @@ export const ACTION_NAMES: ActionName[] = [
   "brief",
   "term_create",
   "term_kill",
+  "session_seen",
   "session_result",
 ];

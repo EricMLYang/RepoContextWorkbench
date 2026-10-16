@@ -1049,6 +1049,10 @@ td button {
   place-content: center;
   font-size: 12px;
 }
+/* F-83：額度餘光，任一視窗 ≥80% 變琥珀 */
+#status .usagewarn {
+  color: var(--amber);
+}
 #status {
   grid-area: status;
   background: #1a1e25;
@@ -1439,11 +1443,21 @@ dialog::backdrop {
   padding: 3px 10px;
   border-radius: 14px;
 }
-.dot.silent {
+.dot.silent,
+.dot.busy {
   background: var(--amber);
 }
 .dot.needs {
   background: var(--red, #e5534b);
+}
+/* F-80：做完沒看亮一點、看過了退成暗綠（光看側欄就知道誰做完沒看） */
+.dot.fresh {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+.dot.seen {
+  background: var(--green);
+  opacity: 0.35;
 }
 .sessionmeta {
   overflow: hidden;
@@ -2576,6 +2590,9 @@ body.withpicks #main {
 .gmeta .gneeds {
   color: var(--red);
 }
+.gmeta .gfresh {
+  color: var(--green);
+}
 .scopechanges {
   margin: 0 0 16px;
   padding: 10px 12px;
@@ -2595,6 +2612,9 @@ body.withpicks #main {
 }
 .pill.palettewait {
   color: var(--red);
+}
+.pill.palettefresh {
+  color: var(--green);
 }
 
 /* App 助手（F-63）：計畫清單 */

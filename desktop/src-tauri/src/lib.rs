@@ -15,6 +15,7 @@ pub mod workbench;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use ctx_core::workbench::Attention;
 use serde_json::Value;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -137,47 +138,56 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 /// 選單列標題：未讀數，加上在等你的會話數（餘光看得到哪個 agent 卡在你這裡）。都是 0＝不顯示。
-fn tray_title(unread: Option<usize>, waiting: Option<usize>) -> Option<String> {
-    match (unread.unwrap_or(0), waiting.unwrap_or(0)) {
-        (0, 0) => None,
-        (u, 0) => Some(u.to_string()),
-        (0, w) => Some(format!("等你 {w}")),
-        (u, w) => Some(format!("{u} · 等你 {w}")),
+fn tray_title(unread: Option<usize>, att: Option<Attention>) -> Option<String> {
+    let att = att.unwrap_or_default();
+    let mut parts = Vec::new();
+    if let Some(u) = unread.filter(|u| *u > 0) {
+        parts.push(u.to_string());
     }
+    if att.needs_you > 0 {
+        parts.push(format!("等你 {}", att.needs_you));
+    }
+    if att.finished_unseen > 0 {
+        parts.push(format!("做完 {}", att.finished_unseen));
+    }
+    (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
-/// Dock 徽章（F-73）：只數在等你的會話——未讀是可以晚點看的，等你的是 agent 停在你這裡。0＝清掉。
-fn badge_count(waiting: Option<usize>) -> Option<i64> {
-    waiting
+/// Dock 徽章（F-73／F-80）：在等你的＋做完還沒看的會話數——未讀是可以晚點看的，這兩種是 agent 停在你這裡。0＝清掉。
+fn badge_count(att: Option<Attention>) -> Option<i64> {
+    att.map(|a| a.needs_you + a.finished_unseen)
         .filter(|n| *n > 0)
         .map(|n| i64::try_from(n).unwrap_or(i64::MAX))
 }
 
 /// 選單列：標題（[`tray_title`]）＋選單「未讀：N」「等你的會話：N」＋Dock 徽章。`None`＝不知道（spine 未設定）。
-pub fn set_tray(app: &AppHandle, unread: Option<usize>, waiting: Option<usize>) {
+pub fn set_tray(app: &AppHandle, unread: Option<usize>, att: Option<Attention>) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_title(tray_title(unread, waiting));
+        let _ = tray.set_title(tray_title(unread, att));
     }
     // macOS／Linux 才有；Windows 不支援（回錯就算了）
     if let Some(w) = app.get_webview_window(MAIN) {
-        let _ = w.set_badge_count(badge_count(waiting));
+        let _ = w.set_badge_count(badge_count(att));
     }
-    let line = |label: &str, n: Option<usize>| match n {
-        Some(n) => format!("{label}：{n}"),
-        None => format!("{label}：—"),
-    };
     if let Some(item) = app.try_state::<UnreadItem>() {
-        let _ = item.0.set_text(line("未讀", unread));
+        let _ = item.0.set_text(match unread {
+            Some(n) => format!("未讀：{n}"),
+            None => "未讀：—".to_string(),
+        });
     }
     if let Some(item) = app.try_state::<WaitingItem>() {
-        let n = waiting.unwrap_or(0);
-        let text = if n > 0 {
-            format!("等你的會話：{n}（點了切過去）")
-        } else {
-            line("等你的會話", waiting)
+        let text = match att {
+            None => "等你的會話：—".to_string(),
+            Some(a) if a.needs_you + a.finished_unseen > 0 => format!(
+                "等你的會話：{} · 做完沒看：{}（點了切過去）",
+                a.needs_you, a.finished_unseen
+            ),
+            Some(a) => format!("等你的會話：{}", a.needs_you),
         };
         let _ = item.0.set_text(text);
-        let _ = item.0.set_enabled(n > 0);
+        let _ = item
+            .0
+            .set_enabled(att.is_some_and(|a| a.needs_you + a.finished_unseen > 0));
     }
 }
 
@@ -192,8 +202,8 @@ fn refresh_unread(app: &AppHandle) {
             .and_then(|s| s.spine())
             .and_then(|sp| ctx_core::notify::pending(&sp).ok())
             .map(|p| p.count);
-        let waiting = st.as_ref().and_then(|s| workbench::needs_you_now(s));
-        set_tray(&app, n, waiting);
+        let att = st.as_ref().and_then(|s| workbench::attention_now(s));
+        set_tray(&app, n, att);
         // agent 停在「要你允許工具」：打斷是掙來的——視窗不在前面就發系統通知（同一次請求只發一次）
         let asks = st
             .as_ref()
@@ -270,7 +280,7 @@ async fn get_state(
     set_tray(
         &handle,
         Some(workbench::unread_count(&st)),
-        Some(workbench::needs_you_count(&st)),
+        Some(workbench::attention_of(&st)),
     );
     Ok(st)
 }
@@ -426,18 +436,39 @@ mod tests {
     }
 
     #[test]
-    fn badge_counts_only_sessions_waiting_for_you() {
+    fn badge_counts_sessions_waiting_for_you_and_unseen_finished() {
+        let att = |n, f| {
+            Some(Attention {
+                needs_you: n,
+                finished_unseen: f,
+            })
+        };
         assert_eq!(badge_count(None), None);
-        assert_eq!(badge_count(Some(0)), None);
-        assert_eq!(badge_count(Some(2)), Some(2));
+        assert_eq!(badge_count(att(0, 0)), None);
+        assert_eq!(badge_count(att(2, 0)), Some(2));
+        assert_eq!(badge_count(att(1, 2)), Some(3));
     }
 
     #[test]
-    fn tray_title_shows_unread_and_waiting() {
+    fn tray_title_shows_unread_waiting_and_finished() {
+        let att = |n, f| {
+            Some(Attention {
+                needs_you: n,
+                finished_unseen: f,
+            })
+        };
         assert_eq!(tray_title(None, None), None);
-        assert_eq!(tray_title(Some(0), Some(0)), None);
-        assert_eq!(tray_title(Some(3), Some(0)).as_deref(), Some("3"));
-        assert_eq!(tray_title(Some(0), Some(2)).as_deref(), Some("等你 2"));
-        assert_eq!(tray_title(Some(3), Some(2)).as_deref(), Some("3 · 等你 2"));
+        assert_eq!(tray_title(Some(0), att(0, 0)), None);
+        assert_eq!(tray_title(Some(3), att(0, 0)).as_deref(), Some("3"));
+        assert_eq!(tray_title(Some(0), att(2, 0)).as_deref(), Some("等你 2"));
+        assert_eq!(
+            tray_title(Some(3), att(2, 0)).as_deref(),
+            Some("3 · 等你 2")
+        );
+        assert_eq!(
+            tray_title(Some(3), att(2, 1)).as_deref(),
+            Some("3 · 等你 2 · 做完 1")
+        );
+        assert_eq!(tray_title(None, att(0, 1)).as_deref(), Some("做完 1"));
     }
 }

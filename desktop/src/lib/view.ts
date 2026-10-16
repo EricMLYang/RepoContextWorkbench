@@ -358,6 +358,7 @@ export const STATUS_TXT: Record<string, string> = {
   waiting: "等你回應",
   blocked: "卡住了",
   done: "已交接",
+  finished: "做完一輪",
   exited: "已結束",
 };
 
@@ -474,9 +475,19 @@ export function sessionTooltip(s: TermInfo): string {
   );
 }
 
-/** 會話在等你（agent 回報等你／卡住，或 Claude Code 這一輪做完、要你允許）。 */
+/** 會話在等你（agent 回報等你／卡住，或 Claude Code 停住要你允許／回答）。做完一輪不算（F-80）。 */
 export function sessionNeedsYou(s: TermInfo): boolean {
   return !!s.alive && !!s.agent_status && ["waiting", "blocked"].includes(s.agent_status.status);
+}
+
+/** 做完一輪、你還沒看（F-80：Claude Code 的 Stop 之後、你還沒切過去）。 */
+export function sessionFresh(s: TermInfo): boolean {
+  return !!s.alive && s.agent_status?.status === "finished" && !s.agent_status.seen;
+}
+
+/** 要你看一眼的：在等你，或做完沒看。 */
+export function sessionWantsYou(s: TermInfo): boolean {
+  return sessionNeedsYou(s) || sessionFresh(s);
 }
 
 /**
@@ -497,17 +508,18 @@ export function scopeSessions(terms: TermInfo[], scope: Scope): TermInfo[] {
     .filter((t) => t.kind === "agent" && t.alive && inScope(t))
     .sort(
       (a, b) =>
-        Number(sessionNeedsYou(b)) - Number(sessionNeedsYou(a)) ||
+        Number(sessionWantsYou(b)) - Number(sessionWantsYou(a)) ||
         String(b.started ?? "").localeCompare(String(a.started ?? "")),
     );
 }
 
-/** 最該先處理的在等你的會話：卡住（要你允許）優先，再來是等你回覆；同類取最早開始的。沒有＝null。 */
+/** 最該先處理的會話：卡住（要你允許）優先，再來是等你回覆，最後是做完沒看；同類取最早開始的。沒有＝null。 */
 export function firstNeedingYou(terms: TermInfo[]): TermInfo | null {
-  const rank = (t: TermInfo) => (t.agent_status?.status === "blocked" ? 0 : 1);
+  const rank = (t: TermInfo) =>
+    t.agent_status?.status === "blocked" ? 0 : sessionNeedsYou(t) ? 1 : 2;
   return (
     terms
-      .filter(sessionNeedsYou)
+      .filter(sessionWantsYou)
       .sort(
         (a, b) =>
           rank(a) - rank(b) || String(a.started ?? "").localeCompare(String(b.started ?? "")),
@@ -515,13 +527,20 @@ export function firstNeedingYou(terms: TermInfo[]): TermInfo | null {
   );
 }
 
-export type DotState = "dead" | "silent" | "needs" | "ok";
+export type DotState = "dead" | "silent" | "busy" | "needs" | "fresh" | "seen" | "ok";
 
+/**
+ * 會話列的小圓點（F-80，抄 BAT 的「需要我」清單）：灰＝已結束、琥珀＝在跑（處理中，或還沒回報過）、
+ * 紅＝等你（要你允許／回答）、亮綠＝做完沒看、暗綠＝做完看過了、綠＝有留痕。
+ */
 export function sessionDot(s: TermInfo): DotState[] {
   const out: DotState[] = [];
   if (!s.alive) out.push("dead");
   if (s.alive && s.kind === "agent" && !s.report && !s.agent_status) out.push("silent");
+  if (s.alive && s.agent_status?.status === "working") out.push("busy");
   if (s.agent_status && ["waiting", "blocked"].includes(s.agent_status.status)) out.push("needs");
+  if (s.alive && s.agent_status?.status === "finished")
+    out.push(s.agent_status.seen ? "seen" : "fresh");
   return out;
 }
 

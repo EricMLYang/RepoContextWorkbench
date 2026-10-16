@@ -124,6 +124,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("brief", a_brief),
     ("term_create", a_term_create),
     ("term_kill", a_term_kill),
+    ("session_seen", a_session_seen),
     ("session_result", a_session_result),
 ];
 
@@ -1170,6 +1171,16 @@ fn a_term_kill(_d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
         return Err(Error::invalid(format!("未知會話: {}", shown(p, "sid"))));
     }
     Ok(ok())
+}
+
+/// 你看過這個會話了（F-80）：做完沒看→看過了。沒狀態檔或已記過＝沒事，不當錯誤（回 `{ok, changed}`）。
+fn a_session_seen(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let sid = raw(p, "sid").unwrap_or_default();
+    if sid.is_empty() {
+        return Err(Error::invalid("缺 sid"));
+    }
+    let changed = crate::session_status::mark_seen(d, &sid);
+    Ok(json!({"ok": true, "changed": changed}))
 }
 
 fn a_session_result(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {

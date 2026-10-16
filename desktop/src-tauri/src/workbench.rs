@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use ctx_core::workbench::{self, StateScope};
+use ctx_core::workbench::{self, Attention, StateScope};
 use serde_json::Value;
 
 use crate::app_state::{AppState, MSG_NO_SPINE};
@@ -44,19 +44,23 @@ pub fn unread_count(state: &Value) -> usize {
     state["unread"].as_array().map_or(0, Vec::len)
 }
 
-/// 在等你的會話數（選單列用）：`get_state` 的 `terms` 裡活著、階段是 waiting／blocked 的（階段由引擎標好）。
-pub fn needs_you_count(state: &Value) -> usize {
-    state["terms"].as_array().map_or(0, |ts| {
-        ts.iter()
-            .filter(|t| t["alive"] == true)
-            .filter(|t| {
-                matches!(
-                    t["agent_status"]["status"].as_str(),
-                    Some("waiting" | "blocked")
-                )
-            })
-            .count()
-    })
+/// 要你看的會話數（選單列用）：`get_state` 的 `terms` 裡活著的，階段是 waiting／blocked 的＝在等你；
+/// `finished` 且沒記 `seen` 的＝做完沒看（F-80）。階段由引擎標好。
+pub fn attention_of(state: &Value) -> Attention {
+    let mut a = Attention::default();
+    for t in state["terms"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|t| t["alive"] == true)
+    {
+        match t["agent_status"]["status"].as_str() {
+            Some("waiting" | "blocked") => a.needs_you += 1,
+            Some("finished") if t["agent_status"]["seen"] != true => a.finished_unseen += 1,
+            _ => {}
+        }
+    }
+    a
 }
 
 /// 現在有哪些會話在「要你允許工具」（引擎 `sessions_asking_permission`）。spine 未設定＝沒有。
@@ -97,14 +101,14 @@ pub fn fresh_permission_asks(
     fresh
 }
 
-/// 視窗藏起來時（沒有 `get_state`）也要算在等你的會話數：直接問引擎（只讀階段檔）。
-pub fn needs_you_now(st: &AppState) -> Option<usize> {
+/// 視窗藏起來時（沒有 `get_state`）也要算要你看的會話數：直接問引擎（只讀階段檔）。
+pub fn attention_now(st: &AppState) -> Option<Attention> {
     let sp = st.spine()?;
     let terms: Vec<Value> = st
         .terms_opt()
         .map(|t| t.list().iter().map(workbench::term_value).collect())
         .unwrap_or_default();
-    workbench::sessions_needing_you(&sp, &terms).ok()
+    workbench::session_attention(&sp, &terms).ok()
 }
 
 /// `GET /api/scan`。`repos` 優先於 `group`；空陣列一律拒絕。
@@ -227,16 +231,25 @@ mod tests {
     }
 
     #[test]
-    fn needs_you_counts_live_waiting_or_blocked() {
+    fn attention_counts_live_waiting_blocked_and_unseen_finished() {
         let st = json!({"terms": [
             {"alive": true, "agent_status": {"status": "waiting"}},
             {"alive": true, "agent_status": {"status": "blocked"}},
             {"alive": true, "agent_status": {"status": "working"}},
+            {"alive": true, "agent_status": {"status": "finished"}},
+            {"alive": true, "agent_status": {"status": "finished", "seen": true}},
             {"alive": false, "agent_status": {"status": "waiting"}},
+            {"alive": false, "agent_status": {"status": "finished"}},
             {"alive": true, "agent_status": null},
         ]});
-        assert_eq!(needs_you_count(&st), 2);
-        assert_eq!(needs_you_count(&json!({})), 0);
+        assert_eq!(
+            attention_of(&st),
+            Attention {
+                needs_you: 2,
+                finished_unseen: 1
+            }
+        );
+        assert_eq!(attention_of(&json!({})), Attention::default());
     }
 
     /// 寫入動作成功才發 changed；唯讀的不發；失敗的不發。

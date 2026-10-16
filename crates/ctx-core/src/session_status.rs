@@ -2,7 +2,8 @@
 //!
 //! 多個 agent 會話同時跑時，最要緊的是一眼看出**哪個在等我**。MCP `report_status` 要 agent 自己記得回報，
 //! 而且依範圍存（同範圍兩個會話會互蓋）；這裡改由 Claude Code 自己的 hook 自動寫、依會話存：
-//! - `Stop`（這一輪做完）→ `waiting`「這一輪做完了，等你回覆」
+//! - `Stop`（這一輪做完）→ `finished`「這一輪做完了」（F-80：做完不等於等你——要你核准／回答才是；
+//!   你看過那個會話後 App 呼叫 [`mark_seen`] 記 `seen`，「做完沒看」跟「看過了」才分得開；下一個 hook 事件重寫整份、`seen` 自然消失）
 //! - `Notification`（依通知種類分開掛）：要你允許工具或回答（`permission_prompt`、`elicitation_*`、
 //!   `agent_needs_input`）→ `blocked`（agent 停住了，App 視窗不在前面時發系統通知）；閒著等輸入
 //!   （`idle_prompt`）→ `waiting`。都帶 Claude Code 給的訊息；其他種類（登入成功等）不動狀態
@@ -82,6 +83,19 @@ pub fn retire(spine_dir: &Path, sid: &str) {
     let _ = crate::fsutil::write_atomic(&path_for(spine_dir, sid), v.to_string().as_bytes());
 }
 
+/// 你看過這個會話了（F-80）：狀態檔記 `seen: true`。沒有狀態檔＝沒事可記（回 false）；已經記過＝不重寫。
+/// 之後任何 hook 事件都會重寫整份、`seen` 跟著消失——下一輪做完又是「沒看」。
+pub fn mark_seen(spine_dir: &Path, sid: &str) -> bool {
+    let Some(mut v) = read(spine_dir, sid) else {
+        return false;
+    };
+    if v.get("seen") == Some(&Value::Bool(true)) {
+        return false;
+    }
+    v["seen"] = json!(true);
+    crate::fsutil::write_atomic(&path_for(spine_dir, sid), v.to_string().as_bytes()).is_ok()
+}
+
 /// App 重開：前一次的會話都不在了（sid 會重新從頭編），全部清掉，只刪 `*.json`。
 pub fn clear_all(spine_dir: &Path) {
     let Ok(rd) = std::fs::read_dir(dir(spine_dir)) else {
@@ -129,7 +143,7 @@ const PERMISSION_MATCHERS: [&str; 4] = [
 /// hook 事件 → (status, text)。不認得＝None。
 fn status_of(event: &str, payload: &Value) -> Option<(&'static str, String)> {
     match event {
-        "stop" => Some(("waiting", "這一輪做完了，等你回覆".to_string())),
+        "stop" => Some(("finished", "這一輪做完了".to_string())),
         "notification" => {
             let text = message(payload, "需要你回應");
             let msg = text.as_str();
@@ -321,7 +335,18 @@ mod tests {
         assert!(record_hook("notification", typed, Some(tp), at));
         assert_eq!(read(sp, "t3").unwrap()["status"], "blocked");
         assert!(record_hook("stop", "not json", Some(tp), at));
-        assert_eq!(read(sp, "t3").unwrap()["text"], "這一輪做完了，等你回覆");
+        let v = read(sp, "t3").unwrap();
+        assert_eq!(
+            (v["status"].as_str(), v["text"].as_str(), v.get("seen")),
+            (Some("finished"), Some("這一輪做完了"), None)
+        );
+        // F-80：看過了記 seen；再記一次不重寫；下一個 hook 事件就把 seen 清掉
+        assert!(mark_seen(sp, "t3"));
+        assert!(!mark_seen(sp, "t3"));
+        assert_eq!(read(sp, "t3").unwrap()["seen"], true);
+        assert!(!mark_seen(sp, "nobody"));
+        assert!(record_hook("stop", "{}", Some(tp), at));
+        assert!(read(sp, "t3").unwrap().get("seen").is_none());
         assert!(record_hook(
             "permission",
             r#"{"message":"Allow Edit?"}"#,

@@ -5,6 +5,7 @@ import {
   groupActivity,
   groupMeta,
   sessionInGroup,
+  sessionFresh,
   sessionNeedsYou,
   type Scope,
 } from "../../lib/view";
@@ -62,6 +63,7 @@ const GroupCard = memo(function GroupCard(props: {
   const sessions = props.sessions || [];
   const live = sessions.filter((s) => s.alive);
   const needs = live.filter(sessionNeedsYou).length;
+  const fresh = live.filter(sessionFresh).length;
   const shownSessions = opened ? sessions : live;
   return (
     <div
@@ -85,6 +87,7 @@ const GroupCard = memo(function GroupCard(props: {
               {groupMeta(g.members, lastStates)}
               {live.length ? " · " + live.length + " 個會話" : ""}
               {needs ? <span className="gneeds">{" · " + needs + " 個等你"}</span> : null}
+              {fresh ? <span className="gfresh">{" · " + fresh + " 個做完沒看"}</span> : null}
             </span>
           </span>
         </button>

@@ -4,8 +4,8 @@ import {
   sessionDot,
   sessionHeadline,
   sessionMeta,
-  sessionNeedsYou,
   sessionTooltip,
+  sessionWantsYou,
   sessionWhere,
   shellOwner,
 } from "../../lib/view";
@@ -13,8 +13,8 @@ import { useSnapshot, useStore, useUi, useUiState } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
 
 /**
- * 會話一列：小圓點（綠＝有留痕、琥珀＝執行中尚無回報、紅＝等你／卡住、灰＝已結束）＋標題＋狀態；
- * 在等你時多一行最後回覆（F-71：不切過去也知道它說了什麼）。
+ * 會話一列：小圓點（琥珀＝在跑、紅＝等你／卡住、亮綠＝做完沒看、暗綠＝做完看過、灰＝已結束；見 `sessionDot`）＋標題＋狀態；
+ * 在等你或做完沒看時多一行最後回覆（F-71／F-80：不切過去也知道它說了什麼）。
  * `inGroup`：放在牌組區塊裡時，位置只寫 repo（組名已經是區塊標題）。
  */
 export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: boolean }) {
@@ -41,11 +41,11 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
           <span className="sessionmeta">
             {inGroup
               ? (s.alive ? "" : "已結束 · ") +
-                (sessionNeedsYou(s) ? STATUS_TXT[s.agent_status!.status] + " · " : "") +
+                (sessionWantsYou(s) ? STATUS_TXT[s.agent_status!.status] + " · " : "") +
                 (where.repo ? where.repo : "整組")
               : sessionMeta(s)}
           </span>
-          {sessionNeedsYou(s) && s.last_reply ? (
+          {sessionWantsYou(s) && s.last_reply ? (
             <span className="sessionpreview">{s.last_reply}</span>
           ) : null}
         </span>

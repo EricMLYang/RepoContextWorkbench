@@ -65,6 +65,14 @@ function HealthLine() {
           {h.assist && h.assist.runs + h.assist.undone > 0
             ? ` · 助手 ${h.assist.runs} 次（有做事 ${h.assist.did_something}、失敗 ${h.assist.failed}、復原 ${h.assist.undone}）`
             : ""}
+          {h.agent_calls && h.agent_calls.calls > 0 ? (
+            <span
+              className="healthcalls"
+              title="碰撞判定、ask_repo、助手、backfill 都是 claude -p 程式化呼叫，走另計的額度，不算訂閱的互動用量"
+            >
+              {` · 程式化呼叫 ${h.agent_calls.calls} 次（今天 ${h.agent_calls.today}、平均 ${Math.round(h.agent_calls.avg_ms / 1000)} 秒、失敗 ${h.agent_calls.errors}；另計額度）`}
+            </span>
+          ) : null}
         </p>
         {p && p.repos ? (
           <p className="small muted healthprofiles">

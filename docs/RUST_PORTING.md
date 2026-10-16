@@ -276,6 +276,9 @@ CLI／MCP（ctx-cli）：
   `stop｜notification｜prompt｜permission`（Notification 依 matcher 分：要你允許／回答＝permission，閒著＝notification），只照環境變數 `REPO_CONTEXT_SESSION_STATUS` 給的路徑寫 `.state/session_status/<sid>.json`
   （沒有環境變數＝不是 App 開的會話，什麼都不做；不印東西、永遠 exit 0）。只由 App 開會話時的 `--settings` 掛上，
   `ctx setup --claude` 不裝這三個 hook（setup 輸出與對拍不變）。
+  （2026-10-16，ideation F-80）`Stop` 寫的是 `finished`「這一輪做完了」不是 waiting：做完不等於等你，紅點只留給要你允許／回答；
+  App 看過那個會話就呼叫 action `session_seen` 在狀態檔記 `seen: true`（下一個 hook 事件重寫整份、自然消失），
+  `workbench::session_attention` 數「等你」與「做完沒看」各幾個，選單列寫「等你 N · 做完 M」、Dock 徽章＝兩者相加。
 - **SIGPIPE 恢復預設**（2026-10-10，ideation N-27）：`ctx … | head` 截斷時安靜結束（exit 141），不再 panic
   「failed printing to stdout: Broken pipe」。Python 的行為是 BrokenPipeError traceback；Unix 指令慣例是安靜結束。
 - **沒接住的錯誤**：Python 會印 traceback、exit 1；Rust 印一行「錯誤：<訊息>」到 stderr、exit 1（exit code 相同）。

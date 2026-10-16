@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { usageText } from "../components/Chrome";
 import type { InboxCard, QuestionCard } from "../api/types";
 import {
   draggedFileAbs,
   firstNeedingYou,
   reportLine,
+  sessionDot,
+  sessionFresh,
   sessionNeedsYou,
+  sessionWantsYou,
   sessionHeadline,
   sessionTooltip,
   pathForTerminal,
@@ -180,16 +184,53 @@ describe("會話在等你（Claude Code hook 自動寫）", () => {
   it("hook 寫的標 Claude Code、agent 自己回報的標 Agent 回報；結束的會話不算在等你", () => {
     const hook = {
       status: "waiting",
-      text: "這一輪做完了，等你回覆",
+      text: "Claude is waiting for your input",
       at: "2026-10-14 01:02",
-      event: "stop",
+      event: "notification",
     };
-    expect(reportLine(term(hook))).toBe("Claude Code「等你回應」01:02：這一輪做完了，等你回覆");
+    expect(reportLine(term(hook))).toBe(
+      "Claude Code「等你回應」01:02：Claude is waiting for your input",
+    );
     expect(reportLine(term({ ...hook, event: undefined }))).toContain("Agent 回報「等你回應」");
     expect(sessionNeedsYou(term(hook))).toBe(true);
     expect(sessionNeedsYou(term({ ...hook, status: "working" }))).toBe(false);
     expect(sessionNeedsYou(term(hook, false))).toBe(false);
     expect(sessionNeedsYou(term(null))).toBe(false);
+  });
+  it("F-80：做完一輪不算等你，是「做完沒看」；看過了就退掉；小圓點照狀態分", () => {
+    const done = {
+      status: "finished",
+      text: "這一輪做完了",
+      at: "2026-10-14 01:02",
+      event: "stop",
+    };
+    expect(sessionNeedsYou(term(done))).toBe(false);
+    expect(sessionFresh(term(done))).toBe(true);
+    expect(sessionWantsYou(term(done))).toBe(true);
+    expect(sessionFresh(term({ ...done, seen: true }))).toBe(false);
+    expect(sessionWantsYou(term({ ...done, seen: true }))).toBe(false);
+    expect(sessionFresh(term(done, false))).toBe(false);
+    expect(sessionDot(term(done))).toEqual(["fresh"]);
+    expect(sessionDot(term({ ...done, seen: true }))).toEqual(["seen"]);
+    expect(sessionDot(term({ ...done, status: "working" }))).toEqual(["busy"]);
+    expect(sessionDot(term({ ...done, status: "blocked" }))).toEqual(["needs"]);
+    expect(sessionDot(term(done, false))).toEqual(["dead"]);
+    expect(sessionDot(term(null))).toEqual(["silent"]);
+    // 最該先處理的：卡住 > 等你 > 做完沒看
+    const t = (sid: string, status: string | null, seen = false) =>
+      ({
+        ...(term(status ? { status, text: "", at: "2026-10-14 01:00", seen } : null) as object),
+        sid,
+        started: "1",
+      }) as never;
+    expect(
+      firstNeedingYou([t("f", "finished"), t("w", "waiting"), t("b", "blocked")]),
+    ).toMatchObject({ sid: "b" });
+    expect(firstNeedingYou([t("f", "finished"), t("w", "waiting")])).toMatchObject({ sid: "w" });
+    expect(firstNeedingYou([t("f", "finished"), t("s", "finished", true)])).toMatchObject({
+      sid: "f",
+    });
+    expect(firstNeedingYou([t("s", "finished", true), t("x", "working")])).toBeNull();
   });
   it("F-71：有 Claude Code 取的標題就當主標題，提示框帶最後回覆", () => {
     const plain = term(null) as object;
@@ -256,5 +297,32 @@ describe("單一 repo 的範圍不講「組」（#73）", () => {
     expect(scopeKindLabel({ group: null, repos: ["a"] })).toBe("單一 repo");
     expect(scopeLabel({ group: null, repos: ["a", "b"] })).toBe("臨時工作組");
     expect(scopeLabel({ group: "g", repos: null })).toBe("g");
+  });
+});
+
+describe("額度餘光（F-83）", () => {
+  it("5h／7d 各一格，有重置時間就帶；沒收過就空字串", () => {
+    expect(usageText(null)).toBe("");
+    expect(usageText(undefined)).toBe("");
+    expect(
+      usageText({
+        at: "2026-10-16 20:50",
+        five_hour: { used: 62, resets: "23:10" },
+        seven_day: { used: 31, resets: null },
+        context: 41,
+        model: "Opus",
+        warn: false,
+      }),
+    ).toBe("5h 62%（23:10 重置） · 7d 31%");
+    expect(
+      usageText({
+        at: "x",
+        five_hour: null,
+        seven_day: { used: 90, resets: "10-20 09:00" },
+        context: null,
+        model: null,
+        warn: true,
+      }),
+    ).toBe("7d 90%（10-20 09:00 重置）");
   });
 });

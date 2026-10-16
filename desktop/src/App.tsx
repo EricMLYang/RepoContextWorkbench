@@ -17,7 +17,7 @@ import { Onboarding } from "./dialogs/misc";
 import { DetailDialog } from "./dialogs/Modal";
 import { PickerDialog } from "./dialogs/PickerDialog";
 import { load, save } from "./lib/storage";
-import { firstNeedingYou, sessionPayload } from "./lib/view";
+import { firstNeedingYou, sessionFresh, sessionPayload } from "./lib/view";
 import {
   StoreContext,
   UiContext,
@@ -300,6 +300,19 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       }),
     [store, ui],
   );
+
+  // F-80：正在看的會話做完一輪＝看過了：告訴引擎記 seen（亮綠退成暗綠、徽章數字減一）。
+  // 切到它時查一次，之後它的狀態每變一次再查（下一輪做完又會變回沒看）
+  useEffect(() => {
+    if (!activeSid) return;
+    const check = () => {
+      const t = (store.getSnapshot().state.terms || []).find((x) => x.sid === activeSid);
+      if (t && sessionFresh(t))
+        void store.action("session_seen", { sid: activeSid }).catch(() => undefined);
+    };
+    check();
+    return store.subscribe(check);
+  }, [store, activeSid]);
 
   // Ctrl+` 收合／展開終端（有對話框開著時不動）；⌘K（Ctrl+K）找 repo——
   // 焦點在終端裡時 Ctrl+K 留給 shell（刪到行尾），⌘K 照常

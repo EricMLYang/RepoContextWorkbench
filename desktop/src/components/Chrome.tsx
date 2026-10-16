@@ -1,5 +1,6 @@
 /** 頂列、頁尾、toast——外框元件。 */
 import { useEffect, useState } from "react";
+import type { Usage, UsageWindow } from "../api/types";
 import { connectionText, scopeLabel } from "../lib/view";
 import { useSnapshot, useStore, useUi } from "../store/context";
 
@@ -52,14 +53,37 @@ export function TopBar({ onHome }: { onHome: () => void }) {
   );
 }
 
+/** 額度餘光一格（F-83）：`5h 62%（23:10 重置）· 7d 30%`；任一視窗 ≥80% 變琥珀。沒收過就不顯示。 */
+export function usageText(u: Usage | null | undefined): string {
+  if (!u) return "";
+  const win = (label: string, w: UsageWindow | null) =>
+    w ? `${label} ${w.used}%` + (w.resets ? `（${w.resets} 重置）` : "") : "";
+  return [win("5h", u.five_hour), win("7d", u.seven_day)].filter(Boolean).join(" · ");
+}
+
 export function StatusBar() {
   const { scope, scanAt, state } = useSnapshot();
   const alive = (state.terms || []).filter((s) => s.alive).length;
+  const usage = usageText(state.usage);
   return (
     <footer id="status">
       <span id="scanscope">{"範圍：" + scopeLabel(scope)}</span>
       <span id="scanwhen">{scanAt ? "上次成功更新 " + scanAt : ""}</span>
       <span className="spacer" />
+      {usage ? (
+        <span
+          id="usage"
+          className={state.usage?.warn ? "usagewarn" : undefined}
+          title={
+            "Claude Code 訂閱額度（App 會話的 statusLine 回報，最後更新 " +
+            state.usage!.at +
+            (state.usage!.model ? "，模型 " + state.usage!.model : "") +
+            "）；程式化呼叫另計，不在這裡"
+          }
+        >
+          {usage}
+        </span>
+      ) : null}
       <span id="sesscount">{alive + " 個執行中會話"}</span>
       <span>Ctrl + ` 終端</span>
     </footer>

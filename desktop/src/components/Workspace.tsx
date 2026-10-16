@@ -8,6 +8,7 @@ import {
   scopeLabel,
   scopeSessions,
   scopedCards,
+  sessionFresh,
   sessionNeedsYou,
   sessionWhere,
 } from "../lib/view";
@@ -123,7 +124,11 @@ export function Workspace(props: {
                 "回到「" +
                 live[0].title +
                 "」" +
-                (sessionNeedsYou(live[0]) ? "（在等你）" : "") +
+                (sessionNeedsYou(live[0])
+                  ? "（在等你）"
+                  : sessionFresh(live[0])
+                    ? "（做完了）"
+                    : "") +
                 (live.length > 1 ? "；其他 " + (live.length - 1) + " 個在左側會話列" : "")
               }
               aria-haspopup={live.length > 1 ? "menu" : undefined}
@@ -135,7 +140,11 @@ export function Workspace(props: {
                 setPickMenu(pickMenu ? null : { x: r.left, y: r.bottom + 4 });
               }}
             >
-              {sessionNeedsYou(live[0]) ? "回到會話（等你回覆）" : "回到會話"}
+              {sessionNeedsYou(live[0])
+                ? "回到會話（等你回覆）"
+                : sessionFresh(live[0])
+                  ? "回到會話（做完了）"
+                  : "回到會話"}
               {live.length > 1 ? " · " + live.length + " ▾" : ""}
             </button>
           ) : null}
@@ -145,7 +154,8 @@ export function Workspace(props: {
               title="回到哪個會話"
               items={live.map((t) => ({
                 key: t.sid,
-                label: t.title + (sessionNeedsYou(t) ? "（等你）" : ""),
+                label:
+                  t.title + (sessionNeedsYou(t) ? "（等你）" : sessionFresh(t) ? "（做完了）" : ""),
                 hint: sessionWhere(t).label,
                 run: () => ui.selectTerm(t.sid),
               }))}

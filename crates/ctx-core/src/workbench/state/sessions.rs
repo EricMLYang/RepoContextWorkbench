@@ -156,25 +156,41 @@ fn agent_status_of(
     }
 }
 
-/// 活著的 agent 會話裡，現在在等你（waiting／blocked）的有幾個——選單列用（Rust 才有）。
-/// 只讀階段檔與 registry，不讀事件（每次 spine 有變動都會算）。
-pub fn sessions_needing_you(spine_dir: impl AsRef<Path>, terms: &[Value]) -> Result<usize> {
+/// 活著的 agent 會話裡要你看的有幾個（選單列、Dock 徽章用；Rust 才有）。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Attention {
+    /// 在等你：要你允許／回答（blocked）或 agent 說在等你（waiting）。
+    pub needs_you: usize,
+    /// 做完一輪、你還沒看（F-80：`finished` 且沒記 `seen`）。
+    pub finished_unseen: usize,
+}
+
+/// 數活著的 agent 會話裡在等你的、做完沒看的。只讀階段檔與 registry，不讀事件（每次 spine 有變動都會算）。
+pub fn session_attention(spine_dir: impl AsRef<Path>, terms: &[Value]) -> Result<Attention> {
     let spine_dir = spine_dir.as_ref();
     let data = registry::load(spine_dir)?;
-    Ok(terms
+    let mut a = Attention::default();
+    for t in terms
         .iter()
         .filter(|t| t.get("kind").and_then(Value::as_str) == Some("agent"))
         .filter(|t| t.get("alive").and_then(Value::as_bool) == Some(true))
-        .filter(|t| {
-            let (group, ids) = session_scope(t, &data);
-            agent_status_of(spine_dir, t, group.as_deref(), ids.as_deref()).is_some_and(|s| {
-                matches!(
-                    s.get("status").and_then(Value::as_str),
-                    Some("waiting" | "blocked")
-                )
-            })
-        })
-        .count())
+    {
+        let (group, ids) = session_scope(t, &data);
+        let Some(s) = agent_status_of(spine_dir, t, group.as_deref(), ids.as_deref()) else {
+            continue;
+        };
+        match s.get("status").and_then(Value::as_str) {
+            Some("waiting" | "blocked") => a.needs_you += 1,
+            Some("finished") if s.get("seen") != Some(&Value::Bool(true)) => a.finished_unseen += 1,
+            _ => {}
+        }
+    }
+    Ok(a)
+}
+
+/// 活著的 agent 會話裡，現在在等你（waiting／blocked）的有幾個。
+pub fn sessions_needing_you(spine_dir: impl AsRef<Path>, terms: &[Value]) -> Result<usize> {
+    Ok(session_attention(spine_dir, terms)?.needs_you)
 }
 
 /// 活著、Claude Code hook 標成「要你允許工具」（blocked）的會話：`[{sid, title, text, at}]`——殼據此發系統通知

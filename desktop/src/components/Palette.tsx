@@ -1,6 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { PaletteResult, TermInfo } from "../api/types";
-import { STATUS_TXT, sessionHeadline, sessionNeedsYou, sessionWhere } from "../lib/view";
+import {
+  STATUS_TXT,
+  sessionHeadline,
+  sessionNeedsYou,
+  sessionWantsYou,
+  sessionWhere,
+} from "../lib/view";
 import { AssistDialog } from "../dialogs/AssistDialog";
 import { useSnapshot, useStore, useUi } from "../store/context";
 
@@ -44,7 +50,7 @@ function sessionsOf(terms: TermInfo[], query: string): Item[] {
           x.toLocaleLowerCase().includes(q),
         ),
       )
-    : [...live].sort((a, b) => Number(sessionNeedsYou(b)) - Number(sessionNeedsYou(a)));
+    : [...live].sort((a, b) => Number(sessionWantsYou(b)) - Number(sessionWantsYou(a)));
   return hit
     .slice(0, SESSIONS_SHOWN)
     .map((term) => ({ kind: "session" as const, key: "s:" + term.sid, term }));
@@ -410,14 +416,16 @@ function FileRow({ file }: { file: FileHit }) {
 }
 
 function SessionItem({ term }: { term: TermInfo }) {
-  const needs = sessionNeedsYou(term);
+  const needs = sessionWantsYou(term);
   return (
     <>
       <div className="paletterow">
         <span className="palettekind small muted">會話</span>
         <span className="palettename">{sessionHeadline(term)}</span>
         {needs ? (
-          <span className="pill palettewait">{STATUS_TXT[term.agent_status!.status]}</span>
+          <span className={"pill " + (sessionNeedsYou(term) ? "palettewait" : "palettefresh")}>
+            {STATUS_TXT[term.agent_status!.status]}
+          </span>
         ) : null}
         <span className="spacer" />
         <span className="small muted">{sessionWhere(term).label}</span>
