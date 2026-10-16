@@ -2281,6 +2281,49 @@ fn session_hook_status_shows_on_its_own_session_and_newer_wins() {
     assert!(rows[1]["ai_title"].is_null() && rows[2]["ai_title"].is_null());
 }
 
+/// F-82：處理中帶正在用的工具與分鐘數；超過 10 分沒結束＝可能卡住；工具結束就沒有。
+#[test]
+fn annotate_terms_shows_the_tool_in_progress_and_flags_stalls() {
+    use ctx_core::session_status::{path_for, record_hook, StatusHook};
+    let (_t, d) = spine_with_repos();
+    let started = (Local::now() - Duration::minutes(30))
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    let t1 = json!({"sid": "t1", "kind": "agent", "alive": true, "scope": "repo-a",
+                    "scope_repos": ["repo-a"], "started": started});
+    let target = path_for(&d, "t1").to_string_lossy().into_owned();
+    let start = r#"{"tool_name":"Bash","tool_input":{"command":"cargo build"}}"#;
+    let twelve_ago = (Local::now() - Duration::minutes(12)).naive_local();
+    assert!(record_hook(
+        StatusHook::ToolStart,
+        start,
+        Some(&target),
+        Some(twelve_ago)
+    ));
+    let row = &annotate_terms(&d, std::slice::from_ref(&t1)).unwrap()[0];
+    assert_eq!(row["tool"]["label"], "Bash：cargo build");
+    assert!(row["tool"]["minutes"].as_i64().unwrap() >= 12);
+    assert_eq!(row["tool"]["stalled"], true);
+    let now = Local::now().naive_local();
+    assert!(record_hook(
+        StatusHook::ToolStart,
+        start,
+        Some(&target),
+        Some(now)
+    ));
+    let row = &annotate_terms(&d, std::slice::from_ref(&t1)).unwrap()[0];
+    assert_eq!(row["tool"]["stalled"], false);
+    assert!(record_hook(
+        StatusHook::ToolEnd,
+        start,
+        Some(&target),
+        Some(now)
+    ));
+    let row = &annotate_terms(&d, std::slice::from_ref(&t1)).unwrap()[0];
+    assert!(row["tool"].is_null());
+    assert_eq!(row["agent_status"]["text"], "處理中");
+}
+
 #[test]
 fn session_attention_counts_live_agents_waiting_blocked_or_unseen_finished() {
     use ctx_core::session_status::{mark_seen, path_for, record_hook, StatusHook};

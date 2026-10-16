@@ -434,6 +434,7 @@ svg {
 }
 .session {
   display: flex;
+  flex-wrap: wrap;
   border: 1px solid transparent;
   border-radius: 7px;
   min-width: 0;
@@ -1446,6 +1447,11 @@ dialog::backdrop {
 .dot.silent,
 .dot.busy {
   background: var(--amber);
+}
+/* F-82：工具跑超過 10 分沒結束——琥珀加紅圈，提醒看一眼（不一定是壞了） */
+.dot.stalled {
+  background: var(--amber);
+  box-shadow: 0 0 0 2px var(--red, #e5534b);
 }
 .dot.needs {
   background: var(--red, #e5534b);
@@ -2831,10 +2837,20 @@ body.withpicks #main {
 }
 
 /* F-78 已結束的會話：接續 */
-.session > button.sessionresume {
+.session > button.sessionresume,
+.session > button.sessionreply {
   align-self: center;
   flex: none;
   padding: 2px 8px;
+}
+/* F-85：在等你的會話直接回一句——整列底下一格輸入框 */
+.sessionreplyform {
+  flex-basis: 100%;
+  padding: 0 8px 8px;
+}
+.sessionreplyform input {
+  width: 100%;
+  font-size: 12px;
 }
 .pastsearch {
   width: 100%;

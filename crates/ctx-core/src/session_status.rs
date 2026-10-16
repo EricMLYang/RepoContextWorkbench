@@ -9,6 +9,8 @@
 //!   （`idle_prompt`）→ `waiting`。都帶 Claude Code 給的訊息；其他種類（登入成功等）不動狀態
 //! - `PermissionRequest`（F-81：要你允許哪個工具、做什麼）→ `blocked`「Bash：cargo test」——只記錄、不回決定，
 //!   提示照常交回 TUI；同一分鐘內跟著來的 `Notification(permission_prompt)` 不蓋掉這句比較具體的
+//! - `PreToolUse`／`PostToolUse`（F-82）→ `working`＋`tool: {label, since}`「處理中：Bash：cargo test」／工具結束就拿掉——
+//!   App 看得出它在做什麼、做多久；超過 [`STALL_MINUTES`] 沒結束＝「可能卡住」（讀端算，見 `workbench::state::sessions`）
 //! - `UserPromptSubmit`（你送出訊息）→ `working`
 //!
 //! 只有 App 開的 Claude Code 會話會寫：開會話時多帶 `--settings=<spine>/.state/session_hooks.json`
@@ -50,6 +52,10 @@ pub enum StatusHook {
     PermissionRequest,
     /// `statusLine`：額度餘光（F-83），不寫會話狀態，見 [`crate::usage`]
     Statusline,
+    /// `PreToolUse`：開始用某個工具 → working＋`tool`（F-82）
+    ToolStart,
+    /// `PostToolUse`：工具結束 → working，拿掉 `tool`（F-82）
+    ToolEnd,
 }
 
 impl StatusHook {
@@ -62,11 +68,15 @@ impl StatusHook {
             StatusHook::Permission => "permission",
             StatusHook::PermissionRequest => "permission-request",
             StatusHook::Statusline => "statusline",
+            StatusHook::ToolStart => "tool-start",
+            StatusHook::ToolEnd => "tool-end",
         }
     }
 }
 /// 訊息最多留幾個字元（Notification 的訊息可能很長）。
 const TEXT_MAX: usize = 120;
+/// 一個工具跑超過幾分鐘沒結束就標「可能卡住」（F-82；cargo build 這種也會超過，所以只是提醒，不是錯誤）。
+pub const STALL_MINUTES: i64 = 10;
 /// 最後回覆預覽最多幾個字元。
 const REPLY_MAX: usize = 160;
 
@@ -163,6 +173,8 @@ pub fn settings_file(spine_dir: &Path, ctx: &Path) -> Result<PathBuf> {
             "Stop": [{"hooks": cmd(StatusHook::Stop)}],
             "Notification": notification,
             "PermissionRequest": [{"hooks": cmd(StatusHook::PermissionRequest)}],
+            "PreToolUse": [{"hooks": cmd(StatusHook::ToolStart)}],
+            "PostToolUse": [{"hooks": cmd(StatusHook::ToolEnd)}],
             "UserPromptSubmit": [{"hooks": cmd(StatusHook::Prompt)}],
         },
         // F-83：額度餘光——statusLine 每輪給的 rate_limits 寫到 .state/usage.json；這條不印東西，
@@ -200,7 +212,16 @@ fn status_of(event: StatusHook, payload: &Value) -> Option<(AgentStatus, String)
         }
         StatusHook::Permission => Some((AgentStatus::Blocked, message(payload, "要你允許或回答"))),
         StatusHook::PermissionRequest => Some((AgentStatus::Blocked, pending_action(payload))),
-        StatusHook::Prompt => Some((AgentStatus::Working, "處理中".to_string())),
+        StatusHook::Prompt | StatusHook::ToolEnd => {
+            Some((AgentStatus::Working, "處理中".to_string()))
+        }
+        StatusHook::ToolStart => Some((
+            AgentStatus::Working,
+            match tool_label(payload) {
+                Some(l) => format!("處理中：{l}"),
+                None => "處理中".to_string(),
+            },
+        )),
         StatusHook::Statusline => None,
     }
 }
@@ -219,14 +240,17 @@ fn message(payload: &Value, fallback: &str) -> String {
 /// `PermissionRequest` 的一句話（F-81，抄 BAT `describePendingAction`）：工具名＋人看得懂的那個欄位
 /// （Bash 的指令、改檔的路徑、問題的標題…），一行、截到 [`TEXT_MAX`]。沒有工具名就只說要你允許。
 fn pending_action(payload: &Value) -> String {
-    let Some(tool) = payload
+    tool_label(payload).unwrap_or_else(|| "要你允許工具".to_string())
+}
+
+/// 「哪個工具、做什麼」：`tool_name`＋`tool_input` 裡人看得懂的那個欄位（`PreToolUse`／`PostToolUse`／
+/// `PermissionRequest` 的 payload 形狀相同）。沒有工具名＝None。
+fn tool_label(payload: &Value) -> Option<String> {
+    let tool = payload
         .get("tool_name")
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|t| !t.is_empty())
-    else {
-        return "要你允許工具".to_string();
-    };
+        .filter(|t| !t.is_empty())?;
     const KEYS: [&str; 8] = [
         "command",
         "file_path",
@@ -251,9 +275,9 @@ fn pending_action(payload: &Value) -> String {
         });
     let text = match detail {
         Some(d) => format!("{tool}：{}", crate::transcript::one_line(d, TEXT_MAX)),
-        None => format!("{tool}：要你允許"),
+        None => tool.to_string(),
     };
-    crate::pystr::take_chars(&text, TEXT_MAX).to_string()
+    Some(crate::pystr::take_chars(&text, TEXT_MAX).to_string())
 }
 
 /// 環境變數給的路徑像不像我們的狀態檔：`…/.state/session_status/<名稱>.json`。不像就不寫（不往任意路徑寫檔）。
@@ -317,6 +341,16 @@ pub fn record_hook(
         _ => text,
     };
     let mut rec = json!({"status": status.as_str(), "text": text, "at": at, "event": event.arg()});
+    // F-82：正在用哪個工具、從幾點幾分幾秒開始（讀端算分鐘數與「可能卡住」）；工具結束或任何別的事件就沒有這個鍵
+    if event == StatusHook::ToolStart {
+        rec["tool"] = json!({
+            "label": tool_label(&payload).unwrap_or_else(|| "（工具）".to_string()),
+            "since": now
+                .unwrap_or_else(|| Local::now().naive_local())
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string(),
+        });
+    }
     let (title, reply) = transcript_bits(event, &payload, &path);
     // F-78：接續用的 Claude Code 會話 id 與目錄（每個 hook 都帶；這次沒帶就沿用上一筆）
     // (hook 欄位, 狀態檔欄位, 合格條件)
@@ -621,8 +655,43 @@ mod tests {
         assert_eq!(pending_action(&json!({})), "要你允許工具");
         assert_eq!(
             pending_action(&json!({"tool_name":"AskUserQuestion","tool_input":{"questions":[]}})),
-            "AskUserQuestion：要你允許"
+            "AskUserQuestion"
         );
+    }
+
+    #[test]
+    fn tool_start_and_end_keep_working_but_show_the_tool() {
+        let t = tempfile::tempdir().unwrap();
+        let sp = t.path();
+        let tp = path_for(sp, "t8");
+        let tp = tp.to_str().unwrap();
+        let at = chrono::NaiveDate::from_ymd_opt(2026, 10, 16)
+            .unwrap()
+            .and_hms_opt(22, 0, 7);
+        let start = r#"{"tool_name":"Bash","tool_input":{"command":"cargo test -q"}}"#;
+        assert!(record_hook(StatusHook::ToolStart, start, Some(tp), at));
+        let v = read(sp, "t8").unwrap();
+        assert_eq!(
+            (v["status"].as_str(), v["text"].as_str()),
+            (Some("working"), Some("處理中：Bash：cargo test -q"))
+        );
+        assert_eq!(v["tool"]["label"], "Bash：cargo test -q");
+        assert_eq!(v["tool"]["since"], "2026-10-16 22:00:07");
+        // 工具結束：回到單純的處理中，tool 鍵消失
+        assert!(record_hook(StatusHook::ToolEnd, start, Some(tp), at));
+        let v = read(sp, "t8").unwrap();
+        assert_eq!(v["text"], "處理中");
+        assert!(v.get("tool").is_none());
+        // 核准後 Claude Code 會先 PreToolUse：blocked 自然回到 working
+        assert!(record_hook(
+            StatusHook::PermissionRequest,
+            start,
+            Some(tp),
+            at
+        ));
+        assert_eq!(read(sp, "t8").unwrap()["status"], "blocked");
+        assert!(record_hook(StatusHook::ToolStart, start, Some(tp), at));
+        assert_eq!(read(sp, "t8").unwrap()["status"], "working");
     }
 
     #[test]

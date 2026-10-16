@@ -3,6 +3,7 @@
 use super::*;
 use crate::session_status::StatusHook;
 use crate::status::AgentStatus;
+use chrono::{Local, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 
 // ── 會話 ───────────────────────────────────────────────────────────────
@@ -115,6 +116,13 @@ pub(super) fn annotate_terms_with(
                     let v = own.as_ref().and_then(|s| s.get(from)).cloned();
                     rec.insert(to.into(), v.unwrap_or(Value::Null));
                 }
+                // F-82：正在用的工具、跑了幾分鐘、有沒有「可能卡住」——算好給畫面，前端只排版
+                rec.insert(
+                    "tool".into(),
+                    own.as_ref()
+                        .and_then(|s| tool_in_progress(s, Local::now().naive_local()))
+                        .unwrap_or(Value::Null),
+                );
                 // 依據要說得出口：範圍認得出來就講範圍，認不出來就說沒再過濾
                 let basis = match (&group, &ids) {
                     (Some(g), _) => format!("會話開始後、範圍內（{g}）的脊椎留痕"),
@@ -130,6 +138,26 @@ pub(super) fn annotate_terms_with(
             Value::Object(rec)
         })
         .collect()
+}
+
+/// hook 狀態檔裡 `tool: {label, since}` → `{label, minutes, stalled}`；不是 working、沒有 tool、時間壞掉＝None。
+fn tool_in_progress(own: &Value, now: NaiveDateTime) -> Option<Value> {
+    if own.get("status").and_then(Value::as_str) != Some(AgentStatus::Working.as_str()) {
+        return None;
+    }
+    let tool = own.get("tool")?;
+    let label = tool.get("label").and_then(Value::as_str)?;
+    let since = NaiveDateTime::parse_from_str(
+        tool.get("since").and_then(Value::as_str)?,
+        "%Y-%m-%d %H:%M:%S",
+    )
+    .ok()?;
+    let minutes = (now - since).num_minutes().max(0);
+    Some(json!({
+        "label": label,
+        "minutes": minutes,
+        "stalled": minutes >= crate::session_status::STALL_MINUTES,
+    }))
 }
 
 /// 會話現在的階段：agent 經 MCP 回報的（依範圍存）與 Claude Code hook 依會話自動寫的（Rust 才有，2026-10-14），

@@ -441,13 +441,23 @@ export function sessionPair(
   return { agent, shell, onShell: cur.kind === "shell" };
 }
 
+/** 階段那幾個字；處理中且知道在用哪個工具時帶工具與分鐘數（F-82），超過 10 分沒結束改說「可能卡住」。 */
+export function statusText(s: TermInfo): string {
+  if (!s.agent_status) return "";
+  const base = STATUS_TXT[s.agent_status.status] || s.agent_status.status;
+  const t = s.alive && s.agent_status.status === "working" ? s.tool : null;
+  if (!t) return base;
+  const mins = t.minutes >= 1 ? `（${t.minutes} 分）` : "";
+  return t.stalled ? `可能卡住：${t.label}（${t.minutes} 分沒結束）` : `${base}：${t.label}${mins}`;
+}
+
 export function sessionMeta(s: TermInfo): string {
   const proc = s.alive ? "程序執行中" : "程序已結束";
   const work =
     s.kind !== "agent"
       ? "Shell"
       : s.agent_status
-        ? STATUS_TXT[s.agent_status.status] || s.agent_status.status
+        ? statusText(s)
         : s.report
           ? "最近留痕 " + s.report.at.slice(11)
           : "尚無回報";
@@ -527,7 +537,7 @@ export function firstNeedingYou(terms: TermInfo[]): TermInfo | null {
   );
 }
 
-export type DotState = "dead" | "silent" | "busy" | "needs" | "fresh" | "seen" | "ok";
+export type DotState = "dead" | "silent" | "busy" | "stalled" | "needs" | "fresh" | "seen" | "ok";
 
 /**
  * 會話列的小圓點（F-80，抄 BAT 的「需要我」清單）：灰＝已結束、琥珀＝在跑（處理中，或還沒回報過）、
@@ -537,7 +547,8 @@ export function sessionDot(s: TermInfo): DotState[] {
   const out: DotState[] = [];
   if (!s.alive) out.push("dead");
   if (s.alive && s.kind === "agent" && !s.report && !s.agent_status) out.push("silent");
-  if (s.alive && s.agent_status?.status === "working") out.push("busy");
+  if (s.alive && s.agent_status?.status === "working")
+    out.push(s.tool?.stalled ? "stalled" : "busy");
   if (s.agent_status && ["waiting", "blocked"].includes(s.agent_status.status)) out.push("needs");
   if (s.alive && s.agent_status?.status === "finished")
     out.push(s.agent_status.seen ? "seen" : "fresh");

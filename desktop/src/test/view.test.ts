@@ -10,7 +10,9 @@ import {
   sessionNeedsYou,
   sessionWantsYou,
   sessionHeadline,
+  sessionMeta,
   sessionTooltip,
+  statusText,
   pathForTerminal,
   actionLabel,
   actionToast,
@@ -213,6 +215,22 @@ describe("會話在等你（Claude Code hook 自動寫）", () => {
     expect(sessionDot(term(done))).toEqual(["fresh"]);
     expect(sessionDot(term({ ...done, seen: true }))).toEqual(["seen"]);
     expect(sessionDot(term({ ...done, status: "working" }))).toEqual(["busy"]);
+    // F-82：處理中帶工具與分鐘；超過 10 分改說可能卡住、小點加紅圈
+    const busy = { ...(term({ ...done, status: "working" }) as object) } as never;
+    expect(statusText(busy)).toBe("處理中");
+    const withTool = {
+      ...(busy as object),
+      tool: { label: "Bash：cargo test", minutes: 3, stalled: false },
+    } as never;
+    expect(statusText(withTool)).toBe("處理中：Bash：cargo test（3 分）");
+    expect(sessionDot(withTool)).toEqual(["busy"]);
+    const stalled = {
+      ...(busy as object),
+      tool: { label: "Bash：cargo test", minutes: 12, stalled: true },
+    } as never;
+    expect(statusText(stalled)).toBe("可能卡住：Bash：cargo test（12 分沒結束）");
+    expect(sessionDot(stalled)).toEqual(["stalled"]);
+    expect(sessionMeta(stalled)).toContain("可能卡住");
     expect(sessionDot(term({ ...done, status: "blocked" }))).toEqual(["needs"]);
     expect(sessionDot(term(done, false))).toEqual(["dead"]);
     expect(sessionDot(term(null))).toEqual(["silent"]);

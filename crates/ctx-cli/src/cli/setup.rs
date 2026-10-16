@@ -25,6 +25,10 @@ pub enum HookEvent {
     PermissionRequest,
     /// Rust 才有（F-83）：Claude Code 的 statusLine 指令——把 rate_limits（5h／7d 額度）寫到 .state/usage.json；不印東西
     Statusline,
+    /// Rust 才有（F-82）：開始用某個工具（Claude Code `PreToolUse`）→「處理中：Bash：cargo test」；不印東西＝不擋
+    ToolStart,
+    /// Rust 才有（F-82）：工具結束（Claude Code `PostToolUse`）→「處理中」
+    ToolEnd,
 }
 
 impl HookEvent {
@@ -47,6 +51,8 @@ impl HookEvent {
             HookEvent::Permission => StatusHook::Permission,
             HookEvent::PermissionRequest => StatusHook::PermissionRequest,
             HookEvent::Statusline => StatusHook::Statusline,
+            HookEvent::ToolStart => StatusHook::ToolStart,
+            HookEvent::ToolEnd => StatusHook::ToolEnd,
         })
     }
 }

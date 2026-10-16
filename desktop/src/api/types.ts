@@ -183,6 +183,8 @@ export interface TermInfo {
   /** Rust 才有（F-78）：Claude Code 自己的會話 id 與目錄（程序結束後「接續」用）。 */
   claude_session?: string | null;
   resume_cwd?: string | null;
+  /** Rust 才有（F-82）：處理中正在用的工具（PreToolUse 記的）；`stalled`＝超過 10 分鐘沒結束（可能卡住，也可能只是慢）。 */
+  tool?: { label: string; minutes: number; stalled: boolean } | null;
 }
 
 /** 過去的一場 Claude Code 會話（F-72，引擎 `history::PastSession`）。 */

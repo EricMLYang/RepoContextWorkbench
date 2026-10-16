@@ -113,6 +113,33 @@ const state = {
       claude_session: "02908d1e-7843",
       resume_cwd: "/Users/me/repo-a",
     },
+    {
+      // F-81／F-85：要你允許工具（紅點、「回答…」）
+      ...term,
+      sid: "t3",
+      ai_title: "補登入頁測試",
+      last_reply: null,
+      agent_status: {
+        status: "blocked",
+        text: "Bash：rm -rf dist",
+        at: "01:40",
+        event: "permission-request",
+      },
+    },
+    {
+      // F-82：處理中、跑超過 10 分（可能卡住）
+      ...term,
+      sid: "t4",
+      ai_title: "重構快取層",
+      last_reply: null,
+      agent_status: {
+        status: "working",
+        text: "處理中：Bash：cargo build",
+        at: "01:20",
+        event: "tool-start",
+      },
+      tool: { label: "Bash：cargo build", minutes: 12, stalled: true },
+    },
   ],
   cards: [
     card("loop:#1", "loop", "驗證 Windows 版"),
@@ -441,3 +468,8 @@ if (scene === "diff-notes")
     });
   });
 if (scene === "ended-session") later(700, () => click(`button[aria-label="展開產品開發"]`));
+if (scene === "reply-box")
+  later(700, () => {
+    click(`button[aria-label="展開產品開發"]`);
+    later(200, () => click(".sessionreply"));
+  });
