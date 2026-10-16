@@ -30,6 +30,8 @@ pub struct Head {
     pub branch: Option<String>,
     /// 誰開的：`cli`＝互動、`sdk-cli`＝`claude -p` 程式化呼叫（取第一則使用者訊息上的）。
     pub entrypoint: Option<String>,
+    /// 開頭是上一場的壓縮摘要（這場是接續的；`prompt` 只取摘要之後真的有人打的那句）。
+    pub continued: bool,
 }
 
 /// 讀 `[start, start+len)` 的完整行（起點不在檔頭時丟掉第一個半行）。
@@ -74,18 +76,43 @@ fn assistant_text(o: &Value) -> Option<String> {
     (!text.is_empty()).then(|| text.join("\n"))
 }
 
-/// 使用者自己打的訊息（content 是字串；工具結果是陣列，不算）。
+/// 壓縮摘要的開頭（舊版逐字稿沒有 `isCompactSummary` 旗標時靠這句認）。
+const COMPACT_PREFIX: &str = "this session is being continued from a previous conversation";
+/// 壓縮摘要列（N-40）：模型確實讀到了，但不是人打的——不能當第一句。
+fn is_compact_summary(o: &Value, text: &str) -> bool {
+    o.get("isCompactSummary") == Some(&Value::Bool(true))
+        || text
+            .get(..COMPACT_PREFIX.len())
+            .is_some_and(|h| h.eq_ignore_ascii_case(COMPACT_PREFIX))
+}
+
+/// harness 自己塞進去、寫成 `type: user` 的列（N-40，抄 BAT `harness-noise.mjs`）：
+/// 背景任務通知（`origin.kind: task-notification`／`promptSource: system`）、本機指令的 caveat（有 `isMeta`）、
+/// 斜線指令（`<command-name>/clear…`，沒有任何旗標）、工具中斷標記。人沒打過字，不能當標題或第一句。
+/// 開頭是 `<` 標籤的一律不算（跟 backfill `compact` 同一條規則；人打的提示幾乎不會以標籤開頭）。
+fn is_harness_noise(o: &Value, text: &str) -> bool {
+    o.get("isMeta") == Some(&Value::Bool(true))
+        || o.get("promptSource").and_then(Value::as_str) == Some("system")
+        || o.get("origin")
+            .and_then(|x| x.get("kind"))
+            .and_then(Value::as_str)
+            == Some("task-notification")
+        || text.starts_with('<')
+        || text.starts_with("[Request interrupted by user")
+}
+
+/// 使用者自己打的訊息（content 是字串；工具結果是陣列，不算；harness 雜訊與壓縮摘要不算）。
 fn user_text(o: &Value) -> Option<&str> {
-    if o.get("type").and_then(Value::as_str) != Some("user")
-        || o.get("isMeta") == Some(&Value::Bool(true))
-    {
+    if o.get("type").and_then(Value::as_str) != Some("user") {
         return None;
     }
-    o.get("message")?
+    let text = o
+        .get("message")?
         .get("content")?
         .as_str()
         .map(str::trim)
-        .filter(|t| !t.is_empty())
+        .filter(|t| !t.is_empty())?;
+    (!is_harness_noise(o, text) && !is_compact_summary(o, text)).then_some(text)
 }
 
 fn str_of(o: &Value, k: &str) -> Option<String> {
@@ -138,6 +165,15 @@ pub fn head(path: &Path) -> Head {
         }
         if h.prompt.is_none() {
             h.prompt = user_text(o).map(str::to_string);
+        }
+        if !h.continued
+            && o.get("type").and_then(Value::as_str) == Some("user")
+            && o.get("message")
+                .and_then(|m| m.get("content"))
+                .and_then(Value::as_str)
+                .is_some_and(|t| is_compact_summary(o, t.trim()))
+        {
+            h.continued = true;
         }
         if h.cwd.is_some()
             && h.first.is_some()
@@ -201,10 +237,41 @@ mod tests {
                 prompt: Some("幫我修登入".into()),
                 branch: Some("main".into()),
                 entrypoint: None,
+                continued: false,
             }
         );
         assert_eq!(tail(&t.path().join("none.jsonl")), Tail::default());
         assert_eq!(one_line(" 改好了，\n 測試都過 ", 4), "改好了，…");
+    }
+
+    #[test]
+    fn head_skips_harness_noise_and_the_compact_summary() {
+        let t = tempfile::tempdir().unwrap();
+        let p = write(
+            t.path(),
+            &[
+                r#"{"type":"user","isCompactSummary":true,"message":{"content":"This session is being continued from a previous conversation that ran out of context."},"cwd":"/r","timestamp":"2026-10-16T01:00:00Z"}"#,
+                r#"{"type":"user","promptSource":"system","origin":{"kind":"task-notification"},"message":{"content":"<task-notification>\n<task-id>x</task-id>\n</task-notification>"}}"#,
+                r#"{"type":"user","isMeta":true,"message":{"content":"<local-command-caveat>…</local-command-caveat>"}}"#,
+                r#"{"type":"user","message":{"content":"[Request interrupted by user for tool use]"}}"#,
+                r#"{"type":"user","message":{"content":"<command-name>/clear</command-name>\n<command-message>clear</command-message>"}}"#,
+                r#"{"type":"user","message":{"content":[{"type":"text","text":"[Request interrupted by user]"}]}}"#,
+                r#"{"type":"user","message":{"content":"git add commit push"}}"#,
+            ],
+        );
+        let h = head(&p);
+        assert_eq!(h.prompt.as_deref(), Some("git add commit push"));
+        assert!(h.continued);
+        // 舊版逐字稿沒有旗標：靠那句開頭認
+        let p2 = write(
+            t.path(),
+            &[
+                r#"{"type":"user","message":{"content":"this session is being continued from a previous conversation…"}}"#,
+            ],
+        );
+        let h2 = head(&p2);
+        assert_eq!(h2.prompt, None);
+        assert!(h2.continued);
     }
 
     #[test]

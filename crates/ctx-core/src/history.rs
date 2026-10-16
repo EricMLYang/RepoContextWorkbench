@@ -117,7 +117,12 @@ pub fn past_sessions(
             {
                 continue;
             }
-            let (Some(cwd), Some(prompt)) = (h.cwd.as_deref(), h.prompt.as_deref()) else {
+            // 接續上一場的會話，開頭可能只有壓縮摘要（N-40）：仍列出，第一句標明是接續的
+            let prompt = h
+                .prompt
+                .as_deref()
+                .or(h.continued.then_some("（從上一場的壓縮摘要接續）"));
+            let (Some(cwd), Some(prompt)) = (h.cwd.as_deref(), prompt) else {
                 continue; // 沒有人說過話的空會話
             };
             let Some((repo, _, _)) = candidates
