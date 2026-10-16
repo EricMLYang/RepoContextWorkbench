@@ -76,15 +76,6 @@ pub fn record_agent_call(
     }
 }
 
-/// config `provider.programmatic`：`allow`（預設）或 `off`（引擎拒絕所有 `claude -p`）。YAML 的裸 `off` 會變 false，也認。
-pub fn programmatic_policy(cfg: &crate::config::Config) -> &'static str {
-    match cfg.get("provider.programmatic") {
-        Some(Value::Bool(false)) => "off",
-        Some(Value::String(s)) if s.trim().eq_ignore_ascii_case("off") => "off",
-        _ => "allow",
-    }
-}
-
 /// 「還沒寫介紹」最多列幾個 id（其餘只給數字）。
 const UNDESCRIBED_SHOWN: usize = 10;
 
@@ -233,8 +224,9 @@ pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result
         }
     }
     let policy = crate::config::load(spine_dir)
-        .map(|c| programmatic_policy(&c))
-        .unwrap_or("allow");
+        .map(|c| c.programmatic())
+        .unwrap_or(crate::config::Programmatic::Allow)
+        .as_str();
     let agent_calls = json!({
         "calls": calls.0, "today": calls.1,
         "avg_ms": calls.2 / (calls.0 as u64).max(1), "errors": calls.3,

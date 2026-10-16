@@ -25,7 +25,9 @@ desktop/src（React，只管畫面）── IPC ┘
 
 - 依賴只能往右指。`ctx-core` 不依賴 Tauri、clap 或任何 UI；要用殼的能力（例如會話清冊）就定義 trait 由外面注入（例：`Terms`）。
 - 一個領域一個模組（`spine`、`registry`、`filetree`…），對外只露少數函式；檔案超過約 800 行時，依職責拆成子模組
-  （`workbench/`、`agentapi/` 已經這樣拆）。
+  （`workbench/`、`agentapi/` 已經這樣拆；`workbench/actions/` 再依一級物件分 `sessions`／`files`／`finder`／`briefs`／`namecard`，
+  `ctx-cli/src/cli/` 的 `health` 也獨立一檔）。目前仍超過的：`agentapi/mod.rs`、`cli/agent.rs`、`filetree.rs`、`assist.rs`、
+  `backfill.rs`（後兩個是對拍 Python 的規格，合併回 main 後再拆）。
 - 外部指令（git／gh／claude）集中在少數模組呼叫並包裝錯誤，會跑很久的（claude）一定要設逾時；測試用 `testkit` 的假資料，
   不打真的網路。
 
@@ -37,6 +39,10 @@ desktop/src（React，只管畫面）── IPC ┘
   桌面 action 的參數用 `parse::<T>()` 解析成 `#[derive(Deserialize)]` 的 struct／enum（例：`ReadFileArgs`、`ReorderArgs`）；
   照抄 Python 的舊 action 還用 `raw`／`s`／`int`（Python 的 truthy 語意），合併回 main 後再換。
   拒絕給 agent 的錯誤用 `RejectCode` enum，字串形式是 MCP 合約。
+- **一種狀態、一個 enum、一個地方**：會話階段用 `status::AgentStatus`（含 hook 才會寫的 `Finished`／`Exited`），
+  App 會話掛的 hook 用 `session_status::StatusHook`（`ctx hook <arg>` 的字串只在 `arg()` 出現一次），「誰在等你」的分類只在
+  `workbench::Attention`——殼讀 `get_state` 的 `attention`，CLI 把 clap 的 enum 對到引擎的 enum，誰都不自己比字串。
+  （2026-10-16 檢查時殼裡曾多一份一樣的分類，已拆掉。）
 - **回傳用 struct**：引擎函式回 `#[derive(Serialize)]` 的 struct（例：`agentapi::Logged`、`TodoAdded`、`HandedOff`），
   到 MCP／CLI 的邊界才轉成 JSON（`mcp/work.rs` 的 `json()`、CLI 的 `agent_call`）。欄位順序和名稱就是合約，
   改了要過 `parity.sh`。舊函式還有不少回 `serde_json::Value` 的（讀取類工具、`ops`），碰到時順手換。
@@ -81,9 +87,10 @@ desktop/src（React，只管畫面）── IPC ┘
 
 ## 7. 測試與驗證
 
-- 改完必跑（CI 也跑同一套）：
-  `cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace`，
+- 改完必跑（CI 也跑同一套）：**`scripts/check.sh [rust|front|all]`** 一次跑完下面這些，過的步驟不印、失敗印尾巴——
+  `cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace`＋`scripts/parity.sh`，
   前端在 `desktop/` 跑 `npm run build && npm test && npm run lint && npm run format:check`（格式化用 `npm run format`）。
+  改到一半不要跑：對拍會把半成品編進去。
 - 引擎邏輯寫單元測試；action 和合約寫 `crates/ctx-core/tests/` 的整合測試；畫面行為寫 vitest（用 mock backend）。
 - 和 Python 版對拍（`scripts/parity.sh`）只到合併回 main 為止；之後由整合測試接手守住合約。
 - 每個功能的 commit 都要註明：macOS GUI 實測過沒有、Windows 測過沒有。

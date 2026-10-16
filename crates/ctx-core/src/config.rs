@@ -150,6 +150,23 @@ pub struct Thresholds {
     pub upstream_prerelease: bool,
 }
 
+/// 引擎自己叫 `claude -p` 的政策（config `provider.programmatic`，F-84）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Programmatic {
+    Allow,
+    Off,
+}
+
+impl Programmatic {
+    /// config 裡的寫法，也是 `health` 回的字串。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Programmatic::Allow => "allow",
+            Programmatic::Off => "off",
+        }
+    }
+}
+
 /// `agents.<名>` 一項（P16 會話 agent 註冊表）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentSpec {
@@ -238,6 +255,16 @@ impl Config {
             openloop_default_due_days: self.i64_or_default("thresholds.openloop_default_due_days"),
             upstream_kinds: self.str_list("thresholds.upstream.kinds"),
             upstream_prerelease: self.bool("thresholds.upstream.prerelease").unwrap_or(false),
+        }
+    }
+
+    /// `provider.programmatic`（F-84，Rust 才有）：引擎能不能自己叫 `claude -p`（另計額度）。
+    /// 預設 allow；`"off"` 或 YAML 裸 `off`（會變成 false）＝不准。
+    pub fn programmatic(&self) -> Programmatic {
+        match self.get("provider.programmatic") {
+            Some(Value::Bool(false)) => Programmatic::Off,
+            Some(Value::String(s)) if s.trim().eq_ignore_ascii_case("off") => Programmatic::Off,
+            _ => Programmatic::Allow,
         }
     }
 

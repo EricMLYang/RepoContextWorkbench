@@ -291,7 +291,7 @@ impl ClaudeProvider {
     ) -> Result<String> {
         // F-84：config `provider.programmatic: off`＝不准程式化呼叫（另計額度）；判定／問答走這裡都會被擋
         if let Ok(cfg) = crate::config::load(spine_dir) {
-            if crate::health::programmatic_policy(&cfg) == "off" {
+            if cfg.programmatic() == crate::config::Programmatic::Off {
                 return Err(Error::External(
                     "程式化呼叫（claude -p）已關：config provider.programmatic 是 off".into(),
                 ));
