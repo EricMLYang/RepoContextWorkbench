@@ -22,12 +22,19 @@ use crate::{brief, collide, registry, route};
 use crate::{Error, Result};
 
 mod briefs;
+mod files;
 mod finder;
 mod namecard;
+mod sessions;
 
 use briefs::{a_pick_brief, a_profile_draft_brief, a_review_brief};
+use files::{
+    a_backlinks, a_create_entry, a_read_file, a_rename_entry, a_repo_tree, a_save_image,
+    a_write_file,
+};
 use finder::{a_file_diff, a_palette, a_repo_changes, a_scope_changes};
 use namecard::{a_describe_repo, a_repo_profile};
+use sessions::{a_session_draft, a_session_result, a_session_seen, a_term_create, a_term_kill};
 
 /// 會話清冊（`TermManager` 的那幾個操作）。殼給真的，測試給假的。
 pub trait Terms {
@@ -675,19 +682,6 @@ fn a_set_goal(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     )
 }
 
-fn a_session_draft(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
-    let sid = raw(p, "sid").unwrap_or_default();
-    let Some(info) = t.and_then(|t| t.info(&sid)) else {
-        return Err(Error::invalid(format!("未知會話: {}", shown(p, "sid"))));
-    };
-    let mut out = Map::new();
-    out.insert("ok".into(), json!(true));
-    if let Value::Object(m) = session_draft(d, &term_value(&info))? {
-        out.extend(m);
-    }
-    Ok(Value::Object(out))
-}
-
 fn a_scan_dir(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     let base = raw(p, "dir").unwrap_or_default().trim().to_string();
     if base.is_empty() {
@@ -700,33 +694,6 @@ fn a_scan_dir(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
         .map(|(path, id)| json!({"path": path.to_string_lossy(), "id": id}))
         .collect();
     Ok(json!({"ok": true, "dir": base, "candidates": candidates}))
-}
-
-/// Rust 才有（2026-10-11）：repo 詳情的檔案清單，一次一層（見 [`crate::filetree`]）。
-#[derive(serde::Deserialize)]
-struct RepoTreeArgs {
-    id: String,
-    /// 相對 repo 根目錄；空＝根。
-    #[serde(default)]
-    dir: String,
-}
-
-fn a_repo_tree(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let RepoTreeArgs { id, dir } = parse("repo_tree", p)?;
-    let root = registry::get_repo(d, &id)?.path();
-    let l = crate::filetree::list_dir(&root, &dir)?;
-    let entries: Vec<Value> = l
-        .entries
-        .iter()
-        .map(|e| {
-            json!({"name": e.name, "path": e.rel.to_string_lossy(),
-                   "abs": e.abs.to_string_lossy(), "dir": e.dir})
-        })
-        .collect();
-    Ok(
-        json!({"ok": true, "id": id, "root": root.to_string_lossy(), "dir": dir,
-              "entries": entries, "more": l.more}),
-    )
 }
 
 /// Rust 才有（2026-10-11）：側欄拖曳排序。`kind`＝groups（`order`＝組名）｜members（`group`＋repo id）｜
@@ -746,97 +713,6 @@ fn a_reorder(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
         ReorderArgs::Repos { order } => registry::reorder_repos(d, &order)?,
     }
     Ok(json!({"ok": true}))
-}
-
-/// Rust 才有（2026-10-11）：唯讀檢視器讀一個檔（見 [`crate::filetree::read_file`]）。
-#[derive(serde::Deserialize)]
-struct ReadFileArgs {
-    id: String,
-    path: String,
-}
-
-fn a_read_file(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let ReadFileArgs { id, path } = parse("read_file", p)?;
-    let root = registry::get_repo(d, &id)?.path();
-    Ok(file_json(&id, crate::filetree::read_file(&root, &path)?))
-}
-
-fn file_json(id: &str, f: crate::filetree::FileRead) -> Value {
-    let mut out = json!({"ok": true, "id": id, "path": f.rel.to_string_lossy(),
-                         "abs": f.abs.to_string_lossy(), "size": f.size});
-    let extra = match f.view {
-        crate::filetree::FileView::Text {
-            text,
-            truncated,
-            editable,
-            version,
-        } => {
-            json!({"kind": "text", "text": text, "truncated": truncated,
-                   "editable": editable, "version": version})
-        }
-        crate::filetree::FileView::Image { mime, base64 } => {
-            json!({"kind": "image", "mime": mime, "base64": base64})
-        }
-        crate::filetree::FileView::Binary => json!({"kind": "binary"}),
-        crate::filetree::FileView::TooLarge => json!({"kind": "too_large"}),
-    };
-    if let (Value::Object(o), Value::Object(e)) = (&mut out, extra) {
-        o.extend(e);
-    }
-    out
-}
-
-/// Rust 才有（2026-10-13）：檢視器簡單編輯（見 [`crate::filetree::write_file`]）。
-/// 不記 spine 事件——改檔的痕跡在 git。磁碟上已被改過回 `{ok: false, conflict: true}`。
-#[derive(serde::Deserialize)]
-struct WriteFileArgs {
-    id: String,
-    path: String,
-    text: String,
-    /// 讀檔時的 `version`。
-    base: String,
-}
-
-fn a_write_file(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let WriteFileArgs {
-        id,
-        path,
-        text,
-        base,
-    } = parse("write_file", p)?;
-    let root = registry::get_repo(d, &id)?.path();
-    Ok(
-        match crate::filetree::write_file(&root, &path, &text, &base)? {
-            crate::filetree::WriteOutcome::Saved(f) => file_json(&id, f),
-            crate::filetree::WriteOutcome::Conflict => {
-                json!({"ok": false, "conflict": true, "id": id, "path": path})
-            }
-        },
-    )
-}
-
-/// Rust 才有（2026-10-15）：檢視器／檔案樹新增空檔或資料夾（見 [`crate::filetree::create_entry`]）。
-/// 不記 spine 事件——跟改檔一樣，痕跡在 git。
-#[derive(serde::Deserialize)]
-struct CreateEntryArgs {
-    id: String,
-    path: String,
-    kind: crate::filetree::NewEntry,
-}
-
-fn a_create_entry(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let CreateEntryArgs { id, path, kind } = parse("create_entry", p)?;
-    let root = registry::get_repo(d, &id)?.path();
-    let abs = crate::filetree::create_entry(&root, &path, kind)?;
-    let rel = abs
-        .strip_prefix(&root)
-        .unwrap_or(&abs)
-        .to_string_lossy()
-        .into_owned();
-    Ok(
-        json!({"ok": true, "id": id, "path": rel, "abs": abs.to_string_lossy(),
-              "dir": kind == crate::filetree::NewEntry::Dir}),
-    )
 }
 
 /// Rust 才有（F-63）：App 助手——一句話 → 驗證過的計畫（不執行；App 照計畫呼叫原本的 action）。
@@ -883,60 +759,6 @@ fn a_assist_log(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     }
     spine::append_event(d, "presented", "assist", &toks, &body.join("\n"), None)?;
     Ok(json!({"ok": true}))
-}
-
-/// Rust 才有（F-66）：檔案樹改名或搬移（見 [`crate::filetree::rename_entry`]）；不覆蓋、不刪；不記 spine 事件。
-#[derive(serde::Deserialize)]
-struct RenameEntryArgs {
-    id: String,
-    from: String,
-    to: String,
-}
-
-fn a_rename_entry(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let RenameEntryArgs { id, from, to } = parse("rename_entry", p)?;
-    let root = registry::get_repo(d, &id)?.path();
-    let (abs, dir) = crate::filetree::rename_entry(&root, &from, &to)?;
-    let rel = abs
-        .strip_prefix(&root)
-        .unwrap_or(&abs)
-        .to_string_lossy()
-        .into_owned();
-    Ok(json!({"ok": true, "id": id, "from": from, "path": rel,
-              "abs": abs.to_string_lossy(), "dir": dir}))
-}
-
-/// Rust 才有（F-64）：md 編輯區貼上圖片存成新檔（見 [`crate::filetree::save_image`]）；不覆蓋、不記 spine 事件。
-#[derive(serde::Deserialize)]
-struct SaveImageArgs {
-    id: String,
-    path: String,
-    base64: String,
-}
-
-fn a_save_image(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let SaveImageArgs { id, path, base64 } = parse("save_image", p)?;
-    let root = registry::get_repo(d, &id)?.path();
-    let abs = crate::filetree::save_image(&root, &path, &base64)?;
-    let rel = abs
-        .strip_prefix(&root)
-        .unwrap_or(&abs)
-        .to_string_lossy()
-        .into_owned();
-    Ok(json!({"ok": true, "id": id, "path": rel, "abs": abs.to_string_lossy()}))
-}
-
-/// Rust 才有（F-69）：repo 裡哪些 md 連到這個檔（唯讀）。
-fn a_backlinks(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let id = raw(p, "id").unwrap_or_default();
-    let path = raw(p, "path").unwrap_or_default();
-    let root = registry::get_repo(d, &id)?.path();
-    let (hits, more) = crate::filetree::backlinks(&root, &path)?;
-    let items: Vec<Value> = hits
-        .iter()
-        .map(|h| json!({"path": h.rel, "line": h.line, "text": h.text}))
-        .collect();
-    Ok(json!({"ok": true, "id": id, "path": path, "items": items, "more": more}))
 }
 
 fn notes_json(d: &Path, group: &str, notes: &[crate::notes::Note]) -> Value {
@@ -1061,158 +883,4 @@ fn a_brief(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
         None,
     )?;
     Ok(json!({"ok": true, "text": text, "file": out.to_string_lossy()}))
-}
-
-/// 對單一 repo 開的會話屬於哪個牌組（只給畫面歸類，Rust 才有，2026-10-13 從前端搬來）：
-/// `hint`（前端目前選的組）有這個 repo 就是它；否則只有一個組有它才算；都不成立就沒有。不是對單一 repo 開就照 `hint`。
-fn home_group_for(d: &Path, hint: Option<String>, repo: Option<&str>) -> Result<Option<String>> {
-    let Some(repo) = repo else {
-        return Ok(hint);
-    };
-    let owners: Vec<String> = registry::load(d)?
-        .groups
-        .iter()
-        .filter(|g| g.members().iter().any(|m| m == repo))
-        .map(|g| g.name())
-        .collect();
-    Ok(match hint {
-        Some(h) if owners.contains(&h) => Some(h),
-        _ if owners.len() == 1 => owners.into_iter().next(),
-        _ => None,
-    })
-}
-
-fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
-    let Some(terms) = t else {
-        return Err(Error::invalid("本 server 未啟用 terminal"));
-    };
-    let kind = raw(p, "kind").unwrap_or_else(|| "shell".into());
-    let resume = s(p, "resume");
-    let (sid, title) = if let (true, Some(id)) = (kind == "agent", resume) {
-        // F-72：接續過去的 Claude Code 會話——在它原本的目錄跑 `claude --resume <id>`（目錄要在登記的 repo 底下）
-        let agent = s(p, "agent").unwrap_or_else(|| "claude".into());
-        let (rid, cwd) = crate::history::resume_target(d, &id, &s(p, "cwd").unwrap_or_default())?;
-        let (mut argv, at) = session::resume_argv(d, &agent, &id, s(p, "prompt").as_deref())?;
-        let file =
-            crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
-        if let Ok(f) = file {
-            argv.insert(at, format!("--settings={}", f.display()));
-        }
-        let home = home_group_for(d, s(p, "home_group"), Some(&rid))?;
-        terms.create_agent(AgentLaunch {
-            agent,
-            argv,
-            cwd,
-            env: Vec::new(),
-            group: None,
-            repos: Some(vec![rid.clone()]),
-            repo: Some(rid),
-            task: s(p, "task"),
-            origin: Some(format!("resume:{id}")),
-            home_group: home,
-        })?
-    } else if kind == "agent" {
-        let group = s(p, "group");
-        let repos = list(p, "repos");
-        let repo = s(p, "repo");
-        let task = s(p, "task");
-        let agent = s(p, "agent").unwrap_or_else(|| "claude".into());
-        let home = home_group_for(d, s(p, "home_group"), repo.as_deref())?;
-        let plan = session::build(
-            d,
-            SessionOpts {
-                group: group.as_deref(),
-                repos: repos.as_deref(),
-                repo: repo.as_deref(),
-                task: task.as_deref(),
-                agent: Some(&agent),
-                home_group: home.as_deref(),
-            },
-        )?;
-        // 會話狀態（Rust 才有）：Claude Code 多帶一份只有三個 hook 的設定（做完／要你允許／你送出），
-        // 不動使用者的 ~/.claude/settings.json；寫不出設定檔就照舊開（只是看不到「等你」）
-        let mut argv = plan.cmd;
-        if plan.claude_code && plan.flags_at <= argv.len() {
-            let file =
-                crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
-            if let Ok(f) = file {
-                // 插在 agent 指令之後（config 可能是 ["npx", "claude"] 這種包裝）
-                argv.insert(plan.flags_at, format!("--settings={}", f.display()));
-            }
-        }
-        terms.create_agent(AgentLaunch {
-            agent,
-            argv,
-            cwd: plan.cwd,
-            env: Vec::new(),
-            group,
-            repos,
-            repo,
-            task,
-            origin: s(p, "origin"),
-            home_group: home,
-        })?
-    } else if let Some(of) = s(p, "of") {
-        // 某個會話的 Terminal：開在同一個目錄，origin 記 `shell-of:<sid>`，畫面據此配對切換
-        let cwd = terms
-            .cwd(&of)
-            .ok_or_else(|| Error::invalid(format!("未知會話: {of}")))?;
-        terms.create_shell(Some(&cwd), Some(format!("shell-of:{of}")))?
-    } else {
-        let cwd = s(p, "cwd").map(PathBuf::from);
-        terms.create_shell(cwd.as_deref(), s(p, "origin"))?
-    };
-    Ok(json!({"ok": true, "sid": sid, "title": title}))
-}
-
-fn a_term_kill(_d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
-    let sid = raw(p, "sid").unwrap_or_default();
-    if !t.is_some_and(|t| t.kill(&sid)) {
-        return Err(Error::invalid(format!("未知會話: {}", shown(p, "sid"))));
-    }
-    Ok(ok())
-}
-
-/// 你看過這個會話了（F-80）：做完沒看→看過了。沒狀態檔或已記過＝沒事，不當錯誤（回 `{ok, changed}`）。
-fn a_session_seen(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let sid = raw(p, "sid").unwrap_or_default();
-    if sid.is_empty() {
-        return Err(Error::invalid("缺 sid"));
-    }
-    let changed = crate::session_status::mark_seen(d, &sid);
-    Ok(json!({"ok": true, "changed": changed}))
-}
-
-fn a_session_result(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
-    let sid = raw(p, "sid").unwrap_or_default();
-    let session = t.and_then(|t| t.info(&sid));
-    let text = raw(p, "text").unwrap_or_default().trim().to_string();
-    let (Some(session), false) = (session, text.is_empty()) else {
-        return Err(Error::invalid("請選擇會話並填寫結果"));
-    };
-    let origin = session.origin.clone().unwrap_or_default();
-    let mut tokens: Vec<String> = if origin.starts_with("collision:") {
-        vec![format!("ref:{origin}")]
-    } else {
-        Vec::new()
-    };
-    let reg = registry::load(d)?;
-    let scope = session.scope.clone().unwrap_or_default();
-    if reg.group(&scope).is_some() {
-        tokens.push(format!("group:{scope}"));
-    } else if reg.repo(&scope).is_some() {
-        tokens.push(format!("repo:{scope}"));
-    } else if let Some(m) = session.scope_repos.as_ref().filter(|m| !m.is_empty()) {
-        tokens.push(format!("group:臨時({})", m.join(",")));
-    }
-    // A session note is a decision record, not evidence of an adopted idea.
-    let ev = spine::append_event(
-        d,
-        "decision",
-        "monitor",
-        &tokens,
-        &format!("會話結果：{}\n{text}", session.title),
-        None,
-    )?;
-    Ok(json!({"ok": true, "date": ev.date, "time": ev.time}))
 }

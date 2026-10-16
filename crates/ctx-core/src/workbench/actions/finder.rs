@@ -185,7 +185,7 @@ pub(super) fn a_repo_changes(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Res
 
 /// Rust 才有（2026-10-14）：單檔差異（見 [`crate::filetree::diff`]）。
 pub(super) fn a_file_diff(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let ReadFileArgs { id, path } = parse("file_diff", p)?;
+    let files::ReadFileArgs { id, path } = parse("file_diff", p)?;
     let root = registry::get_repo(d, &id)?.path();
     let (diff, truncated) = crate::filetree::diff(&root, &path)?;
     Ok(json!({"ok": true, "id": id, "path": path, "diff": diff, "truncated": truncated}))

@@ -11,6 +11,7 @@ pub mod agent;
 pub mod apps;
 pub mod common;
 pub mod daily;
+pub mod health;
 pub mod setup;
 
 use clap::{Parser, Subcommand};
@@ -221,7 +222,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Handoff(a) => agent::cmd_handoff(ctx, a),
         Search(a) => agent::cmd_search(ctx, a),
         Fresh(a) => agent::cmd_fresh(ctx, a),
-        Health { days } => agent::cmd_health(ctx, *days),
+        Health { days } => health::cmd_health(ctx, *days),
         Assist(a) => agent::cmd_assist(ctx, a),
         Decisions { cmd } => agent::cmd_decisions(ctx, cmd),
         Backfill(a) => agent::cmd_backfill(ctx, a),
