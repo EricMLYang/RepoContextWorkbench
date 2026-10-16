@@ -35,7 +35,7 @@ fi
 if [ "$what" != front ]; then
   cd "$(dirname "$0")/.." || exit 2
   if command -v cargo-sweep >/dev/null 2>&1; then
-    cargo sweep -q --time 7 >/dev/null 2>&1 || echo "（cargo sweep 失敗，略過）"
+    cargo sweep --time 7 >/dev/null 2>&1 || echo "（cargo sweep 失敗，略過）"
   else
     echo "（沒裝 cargo-sweep：target/ 會越長越大，cargo install cargo-sweep 後這裡會自動掃）"
   fi
