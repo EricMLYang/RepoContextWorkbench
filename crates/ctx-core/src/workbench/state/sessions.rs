@@ -1,6 +1,9 @@
 //! 會話：清冊上的回報、交接草稿。
 
 use super::*;
+use crate::session_status::StatusHook;
+use crate::status::AgentStatus;
+use serde::{Deserialize, Serialize};
 
 // ── 會話 ───────────────────────────────────────────────────────────────
 
@@ -157,7 +160,7 @@ fn agent_status_of(
 }
 
 /// 活著的 agent 會話裡要你看的有幾個（選單列、Dock 徽章用；Rust 才有）。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attention {
     /// 在等你：要你允許／回答（blocked）或 agent 說在等你（waiting）。
     pub needs_you: usize,
@@ -165,27 +168,52 @@ pub struct Attention {
     pub finished_unseen: usize,
 }
 
-/// 數活著的 agent 會話裡在等你的、做完沒看的。只讀階段檔與 registry，不讀事件（每次 spine 有變動都會算）。
+impl Attention {
+    /// 把一個活著的 agent 會話的階段算進來（分類只寫這一次；[`session_attention`] 與
+    /// [`attention_of_terms`] 都走這裡）。
+    fn count(&mut self, status: Option<&Value>) {
+        let Some(s) = status else { return };
+        let parsed = s
+            .get("status")
+            .and_then(Value::as_str)
+            .and_then(AgentStatus::parse);
+        match parsed {
+            Some(st) if st.needs_you() => self.needs_you += 1,
+            Some(AgentStatus::Finished) if s.get("seen") != Some(&Value::Bool(true)) => {
+                self.finished_unseen += 1
+            }
+            _ => {}
+        }
+    }
+}
+
+fn live_agents(terms: &[Value]) -> impl Iterator<Item = &Value> {
+    terms
+        .iter()
+        .filter(|t| t.get("kind").and_then(Value::as_str) == Some("agent"))
+        .filter(|t| t.get("alive").and_then(Value::as_bool) == Some(true))
+}
+
+/// 數活著的 agent 會話裡在等你的、做完沒看的。只讀階段檔與 registry，不讀事件（視窗藏起來時殼用）。
 pub fn session_attention(spine_dir: impl AsRef<Path>, terms: &[Value]) -> Result<Attention> {
     let spine_dir = spine_dir.as_ref();
     let data = registry::load(spine_dir)?;
     let mut a = Attention::default();
-    for t in terms
-        .iter()
-        .filter(|t| t.get("kind").and_then(Value::as_str) == Some("agent"))
-        .filter(|t| t.get("alive").and_then(Value::as_bool) == Some(true))
-    {
+    for t in live_agents(terms) {
         let (group, ids) = session_scope(t, &data);
-        let Some(s) = agent_status_of(spine_dir, t, group.as_deref(), ids.as_deref()) else {
-            continue;
-        };
-        match s.get("status").and_then(Value::as_str) {
-            Some("waiting" | "blocked") => a.needs_you += 1,
-            Some("finished") if s.get("seen") != Some(&Value::Bool(true)) => a.finished_unseen += 1,
-            _ => {}
-        }
+        a.count(agent_status_of(spine_dir, t, group.as_deref(), ids.as_deref()).as_ref());
     }
     Ok(a)
+}
+
+/// 同 [`session_attention`]，但從已經標好 `agent_status` 的會話清冊（[`annotate_terms`] 的輸出）算——
+/// `api_state` 用，不再讀一次檔。
+pub fn attention_of_terms(annotated: &[Value]) -> Attention {
+    let mut a = Attention::default();
+    for t in live_agents(annotated) {
+        a.count(t.get("agent_status").filter(|s| !s.is_null()));
+    }
+    a
 }
 
 /// 活著的 agent 會話裡，現在在等你（waiting／blocked）的有幾個。
@@ -205,11 +233,17 @@ pub fn sessions_asking_permission(spine_dir: impl AsRef<Path>, terms: &[Value]) 
             let sid = tget(t, "sid")?;
             let st = crate::session_status::read(spine_dir, sid)?;
             let at = st.get("at").and_then(Value::as_str)?;
-            let asking = st.get("status").and_then(Value::as_str) == Some("blocked")
-                && matches!(
-                    st.get("event").and_then(Value::as_str),
-                    Some("notification" | "permission" | "permission-request")
-                )
+            let asking = st.get("status").and_then(Value::as_str)
+                == Some(AgentStatus::Blocked.as_str())
+                && st.get("event").and_then(Value::as_str).is_some_and(|e| {
+                    [
+                        StatusHook::Notification,
+                        StatusHook::Permission,
+                        StatusHook::PermissionRequest,
+                    ]
+                    .iter()
+                    .any(|h| h.arg() == e)
+                })
                 && at >= tget(t, "started").unwrap_or("~");
             asking.then(|| {
                 json!({"sid": sid, "title": tget(t, "title").unwrap_or(sid),

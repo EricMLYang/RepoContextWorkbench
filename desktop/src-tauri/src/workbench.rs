@@ -44,23 +44,9 @@ pub fn unread_count(state: &Value) -> usize {
     state["unread"].as_array().map_or(0, Vec::len)
 }
 
-/// 要你看的會話數（選單列用）：`get_state` 的 `terms` 裡活著的，階段是 waiting／blocked 的＝在等你；
-/// `finished` 且沒記 `seen` 的＝做完沒看（F-80）。階段由引擎標好。
+/// 要你看的會話數（選單列用）：引擎在 `get_state` 算好的 `attention`（F-80）；舊引擎沒有這個鍵＝0。
 pub fn attention_of(state: &Value) -> Attention {
-    let mut a = Attention::default();
-    for t in state["terms"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|t| t["alive"] == true)
-    {
-        match t["agent_status"]["status"].as_str() {
-            Some("waiting" | "blocked") => a.needs_you += 1,
-            Some("finished") if t["agent_status"]["seen"] != true => a.finished_unseen += 1,
-            _ => {}
-        }
-    }
-    a
+    serde_json::from_value(state["attention"].clone()).unwrap_or_default()
 }
 
 /// 現在有哪些會話在「要你允許工具」（引擎 `sessions_asking_permission`）。spine 未設定＝沒有。
@@ -231,17 +217,8 @@ mod tests {
     }
 
     #[test]
-    fn attention_counts_live_waiting_blocked_and_unseen_finished() {
-        let st = json!({"terms": [
-            {"alive": true, "agent_status": {"status": "waiting"}},
-            {"alive": true, "agent_status": {"status": "blocked"}},
-            {"alive": true, "agent_status": {"status": "working"}},
-            {"alive": true, "agent_status": {"status": "finished"}},
-            {"alive": true, "agent_status": {"status": "finished", "seen": true}},
-            {"alive": false, "agent_status": {"status": "waiting"}},
-            {"alive": false, "agent_status": {"status": "finished"}},
-            {"alive": true, "agent_status": null},
-        ]});
+    fn attention_comes_from_the_engine_state() {
+        let st = json!({"attention": {"needs_you": 2, "finished_unseen": 1}});
         assert_eq!(
             attention_of(&st),
             Attention {
@@ -249,7 +226,12 @@ mod tests {
                 finished_unseen: 1
             }
         );
+        // 舊引擎沒有這個鍵、或形狀不對：當 0，不炸
         assert_eq!(attention_of(&json!({})), Attention::default());
+        assert_eq!(
+            attention_of(&json!({"attention": "x"})),
+            Attention::default()
+        );
     }
 
     /// 寫入動作成功才發 changed；唯讀的不發；失敗的不發。

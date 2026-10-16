@@ -17,10 +17,12 @@ use std::sync::LazyLock;
 
 use crate::{Error, Result};
 
-/// 對應 `agentapi.STATUSES`。
+/// 對應 `agentapi.STATUSES`：agent 經 MCP `report_status` 能回報的四種（合約，不加）。
 pub const STATUSES: [&str; 4] = ["working", "waiting", "blocked", "done"];
 
-/// agent 回報的階段（序列化字串與 Python 相同）。
+/// 會話階段（序列化字串與 Python 相同）。前四種 agent 自己回報（MCP）；後兩種只有 Claude Code hook 會寫
+/// （`session_status`，Rust 才有）：`Finished`＝這一輪做完（F-80：不等於等你）、`Exited`＝程序結束但對話還能接續（F-78）。
+/// 判斷「誰在等你」只看這裡（[`AgentStatus::needs_you`]），引擎、殼、CLI 不各自比字串。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentStatus {
@@ -28,28 +30,39 @@ pub enum AgentStatus {
     Waiting,
     Blocked,
     Done,
+    Finished,
+    Exited,
 }
 
 impl AgentStatus {
-    /// 對應 `agentapi.STATUSES` 的字串。
+    /// 寫進 `.state` 與 IPC 的字串。
     pub fn as_str(self) -> &'static str {
         match self {
             AgentStatus::Working => "working",
             AgentStatus::Waiting => "waiting",
             AgentStatus::Blocked => "blocked",
             AgentStatus::Done => "done",
+            AgentStatus::Finished => "finished",
+            AgentStatus::Exited => "exited",
         }
     }
 
-    /// 字串 → 階段；不認得回 `None`（呼叫端決定錯誤訊息）。
+    /// 字串 → 階段；不認得回 `None`（呼叫端決定錯誤訊息）。MCP 回報只准 [`STATUSES`]，見 [`parse_status`]。
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "working" => Some(AgentStatus::Working),
             "waiting" => Some(AgentStatus::Waiting),
             "blocked" => Some(AgentStatus::Blocked),
             "done" => Some(AgentStatus::Done),
+            "finished" => Some(AgentStatus::Finished),
+            "exited" => Some(AgentStatus::Exited),
             _ => None,
         }
+    }
+
+    /// agent 停在你這裡：要你允許／回答（blocked）或它說在等你（waiting）。做完一輪（finished）不算。
+    pub fn needs_you(self) -> bool {
+        matches!(self, AgentStatus::Waiting | AgentStatus::Blocked)
     }
 }
 
@@ -144,17 +157,19 @@ pub fn all_statuses(spine_dir: impl AsRef<Path>) -> Vec<Value> {
 
 /// 檢查 status 字串；不合法時的錯誤與 Python `report_status` 相同（code=bad_request）。
 pub fn parse_status(status: &str) -> Result<AgentStatus> {
-    AgentStatus::parse(status).ok_or_else(|| {
-        Error::rejected(
-            crate::RejectCode::BadRequest,
-            format!(
-                "status 需為 {}：{}",
-                STATUSES.join("／"),
-                crate::pystr::repr(status)
-            ),
-            None,
-        )
-    })
+    AgentStatus::parse(status)
+        .filter(|_| STATUSES.contains(&status))
+        .ok_or_else(|| {
+            Error::rejected(
+                crate::RejectCode::BadRequest,
+                format!(
+                    "status 需為 {}：{}",
+                    STATUSES.join("／"),
+                    crate::pystr::repr(status)
+                ),
+                None,
+            )
+        })
 }
 
 #[cfg(test)]

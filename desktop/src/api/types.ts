@@ -426,6 +426,8 @@ export interface WorkbenchState {
   health?: Health;
   /** Rust 才有（F-83）：Claude Code 額度餘光；沒收過 statusLine 就沒有這個鍵。 */
   usage?: Usage | null;
+  /** Rust 才有（F-80）：活著的 agent 會話裡在等你／做完沒看各幾個（殼的徽章用；前端牌組卡自己算每組的）。 */
+  attention?: { needs_you: number; finished_unseen: number };
   /** 碰到目前範圍、還沒設的關係建議；沒有建議時引擎不給這個鍵。 */
   relation_suggestions?: RelationSuggestion[];
   unread: (SpineEvent & { interrupt?: boolean })[];

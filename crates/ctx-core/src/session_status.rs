@@ -28,10 +28,43 @@ use std::path::{Path, PathBuf};
 use chrono::{Local, NaiveDateTime};
 use serde_json::{json, Value};
 
+use crate::status::AgentStatus;
 use crate::Result;
 
 /// App 開的 agent 會話帶的環境變數：這個會話的狀態檔絕對路徑。
 pub const ENV: &str = "REPO_CONTEXT_SESSION_STATUS";
+
+/// App 會話掛的 Claude Code hook（`ctx hook <arg>`）。settings 檔怎麼寫、CLI 怎麼認、狀態怎麼對應，都從這裡查，
+/// 字串只出現一次（[`StatusHook::arg`]）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusHook {
+    /// Claude Code `Stop`：這一輪做完 → finished
+    Stop,
+    /// `Notification` 的 `idle_prompt`：閒著等輸入 → waiting
+    Notification,
+    /// `UserPromptSubmit`：你送出 → working
+    Prompt,
+    /// `Notification` 的 permission_prompt／elicitation_*／agent_needs_input：要你允許或回答 → blocked
+    Permission,
+    /// `PermissionRequest`：要你允許哪個工具、做什麼 → blocked「Bash：…」（F-81）
+    PermissionRequest,
+    /// `statusLine`：額度餘光（F-83），不寫會話狀態，見 [`crate::usage`]
+    Statusline,
+}
+
+impl StatusHook {
+    /// `ctx hook <arg>` 的 arg，也是狀態檔 `event` 欄位的值。
+    pub fn arg(self) -> &'static str {
+        match self {
+            StatusHook::Stop => "stop",
+            StatusHook::Notification => "notification",
+            StatusHook::Prompt => "prompt",
+            StatusHook::Permission => "permission",
+            StatusHook::PermissionRequest => "permission-request",
+            StatusHook::Statusline => "statusline",
+        }
+    }
+}
 /// 訊息最多留幾個字元（Notification 的訊息可能很長）。
 const TEXT_MAX: usize = 120;
 /// 最後回覆預覽最多幾個字元。
@@ -72,7 +105,7 @@ pub fn retire(spine_dir: &Path, sid: &str) {
         clear(spine_dir, sid);
         return;
     };
-    v["status"] = json!("exited");
+    v["status"] = json!(AgentStatus::Exited.as_str());
     v["text"] = json!("程序已結束");
     v["event"] = json!("exit");
     v["at"] = json!(Local::now()
@@ -117,24 +150,24 @@ pub fn settings_file(spine_dir: &Path, ctx: &Path) -> Result<PathBuf> {
     if let Some(parent) = p.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let cmd = |arg: &str| json!([{"type": "command", "command": crate::agentsetup::hook_command(ctx, arg)}]);
+    let cmd = |h: StatusHook| json!([{"type": "command", "command": crate::agentsetup::hook_command(ctx, h.arg())}]);
     // Notification 依通知種類（matcher）分開掛：要你允許／要你回答 → permission（blocked）；閒著等輸入 →
     // notification（waiting）；其他種類（登入成功、額度…）不動會話狀態。一個 matcher 一筆，不靠 regex 的「|」
     let mut notification: Vec<Value> = PERMISSION_MATCHERS
         .iter()
-        .map(|m| json!({"matcher": m, "hooks": cmd("permission")}))
+        .map(|m| json!({"matcher": m, "hooks": cmd(StatusHook::Permission)}))
         .collect();
-    notification.push(json!({"matcher": "idle_prompt", "hooks": cmd("notification")}));
+    notification.push(json!({"matcher": "idle_prompt", "hooks": cmd(StatusHook::Notification)}));
     let v = json!({
         "hooks": {
-            "Stop": [{"hooks": cmd("stop")}],
+            "Stop": [{"hooks": cmd(StatusHook::Stop)}],
             "Notification": notification,
-            "PermissionRequest": [{"hooks": cmd("permission-request")}],
-            "UserPromptSubmit": [{"hooks": cmd("prompt")}],
+            "PermissionRequest": [{"hooks": cmd(StatusHook::PermissionRequest)}],
+            "UserPromptSubmit": [{"hooks": cmd(StatusHook::Prompt)}],
         },
         // F-83：額度餘光——statusLine 每輪給的 rate_limits 寫到 .state/usage.json；這條不印東西，
         // 那場會話的終端就沒有 statusline（使用者 2026-10-16 接受）
-        "statusLine": {"type": "command", "command": crate::agentsetup::hook_command(ctx, "statusline")},
+        "statusLine": {"type": "command", "command": crate::agentsetup::hook_command(ctx, StatusHook::Statusline.arg())},
     });
     crate::fsutil::write_atomic(&p, serde_json::to_string_pretty(&v)?.as_bytes())?;
     Ok(p)
@@ -148,11 +181,11 @@ const PERMISSION_MATCHERS: [&str; 4] = [
     "agent_needs_input",
 ];
 
-/// hook 事件 → (status, text)。不認得＝None。
-fn status_of(event: &str, payload: &Value) -> Option<(&'static str, String)> {
+/// hook 事件 → (階段, 文字)。statusline 不寫會話狀態＝None。
+fn status_of(event: StatusHook, payload: &Value) -> Option<(AgentStatus, String)> {
     match event {
-        "stop" => Some(("finished", "這一輪做完了".to_string())),
-        "notification" => {
+        StatusHook::Stop => Some((AgentStatus::Finished, "這一輪做完了".to_string())),
+        StatusHook::Notification => {
             let text = message(payload, "需要你回應");
             let msg = text.as_str();
             // 照 matcher 掛的是 idle_prompt；萬一舊設定沒分 matcher，從欄位或訊息再判斷一次是不是要你允許
@@ -160,15 +193,15 @@ fn status_of(event: &str, payload: &Value) -> Option<(&'static str, String)> {
                 == Some("permission_prompt")
                 || msg.to_lowercase().contains("permission");
             Some(if permission {
-                ("blocked", text)
+                (AgentStatus::Blocked, text)
             } else {
-                ("waiting", text)
+                (AgentStatus::Waiting, text)
             })
         }
-        "permission" => Some(("blocked", message(payload, "要你允許或回答"))),
-        "permission-request" => Some(("blocked", pending_action(payload))),
-        "prompt" => Some(("working", "處理中".to_string())),
-        _ => None,
+        StatusHook::Permission => Some((AgentStatus::Blocked, message(payload, "要你允許或回答"))),
+        StatusHook::PermissionRequest => Some((AgentStatus::Blocked, pending_action(payload))),
+        StatusHook::Prompt => Some((AgentStatus::Working, "處理中".to_string())),
+        StatusHook::Statusline => None,
     }
 }
 
@@ -243,7 +276,7 @@ pub(crate) fn valid_target(p: &Path) -> bool {
 /// `ctx hook stop|notification|prompt` 的本體：`target`＝環境變數 [`ENV`] 的值（沒有＝不是 App 開的會話，什麼都不做）。
 /// 回傳有沒有寫。永遠不失敗（hook 壞掉不能擋住 agent）。
 pub fn record_hook(
-    event: &str,
+    event: StatusHook,
     stdin: &str,
     target: Option<&str>,
     now: Option<NaiveDateTime>,
@@ -269,9 +302,11 @@ pub fn record_hook(
     // F-81：PermissionRequest 已經寫了「Bash：cargo test」，同一分鐘跟著來的 Notification 只會說
     // 「Claude needs your permission」——留具體的那句
     let text = match (&prev, event, status) {
-        (Some(p), "notification" | "permission", "blocked")
-            if p.get("event").and_then(Value::as_str) == Some("permission-request")
-                && p.get("status").and_then(Value::as_str) == Some("blocked")
+        (Some(p), StatusHook::Notification | StatusHook::Permission, AgentStatus::Blocked)
+            if p.get("event").and_then(Value::as_str)
+                == Some(StatusHook::PermissionRequest.arg())
+                && p.get("status").and_then(Value::as_str)
+                    == Some(AgentStatus::Blocked.as_str())
                 && p.get("at").and_then(Value::as_str) == Some(at.as_str()) =>
         {
             p.get("text")
@@ -281,7 +316,7 @@ pub fn record_hook(
         }
         _ => text,
     };
-    let mut rec = json!({"status": status, "text": text, "at": at, "event": event});
+    let mut rec = json!({"status": status.as_str(), "text": text, "at": at, "event": event.arg()});
     let (title, reply) = transcript_bits(event, &payload, &path);
     // F-78：接續用的 Claude Code 會話 id 與目錄（每個 hook 都帶；這次沒帶就沿用上一筆）
     // (hook 欄位, 狀態檔欄位, 合格條件)
@@ -319,7 +354,11 @@ pub fn record_hook(
 
 /// 標題與最後回覆：`Stop` 讀逐字稿尾巴（Claude Code 有給 `last_assistant_message` 就先用它）；
 /// 其他事件沿用上一筆的標題，回覆只留到你送出下一句（`prompt`）之前。
-fn transcript_bits(event: &str, payload: &Value, path: &Path) -> (Option<String>, Option<String>) {
+fn transcript_bits(
+    event: StatusHook,
+    payload: &Value,
+    path: &Path,
+) -> (Option<String>, Option<String>) {
     let prev = std::fs::read_to_string(path)
         .ok()
         .and_then(|s| serde_json::from_str::<Value>(&s).ok());
@@ -338,14 +377,14 @@ fn transcript_bits(event: &str, payload: &Value, path: &Path) -> (Option<String>
         .unwrap_or_default();
     let title = tail.title.or_else(|| prev_of("title"));
     let reply = match event {
-        "stop" => payload
+        StatusHook::Stop => payload
             .get("last_assistant_message")
             .and_then(Value::as_str)
             .filter(|s| !s.trim().is_empty())
             .map(str::to_string)
             .or(tail.reply)
             .map(|r| crate::transcript::one_line(&r, REPLY_MAX)),
-        "prompt" => None,
+        StatusHook::Prompt => None,
         _ => prev_of("reply"),
     };
     (title, reply)
@@ -364,24 +403,29 @@ mod tests {
             .unwrap()
             .and_hms_opt(1, 2, 0);
         // 不是 App 開的會話：不寫
-        assert!(!record_hook("stop", "{}", None, at));
-        assert!(!record_hook("stop", "{}", Some(""), at));
+        assert!(!record_hook(StatusHook::Stop, "{}", None, at));
+        assert!(!record_hook(StatusHook::Stop, "{}", Some(""), at));
         // 路徑不像我們的狀態檔：不寫
         let evil = sp.join("registry.yaml");
-        assert!(!record_hook("stop", "{}", Some(evil.to_str().unwrap()), at));
+        assert!(!record_hook(
+            StatusHook::Stop,
+            "{}",
+            Some(evil.to_str().unwrap()),
+            at
+        ));
         assert!(!evil.exists());
         assert!(!record_hook(
-            "stop",
+            StatusHook::Stop,
             "{}",
             Some("rel/.state/session_status/x.json"),
             at
         ));
 
         let tp = target.to_str().unwrap();
-        assert!(record_hook("prompt", "", Some(tp), at));
+        assert!(record_hook(StatusHook::Prompt, "", Some(tp), at));
         assert_eq!(read(sp, "t3").unwrap()["status"], "working");
         let msg = r#"{"message":"Claude needs your permission to use Bash"}"#;
-        assert!(record_hook("notification", msg, Some(tp), at));
+        assert!(record_hook(StatusHook::Notification, msg, Some(tp), at));
         let v = read(sp, "t3").unwrap();
         assert_eq!(
             (v["status"].as_str(), v["text"].as_str(), v["at"].as_str()),
@@ -393,12 +437,12 @@ mod tests {
         );
         let idle =
             r#"{"message":"Claude is waiting for your input","notification_type":"idle_prompt"}"#;
-        assert!(record_hook("notification", idle, Some(tp), at));
+        assert!(record_hook(StatusHook::Notification, idle, Some(tp), at));
         assert_eq!(read(sp, "t3").unwrap()["status"], "waiting");
         let typed = r#"{"message":"需要確認","notification_type":"permission_prompt"}"#;
-        assert!(record_hook("notification", typed, Some(tp), at));
+        assert!(record_hook(StatusHook::Notification, typed, Some(tp), at));
         assert_eq!(read(sp, "t3").unwrap()["status"], "blocked");
-        assert!(record_hook("stop", "not json", Some(tp), at));
+        assert!(record_hook(StatusHook::Stop, "not json", Some(tp), at));
         let v = read(sp, "t3").unwrap();
         assert_eq!(
             (v["status"].as_str(), v["text"].as_str(), v.get("seen")),
@@ -409,10 +453,10 @@ mod tests {
         assert!(!mark_seen(sp, "t3"));
         assert_eq!(read(sp, "t3").unwrap()["seen"], true);
         assert!(!mark_seen(sp, "nobody"));
-        assert!(record_hook("stop", "{}", Some(tp), at));
+        assert!(record_hook(StatusHook::Stop, "{}", Some(tp), at));
         assert!(read(sp, "t3").unwrap().get("seen").is_none());
         assert!(record_hook(
-            "permission",
+            StatusHook::Permission,
             r#"{"message":"Allow Edit?"}"#,
             Some(tp),
             at
@@ -422,11 +466,11 @@ mod tests {
             (v["status"].as_str(), v["text"].as_str()),
             (Some("blocked"), Some("Allow Edit?"))
         );
-        assert!(!record_hook("bogus", "{}", Some(tp), at));
+        assert!(!record_hook(StatusHook::Statusline, "{}", Some(tp), at));
 
         clear(sp, "t3");
         assert!(read(sp, "t3").is_none());
-        record_hook("stop", "{}", Some(tp), at);
+        record_hook(StatusHook::Stop, "{}", Some(tp), at);
         std::fs::write(dir(sp).join("keep.txt"), "x").unwrap();
         clear_all(sp);
         assert!(read(sp, "t3").is_none());
@@ -450,13 +494,13 @@ mod tests {
         let tp = path_for(sp, "t1");
         let tps = tp.to_str().unwrap();
         let payload = json!({"transcript_path": tr}).to_string();
-        assert!(record_hook("stop", &payload, Some(tps), None));
+        assert!(record_hook(StatusHook::Stop, &payload, Some(tps), None));
         let v = read(sp, "t1").unwrap();
         assert_eq!(v["title"], "修登入流程");
         assert_eq!(v["reply"], "改好了。 測試都過，要 commit 嗎？");
         // 等你允許：標題、回覆都沿用
         assert!(record_hook(
-            "permission",
+            StatusHook::Permission,
             r#"{"message":"Allow Bash?"}"#,
             Some(tps),
             None
@@ -470,14 +514,14 @@ mod tests {
             )
         );
         // 你送出下一句：回覆清掉、標題留著
-        assert!(record_hook("prompt", "{}", Some(tps), None));
+        assert!(record_hook(StatusHook::Prompt, "{}", Some(tps), None));
         let v = read(sp, "t1").unwrap();
         assert_eq!(v["title"], "修登入流程");
         assert!(v.get("reply").is_none());
         // Claude Code 直接給最後訊息就用它；相對路徑的逐字稿不讀
         let p2 = json!({"transcript_path": "rel/x.jsonl", "last_assistant_message": "直接給的"})
             .to_string();
-        assert!(record_hook("stop", &p2, Some(tps), None));
+        assert!(record_hook(StatusHook::Stop, &p2, Some(tps), None));
         assert_eq!(read(sp, "t1").unwrap()["reply"], "直接給的");
     }
 
@@ -490,7 +534,7 @@ mod tests {
         let p = json!({"session_id": "aaaaaaaa-3333", "cwd": "/r",
                        "last_assistant_message": "好了"})
         .to_string();
-        assert!(record_hook("stop", &p, Some(tps), None));
+        assert!(record_hook(StatusHook::Stop, &p, Some(tps), None));
         let v = read(sp, "t1").unwrap();
         assert_eq!(
             (v["claude_session"].as_str(), v["cwd"].as_str()),
@@ -504,7 +548,7 @@ mod tests {
         // 之後的事件沒帶 id／cwd：沿用
         let tp1 = path_for(sp, "t1");
         assert!(record_hook(
-            "prompt",
+            StatusHook::Prompt,
             "{}",
             Some(tp1.to_str().unwrap()),
             None
@@ -516,7 +560,7 @@ mod tests {
         );
         // 沒記到 id：照舊刪掉
         assert!(record_hook(
-            "stop",
+            StatusHook::Stop,
             r#"{"session_id":"bad id"}"#,
             Some(path_for(sp, "t2").to_str().unwrap()),
             None
@@ -535,7 +579,12 @@ mod tests {
             .unwrap()
             .and_hms_opt(21, 0, 0);
         let req = r#"{"tool_name":"Bash","tool_input":{"command":"cargo test -q\n  --workspace","description":"跑測試"}}"#;
-        assert!(record_hook("permission-request", req, Some(tp), at));
+        assert!(record_hook(
+            StatusHook::PermissionRequest,
+            req,
+            Some(tp),
+            at
+        ));
         let v = read(sp, "t9").unwrap();
         assert_eq!(
             (
@@ -551,13 +600,13 @@ mod tests {
         );
         // 同一分鐘跟著來的 Notification 只會說「needs your permission」：留具體那句
         let note = r#"{"message":"Claude needs your permission to use Bash","notification_type":"permission_prompt"}"#;
-        assert!(record_hook("permission", note, Some(tp), at));
+        assert!(record_hook(StatusHook::Permission, note, Some(tp), at));
         let v = read(sp, "t9").unwrap();
         assert_eq!(v["text"], "Bash：cargo test -q --workspace");
         assert_eq!(v["event"], "permission");
         // 不同分鐘＝另一次請求，照通知寫
         let later = at.map(|a| a + chrono::Duration::minutes(1));
-        assert!(record_hook("permission", note, Some(tp), later));
+        assert!(record_hook(StatusHook::Permission, note, Some(tp), later));
         assert_eq!(
             read(sp, "t9").unwrap()["text"],
             "Claude needs your permission to use Bash"

@@ -4,6 +4,7 @@ use std::io::Read;
 
 use clap::{Args, ValueEnum};
 use ctx_core::agentsetup::{self, SetupEnv};
+use ctx_core::session_status::StatusHook;
 use ctx_core::{config, fsutil, hooks};
 
 use super::common::{fail, CmdResult, Ctx, Exit, EXIT_FINDINGS, EXIT_NO_SPINE};
@@ -27,17 +28,26 @@ pub enum HookEvent {
 }
 
 impl HookEvent {
+    /// 開場／收尾 hook（`hooks::run_hook` 認的名字）。
     fn as_str(self) -> &'static str {
         match self {
             HookEvent::SessionStart => "session-start",
             HookEvent::SessionEnd => "session-end",
-            HookEvent::Stop => "stop",
-            HookEvent::Notification => "notification",
-            HookEvent::Prompt => "prompt",
-            HookEvent::Permission => "permission",
-            HookEvent::PermissionRequest => "permission-request",
-            HookEvent::Statusline => "statusline",
+            other => other.status_hook().map(StatusHook::arg).unwrap_or_default(),
         }
+    }
+
+    /// App 會話的狀態／額度 hook（引擎的 [`StatusHook`]，字串在那邊）；開場／收尾 hook 回 None。
+    fn status_hook(self) -> Option<StatusHook> {
+        Some(match self {
+            HookEvent::SessionStart | HookEvent::SessionEnd => return None,
+            HookEvent::Stop => StatusHook::Stop,
+            HookEvent::Notification => StatusHook::Notification,
+            HookEvent::Prompt => StatusHook::Prompt,
+            HookEvent::Permission => StatusHook::Permission,
+            HookEvent::PermissionRequest => StatusHook::PermissionRequest,
+            HookEvent::Statusline => StatusHook::Statusline,
+        })
     }
 }
 
@@ -46,23 +56,19 @@ pub fn cmd_hook(ctx: &Ctx, event: HookEvent) -> CmdResult {
     let mut buf = Vec::new();
     let _ = std::io::stdin().read_to_end(&mut buf);
     let stdin = String::from_utf8_lossy(&buf);
-    if event == HookEvent::Statusline {
-        // 額度餘光（F-83）：跟會話狀態同一個環境變數找 .state；不是 App 開的會話就什麼都不做
+    if let Some(h) = event.status_hook() {
+        // App 開的會話才有：照環境變數給的路徑寫，不找 spine、不印任何東西（不是 App 開的會話就什麼都不做）
         let target = std::env::var(ctx_core::session_status::ENV).ok();
-        ctx_core::usage::record(&stdin, target.as_deref(), None);
-        return Ok(());
-    }
-    if matches!(
-        event,
-        HookEvent::Stop
-            | HookEvent::Notification
-            | HookEvent::Prompt
-            | HookEvent::Permission
-            | HookEvent::PermissionRequest
-    ) {
-        // 會話狀態：照 App 給的路徑寫，不找 spine、不印任何東西（不是 App 開的會話就什麼都不做）
-        let target = std::env::var(ctx_core::session_status::ENV).ok();
-        ctx_core::session_status::record_hook(event.as_str(), &stdin, target.as_deref(), None);
+        match h {
+            // 額度餘光（F-83）
+            StatusHook::Statusline => {
+                ctx_core::usage::record(&stdin, target.as_deref(), None);
+            }
+            // 會話狀態（做完／等你／處理中／要你允許）
+            h => {
+                ctx_core::session_status::record_hook(h, &stdin, target.as_deref(), None);
+            }
+        }
         return Ok(());
     }
     let Some(d) = config::find_spine(ctx.spine.as_deref()) else {

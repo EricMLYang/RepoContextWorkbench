@@ -2210,7 +2210,7 @@ fn term_create_gives_claude_code_the_session_hooks() {
 
 #[test]
 fn session_hook_status_shows_on_its_own_session_and_newer_wins() {
-    use ctx_core::session_status::{path_for, record_hook};
+    use ctx_core::session_status::{path_for, record_hook, StatusHook};
     use ctx_core::status::{save_status, StatusRecord};
     let (_t, d) = spine_with_repos();
     let started = (Local::now() - Duration::minutes(5))
@@ -2222,7 +2222,12 @@ fn session_hook_status_shows_on_its_own_session_and_newer_wins() {
         |t: &Value| annotate_terms(&d, std::slice::from_ref(t)).unwrap()[0]["agent_status"].clone();
     let target = path_for(&d, "t1").to_string_lossy().into_owned();
     let now = Local::now().naive_local();
-    assert!(record_hook("stop", "{}", Some(&target), Some(now)));
+    assert!(record_hook(
+        StatusHook::Stop,
+        "{}",
+        Some(&target),
+        Some(now)
+    ));
     // 只掛在自己的會話上（同範圍的另一個會話看不到）
     assert_eq!(status_of(&t1)["status"], "finished");
     assert_eq!(status_of(&t1)["text"], "這一輪做完了");
@@ -2262,7 +2267,12 @@ fn session_hook_status_shows_on_its_own_session_and_newer_wins() {
     )
     .unwrap();
     let payload = json!({"transcript_path": tr}).to_string();
-    assert!(record_hook("stop", &payload, Some(&target), Some(now)));
+    assert!(record_hook(
+        StatusHook::Stop,
+        &payload,
+        Some(&target),
+        Some(now)
+    ));
     let rows = annotate_terms(&d, &[t1.clone(), t2.clone(), old.clone()]).unwrap();
     assert_eq!(
         (rows[0]["ai_title"].as_str(), rows[0]["last_reply"].as_str()),
@@ -2273,7 +2283,7 @@ fn session_hook_status_shows_on_its_own_session_and_newer_wins() {
 
 #[test]
 fn session_attention_counts_live_agents_waiting_blocked_or_unseen_finished() {
-    use ctx_core::session_status::{mark_seen, path_for, record_hook};
+    use ctx_core::session_status::{mark_seen, path_for, record_hook, StatusHook};
     use ctx_core::workbench::{session_attention, sessions_needing_you, Attention};
     let (_t, d) = spine_with_repos();
     let started = (Local::now() - Duration::minutes(5))
@@ -2285,12 +2295,12 @@ fn session_attention_counts_live_agents_waiting_blocked_or_unseen_finished() {
     };
     let now = Some(Local::now().naive_local());
     for (sid, ev) in [
-        ("t1", "stop"),
-        ("t2", "prompt"),
-        ("t3", "permission"),
-        ("t4", "stop"),
-        ("t6", "stop"),
-        ("t7", "notification"),
+        ("t1", StatusHook::Stop),
+        ("t2", StatusHook::Prompt),
+        ("t3", StatusHook::Permission),
+        ("t4", StatusHook::Stop),
+        ("t6", StatusHook::Stop),
+        ("t7", StatusHook::Notification),
     ] {
         let p = path_for(&d, sid).to_string_lossy().into_owned();
         assert!(record_hook(ev, "{}", Some(&p), now));
@@ -2317,13 +2327,13 @@ fn session_attention_counts_live_agents_waiting_blocked_or_unseen_finished() {
     assert!(mark_seen(&d, "t1"));
     assert_eq!(session_attention(&d, &terms).unwrap().finished_unseen, 0);
     let p = path_for(&d, "t1").to_string_lossy().into_owned();
-    assert!(record_hook("stop", "{}", Some(&p), now));
+    assert!(record_hook(StatusHook::Stop, "{}", Some(&p), now));
     assert_eq!(session_attention(&d, &terms).unwrap().finished_unseen, 1);
 }
 
 #[test]
 fn sessions_asking_permission_lists_only_hook_permission_requests() {
-    use ctx_core::session_status::{path_for, record_hook};
+    use ctx_core::session_status::{path_for, record_hook, StatusHook};
     use ctx_core::workbench::sessions_asking_permission;
     let (_t, d) = spine_with_repos();
     let started = (Local::now() - Duration::minutes(5))
@@ -2336,10 +2346,10 @@ fn sessions_asking_permission_lists_only_hook_permission_requests() {
     let now = Some(Local::now().naive_local());
     let perm = r#"{"message":"Claude needs your permission to use Bash"}"#;
     for (sid, ev, stdin) in [
-        ("t1", "notification", perm),
-        ("t2", "stop", "{}"),
-        ("t3", "notification", perm),
-        ("t4", "permission", r#"{"message":"Allow Edit?"}"#),
+        ("t1", StatusHook::Notification, perm),
+        ("t2", StatusHook::Stop, "{}"),
+        ("t3", StatusHook::Notification, perm),
+        ("t4", StatusHook::Permission, r#"{"message":"Allow Edit?"}"#),
     ] {
         let p = path_for(&d, sid).to_string_lossy().into_owned();
         assert!(record_hook(ev, stdin, Some(&p), now));

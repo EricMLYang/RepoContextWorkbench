@@ -490,6 +490,11 @@ pub fn api_state(
         .map(|(k, _)| k)
         .collect();
     if let Some(o) = st.as_object_mut() {
+        // Rust 才有（F-80）：要你看的會話數——殼的選單列／Dock 徽章直接讀，不自己比狀態字串
+        o.insert(
+            "attention".into(),
+            json!(super::attention_of_terms(&annotated)),
+        );
         o.insert("terms".into(), json!(annotated));
         o.insert("agents".into(), json!(agents));
         // Rust 才有（F-83）：額度餘光；沒收過 statusLine 就沒有這個鍵
