@@ -21,7 +21,7 @@ pub(super) fn a_repo_tree(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result
         .iter()
         .map(|e| {
             json!({"name": e.name, "path": e.rel.to_string_lossy(),
-                   "abs": e.abs.to_string_lossy(), "dir": e.dir})
+                   "abs": e.abs.to_string_lossy(), "dir": e.dir, "ignored": e.ignored})
         })
         .collect();
     Ok(

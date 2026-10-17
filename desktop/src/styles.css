@@ -1560,6 +1560,10 @@ dialog::backdrop {
   background: #2b3a55;
   color: var(--ink);
 }
+/* 被 .gitignore 忽略的：照列、變淡（跟 VS Code 一樣） */
+.trow.ignored {
+  opacity: 0.5;
+}
 /* 新增檔案／資料夾的輸入列 */
 .trow.tnew {
   flex-wrap: wrap;

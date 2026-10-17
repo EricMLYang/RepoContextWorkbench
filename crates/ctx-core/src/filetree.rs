@@ -2,8 +2,9 @@
 //!
 //! App 的 repo 詳情像 IDE 側邊欄一樣逐層展開，每一列可以複製絕對或相對路徑：
 //! - 一次只列一層（展開資料夾才讀下一層），大 repo 也不會一次讀完。
-//! - 不列 `.git`；git repo 裡被 .gitignore 忽略的不列（交給 `git check-ignore`，規則跟 git 一致），
-//!   不是 git 的資料夾全列。
+//! - 不列 `.git`；git repo 裡被 .gitignore 忽略的照列但標 `ignored`（App 畫灰色，跟 VS Code 一樣；
+//!   2026-10-17 改，原本不列——agent 的產出常故意不進 git，例如 `runs/`）。判斷交給 `git check-ignore`，
+//!   規則跟 git 一致；不是 git 的資料夾全列、都不標。
 //! - 只讀，不改任何檔；`dir` 必須在 repo 裡（擋 `..`、絕對路徑、符號連結跳出 repo）。
 //!
 //! [`read_file`]：App 的檢視器讀一個檔——文字（UTF-8，壞位元組換成 �）、圖片（base64 給 `<img>`）、
@@ -40,6 +41,8 @@ pub struct Entry {
     pub abs: PathBuf,
     /// 符號連結一律當檔案（不跟進去，免得跳出 repo）。
     pub dir: bool,
+    /// 被 .gitignore 忽略（只有 git repo 會是 true）。
+    pub ignored: bool,
 }
 
 /// 一層的內容：資料夾在前、再依名稱（不分大小寫）排序。
@@ -145,16 +148,14 @@ pub fn list_dir(root: &Path, dir: &str) -> Result<Listing> {
                 abs: root.join(&rel_dir).join(&name),
                 name,
                 dir,
+                ignored: false,
             })
         })
         .collect();
     let rels: Vec<PathBuf> = entries.iter().map(|e| e.rel.clone()).collect();
-    let skip = ignored(&root_real, &rels);
-    let mut i = 0;
-    entries.retain(|_| {
-        i += 1;
-        !skip[i - 1]
-    });
+    for (e, ig) in entries.iter_mut().zip(ignored(&root_real, &rels)) {
+        e.ignored = ig;
+    }
     entries.sort_by(|a, b| {
         b.dir
             .cmp(&a.dir)
@@ -935,7 +936,7 @@ mod tests {
     }
 
     #[test]
-    fn git_repo_hides_dot_git_and_ignored() {
+    fn git_repo_hides_dot_git_and_marks_ignored() {
         let t = tempfile::tempdir().unwrap();
         let r = t.path();
         let ok = Command::new("git")
@@ -950,11 +951,25 @@ mod tests {
         std::fs::create_dir(r.join("target")).unwrap();
         std::fs::write(r.join("run.log"), "").unwrap();
         std::fs::write(r.join("README.md"), "").unwrap();
+        std::fs::write(r.join("target").join("out.bin"), "").unwrap();
         let l = list_dir(r, "").unwrap();
+        let marked: Vec<(String, bool)> = l
+            .entries
+            .iter()
+            .map(|e| (e.name.clone(), e.ignored))
+            .collect();
         assert_eq!(
-            names(&l),
-            vec![(".gitignore".into(), false), ("README.md".into(), false)]
+            marked,
+            vec![
+                ("target".into(), true),
+                (".gitignore".into(), false),
+                ("README.md".into(), false),
+                ("run.log".into(), true),
+            ]
         );
+        // 被忽略的資料夾裡面也標
+        let inner = list_dir(r, "target").unwrap();
+        assert!(inner.entries.iter().all(|e| e.ignored));
     }
 
     #[test]

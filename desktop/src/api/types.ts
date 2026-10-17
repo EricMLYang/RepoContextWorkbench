@@ -349,6 +349,8 @@ export interface TreeEntry {
   path: string;
   abs: string;
   dir: boolean;
+  /** 被 .gitignore 忽略：照列、畫灰色（跟 VS Code 一樣）。 */
+  ignored?: boolean;
 }
 
 /** 一個還沒 commit 的變更（path 相對 repo 根目錄）。 */

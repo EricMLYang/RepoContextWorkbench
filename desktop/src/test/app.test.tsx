@@ -515,6 +515,32 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     return store;
   }
 
+  it("被 .gitignore 忽略的照列、畫灰色（跟 VS Code 一樣）", async () => {
+    const backend = treeBackend({
+      action: vi.fn(async (name: string, p: { id?: string; dir?: string }) => {
+        if (name !== "repo_tree") return { ok: true };
+        const t = tree(p.id!, p.dir || "");
+        if (!p.dir)
+          t.entries = [
+            { name: "runs", path: "runs", abs: "/r/a/runs", dir: true, ignored: true },
+            ...t.entries,
+          ] as typeof t.entries;
+        return t;
+      }) as never,
+    });
+    await openFiles(backend);
+    await act(async () =>
+      fireEvent.click(
+        within(document.getElementById("tab-files")!).getByRole("button", { name: "a" }),
+      ),
+    );
+    const runs = await screen.findByRole("treeitem", { name: "runs" });
+    expect(runs.classList.contains("ignored")).toBe(true);
+    expect(runs.getAttribute("title")).toContain("忽略");
+    const readme = screen.getByRole("treeitem", { name: "README.md" });
+    expect(readme.classList.contains("ignored")).toBe(false);
+  });
+
   it("範圍內每個 repo 是一個根；展開才讀下一層，可複製絕對／相對路徑", async () => {
     const backend = treeBackend();
     await openFiles(backend);

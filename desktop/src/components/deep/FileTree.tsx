@@ -528,10 +528,11 @@ export function RepoRoot(props: {
               "trow" +
               (e.dir ? " dir" : " file") +
               (!e.dir && e.path === active ? " selected" : "") +
-              (picked ? " picked" : "")
+              (picked ? " picked" : "") +
+              (e.ignored ? " ignored" : "")
             }
             style={pad}
-            title={e.path}
+            title={e.ignored ? e.path + "（被 .gitignore 忽略）" : e.path}
             onClick={(ev) => {
               // ⌘／Ctrl＋點＝挑起來（多選要交給 agent 的檔案），不開檔
               if (ev.metaKey || ev.ctrlKey) {

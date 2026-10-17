@@ -90,7 +90,7 @@ Rust 端簽名建議：
 | `term_kill` | `{sid}` | — |
 | `session_seen` | `{sid}`（Rust 才有，F-80：你看過這個會話了——做完沒看→看過了；引擎在 `.state/session_status/<sid>.json` 記 `seen: true`，下一個 hook 事件就消失） | `changed`（沒狀態檔或已記過＝false） |
 | `session_result` | `{sid, text}` | `date`, `time` |
-| `repo_tree`（Rust 才有） | `{id, dir?}`（`dir` 相對 repo 根目錄，空＝根） | `root`, `dir`, `entries: [{name, path, abs, dir}]`, `more` |
+| `repo_tree`（Rust 才有） | `{id, dir?}`（`dir` 相對 repo 根目錄，空＝根） | `root`, `dir`, `entries: [{name, path, abs, dir, ignored}]`（`ignored`＝被 .gitignore 忽略，照列、App 畫灰色；`.git` 不列）, `more` |
 | `group_add_folder`（Rust 才有） | `{path, group?}` | `id`, `registered`, `group` |
 | `reorder`（Rust 才有） | `{kind: "groups"\|"members"\|"repos", order, group?}`（只換順序，不是同一批就拒絕） | — |
 | `read_file`（Rust 才有） | `{id, path}` | `path`, `abs`, `size`, `kind: "text"\|"image"\|"binary"\|"too_large"`（text 帶 `text`、`truncated`、`editable`（沒截斷且是合法 UTF-8）、`version`（內容版本，存檔時帶回）；image 帶 `mime`、`base64`） |
