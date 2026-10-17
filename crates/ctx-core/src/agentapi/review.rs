@@ -129,6 +129,17 @@ fn mention_nums(text: &str) -> HashSet<String> {
     out
 }
 
+/// Rust 才有（2026-10-18）：做事的 commit（`feat`／`fix`／`perf`／`refactor` 開頭，可帶 `(scope)`）。
+/// 這種 commit 的標題點名 `#N`＝為那項做的事，算「可能已處理」的證據；`docs`／`chore`／沒前綴的提到 `#N`
+/// 只算有人提到（「#7 端到端在副本上走通」不等於 #7 做完）。
+fn is_work_commit(subject: &str) -> bool {
+    let head: String = subject
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect();
+    matches!(head.as_str(), "feat" | "fix" | "perf" | "refactor")
+}
+
 /// 交接只看「完成：」那行（剩下／下次是還沒做的事）；其他判斷看全文。
 fn evidence_text(ev: &Event) -> String {
     if is_handoff(ev) {
@@ -260,6 +271,11 @@ pub fn review_todos_at(
                 c.at >= opened && ev.num() != Some(num.as_str()) && !m.contains(&num)
             })
             .map(|(_, _, c)| c);
+        // commit 標題點名這項（做事的 commit）：直接當證據，不用比對文字
+        let named: Vec<&Cand> = commits
+            .iter()
+            .filter(|c| c.at >= opened && is_work_commit(&c.text) && mentions(&c.text, &num))
+            .collect();
         let cover_text = CoverText::new(&text);
         let mut scored: Vec<(f64, &Cand, Vec<String>)> = commits
             .iter()
@@ -278,7 +294,15 @@ pub fn review_todos_at(
             .unwrap_or(0);
         let d = loop_dict(lp, Some(&td));
         let overdue = d["overdue"] == true;
-        let (verdict, why) = if best >= REVIEW_DONE_COVER {
+        let (verdict, why) = if !named.is_empty() {
+            n_done += 1;
+            (
+                "maybe_done",
+                format!(
+                    "commit 標題點名了 {num}——看那個 commit，確認做完就 close（可能只做了一部分）"
+                ),
+            )
+        } else if best >= REVIEW_DONE_COVER {
             n_done += 1;
             (
                 "maybe_done",
@@ -313,13 +337,17 @@ pub fn review_todos_at(
         } else {
             ("active", "還沒到期或開沒多久".to_string())
         };
-        let evidence: Vec<Value> = scored
+        let evidence: Vec<Value> = named
             .iter()
-            .take(3)
-            .map(|(r, c, pieces)| {
+            .map(|c| {
+                json!({"kind": c.kind, "ref": c.reference, "at": c.at, "text": c.text,
+                       "cover": 1.0, "shared": [num.clone()]})
+            })
+            .chain(scored.iter().map(|(r, c, pieces)| {
                 json!({"kind": c.kind, "ref": c.reference, "at": c.at, "text": c.text,
                        "cover": knowledge::round2(*r), "shared": pieces})
-            })
+            }))
+            .take(3)
             .collect();
         items.push(json!({
             "id": num, "text": text, "opened": opened, "age_days": age_days,
@@ -416,6 +444,17 @@ mod tests {
     use super::*;
 
     /// mention_nums（先算一次）跟 mentions（逐項搜尋）的判斷要一模一樣。
+    #[test]
+    fn work_commit_prefixes() {
+        assert!(is_work_commit("fix(desktop)：新建牌組不再預勾（#72）"));
+        assert!(is_work_commit("feat：x"));
+        assert!(is_work_commit("perf(search)：y"));
+        assert!(!is_work_commit("docs：#7 端到端走通"));
+        assert!(!is_work_commit("chore(scripts)：e2e（#7）"));
+        assert!(!is_work_commit("featherweight #3"));
+        assert!(!is_work_commit("修好 #3"));
+    }
+
     #[test]
     fn mention_nums_agrees_with_mentions() {
         let texts = [

@@ -604,6 +604,33 @@ fn review_finds_commit_that_covers_the_todo() {
     assert_eq!(v["counts"]["maybe_done"], 1);
 }
 
+/// Rust 才有（2026-10-18）：做事的 commit 標題點名 #N＝證據；docs／chore 提到只算有人提到。
+#[test]
+fn review_counts_work_commit_that_names_the_todo() {
+    let w = two_groups();
+    let id = todo(&w, "左欄新建牌組預設不勾", &w.impl_)["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let other = todo(&w, "端到端驗證", &w.impl_)["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    std::fs::write(w.impl_.join("picker.ts"), "x\n").unwrap();
+    git(&w.impl_, &["add", "-A"], &[]);
+    let msg = format!("fix(desktop)：PickerDialog 改初始值（{id}）");
+    git(&w.impl_, &["commit", "-q", "-m", &msg], &[]);
+    std::fs::write(w.impl_.join("e2e.sh"), "x\n").unwrap();
+    git(&w.impl_, &["add", "-A"], &[]);
+    let msg = format!("chore(scripts)：e2e 腳本（{other}）");
+    git(&w.impl_, &["commit", "-q", "-m", &msg], &[]);
+    let v = api::review_todos(&w.sp, &at(&w.impl_)).unwrap();
+    let it = review_item(&v, &id);
+    assert_eq!(it["verdict"], "maybe_done", "{it}");
+    assert_eq!(it["evidence"][0]["shared"][0], id.as_str());
+    assert_eq!(review_item(&v, &other)["verdict"], "active");
+}
+
 #[test]
 fn review_does_not_count_the_handoff_that_opened_the_todo() {
     let w = two_groups();
