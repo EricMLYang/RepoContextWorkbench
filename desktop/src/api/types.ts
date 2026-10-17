@@ -143,6 +143,10 @@ export interface AgentStatus {
   status: AgentStatusName | (string & {});
   /** Rust 才有（F-80）：`finished` 之後你看過那個會話了（App 呼叫 `session_seen` 記的；下一個 hook 事件就消失）。 */
   seen?: boolean;
+  /** Rust 才有（N-41）：做完沒看超過 24 小時，當成看過（不亮、不算徽章）；讀端算。 */
+  faded?: boolean;
+  /** Rust 才有（N-41）：處理中、沒有工具在跑、超過 30 分鐘沒任何事件——幾分鐘沒動靜；讀端算。 */
+  quiet_minutes?: number;
   text: string;
   at: string; // "YYYY-MM-DD HH:MM"
   scope?: string;

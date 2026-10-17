@@ -181,10 +181,46 @@ fn agent_status_of(
     let own = tget(t, "sid")
         .and_then(|sid| crate::session_status::read(spine_dir, sid))
         .filter(|s| at(s).as_str() >= started);
-    match (reported, own) {
+    let st = match (reported, own) {
         (Some(r), Some(o)) => Some(if at(&o) > at(&r) { o } else { r }),
         (r, o) => r.or(o),
+    };
+    st.map(|s| decay(s, Local::now().naive_local()))
+}
+
+/// N-41：處理中超過幾分鐘沒有任何事件（也沒有正在跑的工具）＝「沒動靜」。
+pub const QUIET_MINUTES: i64 = 30;
+/// N-41：做完一輪沒看，超過幾小時就不再亮（不算進徽章）。
+pub const FADE_HOURS: i64 = 24;
+
+/// N-41（Rust 才有，2026-10-18；抄 Orca `agent-status-freshness`）：階段依 `at` 衰減，讀端算、不改檔。
+/// - 處理中、沒有正在跑的工具、`at` 超過 [`QUIET_MINUTES`] 分 → 加 `quiet_minutes`（畫面說「沒動靜 N 分」）
+/// - 做完沒看、`at` 超過 [`FADE_HOURS`] 小時 → 加 `faded: true`（當成看過：不亮、不算徽章）
+fn decay(mut st: Value, now: NaiveDateTime) -> Value {
+    let Some(at) = st
+        .get("at")
+        .and_then(Value::as_str)
+        .and_then(|a| NaiveDateTime::parse_from_str(a, "%Y-%m-%d %H:%M").ok())
+    else {
+        return st;
+    };
+    let minutes = (now - at).num_minutes();
+    let status = st
+        .get("status")
+        .and_then(Value::as_str)
+        .and_then(AgentStatus::parse);
+    match status {
+        Some(AgentStatus::Working) if st.get("tool").is_none() && minutes >= QUIET_MINUTES => {
+            st["quiet_minutes"] = json!(minutes);
+        }
+        Some(AgentStatus::Finished)
+            if st.get("seen") != Some(&Value::Bool(true)) && minutes >= FADE_HOURS * 60 =>
+        {
+            st["faded"] = json!(true);
+        }
+        _ => {}
     }
+    st
 }
 
 /// 活著的 agent 會話裡要你看的有幾個（選單列、Dock 徽章用；Rust 才有）。
@@ -211,7 +247,10 @@ impl Attention {
         match parsed {
             Some(st) if st.needs_you() => self.needs_you += 1,
             Some(AgentStatus::Working) => self.working += 1,
-            Some(AgentStatus::Finished) if s.get("seen") != Some(&Value::Bool(true)) => {
+            Some(AgentStatus::Finished)
+                if s.get("seen") != Some(&Value::Bool(true))
+                    && s.get("faded") != Some(&Value::Bool(true)) =>
+            {
                 self.finished_unseen += 1
             }
             _ => {}
@@ -365,4 +404,49 @@ pub fn session_draft(spine_dir: impl AsRef<Path>, term: &Value) -> Result<Value>
         "loops": loops.len(),
         "note": "草稿由脊椎留痕組成，尚未儲存；存檔會落一筆 decision，不代表成果已被採納。",
     }))
+}
+
+#[cfg(test)]
+mod decay_tests {
+    use super::*;
+
+    fn at(s: &str) -> NaiveDateTime {
+        NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap()
+    }
+
+    #[test]
+    fn working_without_events_goes_quiet() {
+        let st = json!({"status": "working", "at": "2026-10-18 10:00"});
+        assert!(decay(st.clone(), at("2026-10-18 10:29"))
+            .get("quiet_minutes")
+            .is_none());
+        assert_eq!(
+            decay(st, at("2026-10-18 10:45"))["quiet_minutes"],
+            json!(45)
+        );
+        // 有工具在跑：交給 F-82 的「可能卡住」，不另標沒動靜
+        let busy = json!({"status": "working", "at": "2026-10-18 10:00",
+                          "tool": {"label": "Bash：cargo test", "since": "2026-10-18 10:00:00"}});
+        assert!(decay(busy, at("2026-10-18 11:00"))
+            .get("quiet_minutes")
+            .is_none());
+    }
+
+    #[test]
+    fn unseen_finished_fades_after_a_day() {
+        let st = json!({"status": "finished", "at": "2026-10-17 09:00"});
+        assert!(decay(st.clone(), at("2026-10-18 08:59"))
+            .get("faded")
+            .is_none());
+        let old = decay(st, at("2026-10-18 09:00"));
+        assert_eq!(old["faded"], json!(true));
+        let mut a = Attention::default();
+        a.count(Some(&old));
+        assert_eq!(a.finished_unseen, 0);
+        let mut b = Attention::default();
+        b.count(Some(
+            &json!({"status": "finished", "at": "2026-10-18 09:00"}),
+        ));
+        assert_eq!(b.finished_unseen, 1);
+    }
 }

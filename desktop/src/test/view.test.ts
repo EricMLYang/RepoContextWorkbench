@@ -250,6 +250,15 @@ describe("會話在等你（Claude Code hook 自動寫）", () => {
     });
     expect(firstNeedingYou([t("s", "finished", true), t("x", "working")])).toBeNull();
   });
+  it("N-41：做完沒看超過一天就不亮；處理中 30 分沒動靜改說沒動靜", () => {
+    const done = { status: "finished", text: "", at: "2026-10-14 01:02", faded: true };
+    expect(sessionFresh(term(done))).toBe(false);
+    expect(sessionWantsYou(term(done))).toBe(false);
+    expect(sessionDot(term(done))).toEqual(["seen"]);
+    const quiet = term({ status: "working", text: "", at: "2026-10-14 01:02", quiet_minutes: 42 });
+    expect(statusText(quiet)).toBe("沒動靜 42 分");
+    expect(sessionDot(quiet)).toEqual(["stalled"]);
+  });
   it("F-71：有 Claude Code 取的標題就當主標題，提示框帶最後回覆", () => {
     const plain = term(null) as object;
     expect(sessionHeadline(plain as never)).toBe("claude · a");

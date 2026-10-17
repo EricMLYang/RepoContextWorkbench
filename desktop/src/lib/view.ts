@@ -445,7 +445,11 @@ export function sessionPair(
 export function statusText(s: TermInfo): string {
   if (!s.agent_status) return "";
   const base = STATUS_TXT[s.agent_status.status] || s.agent_status.status;
-  const t = s.alive && s.agent_status.status === "working" ? s.tool : null;
+  const working = s.alive && s.agent_status.status === "working";
+  const t = working ? s.tool : null;
+  // N-41：處理中卻 30 分鐘以上沒任何事件（引擎算好）
+  if (!t && working && s.agent_status.quiet_minutes)
+    return `沒動靜 ${s.agent_status.quiet_minutes} 分`;
   if (!t) return base;
   const mins = t.minutes >= 1 ? `（${t.minutes} 分）` : "";
   return t.stalled ? `可能卡住：${t.label}（${t.minutes} 分沒結束）` : `${base}：${t.label}${mins}`;
@@ -492,7 +496,12 @@ export function sessionNeedsYou(s: TermInfo): boolean {
 
 /** 做完一輪、你還沒看（F-80：Claude Code 的 Stop 之後、你還沒切過去）。 */
 export function sessionFresh(s: TermInfo): boolean {
-  return !!s.alive && s.agent_status?.status === "finished" && !s.agent_status.seen;
+  return (
+    !!s.alive &&
+    s.agent_status?.status === "finished" &&
+    !s.agent_status.seen &&
+    !s.agent_status.faded
+  );
 }
 
 /** 要你看一眼的：在等你，或做完沒看。 */
@@ -548,10 +557,10 @@ export function sessionDot(s: TermInfo): DotState[] {
   if (!s.alive) out.push("dead");
   if (s.alive && s.kind === "agent" && !s.report && !s.agent_status) out.push("silent");
   if (s.alive && s.agent_status?.status === "working")
-    out.push(s.tool?.stalled ? "stalled" : "busy");
+    out.push(s.tool?.stalled || s.agent_status.quiet_minutes ? "stalled" : "busy");
   if (s.agent_status && ["waiting", "blocked"].includes(s.agent_status.status)) out.push("needs");
   if (s.alive && s.agent_status?.status === "finished")
-    out.push(s.agent_status.seen ? "seen" : "fresh");
+    out.push(s.agent_status.seen || s.agent_status.faded ? "seen" : "fresh");
   return out;
 }
 
