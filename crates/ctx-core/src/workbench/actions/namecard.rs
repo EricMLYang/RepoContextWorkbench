@@ -11,10 +11,35 @@ pub(super) fn a_repo_profile(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Res
 fn profile_json(r: &registry::Repo, changed: Option<bool>) -> Result<Value> {
     let mut v = serde_json::to_value(crate::profile::profile(r))?;
     v["ok"] = json!(true);
+    // 類別選單的選項（2026-10-18）：名稱與「怎樣算可靠」都從引擎來，前端不對照
+    v["classes"] = json!(registry::RepoClass::ALL
+        .iter()
+        .map(|c| json!({"id": c.as_str(), "label": c.label(), "reliable": c.reliable()}))
+        .collect::<Vec<_>>());
     if let Some(c) = changed {
         v["changed"] = json!(c);
     }
     Ok(v)
+}
+
+#[derive(serde::Deserialize)]
+struct ClassArgs {
+    id: String,
+    /// 空字串＝清掉（未分類）
+    #[serde(default)]
+    class: String,
+}
+
+/// Rust 才有（2026-10-18）：App 改 repo 類別（走 `registry_class`，同 CLI 的驗證與留痕）；回更新後的名片。
+pub(super) fn a_repo_class(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let ClassArgs { id, class } = parse("repo_class", p)?;
+    ops::call(
+        d,
+        "registry_class",
+        json!({"id": id, "class": class}),
+        Via::Ui,
+    )?;
+    profile_json(&registry::get_repo(d, &id)?, Some(true))
 }
 
 /// Rust 才有（F-57）：App 編輯名片。表單送三欄的完整內容，**只有跟 registry 不同的欄位**才寫

@@ -411,6 +411,19 @@ export interface RepoProfile {
   description_source?: "registry" | "readme";
   keywords?: string[];
   tags?: string[];
+  /** 類別（2026-10-18，引擎 registry::RepoClass）；未分類＝沒有這個鍵。 */
+  class?: RepoClassInfo;
+  /** 類別選單的選項（引擎給，前端不對照）；舊引擎沒有這個鍵。 */
+  classes?: { id: string; label: string; reliable: string }[];
+}
+
+/** repo 類別：名稱、怎樣算可靠、給 agent 的規則、名冊用的短規則。 */
+export interface RepoClassInfo {
+  id: string;
+  label: string;
+  reliable: string;
+  rule: string;
+  short?: string;
 }
 
 /**
@@ -743,6 +756,11 @@ export interface ActionMap {
   };
   describe_repo: {
     payload: { id: string; description: string; role: string; keywords: string };
+    result: RepoProfile & { changed: boolean };
+  };
+  /** Rust 才有（2026-10-18）：改 repo 類別（空字串＝清掉）；回更新後的名片。 */
+  repo_class: {
+    payload: { id: string; class: string };
     result: RepoProfile & { changed: boolean };
   };
   /** Rust 才有：牌組筆記（spine 的 groups/<組>/notes.md；新的在前）。 */

@@ -119,6 +119,10 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   repo 分布只用 repo 裡的檔算）。開場（`context_for.fresh`）只推目前規則、`PUSH_DAYS`（7）天內找到的
   （`ruminate::push_links`）；舊規則的推薦視為被取代——不推、不擋新規則重推、資料保留（`ctx fresh --all` 看得到）。
   對拍時比對前拿掉推薦的 `rules` 鍵，記為允許差異。
+- **repo 類別**（2026-10-18，`docs/REPO_CLASSES.md`）：registry 多一個 `class` 欄（新欄位，Python 讀得回、不懂意思）；
+  CLI `ctx registry class`、App `repo_class`、op `registry_class`。`context_for` 多 `repo_class`（未分類不給；對拍時拿掉）、
+  名冊／名片多 `class`；開場注入在目標下一行印所在 repo 的類別規則（未分類不印）。參考類（或沒寫 class 的
+  `type: external`）採集時當 external、不進程式碼搜尋；`type: mine` 但類別是參考時，採集的 note 寫「參考 repo：不採集 git 狀態」。
 - **程式碼搜尋**（N-43，2026-10-18）：`crossref::code_search` 的 git grep 每個 repo 只給 `--threads=2`（23 個 repo 同時跑時
   預設執行緒互搶，sys 17 秒、牆上 1.7 秒 → 0.9 秒）；英文詞要出現在詞首（前一字元不是英文字母）才算命中，
   擋掉 `Rust` 中 `TRUST_PROBE`／`TrustBoundary`。Python 版是純子字串。

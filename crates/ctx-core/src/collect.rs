@@ -26,6 +26,8 @@ pub struct RepoSpec {
     pub path: std::path::PathBuf,
     pub repo_type: String,
     pub tier: String,
+    /// Rust 才有（2026-10-18）：類別是「參考」但 `type` 不是 external——採集時當 external（不跑 git）。
+    pub reference: bool,
 }
 
 impl RepoSpec {
@@ -36,6 +38,7 @@ impl RepoSpec {
             path: path.into(),
             repo_type: "mine".into(),
             tier: "active".into(),
+            reference: false,
         }
     }
     pub fn with_type(mut self, t: impl Into<String>) -> Self {
@@ -57,6 +60,10 @@ impl From<&crate::registry::Repo> for RepoSpec {
         }
         if let Some(t) = r.tier_str() {
             s.tier = t;
+        }
+        if r.is_reference() && s.repo_type != "external" {
+            s.repo_type = "external".into();
+            s.reference = true;
         }
         s
     }
@@ -138,7 +145,11 @@ pub fn collect_repo(entry: &RepoSpec) -> RepoState {
         return st;
     }
     if st.repo_type == "external" {
-        st.note = "external：上游查詢待 P4".into();
+        st.note = if entry.reference {
+            "參考 repo：不採集 git 狀態".into()
+        } else {
+            "external：上游查詢待 P4".into()
+        };
         return st;
     }
     // status 不 trim 整份輸出：porcelain 第一行開頭的空白（" M file"）是欄位的一部分。

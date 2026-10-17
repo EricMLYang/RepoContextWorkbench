@@ -232,6 +232,18 @@ fn registry_describe(d: &Path, a: &Args) -> Result<Value> {
     Ok(registry::describe_repo(d, &a.req("id"), &desc)?.to_json())
 }
 
+fn registry_class(d: &Path, a: &Args) -> Result<Value> {
+    let id = a.req("id");
+    let raw = a.s("class").unwrap_or_default();
+    let class = match raw.trim() {
+        "" => None,
+        t => Some(t.parse::<registry::RepoClass>()?),
+    };
+    let (_, old) = registry::set_class(d, &id, class)?;
+    Ok(json!({"id": id, "class": class.map(|c| c.as_str()),
+              "label": class.map(|c| c.label()), "old": old}))
+}
+
 fn registry_tier(d: &Path, a: &Args) -> Result<Value> {
     let (id, tier) = (a.req("id"), a.req("tier"));
     if !registry::TIERS.contains(&tier.as_str()) {
@@ -670,6 +682,23 @@ static OPS: LazyLock<Vec<Op>> = LazyLock::new(|| {
                     parts.push(format!("關鍵字＝{}", if v.is_empty() { "（清掉）".into() } else { v.join("、") }));
                 }
                 Some((vec![format!("repo:{}", rs(r, "id"))], format!("{} 名片：{}", rs(r, "id"), parts.join("；"))))
+            }),
+        },
+        Op {
+            name: "registry_class",
+            summary: "改 repo 類別：code（程式）／agent（領域 Agent）／data（數據探索）／docs（文件・PM）／knowledge（知識）／reference（參考，只讀、不採集）；空字串＝清掉",
+            params: vec![
+                p("id", Str, "repo id", true),
+                p("class", Str, "code｜agent｜data｜docs｜knowledge｜reference；不給或空字串＝清掉", false),
+            ],
+            run: registry_class,
+            say: |r, _| match r["label"].as_str() {
+                Some(l) => format!("{}：類別 → {l}", rs(r, "id")),
+                None => format!("{}：類別已清掉（未分類）", rs(r, "id")),
+            },
+            audit: Some(|r, _| {
+                let now = r["label"].as_str().unwrap_or("未分類");
+                Some((vec![format!("repo:{}", rs(r, "id"))], format!("{} 類別：{now}", rs(r, "id"))))
             }),
         },
     ]

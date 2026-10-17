@@ -566,6 +566,14 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
     if !roster.is_empty() {
         out["roster"] = serde_json::to_value(&roster)?;
     }
+    // Rust 才有（2026-10-18）：所在 repo 的類別與規則（registry::RepoClass）；未分類就不給這個鍵
+    if let Some(c) = w
+        .repo_id()
+        .and_then(|id| registry::get_repo(spine_dir, id).ok())
+        .and_then(|r| r.class())
+    {
+        out["repo_class"] = serde_json::to_value(registry::ClassInfo::from(c))?;
+    }
     // Rust 才有（2026-10-14）：牌組筆記（人在 App 隨手記的、不屬於任何 repo 的事）——agent 開場也要看得到；
     // 沒有筆記就不給這個鍵。只給最新幾則、每則截短，全文在 path
     if let Some(g) = s.group.as_deref() {

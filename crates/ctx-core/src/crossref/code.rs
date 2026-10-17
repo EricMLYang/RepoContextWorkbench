@@ -100,7 +100,8 @@ pub fn code_search(entries: &[Repo], query: &str, limit: usize, per_repo: usize)
                 let args = &args;
                 sc.spawn(move || {
                     let root = e.path();
-                    (root.is_dir() && e.kind().as_deref() != Some("external"))
+                    // external 與類別「參考」都不搜（Rust 才有：類別，2026-10-18）
+                    (root.is_dir() && !e.is_reference())
                         .then(|| git(&root, args, Duration::from_secs(10)))
                 })
             })

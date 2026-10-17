@@ -49,6 +49,9 @@ pub struct RepoProfile {
     pub keywords: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    /// 類別（2026-10-18）；未分類＝不給。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub class: Option<crate::registry::ClassInfo>,
 }
 
 /// 組出名片：registry 有介紹就用，沒有就從 repo 截一句（只讀）。
@@ -69,6 +72,7 @@ pub fn profile(r: &Repo) -> RepoProfile {
         description_source,
         keywords: r.keywords(),
         tags: r.tags(),
+        class: r.class().map(Into::into),
     }
 }
 
@@ -395,6 +399,7 @@ mod tests {
             description_source: desc.map(|_| DescSource::Registry),
             keywords: kw.iter().map(|s| s.to_string()).collect(),
             tags: Vec::new(),
+            class: None,
         }
     }
 
@@ -461,6 +466,7 @@ mod tests {
             description_source: desc.map(|_| src),
             keywords: Vec::new(),
             tags: Vec::new(),
+            class: None,
         }
     }
 

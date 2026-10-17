@@ -898,6 +898,53 @@ describe("repo 右側欄與右鍵選單", () => {
     expect(within(card).getByRole("list", { name: "關鍵字" }).textContent).toBe("登入OAuth");
   });
 
+  it("名片：類別選單選了就存（鎖住、失敗顯示原因並回原值），存好顯示給 agent 的規則", async () => {
+    let fail = true;
+    const classes = [
+      { id: "code", label: "程式", reliable: "測試通過" },
+      { id: "reference", label: "參考", reliable: "不改，只讀" },
+    ];
+    const base = { ok: true, id: "a", path: "/r/a", classes };
+    const backend = mockBackend({
+      getScan: vi.fn(async () =>
+        makeScan({ states: [{ ...repoA, recent_commits: [], agents: [] }] }),
+      ),
+      action: vi.fn(async (name: string, p: Record<string, string>) => {
+        if (name === "repo_tree")
+          return { ok: true, id: "a", root: "/r/a", dir: "", more: 0, entries: [] };
+        if (name === "repo_profile") return base;
+        if (name === "repo_class") {
+          if (fail) {
+            fail = false;
+            throw new Error("類別需為 code|agent");
+          }
+          return {
+            ...base,
+            changed: true,
+            class: { id: p.class, label: "參考", reliable: "不改，只讀", rule: "別人的專案，只讀" },
+          };
+        }
+        return { ok: true };
+      }) as never,
+    });
+    await mountGroup(backend);
+    await act(async () => fireEvent.click(repoButton()));
+    await act(async () => fireEvent.click(screen.getByRole("tab", { name: "資訊" })));
+    const card = within(document.getElementById("repopanel")!).getByRole("region", {
+      name: "a 的名片",
+    });
+    const select = (await within(card).findByLabelText("類別")) as HTMLSelectElement;
+    expect(select.value).toBe("");
+    await act(async () => fireEvent.change(select, { target: { value: "reference" } }));
+    expect(within(card).getByRole("alert").textContent).toContain("類別需為");
+    expect(select.value).toBe("");
+    await act(async () => fireEvent.change(select, { target: { value: "reference" } }));
+    expect(backend.action).toHaveBeenLastCalledWith("repo_class", { id: "a", class: "reference" });
+    expect(select.value).toBe("reference");
+    expect(card.textContent).toContain("給 agent 的規則：別人的專案，只讀");
+    expect(within(card).queryByRole("alert")).toBeNull();
+  });
+
   it("變更：列出還沒 commit 的檔，點了在主區開差異；差異模式不顯示讀檔錯誤", async () => {
     const diff = "diff --git a/src/a.ts b/src/a.ts\n@@ -1 +1 @@\n-old\n+new";
     const backend = mockBackend({

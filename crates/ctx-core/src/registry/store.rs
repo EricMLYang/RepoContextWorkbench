@@ -136,6 +136,20 @@ impl Repo {
     pub fn kind(&self) -> Option<String> {
         self.get_str("type")
     }
+    /// Rust 才有（2026-10-18）：`class` 欄（見 [`super::RepoClass`]）。沒寫或寫錯＝None（未分類，照程式對待）；
+    /// 沒寫 class 但 `type: external`＝參考。
+    pub fn class(&self) -> Option<super::RepoClass> {
+        match self.get_str("class") {
+            Some(c) => c.parse().ok(),
+            None => {
+                (self.kind().as_deref() == Some("external")).then_some(super::RepoClass::Reference)
+            }
+        }
+    }
+    /// 參考 repo：不採集 git 狀態、不進程式碼搜尋（[`super::RepoClass::Reference`]）。
+    pub fn is_reference(&self) -> bool {
+        self.class() == Some(super::RepoClass::Reference)
+    }
     /// `tier` 欄字串（可能是手寫的未知值）。
     pub fn tier_str(&self) -> Option<String> {
         self.get_str("tier")

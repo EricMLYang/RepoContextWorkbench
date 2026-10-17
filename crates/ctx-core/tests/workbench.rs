@@ -2732,3 +2732,59 @@ fn group_notes_never_keep_secrets() {
     assert!(text.contains("[REDACTED TOKEN]"));
     assert!(r.to_string().contains("[REDACTED TOKEN]"));
 }
+
+/// 2026-10-18：repo 類別——App 改類別走 registry_class（驗證＋留痕），名片帶類別與選項；
+/// 參考類不採集 git、不進程式碼搜尋；context_for 給所在 repo 的規則。
+#[test]
+fn repo_class_soft_labels_and_reference_behavior() {
+    let (_t, d) = spine_with_repos();
+    let p = act(&d, "repo_profile", json!({"id": "repo-a"})).unwrap();
+    assert!(p.get("class").is_none());
+    assert_eq!(p["classes"].as_array().unwrap().len(), 6);
+
+    let n0 = of_type(&d, EventType::Decision).len();
+    let r = act(
+        &d,
+        "repo_class",
+        json!({"id": "repo-a", "class": "knowledge"}),
+    )
+    .unwrap();
+    assert_eq!(r["class"]["id"], "knowledge");
+    assert_eq!(r["rescan"], json!(true), "參考類不採集：改類別後要重新採集");
+    assert_eq!(r["class"]["label"], "知識");
+    let evs = of_type(&d, EventType::Decision);
+    assert_eq!(evs.len(), n0 + 1, "改類別要留痕");
+    assert!(evs.last().unwrap().body.contains("repo-a 類別：知識"));
+    assert!(err(&d, "repo_class", json!({"id": "repo-a", "class": "pm"})).contains("類別需為"));
+
+    // 參考：採集時不跑 git（note 說明），程式碼搜尋不搜
+    act(
+        &d,
+        "repo_class",
+        json!({"id": "repo-b", "class": "reference"}),
+    )
+    .unwrap();
+    let rb = registry::get_repo(&d, "repo-b").unwrap();
+    assert!(rb.is_reference());
+    let st = ctx_core::collect::collect_repo(&ctx_core::collect::RepoSpec::from(&rb));
+    assert_eq!(st.note, "參考 repo：不採集 git 狀態");
+    assert_eq!(st.dirty, 0);
+    std::fs::write(rb.path().join("lib.rs"), "fn widget_cache() {}\n").unwrap();
+    ctx_core::testkit::git(&rb.path(), &["add", "-A"], &[]);
+    let data = registry::load(&d).unwrap();
+    let hits = ctx_core::crossref::code_search(&data.repos, "widget_cache", 8, 40);
+    assert!(hits.iter().all(|h| h.repo != "repo-b"), "{hits:?}");
+
+    // context_for：所在 repo 的類別規則
+    let ctx = ctx_core::agentapi::context_for(
+        &d,
+        &ctx_core::agentapi::Target::at(registry::get_repo(&d, "repo-a").unwrap().path()),
+        false,
+    )
+    .unwrap();
+    assert_eq!(ctx["repo_class"]["label"], "知識");
+
+    // 清掉＝未分類
+    let r = act(&d, "repo_class", json!({"id": "repo-a", "class": ""})).unwrap();
+    assert!(r.get("class").is_none());
+}

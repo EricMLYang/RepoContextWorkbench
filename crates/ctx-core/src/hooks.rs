@@ -75,6 +75,13 @@ fn roster_line(r: &Value, desc_chars: Option<usize>) -> String {
     if let Some(role) = r["role"].as_str() {
         line.push_str(&format!("｜{role}"));
     }
+    // 類別（2026-10-18）：別的組員帶短規則（「參考：只讀」）；自己的完整規則在開頭那行
+    if let Some(label) = r["class"]["label"].as_str() {
+        match r["class"]["short"].as_str().filter(|_| r["you"] != true) {
+            Some(short) => line.push_str(&format!("｜{label}：{short}")),
+            None => line.push_str(&format!("｜{label}")),
+        }
+    }
     line.push_str(&format!("｜{}", s(r, "path")));
     if let Some(d) = r["description"].as_str() {
         let d = match desc_chars {
@@ -191,6 +198,13 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
         Some(g) => format!("目標：{g}"),
         None => format!("目標：（{}）", py_str(&ctx["goal_gap"])),
     });
+    // Rust 才有（2026-10-18）：所在 repo 的類別與規則（未分類不印）
+    if let (Some(label), Some(rule)) = (
+        ctx["repo_class"]["label"].as_str(),
+        ctx["repo_class"]["rule"].as_str(),
+    ) {
+        out.push(format!("這個 repo 是「{label}」類：{rule}。"));
+    }
     let ho = &ctx["last_handoff"];
     let lp = &ctx["last_progress"];
     if ho.is_object() {

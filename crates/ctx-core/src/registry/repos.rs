@@ -148,6 +148,27 @@ pub fn set_field(
     })
 }
 
+/// Rust 才有（2026-10-18）：改 repo 類別（`class` 欄）。None＝清掉（回到未分類）。回傳 (更新後的登記項, 原本的值)。
+pub fn set_class(
+    spine_dir: impl AsRef<Path>,
+    id: &str,
+    class: Option<super::RepoClass>,
+) -> Result<(Repo, Option<String>)> {
+    transaction(spine_dir, |data| {
+        let r = data
+            .repo_mut(id)
+            .ok_or_else(|| Error::invalid(format!("repo 不存在: {id}")))?;
+        let old = r.get_str("class");
+        match class {
+            Some(c) => r.set("class", c.as_str()),
+            None => {
+                r.remove("class");
+            }
+        }
+        Ok((r.clone(), old))
+    })
+}
+
 /// `describe_repo` 要改哪些名片欄位：None＝不動、空字串／空清單＝清掉。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Describe {

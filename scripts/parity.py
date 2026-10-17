@@ -75,6 +75,7 @@ MCP_EXTRA_TOOLS = {
     "describe_repo": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
     "registry_describe": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
     "workbench_apply": "改工作台設定 workbench_apply（F-63 App 助手同一份白名單，2026-10-15，Rust 才有）",
+    "registry_class": "repo 類別 registry_class（2026-10-18，Rust 才有，docs/REPO_CLASSES.md）",
 }
 
 
@@ -351,6 +352,9 @@ def strip_rust_only(v):
             hit = True
         if "open_loops" in v and "scope" in v and "roster" in v:  # context_for 的組員名冊（2026-10-13）
             del v["roster"]
+            hit = True
+        if "open_loops" in v and "scope" in v and "repo_class" in v:  # context_for 的所在 repo 類別（2026-10-18）
+            del v["repo_class"]
             hit = True
         if "rel" in v and "commit" in v and "linked_from" in v:  # read_from 的反向連結（F-69，2026-10-15）
             del v["linked_from"]

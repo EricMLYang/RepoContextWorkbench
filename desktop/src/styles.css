@@ -1843,6 +1843,18 @@ dialog::backdrop {
   margin: 8px 0;
   font-size: 12px;
 }
+/* 類別（2026-10-18）：一行「類別 [選單]」，規則在下面一行小字 */
+.profileclass .field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 2px;
+  font-size: 12px;
+}
+.profileclass .field.inline select {
+  flex: 1;
+  min-width: 0;
+}
 .profileform textarea {
   width: 100%;
   resize: vertical;

@@ -69,7 +69,10 @@ export function RepoProfileCard({ id }: { id: string }) {
           }}
         />
       ) : (
-        <ProfileView profile={shown} />
+        <>
+          <ProfileView profile={shown} />
+          <ClassPicker profile={shown} onSaved={setProfile} />
+        </>
       )}
     </section>
   );
@@ -98,6 +101,64 @@ function ProfileView({ profile }: { profile: RepoProfile }) {
         </ul>
       ) : null}
     </>
+  );
+}
+
+/**
+ * 類別（2026-10-18）：決定工作台與 agent 怎麼對待這個 repo（開場告訴 agent 這類的規則；參考類不採集、不搜程式碼）。
+ * 選了就存（走引擎 repo_class，留痕）；存的時候鎖住，失敗把錯誤顯示出來、選單回到原值。
+ */
+function ClassPicker(props: { profile: RepoProfile; onSaved: (p: RepoProfile) => void }) {
+  const { profile, onSaved } = props;
+  const store = useStore();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (!profile.classes?.length) return null;
+  const current = profile.class?.id ?? "";
+  return (
+    <div className="profileclass">
+      <label className="field inline">
+        類別
+        <select
+          value={current}
+          disabled={busy}
+          aria-describedby={profile.class ? "classrule-" + profile.id : undefined}
+          onChange={async (e) => {
+            const next = e.target.value;
+            setBusy(true);
+            setError("");
+            try {
+              const p = await store.action("repo_class", { id: profile.id, class: next });
+              onSaved(p);
+              store.toast(
+                p.class ? `${profile.id} 類別：${p.class.label}` : `${profile.id} 改回未分類`,
+              );
+            } catch (err) {
+              setError((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <option value="">未分類（照程式對待）</option>
+          {profile.classes.map((c) => (
+            <option key={c.id} value={c.id} title={"怎樣算可靠：" + c.reliable}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {profile.class ? (
+        <p id={"classrule-" + profile.id} className="muted small panelnote">
+          {"給 agent 的規則：" + profile.class.rule}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="error small" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

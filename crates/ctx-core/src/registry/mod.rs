@@ -8,6 +8,7 @@
 //! 呼叫端照舊 `registry::xxx`。
 
 pub mod audit;
+pub mod class;
 pub mod groups;
 pub mod relations;
 pub mod repos;
@@ -16,6 +17,7 @@ pub mod store;
 pub use audit::{
     add_folder, audit, audit_with, last_commit_days, scan_dir, scan_dir_with_self, scan_register,
 };
+pub use class::{ClassInfo, RepoClass};
 pub use groups::{
     add_group, add_group_members, add_group_with_landing, check_group_name, get_group,
     remove_group, remove_group_members, rename_group, reorder_groups, reorder_members,
@@ -28,7 +30,7 @@ pub use relations::{
     RelationKind, RelationKinds, RelationRow, RelationView,
 };
 pub use repos::{
-    add_repo, all_tags, describe_repo, get_repo, remove_repo, set_field, survival, tag_repo,
-    AddRepo, Describe, Survival, Tier, TIERS,
+    add_repo, all_tags, describe_repo, get_repo, remove_repo, set_class, set_field, survival,
+    tag_repo, AddRepo, Describe, Survival, Tier, TIERS,
 };
 pub use store::{load, save, transaction, Export, Group, RegistryData, Relation, Repo};

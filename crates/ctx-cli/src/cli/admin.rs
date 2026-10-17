@@ -76,6 +76,12 @@ pub enum RegistryCmd {
         #[arg(long)]
         keywords: Option<String>,
     },
+    /// 改 repo 類別：code｜agent｜data｜docs｜knowledge｜reference（Rust 才有；不給類別＝清掉）
+    Class {
+        id: String,
+        /// code（程式）／agent（領域 Agent）／data（數據探索）／docs（文件・PM）／knowledge（知識）／reference（參考）
+        class: Option<String>,
+    },
     /// 改 tier（paused 可帶 --resume-when）
     Tier {
         id: String,
@@ -196,6 +202,11 @@ pub fn cmd_registry(ctx: &Ctx, c: &RegistryCmd) -> CmdResult {
             json!({"id": id, "tier": tier, "resume_when": resume_when}),
         ),
         Remove { id } => op(ctx, "registry_remove", json!({"id": id})),
+        Class { id, class } => op(
+            ctx,
+            "registry_class",
+            json!({"id": id, "class": class.clone().unwrap_or_default()}),
+        ),
         Tag { id, add, remove } => op(
             ctx,
             "registry_tag",

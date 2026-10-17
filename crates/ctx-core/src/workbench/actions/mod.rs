@@ -33,7 +33,7 @@ use files::{
     a_write_file,
 };
 use finder::{a_file_diff, a_palette, a_repo_changes, a_scope_changes};
-use namecard::{a_describe_repo, a_repo_profile};
+use namecard::{a_describe_repo, a_repo_class, a_repo_profile};
 use sessions::{a_session_draft, a_session_result, a_session_seen, a_term_create, a_term_kill};
 
 /// 會話清冊（`TermManager` 的那幾個操作）。殼給真的，測試給假的。
@@ -96,6 +96,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("tag", a_tag),
     ("repo_profile", a_repo_profile),
     ("describe_repo", a_describe_repo),
+    ("repo_class", a_repo_class),
     ("palette", a_palette),
     ("pick_brief", a_pick_brief),
     ("profile_draft_brief", a_profile_draft_brief),
@@ -194,9 +195,9 @@ pub fn handle_action(
     Ok(out)
 }
 
-/// 會改變 repo 採集結果的 action（tier、延後問句卡、移除 repo）：結果多帶 `rescan: true`，前端照它重新採集。
+/// 會改變 repo 採集結果的 action（tier、延後問句卡、移除 repo、類別——參考類不採集）：結果多帶 `rescan: true`，前端照它重新採集。
 /// Rust 才有（2026-10-13，原本前端寫死這份清單）。
-const RESCAN_AFTER: &[&str] = &["tier", "defer", "remove_repo"];
+const RESCAN_AFTER: &[&str] = &["tier", "defer", "remove_repo", "repo_class"];
 
 /// 把 payload 解析成型別化參數。**新 action 一律用這個**（缺欄位、型別不對都在這裡擋下）；
 /// 下面那組 `raw`／`s`／`int` 只給照抄 Python 版的舊 action（`payload.get(k) or …` 的語意），合併回 main 後換掉。

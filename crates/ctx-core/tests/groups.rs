@@ -331,7 +331,8 @@ fn test_ops_table_is_the_single_source() {
             "group_update",
             "group_remove",
             "group_goal",
-            "registry_describe"
+            "registry_describe",
+            "registry_class"
         ]
     );
     assert_eq!(
