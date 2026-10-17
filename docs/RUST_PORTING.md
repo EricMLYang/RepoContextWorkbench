@@ -119,6 +119,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   repo 分布只用 repo 裡的檔算）。開場（`context_for.fresh`）只推目前規則、`PUSH_DAYS`（7）天內找到的
   （`ruminate::push_links`）；舊規則的推薦視為被取代——不推、不擋新規則重推、資料保留（`ctx fresh --all` 看得到）。
   對拍時比對前拿掉推薦的 `rules` 鍵，記為允許差異。
+- **開場注入預算**（N-28，2026-10-18）：`hooks::render_start` 超過 `START_BUDGET`（3,000 字元）就一層層收——
+  先把同組成員的介紹截到 40 字，再把新料從 3 筆減到 1 筆，最後新料只留一行「另有 N 筆，`ctx fresh` 看」、介紹截到 24 字。
+  未結、提醒、工作約定不砍。Python 版不收斂；對拍夾具的注入在預算內，輸出不變。
 
 - **事件文字寫入前遮蔽秘密**（2026-10-16，ideation N-39；Python 沒有）：`spine::write_event`（與 dead-letter）在落地前
   跑 `redact::redact_secrets`——私鑰區塊、`sk-ant-`／`sk-`／`ghp_`／`github_pat_`／`xox?-` 類 token、AWS `AKIA…`、

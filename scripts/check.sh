@@ -13,7 +13,7 @@ step() {
   shift
   echo "== $name"
   if ! "$@" >"$log" 2>&1; then
-    echo "FAIL（$name）"
+    echo "FAIL（${name}）"
     tail -40 "$log"
     fail=1
   fi

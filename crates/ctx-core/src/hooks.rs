@@ -35,9 +35,39 @@ report_status／handoff／search_knowledge／read_from／ask_repo／repo_status"
 const NOTE_LINE_CHARS: usize = 60;
 /// 開場名冊最多列幾個成員。
 const ROSTER_LINES: usize = 20;
+/// Rust 才有（N-28，2026-10-18）：開場注入的字元預算。超過就照 [`START_TRIMS`] 一層一層收，
+/// 收到最後一層還超過就照最後一層給（不砍未結、提醒與工作約定）。
+pub const START_BUDGET: usize = 3000;
+
+/// 開場注入收斂的一層：新料最多幾筆、名冊介紹最多幾個字元（None＝不截）。
+#[derive(Debug, Clone, Copy)]
+struct Trim {
+    fresh: usize,
+    desc_chars: Option<usize>,
+}
+
+/// 由寬到緊。新料命中率低（R35：推了 59、用上 1），先截名冊介紹、再少推新料。
+const START_TRIMS: [Trim; 4] = [
+    Trim {
+        fresh: 3,
+        desc_chars: None,
+    },
+    Trim {
+        fresh: 3,
+        desc_chars: Some(40),
+    },
+    Trim {
+        fresh: 1,
+        desc_chars: Some(40),
+    },
+    Trim {
+        fresh: 0,
+        desc_chars: Some(24),
+    },
+];
 
 /// 名冊一列：`- **id**（你在這）｜角色｜路徑 — 介紹（推測）｜N 個會話在跑，K 個檔還沒 commit`。
-fn roster_line(r: &Value) -> String {
+fn roster_line(r: &Value, desc_chars: Option<usize>) -> String {
     let mut line = format!("- **{}**", s(r, "id"));
     if r["you"] == true {
         line.push_str("（你在這）");
@@ -47,6 +77,10 @@ fn roster_line(r: &Value) -> String {
     }
     line.push_str(&format!("｜{}", s(r, "path")));
     if let Some(d) = r["description"].as_str() {
+        let d = match desc_chars {
+            Some(n) => crate::pystr::clip(d, n),
+            None => d.to_string(),
+        };
         line.push_str(&format!(" — {d}"));
         if r["description_source"] == "readme" {
             line.push_str("（推測自 README）");
@@ -112,7 +146,19 @@ fn s<'a>(v: &'a Value, k: &str) -> &'a str {
 }
 
 /// 對應 `hooks.render_start`：context_for 的結果 → 開場注入文字（精簡，一屏內）。
+/// Rust 才有（N-28）：超過 [`START_BUDGET`] 字元就收斂（見 [`START_TRIMS`]）。
 pub fn render_start(c: &ContextFor) -> String {
+    let mut text = String::new();
+    for t in START_TRIMS {
+        text = render_start_with(c, t);
+        if text.chars().count() <= START_BUDGET {
+            break;
+        }
+    }
+    text
+}
+
+fn render_start_with(c: &ContextFor, trim: Trim) -> String {
     let ctx = &c.value;
     let w = &ctx["where"];
     let sc = &ctx["scope"];
@@ -244,7 +290,12 @@ pub fn render_start(c: &ContextFor) -> String {
             "## 同組成員（{} 個；路徑可直接讀，要留引用就用 read_from）",
             roster.len()
         ));
-        out.extend(roster.iter().take(ROSTER_LINES).map(|r| roster_line(r)));
+        out.extend(
+            roster
+                .iter()
+                .take(ROSTER_LINES)
+                .map(|r| roster_line(r, trim.desc_chars)),
+        );
         if roster.len() > ROSTER_LINES {
             out.push(format!(
                 "- …另 {} 個（context_for 的 roster 有完整清單）",
@@ -273,10 +324,15 @@ pub fn render_start(c: &ContextFor) -> String {
         out.push("你之前引用過的上游檔之後又改了（本地的副本或結論可能過期）：".into());
         out.extend(crossref::drift_lines(&c.drift, 3));
     }
-    if !c.fresh.is_empty() {
+    if !c.fresh.is_empty() && trim.fresh == 0 {
+        out.push(format!(
+            "（另有 {} 筆反芻新料，開場預算不夠沒列：`ctx fresh` 看）",
+            c.fresh.len()
+        ));
+    } else if !c.fresh.is_empty() {
         out.push(String::new());
         out.push("## 自上次以來跟你手上工作相關的新料（反芻；別組新進的知識或判斷）".into());
-        out.extend(ruminate::link_lines(&c.fresh, 3));
+        out.extend(ruminate::link_lines(&c.fresh, trim.fresh));
         out.push(
             "用得上就 read_from 那個 ref；不相關可略過（使用者可 `ctx fresh --dismiss <id>`）。"
                 .into(),
@@ -553,4 +609,70 @@ pub fn run_hook(spine_dir: &Path, event: &str, stdin: &str) -> String {
 pub fn parse_payload(stdin: &str) -> Value {
     let text = if stdin.is_empty() { "{}" } else { stdin };
     serde_json::from_str(text).unwrap_or_else(|_| json!({}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ctx(members: usize, fresh: usize) -> ContextFor {
+        let long = "很長的介紹".repeat(30);
+        let roster: Vec<Value> = (0..members)
+            .map(
+                |i| json!({"id": format!("r{i}"), "path": format!("/x/r{i}"), "description": long}),
+            )
+            .collect();
+        let links = (0..fresh)
+            .map(|i| {
+                serde_json::from_value(json!({
+                    "id": format!("r{i}"), "group": "g", "kind": "file", "repo": "notes",
+                    "ref": format!("notes:a{i}.md"), "title": "t", "stamp": 0, "score": 1.0,
+                    "terms": ["甲", "乙"], "basis": [], "found": "2026-10-18 00:00", "status": "new",
+                    "snippets": [{"line": 1, "text": "片段".repeat(60)}]
+                }))
+                .unwrap()
+            })
+            .collect();
+        ContextFor {
+            value: json!({"where": {"repo": {"id": "r0"}}, "scope": {"label": "g", "repos": ["r0"]},
+                          "goal": {"text": "目標"}, "roster": roster}),
+            neighbors: vec![],
+            drift: vec![],
+            fresh: links,
+        }
+    }
+
+    #[test]
+    fn small_context_is_not_trimmed() {
+        let t = render_start(&ctx(2, 3));
+        assert!(t.chars().count() <= START_BUDGET);
+        assert_eq!(t.matches("- [r").count(), 3, "{t}");
+        assert!(t.contains(&"很長的介紹".repeat(30)));
+    }
+
+    #[test]
+    fn over_budget_clips_roster_and_tightest_drops_fresh() {
+        let t = render_start(&ctx(20, 3));
+        assert!(t.chars().count() <= START_BUDGET, "{}", t.chars().count());
+        assert!(!t.contains(&"很長的介紹".repeat(30)));
+        // 最緊那層：新料只剩一行指引
+        let tight = render_start_with(&ctx(20, 3), START_TRIMS[3]);
+        assert!(tight.contains("另有 3 筆反芻新料"), "{tight}");
+        // 工作約定一定在
+        assert!(t.contains("## 工作約定"));
+    }
+
+    #[test]
+    fn mid_budget_keeps_one_fresh() {
+        // 名冊截短後還超一點：新料只留 1 筆
+        let full = render_start_with(&ctx(7, 3), START_TRIMS[1])
+            .chars()
+            .count();
+        let one = render_start_with(&ctx(7, 3), START_TRIMS[2])
+            .chars()
+            .count();
+        assert!(full > one);
+        let t = render_start(&ctx(7, 3));
+        assert!(t.chars().count() <= START_BUDGET);
+    }
 }
