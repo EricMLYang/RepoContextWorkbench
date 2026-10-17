@@ -84,6 +84,11 @@ desktop/src（React，只管畫面）── IPC ┘
 - stdio 模式的 stdout 只能輸出協定訊息；log 寫到 stderr 或檔案。
 - 錯誤要回「發生什麼事＋可以怎麼補救」（例：跨組寫入被拒時附上 hint），設定錯誤時不能讓 server 崩潰。
 - CLI 每個查詢指令都要支援 `--json`，欄位一旦發佈就不改意思。
+- **hook 回應紀律**（N-42）：觀測類 hook（Stop／Notification／PreToolUse／PostToolUse／UserPromptSubmit／statusLine）
+  必須 < 100ms 回、不等網路、不印會擋住 Claude Code 的東西；讀逐字稿只讀尾巴固定位元組。PreToolUse 每次工具呼叫都會
+  spawn 一次 `ctx`，任何會讓它變慢的改動（讀事件、讀 registry、git）都不准放進這條路徑。核准類 hook 若將來要回決定，
+  一定帶 timeout、逾時交回 TUI。2026-10-18 實測（release、7MB 逐字稿）：tool-start／tool-end／stop／prompt 都約 10ms。
+  SessionStart 是例外（要組脈絡），預算 < 500ms。
 
 ## 7. 測試與驗證
 
