@@ -110,6 +110,22 @@ function HealthLine() {
                 </AsyncButton>
               </>
             ) : null}
+            {p.stale?.length ? (
+              <>
+                {"；介紹可能過時："}
+                {p.stale.map((x) => (
+                  <button
+                    key={x.repo}
+                    type="button"
+                    className="linkish"
+                    title={`${x.described_at} 寫的介紹，之後 ${x.commits} 個 commit——在右側欄打開看看還對不對`}
+                    onClick={() => ui.showRepo(x.repo)}
+                  >
+                    {x.repo}
+                  </button>
+                ))}
+              </>
+            ) : null}
           </p>
         ) : null}
       </div>

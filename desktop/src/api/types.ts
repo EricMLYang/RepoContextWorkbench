@@ -309,6 +309,8 @@ export interface Health {
     /** 還沒寫介紹的（最多 10 個） */
     undescribed: string[];
     undescribed_more: number;
+    /** #68：寫介紹之後又有 50 個以上 commit 的（介紹可能過時）；舊引擎沒有這個鍵。 */
+    stale?: { repo: string; described_at: string; commits: number }[];
   };
   /** 助手用量（F-63）；舊引擎沒有這個鍵。 */
   assist?: {

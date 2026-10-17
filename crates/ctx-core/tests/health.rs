@@ -183,3 +183,46 @@ fn programmatic_off_refuses_claude_before_spawning() {
         "off"
     );
 }
+
+/// #68：寫介紹之後又有很多 commit＝介紹可能過時（介紹的時間看 spine 的〔registry〕紀錄）。
+#[test]
+fn health_flags_stale_profiles() {
+    use ctx_core::health::PROFILE_STALE_COMMITS;
+    use ctx_core::registry::{describe_repo, Describe};
+    let (t, d) = ctx_core::testkit::spine_with_repos();
+    for id in ["repo-a", "repo-b"] {
+        describe_repo(
+            &d,
+            id,
+            &Describe {
+                description: Some("介紹".into()),
+                role: None,
+                keywords: None,
+            },
+        )
+        .unwrap();
+        append_event(
+            &d,
+            "decision",
+            "cli",
+            &[format!("repo:{id}")],
+            &format!("〔registry〕{id} 名片：介紹＝介紹（從 CLI）"),
+            Some(Local::now().naive_local() - Duration::days(2)),
+        )
+        .unwrap();
+    }
+    let ra = t.path().join("repo-a");
+    for i in 0..PROFILE_STALE_COMMITS {
+        ctx_core::testkit::git(
+            &ra,
+            &["commit", "-q", "--allow-empty", "-m", &format!("c{i}")],
+            &[],
+        );
+    }
+    let h = health(&d, 14, None).unwrap();
+    let stale = h["profiles"]["stale"].as_array().unwrap();
+    assert_eq!(stale.len(), 1, "{stale:?}");
+    assert_eq!(stale[0]["repo"], "repo-a");
+    // 加上 testkit 建 repo-a 時那個 1 天前的 init commit（在介紹之後）
+    assert_eq!(stale[0]["commits"], PROFILE_STALE_COMMITS + 1);
+}

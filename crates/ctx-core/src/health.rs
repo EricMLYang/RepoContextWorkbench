@@ -78,6 +78,60 @@ pub fn record_agent_call(
 
 /// 「還沒寫介紹」最多列幾個 id（其餘只給數字）。
 const UNDESCRIBED_SHOWN: usize = 10;
+/// #68：寫介紹之後又有這麼多 commit＝介紹可能過時。
+pub const PROFILE_STALE_COMMITS: u64 = 50;
+
+/// #68（Rust 才有，2026-10-18）：介紹可能過時的 repo——spine 裡最近一筆改介紹的紀錄
+/// （`〔registry〕<id> 名片：…介紹＝…`）之後，repo 又有 [`PROFILE_STALE_COMMITS`] 個以上 commit。
+/// 介紹寫在 registry 但 spine 找不到紀錄的（手改 YAML）不判斷。各 repo 的 git 同時跑。
+fn stale_profiles(events: &[spine::Event], repos: &[&crate::registry::Repo]) -> Vec<Value> {
+    let described_at = |id: &str| -> Option<String> {
+        let head = format!("{}{id} 名片：", spine::ADMIN_TAG);
+        events
+            .iter()
+            .filter(|e| {
+                e.etype == EventType::Decision
+                    && e.body.starts_with(&head)
+                    && e.body.contains("介紹＝")
+            })
+            .map(spine::Event::stamp)
+            .max()
+    };
+    let todo: Vec<(String, std::path::PathBuf, String)> = repos
+        .iter()
+        .filter(|r| r.description().is_some())
+        .filter_map(|r| described_at(&r.id()).map(|at| (r.id(), r.path(), at)))
+        .collect();
+    let counts: Vec<Option<u64>> = std::thread::scope(|sc| {
+        let hs: Vec<_> = todo
+            .iter()
+            .map(|(_, path, at)| {
+                sc.spawn(move || {
+                    if !path.is_dir() {
+                        return None;
+                    }
+                    let (rc, out) = crate::crossref::git(
+                        path,
+                        &["rev-list", "--count", &format!("--since={at}"), "HEAD"],
+                        std::time::Duration::from_secs(10),
+                    );
+                    (rc == 0).then(|| out.trim().parse().ok()).flatten()
+                })
+            })
+            .collect();
+        hs.into_iter().map(|h| h.join().ok().flatten()).collect()
+    });
+    let mut out: Vec<Value> = todo
+        .iter()
+        .zip(counts)
+        .filter_map(|((id, _, at), n)| {
+            n.filter(|n| *n >= PROFILE_STALE_COMMITS)
+                .map(|n| json!({"repo": id, "described_at": at, "commits": n}))
+        })
+        .collect();
+    out.sort_by_key(|v| std::cmp::Reverse(v["commits"].as_u64().unwrap_or(0)));
+    out
+}
 
 fn ratio(n: usize, d: usize) -> Value {
     if d == 0 {
@@ -246,13 +300,15 @@ pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result
         .map(|r| r.id())
         .collect();
     let with_role = live.iter().filter(|r| r.role().is_some()).count();
+    let stale = stale_profiles(&events, &live);
 
     Ok(json!({
         "ok": true, "days": days, "since": since,
         "profiles": {"repos": live.len(), "described": live.len() - undescribed.len(),
                      "with_role": with_role,
                      "undescribed": undescribed.iter().take(UNDESCRIBED_SHOWN).collect::<Vec<_>>(),
-                     "undescribed_more": undescribed.len().saturating_sub(UNDESCRIBED_SHOWN)},
+                     "undescribed_more": undescribed.len().saturating_sub(UNDESCRIBED_SHOWN),
+                     "stale": stale},
         "handoff": {"handoffs": handoffs, "missed": missed, "rate": ratio(handoffs, handoffs + missed)},
         "fresh": {"found": links.len(), "used": used, "dismissed": dismissed, "hit_rate": ratio(used, links.len())},
         "decisions": {"with_outcome": with_outcome, "awaiting_retro": due,

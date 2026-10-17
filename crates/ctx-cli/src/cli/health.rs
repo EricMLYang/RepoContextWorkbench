@@ -73,6 +73,13 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                 if more > 0 { format!("，另 {more} 個") } else { String::new() }
             ));
         }
+        let stale: Vec<String> = arr(p, "stale")
+            .iter()
+            .map(|x| format!("{}（{} 之後 {} 個 commit）", s(x, "repo"), s(x, "described_at"), s(x, "commits")))
+            .collect();
+        if !stale.is_empty() {
+            line.push_str(&format!("；介紹可能過時：{}", stale.join("、")));
+        }
         out.push(line);
         let a = &r["assist"];
         if a["runs"].as_u64().unwrap_or(0) + a["undone"].as_u64().unwrap_or(0) > 0 {
