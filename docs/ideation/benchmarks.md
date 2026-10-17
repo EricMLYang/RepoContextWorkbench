@@ -44,7 +44,7 @@
 | Claude Code Tasks | 任務記憶 | session 內的執行步驟（可存檔延續） | — | 管執行；Beads／ctx todo 管捕捉，兩者互補 → F-19 | 觀察 | 🔗 | 2026-10-09 | R02 查詢 2 | [keepcoding](https://keepcoding.io/blog-frr/tasks-vs-beads-memoria-claude-code/) |
 | Kilo Agent Manager | 平行執行台 | VS Code 面板 | — | 綁 Kilo 擴充 | 觀察 | 🔗 | 2026-10-09 | R02 查詢 1（Orca 延伸） | [Kilo blog](https://blog.kilo.ai/p/orca-vs-kilo-agent-manager) |
 | Claude Squad | 平行執行台 | 終端機多工 | 暫停／審查／出貨 | — | 觀察 | 🔗 | 2026-10-09 | 待查 | [review](https://vibecodinghub.org/blog/claude-squad-review) |
-| Superset | 平行執行台 | worktree 桌面工作區 | MCP、遠端／雲端工作區 | — → F-43 | 觀察 | 🔗 | 2026-10-09 | 待查 | [vs Claude Squad](https://superset.sh/compare/superset-vs-claude-squad) |
+| Superset | 平行執行台 | worktree 桌面工作區 | MCP、遠端／雲端工作區；R35：排程 automations、CLI／MCP／SDK 三種程式介面、團隊功能（source-available，macOS 先） | — → F-43 | 觀察 | 🔗 | 2026-10-18（R35） | 待查 | [vs Claude Squad](https://superset.sh/compare/superset-vs-claude-squad) |
 | Paseo | 入口 | 跨裝置控制層（網頁、桌面、手機、CLI） | 自架、手機看 agent | — → F-43 | 參考 | 🔗 | 2026-10-09 | 待查 | [amux 整理](https://amux.io/guides/best-claude-code-session-managers-2026/) |
 | Kiro（AWS） | 流程即規格 | spec 是真相，程式碼是產物 | steering files（常駐專案知識）＋事件 hooks | IDE 綁定 → F-12 | 參考 | 🔗 | 2026-10-09 | 待查 | [指南](https://thepromptshelf.dev/blog/amazon-kiro-ide-complete-guide-2026/) |
 | GSD（Get Shit Done） | 流程／context engineering | spec→研究→原子任務包 | 每個任務交給全新 200K context 的 subagent，防 context rot | — → F-42 | 參考 | 🔗 | 2026-10-09 | 待查 | [mindstudio](https://www.mindstudio.ai/blog/gsd-framework-prevent-context-rot-claude-code) |
@@ -66,7 +66,7 @@
 | Tiago Forte：Progressive Summarization／just-in-time | 知識庫（方法論） | 筆記 | 不一次加工到底；專案需要時才加工到最後一層「混進自己的產出」 | — → F-26 | 參考 | 🔗 | 2026-10-10 | R10 查詢 | [fortelabs](https://fortelabs.com/blog/progressive-summarization-vi-core-principles-of-knowledge-capture/) |
 | 子 agent 任務包模板（MetaClaw／Brief-and-Drill／compact-handoff） | 流程（交辦） | — | Goal／Context（最少必要）／Constraints（不要做什麼、何時停）／Inputs／Done when；「為接收者寫，不是為發送者」 | 都是手寫模板 → F-42 由引擎自動組 | 參考 | 🔗 | 2026-10-10 | R11 查詢 | [MetaClaw](https://openskillindex.com/skills/aiming-lab-metaclaw-agent-task-handoff)、[brief-and-drill](https://claudskills.com/skills/brief-and-drill/SKILL.md) |
 | Nx Polygraph（synthetic monorepo） | 跨 repo 脈絡 | 多 repo 接成一張相依圖 | 不搬 code 就有 monorepo 的讀／寫／記憶；跨 repo 協調 PR | 程式碼相依為主 → 驗證方向 | 參考 | 🔗 | 2026-10-10 | R14 查詢 1（mra 延伸） | [monorepo.tools](https://monorepo.tools/synthetic-monorepos) |
-| Emdash | 平行執行台 | 多 agent 協調 | — | **agent 之間不共享脈絡**（跟一個 agent 說的限制，其他不知道）＝本工具補的那塊 | 觀察 | 🔗 | 2026-10-10 | R14 查詢 1 | [augmentcode](https://www.augmentcode.com/tools/best-warp-alternatives) |
+| Emdash | 平行執行台 | 多 agent 協調 | R35：Apache-2.0；worktree＋diff 審查＋瀏覽器、cron automations、多種 issue tracker 收件（沒有 CLI／SDK／API） | **agent 之間不共享脈絡**（跟一個 agent 說的限制，其他不知道）＝本工具補的那塊 | 觀察 | 🔗 | 2026-10-18（R35） | R14 查詢 1 | [augmentcode](https://www.augmentcode.com/tools/best-warp-alternatives) |
 | Claude Code Plugins（官方） | 技能包 | skills＋hooks＋agents＋MCP 的發佈單位 | 官方把「tribal knowledge」交給 plugin；marketplace 數百個 | ctx setup 已有同等安裝 → F-16 延後 | 觀察 | 🔗 | 2026-10-10 | R14 查詢 2 | [指南](https://hidekazu-konishi.com/entry/claude_code_plugins_complete_guide.html) |
 | macOS 替換執行中 App 的做法（Apple 論壇／社群） | 發佈與升級 | — | 先結束 App；用 ditto 整包替換（cp 改內容會讓下次啟動簽章崩潰）；清 quarantine | — → F-49 | 參考 | 🔗 | 2026-10-10 | R20 查詢 | [Apple 論壇](https://developer.apple.com/forums/thread/761433)、[updating mac software](https://developer.apple.com/documentation/security/updating-mac-software.md) |
 | agentsview／tuneloop／agentacct | 觀測（成本與時間） | 讀本機 Claude Code 等會話紀錄 | 每會話 token、成本、依日／模型／agent 分；本機、無遙測 | 已做得好 → F-29 整合不重做 | 零件 | 🔗 | 2026-10-10 | R24 查詢 | [agentsview](https://braindetox.kr/en/posts/agentsview_agent_session_analytics_2026.html)、[tuneloop](https://cdn.jsdelivr.net/npm/tuneloop@0.8.1/README.md)、[agentacct](https://www.everydev.ai/tools/agentacct/llms.txt) |
@@ -78,6 +78,7 @@
 | Stepsailor AI Command Bar | 元件（SaaS） | — | 自然語言 → 確定性動作，人留在迴圈裡 | 只看到產品介紹；ctx 自己做白名單＋驗證放引擎 → F-63 | 觀察 | 🔗 | 2026-10-15 | 同上 | [hunted.space](https://hunted.space/product/ai-command-bar) |
 | HackMD／HedgeDoc／MarkText | md 編輯器 | 文件（雲端或本機檔） | 左寫右看分割預覽、工具列；MarkText 本機檔即時預覽 | 要協作／雲端才用 HackMD；ctx 只做 repo 裡檔案的輕量編輯，不做協作 → F-64 | 參考 | 🔗 | 2026-10-15 | 使用者點名 HackMD；R30 查詢 | [比較](https://unmarkdown.com/blog/stackedit-vs-hedgedoc-vs-hackmd) |
 | Clearly | md 編輯器（開源、Mac） | 本機 md 資料夾 | wiki-link 自動完成、backlinks（含未連結的提及）、標題大綱、全文搜尋排序；**自帶 MCP server** | 不管 repo 與 agent 會話；ctx 抄 backlinks（F-69），MCP 已有 | 參考 | 🔗 | 2026-10-15 | R32 查詢「local markdown editor … backlinks」 | [介紹](https://notes.nicolasdeville.com/apps/clearly/) |
+| Herdr | 終端 runtime（Apache-2.0、無 GUI） | 終端會話 | 斷線後 agent 會話照樣活著（會話生命週期獨立於前端，跟 AGENTS.md「關視窗不殺 agent」同一個原則） | 沒有 GUI、diff 審查、排程 | 觀察 | 🔗 | 2026-10-18（R35） | R35 `Orca agent terminal alternatives 2026`（Superset 比較頁，偏袒 Superset） | [superset.sh 比較](https://superset.sh/compare/herdr-alternative) |
 
 ## 待查對標（下一輪處理）
 
@@ -156,7 +157,11 @@
 - R32：`HackMD editor features shortcuts split view sync scroll table of contents mermaid 2026`（三種模式、ToC 已有）
 - R32：`local markdown editor app features users love outline backlinks quick switcher 2026`
 
+- R35：`Orca agent terminal alternatives 2026`（延伸法；結果多是 Superset 自家比較頁：Superset、Emdash、Conductor、Herdr、super.engineering）
+- R35：`agent memory recommendation relevance stale todo backlog pruning beads compaction`（沒找到「自動判斷待辦過時」的現成做法；bv 用 PageRank 排優先）
+
 ### 下一輪查詢
+1. `beads bv triage PageRank betweenness agent task priority`（R35：未結 81 項、開 78 關 11，排序與清理的做法）
 2. `Conductor diff review workflow agent changes approve commit 2026`（F-62 之後：審完怎麼收）
 3. `AgDR tooling adoption 2026 decision records in repo agents read`（F-40 之後）
 4. `Nx Polygraph synthetic monorepo agent memory`（R14 留下）
@@ -165,3 +170,5 @@
 7. `VS Code file explorer rename delete move to trash electron tauri trash crate`（F-66）
 8. `MarkText alternatives local markdown editor split preview scroll sync 2026`（F-64 之後：捲動同步做法）
 9. `Clearly markdown editor MCP server backlinks github`（F-69 之後：它的 MCP 給 agent 什麼工具）
+10. `Superset automations scheduled agent precheck docs`（R35 延伸：排程任務怎麼避免白跑，對照 F-76）
+11. `git grep large monorepo speed fsmonitor untracked cache read-only tool`（N-43 之後：orca 這種 3.6 萬檔的 repo 還能怎麼快）
