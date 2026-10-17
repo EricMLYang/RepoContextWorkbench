@@ -119,6 +119,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   repo 分布只用 repo 裡的檔算）。開場（`context_for.fresh`）只推目前規則、`PUSH_DAYS`（7）天內找到的
   （`ruminate::push_links`）；舊規則的推薦視為被取代——不推、不擋新規則重推、資料保留（`ctx fresh --all` 看得到）。
   對拍時比對前拿掉推薦的 `rules` 鍵，記為允許差異。
+- **程式碼搜尋**（N-43，2026-10-18）：`crossref::code_search` 的 git grep 每個 repo 只給 `--threads=2`（23 個 repo 同時跑時
+  預設執行緒互搶，sys 17 秒、牆上 1.7 秒 → 0.9 秒）；英文詞要出現在詞首（前一字元不是英文字母）才算命中，
+  擋掉 `Rust` 中 `TRUST_PROBE`／`TrustBoundary`。Python 版是純子字串。
 - **開場注入預算**（N-28，2026-10-18）：`hooks::render_start` 超過 `START_BUDGET`（3,000 字元）就一層層收——
   先把同組成員的介紹截到 40 字，再把新料從 3 筆減到 1 筆，最後新料只留一行「另有 N 筆，`ctx fresh` 看」、介紹截到 24 字。
   未結、提醒、工作約定不砍。Python 版不收斂；對拍夾具的注入在預算內，輸出不變。

@@ -34,6 +34,21 @@ pub fn query_terms(query: &str, limit: usize) -> Vec<String> {
     terms
 }
 
+/// Rust 才有（2026-10-18）：`low`（已轉小寫）裡有沒有 `term`（小寫）出現在詞首——前一個字元不是英文字母。
+/// 擋掉 `Rust` 命中 `TRUST_PROBE`、`TrustBoundary` 這類字中間的子字串；`rust_core`、`session_hook` 照中。
+/// 不是英文字母開頭的詞（中文詞段）不檢查。
+fn at_word_start(low: &str, term: &str) -> bool {
+    if !term.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        return low.contains(term);
+    }
+    low.match_indices(term).any(|(i, _)| {
+        !low[..i]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_ascii_alphabetic())
+    })
+}
+
 /// 程式碼命中一份檔（對應 `code_search` 回傳的 dict）。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CodeHit {
@@ -53,7 +68,17 @@ pub fn code_search(entries: &[Repo], query: &str, limit: usize, per_repo: usize)
         return Vec::new();
     }
     let lows: Vec<String> = terms.iter().map(|t| t.to_lowercase()).collect();
-    let mut args: Vec<&str> = vec!["grep", "-n", "-I", "-i", "-F", "--max-count=20"];
+    // Rust 才有（2026-10-18）：每個 repo 只給 git grep 2 條執行緒——預設 8 條、23 個 repo 同時跑時
+    // sys 時間 17 秒、牆上 1.5 秒（大 repo 如 orca 3.6 萬檔）；2 條時總量少很多、單 repo 一樣快
+    let mut args: Vec<&str> = vec![
+        "grep",
+        "-n",
+        "-I",
+        "-i",
+        "-F",
+        "--max-count=20",
+        "--threads=2",
+    ];
     for t in &terms {
         args.push("-e");
         args.push(t);
@@ -104,6 +129,10 @@ pub fn code_search(entries: &[Repo], query: &str, limit: usize, per_repo: usize)
             let Ok(n) = parts[1].parse::<usize>() else {
                 continue;
             };
+            let line_low = parts[2].to_lowercase();
+            if !lows.iter().any(|l| at_word_start(&line_low, l)) {
+                continue;
+            }
             let i = *idx.entry(parts[0].to_string()).or_insert_with(|| {
                 per_file.push((parts[0].to_string(), Vec::new()));
                 per_file.len() - 1
@@ -119,12 +148,12 @@ pub fn code_search(entries: &[Repo], query: &str, limit: usize, per_repo: usize)
             let matched: Vec<&String> = terms
                 .iter()
                 .zip(&lows)
-                .filter(|(_, l)| low.contains(l.as_str()))
+                .filter(|(_, l)| at_word_start(&low, l))
                 .map(|(t, _)| t)
                 .collect();
             let hit_count = |h: &(usize, String)| {
                 let hl = h.1.to_lowercase();
-                lows.iter().filter(|l| hl.contains(l.as_str())).count()
+                lows.iter().filter(|l| at_word_start(&hl, l)).count()
             };
             let mut best: Vec<&(usize, String)> = hits.iter().collect();
             best.sort_by_key(|h| std::cmp::Reverse(hit_count(h)));
@@ -160,4 +189,21 @@ pub fn code_search(entries: &[Repo], query: &str, limit: usize, per_repo: usize)
     }
     rows.truncate(limit);
     rows
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn word_start_skips_mid_word_substrings() {
+        assert!(!at_word_start("regional_rehome_trust_probe", "rust"));
+        assert!(!at_word_start("trustboundary 頁", "rust"));
+        assert!(at_word_start("# rust core crates", "rust"));
+        assert!(at_word_start("use rust_core::x", "rust"));
+        assert!(at_word_start("session_hook()", "hook"));
+        assert!(at_word_start("trust; rust", "rust"));
+        // 中文詞段不檢查邊界
+        assert!(at_word_start("工作的脈絡是", "脈絡"));
+    }
 }
