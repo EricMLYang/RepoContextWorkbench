@@ -4,6 +4,7 @@
 # 每步輸出先收進暫存檔，過了就不印（一次約 10 分鐘，大多是 cargo test 與對拍）。
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
+root=$PWD
 what=${1:-all}
 fail=0
 log=$(mktemp "${TMPDIR:-/tmp}/ctx-check.XXXXXX")
@@ -33,7 +34,8 @@ if [ "$what" != rust ]; then
 fi
 # 磁碟衛生（docs/DEVELOPMENT.md §7）：build 產物只留最近 7 天用到的；沒裝 cargo-sweep 就提醒一句、不算失敗。
 if [ "$what" != front ]; then
-  cd "$(dirname "$0")/.." || exit 2
+  # 前端那段 cd 進 desktop 之後，相對的 $0 會解到 desktop/scripts/..（曾讓 sweep 一直跑在 desktop 裡失敗）
+  cd "$root" || exit 2
   if command -v cargo-sweep >/dev/null 2>&1; then
     cargo sweep --time 7 >/dev/null 2>&1 || echo "（cargo sweep 失敗，略過）"
   else
