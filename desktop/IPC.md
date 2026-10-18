@@ -30,6 +30,7 @@
 | `set_spine` | `{ path: string }` | `{ spine: string }`（解析後的絕對路徑） | （無） |
 | `create_spine` | `{ path: string }` | `{ spine: string }`（同 `set_spine`） | （無；在新路徑或空資料夾跑 `ctx init` 同一份 scaffold，已是 spine 就直接用） |
 | `pick_folder` | — | `string \| null`（取消＝null） | （無；Rust 端用 `tauri-plugin-dialog` 開原生「選擇資料夾」，前端不開 dialog 權限） |
+| `copy_text` | `{ text: string }` | `null` | （無；Rust 端用 `tauri-plugin-clipboard-manager` 寫系統剪貼簿。不走 WebView 的 `navigator.clipboard`：WKWebView 在 WebView 不是焦點時會拒絕，症狀是偶爾「無法複製到剪貼簿」） |
 | `watch_tree` | `{ repos: { [id]: string[] } }`（每個 repo 展開中的資料夾，`""`＝根；空物件＝全部停） | `null` | （無；查不到的 repo 略過。變動用事件 `repo://changed` 通知） |
 
 ### spine 定位（桌面殼才有）

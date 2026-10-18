@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { PastSession } from "../../api/types";
 import { DetailLayout, useDetail } from "../../dialogs/Modal";
+import { copyText } from "../../lib/clipboard";
 import { useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
 
@@ -94,7 +95,7 @@ export function PastSessions() {
               <AsyncButton
                 className="ghost small"
                 run={async () => {
-                  await navigator.clipboard.writeText(resumeCommand(s));
+                  await copyText(store.backend, resumeCommand(s));
                   setCopied(s.id);
                 }}
               >

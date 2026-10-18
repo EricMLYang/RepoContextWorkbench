@@ -5,7 +5,8 @@ import { MSG_FAILED, MSG_UNREACHABLE, type Backend, type TermStream } from "./ba
 /**
  * Tauri v2 殼（Rust 引擎）的 IPC。合約全文見 desktop/IPC.md——改這裡要同步改那份。
  *
- * 命令：get_state／get_scan／run_action／term_open／term_write／term_resize／term_close；
+ * 命令：get_state／get_scan／run_action／term_open／term_write／term_resize／term_close／
+ * pick_folder／watch_tree／copy_text；
  * spine 定位：get_spine／set_spine（createSpineApi）。
  * 事件：`workbench://changed`（引擎寫入脊椎／registry 後通知前端重抓 state，取代高頻輪詢）。
  */
@@ -119,6 +120,7 @@ export function createTauriBackend(
     getScan: (p) => run("get_scan", { group: p.group ?? null, repos: p.repos ?? null }),
     action: (name, payload) => run("run_action", { name, payload: payload ?? {} }),
     pickFolder: () => run<string | null>("pick_folder"),
+    copyText: (text) => run<void>("copy_text", { text }),
     watchTree: (repos) => run<void>("watch_tree", { repos }),
     onRepoChanged(cb) {
       let stop: (() => void) | null = null;

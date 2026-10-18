@@ -199,6 +199,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   再加進目前牌組）；「從這組移除」走既有 `update_group`；「移出工作台…」走既有 `remove_repo`（不刪檔）。
   `scan_dir` 動作改用 `scan_dir_with_self`：選到的資料夾本身就是未登記 repo 時排第一個（CLI `registry scan` 不變）。
   殼多命令 `pick_folder`（`tauri-plugin-dialog`，只在 Rust 端用）。macOS：單元／整合測試過，GUI 未實測；Windows：未測。
+- **剪貼簿走殼層**（2026-10-19；Python 沒有）：所有「複製…」經 `lib/clipboard.ts` 的 `copyText`，Tauri 下呼叫殼命令
+  `copy_text`（`tauri-plugin-clipboard-manager`，只在 Rust 端用），瀏覽器才退回 `navigator.clipboard`。原因：macOS WKWebView
+  在 WebView 不是焦點時（剛從終端、選單列或別的視窗回來）會拒絕 Web API，使用者看到偶爾「無法複製到剪貼簿」。Windows：未測。
 - **側欄排序、寬度與唯讀檢視器**（2026-10-11；Python 沒有）：牌組與組員可拖曳排序（Alt+↑↓ 也行）——action `reorder`
   （registry `reorder_groups`／`reorder_members`／`reorder_repos`：只換 registry.yaml 裡的順序、不是同一批就拒絕、
   不記 spine 事件）；左右側欄拖曳調寬（存本機偏好）。點檔案在主區開唯讀分頁——action `read_file`（`filetree::read_file`：

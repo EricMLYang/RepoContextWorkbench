@@ -48,6 +48,11 @@ export interface Backend {
   /** 選配：原生「選擇資料夾」對話框（Tauri 才有）；取消回 null。 */
   pickFolder?(): Promise<string | null>;
   /**
+   * 選配（Tauri 才有）：殼層寫系統剪貼簿。WKWebView 的 `navigator.clipboard` 在 WebView 沒拿到焦點時會拒絕，
+   * 前端一律經 `lib/clipboard.ts` 的 copyText：有這個就用、沒有退回 Web API。
+   */
+  copyText?(text: string): Promise<void>;
+  /**
    * 選配：後端主動通知「資料變了」（Tauri 事件 `workbench://changed`）。
    * 有這個就不用靠 5 秒輪詢才看到變化；回傳取消訂閱。
    */

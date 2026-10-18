@@ -1,3 +1,4 @@
+import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
 import { useStore, useUi } from "../../store/context";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 import { repoDetailSpec } from "./RepoDetail";
@@ -26,10 +27,10 @@ export function RepoMenu(props: { id: string; x: number; y: number; onClose: () 
       label: "複製絕對路徑",
       run: async () => {
         try {
-          await navigator.clipboard.writeText(path);
+          await copyText(store.backend, path);
           store.toast("已複製絕對路徑：" + path);
         } catch {
-          store.toast("無法複製到剪貼簿");
+          store.toast(MSG_COPY_FAILED);
         }
       },
     });

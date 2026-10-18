@@ -5,6 +5,7 @@
 import { useCallback, useState } from "react";
 import type { ActionName, CardAction, InboxCard } from "../../api/types";
 import { DetailLayout, useAutoFocus, useDetail } from "../../dialogs/Modal";
+import { copyText } from "../../lib/clipboard";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { KINDNAME, actionLabel, actionToast, cardDetailText, primaryAction } from "../../lib/view";
 
@@ -145,7 +146,7 @@ export function CardDetail({ card }: { card: InboxCard }) {
         className="ghost small"
         onClick={async () => {
           try {
-            await navigator.clipboard.writeText(card.title + "\n" + text);
+            await copyText(store.backend, card.title + "\n" + text);
             store.toast("已複製完整內容與來源");
           } catch {
             setError("請直接選取上方內容複製。");

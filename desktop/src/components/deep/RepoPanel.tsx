@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
 import { useSnapshot, useStore, useUi, type PanelTab } from "../../store/context";
 import { RepoRoot } from "./FileTree";
 import { RepoChanges } from "./RepoChanges";
@@ -57,10 +58,10 @@ export function RepoPanel({
   const copyPath = async () => {
     if (!s?.path) return;
     try {
-      await navigator.clipboard.writeText(s.path);
+      await copyText(store.backend, s.path);
       store.toast("已複製絕對路徑：" + s.path);
     } catch {
-      store.toast("無法複製到剪貼簿");
+      store.toast(MSG_COPY_FAILED);
     }
   };
 

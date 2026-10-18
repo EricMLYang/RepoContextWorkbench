@@ -1,4 +1,5 @@
 import { DetailLayout, useDetail } from "./Modal";
+import { copyText } from "../lib/clipboard";
 import { useStore } from "../store/context";
 
 /** 完整內容（commit、事件、簡報）：可複製。 */
@@ -13,7 +14,7 @@ export function FullText({ text, meta = "" }: { text: string; meta?: string }) {
             type="button"
             onClick={async () => {
               try {
-                await navigator.clipboard.writeText(text);
+                await copyText(store.backend, text);
                 store.toast("已複製內容");
               } catch {
                 setError("無法存取剪貼簿，可直接選取上方文字複製。");

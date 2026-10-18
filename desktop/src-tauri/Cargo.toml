@@ -23,6 +23,8 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
 # 原生「選擇資料夾」（官方 plugin，同 notification／autostart 一家）
 tauri-plugin-dialog = "2"
+# 系統剪貼簿（官方 plugin）：只給 copy_text 命令在 Rust 端用，前端不開 clipboard 權限
+tauri-plugin-clipboard-manager = "2"
 # spine/events 與 registry.yaml 有變就通知前端重抓——用 OS 檔案事件（FSEvents／inotify／ReadDirectoryChangesW），
 # 閒置不輪詢（AGENTS.md「閒置不吃 CPU」）
 notify = "8"

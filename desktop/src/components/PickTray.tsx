@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { copyText } from "../lib/clipboard";
 import { useSnapshot, useStore, useUi, useUiState } from "../store/context";
 
 /**
@@ -58,11 +59,7 @@ export function PickTray() {
   const copyMentions = () =>
     run(async () => {
       const r = await brief();
-      try {
-        await navigator.clipboard.writeText(r.mentions);
-      } catch {
-        throw new Error("無法複製到剪貼簿");
-      }
+      await copyText(store.backend, r.mentions);
       store.toast("已複製 " + r.count + " 個 @路徑（貼到 agent 的對話框）");
     });
 

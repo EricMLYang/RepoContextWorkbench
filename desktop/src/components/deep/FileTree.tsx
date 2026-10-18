@@ -10,6 +10,7 @@ import type { TreeEntry } from "../../api/types";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
 import { FILE_DRAG_TYPE } from "../../lib/view";
+import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
 import { samePick, useStore, useUi, useUiState, type Pick } from "../../store/context";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 
@@ -70,10 +71,10 @@ function useCopy() {
   const store = useStore();
   return async (text: string, label: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyText(store.backend, text);
       store.toast("已複製" + label + "：" + text);
     } catch {
-      store.toast("無法複製到剪貼簿");
+      store.toast(MSG_COPY_FAILED);
     }
   };
 }

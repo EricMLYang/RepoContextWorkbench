@@ -571,6 +571,30 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     expect(write).toHaveBeenCalledWith("/r/a/docs/plan.md");
   });
 
+  it("殼層有 copyText（Tauri）就走殼層寫剪貼簿，不碰 WebView 的 navigator.clipboard；殼層失敗才退回", async () => {
+    const copyText = vi.fn(async () => {});
+    const backend = treeBackend({ copyText });
+    await openFiles(backend);
+    await act(async () =>
+      fireEvent.click(
+        within(document.getElementById("tab-files")!).getByRole("button", { name: "a" }),
+      ),
+    );
+    const write = vi.fn(async () => {});
+    Object.assign(navigator, { clipboard: { writeText: write } });
+    const docs = await screen.findByRole("treeitem", { name: "docs" });
+    fireEvent.contextMenu(docs);
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: /^複製路徑/ })));
+    expect(copyText).toHaveBeenCalledWith("/r/a/docs");
+    expect(write).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("已複製路徑：/r/a/docs");
+
+    copyText.mockRejectedValueOnce(new Error("boom"));
+    fireEvent.contextMenu(docs);
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: /複製相對路徑/ })));
+    expect(write).toHaveBeenCalledWith("docs");
+  });
+
   it("挑檔案交給 Agent：⌘＋點挑、右鍵移出、引擎組任務；失敗顯示原因；記在這台電腦", async () => {
     let fail = true;
     const backend = treeBackend({

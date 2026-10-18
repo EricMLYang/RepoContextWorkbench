@@ -318,6 +318,17 @@ async fn pick_folder(app: AppHandle) -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
+/// 寫系統剪貼簿（檔案樹／repo／筆記／卡片的「複製…」）。走殼層而不是 WebView 的 `navigator.clipboard`：
+/// macOS 的 WKWebView 在 WebView 不是焦點時（剛從終端、選單列或別的視窗回來）會拒絕那個 API，
+/// 症狀是偶爾「無法複製到剪貼簿」、過一下又好。
+#[tauri::command]
+fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    app.clipboard()
+        .write_text(text)
+        .map_err(|e| format!("無法複製到剪貼簿：{e}"))
+}
+
 /// 檔案樹要跟著磁碟變：前端給「每個 repo 展開中的資料夾」（`{id: [相對路徑…]}`，`""`＝根），
 /// 殼只監看這些 repo、只報這些資料夾裡的變動。空物件＝全部停掉。查不到的 repo 略過。
 #[tauri::command]
@@ -358,6 +369,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         // 只給 pick_folder 命令在 Rust 端用；前端不開 dialog 權限
         .plugin(tauri_plugin_dialog::init())
+        // 只給 copy_text 命令在 Rust 端用；前端不開 clipboard 權限
+        .plugin(tauri_plugin_clipboard_manager::init())
         // 開機自啟：預設關（plugin 只提供開關，沒人呼叫 enable 就不會註冊 LaunchAgent）
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -405,6 +418,7 @@ pub fn run() {
             get_scan,
             run_action,
             pick_folder,
+            copy_text,
             watch_tree,
             terminal::term_open,
             terminal::term_write,

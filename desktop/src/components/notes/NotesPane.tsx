@@ -3,15 +3,16 @@ import type { GroupNote } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
 import { continueList, indent } from "../../lib/mdedit";
 import { load, save } from "../../lib/storage";
+import { MSG_COPY_FAILED, copyText as writeClipboard } from "../../lib/clipboard";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
 
 async function copyText(store: ReturnType<typeof useStore>, text: string, label: string) {
   try {
-    await navigator.clipboard.writeText(text);
+    await writeClipboard(store.backend, text);
     store.toast("已複製" + label);
   } catch {
-    store.toast("無法複製到剪貼簿");
+    store.toast(MSG_COPY_FAILED);
   }
 }
 

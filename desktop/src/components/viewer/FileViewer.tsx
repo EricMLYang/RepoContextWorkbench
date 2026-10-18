@@ -3,6 +3,7 @@ import { langOf, tokenizeLine, type HlState, type Lang } from "../../lib/highlig
 import type { FileContent } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
+import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
 import { useStore, useUi } from "../../store/context";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
@@ -57,10 +58,10 @@ export function resolveRel(from: string, href: string): string | null {
 
 async function copy(store: ReturnType<typeof useStore>, text: string, label: string) {
   try {
-    await navigator.clipboard.writeText(text);
+    await copyText(store.backend, text);
     store.toast("已複製" + label + "：" + text);
   } catch {
-    store.toast("無法複製到剪貼簿");
+    store.toast(MSG_COPY_FAILED);
   }
 }
 
