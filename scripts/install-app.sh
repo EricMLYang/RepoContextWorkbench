@@ -37,7 +37,7 @@ fi
 
 export PATH="$HOME/.cargo/bin:$PATH"
 if [ "$PREBUILT" = 1 ] && [ -d "$BUILT" ]; then
-  say "1. build：用已經 build 好的 $BUILT（--prebuilt）"
+  say "1. build：用已經 build 好的 ${BUILT}（--prebuilt）"
 else
   say "1. build（ctx＋桌面 App）"
   run bash -c "cd desktop && npm run bundle -- --bundles app"
