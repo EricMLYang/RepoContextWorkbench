@@ -5,6 +5,7 @@
 # 用法：
 #   bash scripts/install-app.sh            # 正式裝
 #   bash scripts/install-app.sh --dry-run  # 只列會做什麼，不 build、不動任何檔
+#   bash scripts/install-app.sh --prebuilt # 已經 build 好（App 開著時先 build）：跳過 build，只驗證與替換
 #
 # 規則：
 # - App 開著就停下來請你先結束（選單列「結束」或 ⌘Q），不替你關——關掉會結束正在跑的 agent 會話。
@@ -19,7 +20,9 @@ DEST="/Applications/$APP_NAME"
 BUILT="target/release/bundle/macos/$APP_NAME"
 BACKUPS="$HOME/.cache/repo-context/app-backups"
 DRY=0
+PREBUILT=0
 [ "${1:-}" = "--dry-run" ] && DRY=1
+[ "${1:-}" = "--prebuilt" ] && PREBUILT=1
 
 say() { printf '%s\n' "$*"; }
 run() {
@@ -33,8 +36,12 @@ if pgrep -f "MacOS/repo-[c]ontext-desktop" >/dev/null 2>&1; then
 fi
 
 export PATH="$HOME/.cargo/bin:$PATH"
-say "1. build（ctx＋桌面 App）"
-run bash -c "cd desktop && npm run bundle -- --bundles app"
+if [ "$PREBUILT" = 1 ] && [ -d "$BUILT" ]; then
+  say "1. build：用已經 build 好的 $BUILT（--prebuilt）"
+else
+  say "1. build（ctx＋桌面 App）"
+  run bash -c "cd desktop && npm run bundle -- --bundles app"
+fi
 
 say "2. 驗證 bundle 裡的 ctx 就是剛 build 的"
 if [ "$DRY" = 0 ]; then
