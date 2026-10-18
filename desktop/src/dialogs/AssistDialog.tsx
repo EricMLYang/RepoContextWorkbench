@@ -77,6 +77,9 @@ async function runStep(store: Store, ui: Ui, s: AssistStep): Promise<void> {
         ...(str(a.resume_when) ? { resume_when: str(a.resume_when) } : {}),
       });
       return;
+    case "set_class":
+      await store.action("repo_class", { id: str(a.id), class: str(a.class) });
+      return;
     case "set_pref":
       applyPref(str(a.key), a.value);
       return;

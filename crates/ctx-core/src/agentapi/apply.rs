@@ -1,4 +1,4 @@
-//! Rust 才有（2026-10-15，F-63）：MCP `workbench_apply`——agent 改工作台設定（建組、改組員、改名、目標、標籤、分層）。
+//! Rust 才有（2026-10-15，F-63）：MCP `workbench_apply`——agent 改工作台設定（建組、改組員、改名、目標、標籤、分層、類別）。
 //! 跟 App 助手同一份白名單與驗證（[`crate::assist::validate`]），執行走 App 按鈕用的同一組 action。
 //!
 //! - 預設只回預覽（每步的人話、錯誤、危險）；agent 給使用者看過、同意後帶 `confirm=true` 才執行。
@@ -66,6 +66,7 @@ fn action_of(data: &registry::RegistryData, s: &Step) -> Option<(&'static str, V
             "tier",
             json!({"id": g("id"), "tier": g("tier"), "resume_when": g("resume_when")}),
         ),
+        "set_class" => ("repo_class", json!({"id": g("id"), "class": g("class")})),
         _ => return None,
     })
 }

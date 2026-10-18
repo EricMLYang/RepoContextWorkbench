@@ -206,7 +206,7 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
         work(
             "workbench_apply",
             "改工作台設定（跟 App 助手同一份白名單）：建組 create_group、設組員 set_members、改名 rename_group、\
-             組目標 set_goal、標籤 tag、分層 set_tier。steps＝[{op, args}]；預設只回預覽，\
+             組目標 set_goal、標籤 tag、分層 set_tier、類別 set_class（code／agent／data／docs／knowledge／reference）。steps＝[{op, args}]；預設只回預覽，\
              給使用者看過、同意後帶 confirm=true 才執行。碰到主場以外的 repo 要使用者同意（cross_scope_ok）。\
              換範圍、切分頁等畫面動作只在 App 做。",
             s_(

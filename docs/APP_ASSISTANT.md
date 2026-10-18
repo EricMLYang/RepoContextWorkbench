@@ -59,6 +59,7 @@ App 顯示計畫：每步一行人話（「VMS_PM：加標籤『規格』」）�
 | `set_goal` | `{group, text}` | `set_goal` | |
 | `tag` | `{id, add?, remove?}` | `tag` | |
 | `set_tier` | `{id, tier, resume_when?}` | `tier` | 封存標紅 |
+| `set_class` | `{id, class}`（代號或中文；空＝清掉） | `repo_class` | 2026-10-18；本機規則認「把 X 設成參考」「X 歸類為知識類」；復原回原本的類別 |
 | `open_session` | `{repo? group? task}` | 開「新建 Agent 會話」對話框（不直接開） | |
 | `set_pref` | `{key, value}`：`autosave`（true／false）、`md_open_edit`（true／false）、`edit_layout`（edit／split／preview） | App 本機偏好（2026-10-15 加；只在 App 做，MCP／CLI 略過）；復原回到之前的值 | |
 

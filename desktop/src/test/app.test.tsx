@@ -2433,6 +2433,46 @@ describe("⌘K 找 repo／牌組", () => {
     expect(within(dialog).queryByRole("button", { name: "復原這次的變更" })).toBeNull();
   });
 
+  it("助手改類別：走 repo_class，復原回原本的類別", async () => {
+    const plan = {
+      ok: true,
+      text: "把 a 設成參考",
+      summary: "a：類別 → 參考",
+      source: "rules",
+      steps: [
+        {
+          op: "set_class",
+          args: { id: "a", class: "reference" },
+          text: "a：類別 → 參考",
+          why: "",
+          danger: false,
+          undo: { op: "set_class", args: { id: "a", class: "" } },
+        },
+      ],
+    };
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: { query?: string }) => {
+        if (name === "palette") return result(p.query ?? "");
+        if (name === "assist_plan") return plan;
+        return { ok: true };
+      }) as never,
+    });
+    await mount(backend);
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    fireEvent.change(box(), { target: { value: "?把 a 設成參考" } });
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter" }));
+    const dialog = document.getElementById("detaildialog")!;
+    await waitFor(() => expect(dialog.textContent).toContain("a：類別 → 參考"));
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "執行 1 步" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("repo_class", { id: "a", class: "reference" });
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "復原這次的變更" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("repo_class", { id: "a", class: "" });
+  });
+
   it("助手改 App 偏好：寫進本機、復原回到預設", async () => {
     const backend = mockBackend({
       action: vi.fn(async (name: string, p: { query?: string }) => {

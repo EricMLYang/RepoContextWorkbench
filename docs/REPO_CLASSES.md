@@ -30,6 +30,7 @@
 |---|---|
 | registry 的 `class` 欄（新欄位，舊欄位不動；Python 讀得回） | `registry::store::Repo::class()` |
 | CLI `ctx registry class <id> [<類別>]`（不給＝清掉）；App 名片卡的「類別」選單；都走 op `registry_class`（驗證＋〔registry〕留痕） | `ops.rs`、`workbench/actions/namecard.rs`、`RepoProfileCard.tsx` |
+| App 助手（⌘K「?把 orca 設成參考」）與 agent（MCP `workbench_apply` 的 `set_class`）：同一份白名單、先預覽、可復原 | `assist.rs`、`agentapi/apply.rs`、`AssistDialog.tsx` |
 | 開場注入：所在 repo 一行「這個 repo 是「X」類：規則」；名冊每列標類別，非程式類帶短規則（「參考：只讀」） | `hooks.rs` |
 | `context_for.repo_class`、名冊與名片的 `class`（含 label／reliable／rule／short） | `agentapi/mod.rs`、`profile.rs` |
 | **參考**類的行為：不採集 git 狀態、不進程式碼搜尋（md 知識索引、read_from 照常） | `collect.rs`、`crossref/code.rs` |

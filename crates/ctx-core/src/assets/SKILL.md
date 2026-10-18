@@ -47,15 +47,15 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 - **repo 類別**：開場「這個 repo 是「X」類：…」＝你所在 repo 的規矩（MCP `context_for` 的 `repo_class`），照它做——
   程式＝跑測試；領域 Agent＝改 prompt 要說理由、跑 eval 並記結果；數據探索＝數字附出處、資料列不進留痕；
   文件・PM＝事實別補、別外傳；知識＝可自由整理、引用附出處；參考＝只讀、不改不 commit。
-  名冊每列也標類別（「參考：只讀」）：讀別的 repo 前看一眼。改類別是使用者的事（App 名片卡或
-  `ctx registry class <id> <類別>`），不要自己改。
+  名冊每列也標類別（「參考：只讀」）：讀別的 repo 前看一眼。使用者要改類別時用 `workbench_apply` 的
+  `set_class`（先預覽、同意才執行）；不要自己決定改。
 - 開場的「組筆記（N 則…）」＝使用者在 App 隨手記的組層級的事（MCP `context_for` 的 `notes`，最新 5 則）；跟手上的事有關就讀全文。
 - `search_knowledge` 的 `repo_profiles` 段先回答「是哪個 repo」（依介紹／角色／關鍵字／tag／名稱排），再看 `files`。
 - `read_from` 讀到 md 時附的 `linked_from`＝那個 repo 裡連到這份的其他 md（前 5 則）：周邊脈絡多半在那裡，需要再讀。
 - 名片缺了或標「推測自 README」：手上的事做完，用 `describe_repo` 補一句介紹與角色（`role` 是一個短詞，
   例 知識庫、規格來源、實作；`keywords` 給搜尋用，別跟 tags 重複）。名片存在 spine，**不寫進任何 repo**；
   只能改主場（所在 repo＋同組成員）。
-- 使用者要你改工作台設定（建組、改組員、組改名、組目標、標籤、暫停／封存）：用 `workbench_apply`，
+- 使用者要你改工作台設定（建組、改組員、組改名、組目標、標籤、暫停／封存、類別）：用 `workbench_apply`，
   先不帶 `confirm` 拿預覽、把每一步給使用者看，同意後才帶 `confirm=true`；不要直接改 registry.yaml。
   沒掛 MCP：`ctx assist "<一句話>" --json` 看計畫，使用者同意後加 `--yes`。
 

@@ -13,7 +13,7 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 
 use crate::agents::{self, AgentProvider};
-use crate::registry::{self, RegistryData, Tier};
+use crate::registry::{self, RegistryData, RepoClass, Tier};
 use crate::{config, Error, Result};
 
 /// 一份計畫最多幾步（一句話做太多事要人拆）。
@@ -39,6 +39,7 @@ const OPS: &str = r#"- switch_scope {group} 或 {repos: [id…]}：換 App 目�
 - set_goal {group, text}：設牌組目標（一句話）
 - tag {id, add?: [標籤…], remove?: [標籤…]}：repo 加／拿掉標籤
 - set_tier {id, tier, resume_when?}：tier ∈ active|paused|dormant|archived；paused 要給 resume_when
+- set_class {id, class}：repo 類別，class ∈ code（程式）|agent（領域 Agent）|data（數據探索）|docs（文件・PM）|knowledge（知識）|reference（參考，只讀）；空字串＝清掉
 - open_session {repo? | group?, task}：打開「新建 Agent 會話」對話框（不會直接開）
 - set_pref {key, value}：App 偏好；key ∈ autosave（true|false，編輯時自動儲存）、md_open_edit（true|false，打開 md 直接編輯）、
   edit_layout（edit|split|preview，編輯版面）"#;
@@ -203,7 +204,7 @@ fn snapshot(
         let tags = r.tags();
         let id = r.id();
         out.push(format!(
-            "- {}{}{}{}",
+            "- {}{}{}{}{}",
             id,
             days.get(&id)
                 .map(|d| format!("（最近 commit：{} 天前）", d.round()))
@@ -211,6 +212,9 @@ fn snapshot(
             r.tier_str()
                 .filter(|t| *t != "active")
                 .map(|t| format!(" [{t}]"))
+                .unwrap_or_default(),
+            r.class()
+                .map(|c| format!(" 類別：{}", c.as_str()))
                 .unwrap_or_default(),
             if tags.is_empty() {
                 String::new()
@@ -446,6 +450,33 @@ fn rules(data: &RegistryData, text: &str) -> Option<Value> {
         }
         return one(format!("{id}：{verb}"), "set_tier", args);
     }
+    // （把）<repo> 設成／改成／歸類為 <類別>（2026-10-18）；類別對不上就往下走，不搶別的規則
+    for verb in [
+        "歸類為",
+        "歸類成",
+        "設成",
+        "設為",
+        "改成",
+        "改為",
+        "標為",
+        "標成",
+        "歸為",
+    ] {
+        let Some((who, what)) = t.split_once(verb) else {
+            continue;
+        };
+        let (Some(id), Some(c)) = (
+            find_repo(data, &unquote(who.trim().trim_start_matches('把'))),
+            class_word(what),
+        ) else {
+            continue;
+        };
+        return one(
+            format!("{id}：類別 → {}", c.label()),
+            "set_class",
+            json!({"id": id, "class": c.as_str()}),
+        );
+    }
     // <repo> 加標籤 a、b ／ <repo> 拿掉標籤 a
     for (verb, key) in [
         ("加標籤", "add"),
@@ -471,6 +502,29 @@ fn rules(data: &RegistryData, text: &str) -> Option<Value> {
 }
 
 /// 「a、b, c 和 d」→ ["a","b","c","d"]。
+/// 口語的類別名稱 → 類別：「參考」「參考專案」「知識類」「PM」「數據」…；對不上＝None。
+fn class_word(s: &str) -> Option<RepoClass> {
+    let w = s
+        .trim()
+        .trim_matches(['「', '」', '"', '\''])
+        .trim_end_matches(['類', '型'])
+        .trim_end_matches("專案")
+        .trim_end_matches("repo")
+        .trim();
+    if let Ok(c) = w.parse::<RepoClass>() {
+        return Some(c);
+    }
+    Some(match w.to_lowercase().as_str() {
+        "程式碼" | "開發" | "管線" | "資料管線" => RepoClass::Code,
+        "agent" | "領域agent" | "領域 agent" => RepoClass::Agent,
+        "數據" | "資料分析" | "分析" => RepoClass::Data,
+        "文件" | "pm" | "文件pm" => RepoClass::Docs,
+        "筆記" | "知識庫" => RepoClass::Knowledge,
+        "外部" | "參考外部" => RepoClass::Reference,
+        _ => return None,
+    })
+}
+
 fn split_list(s: &str) -> Vec<String> {
     s.split(['、', ',', '，', ' ', '／', '/', '和'])
         .map(|x| x.trim().trim_matches(['「', '」', '"', '\'']))
@@ -624,6 +678,10 @@ fn undo_of(data: &RegistryData, op: &str, a: &Value) -> Option<Value> {
             (!add.is_empty() || !remove.is_empty()).then(
                 || json!({"op": "tag", "args": {"id": s("id"), "add": add, "remove": remove}}),
             )
+        }
+        "set_class" => {
+            let old = data.repo(s("id"))?.get_str("class").unwrap_or_default();
+            Some(json!({"op": "set_class", "args": {"id": s("id"), "class": old}}))
         }
         "set_tier" => {
             let r = data.repo(s("id"))?;
@@ -839,6 +897,27 @@ fn check(
                 tier == Tier::Archived,
             ))
         }
+        "set_class" => {
+            let id = repo(s("id"))?;
+            if s("class").is_empty() {
+                return Ok((
+                    json!({"id": id, "class": ""}),
+                    format!("{id}：類別清掉（未分類）"),
+                    false,
+                ));
+            }
+            let c = class_word(s("class")).ok_or_else(|| {
+                format!(
+                    "類別要是 code／agent／data／docs／knowledge／reference（給了「{}」）",
+                    s("class")
+                )
+            })?;
+            Ok((
+                json!({"id": id, "class": c.as_str()}),
+                format!("{id}：類別 → {}", c.label()),
+                false,
+            ))
+        }
         "open_session" => {
             let task = s("task");
             let (args, target) = if !s("repo").is_empty() {
@@ -1040,6 +1119,59 @@ mod tests {
         let q = fixed(json!({"steps": []}));
         plan_with(&d, "暫停 repo-a", &Scope::default(), &q).unwrap();
         assert!(!q.1.lock().unwrap().is_empty());
+    }
+
+    /// 2026-10-18：類別——本機規則認口語說法、驗證認代號與中文、復原回原本的類別。
+    #[test]
+    fn set_class_rules_validation_and_undo() {
+        let (_t, d) = spine_with_repos();
+        let never = fixed(json!({}));
+        let p = |t: &str| plan_with(&d, t, &Scope::default(), &never).unwrap();
+        let s = &p("把 repo-b 設成參考").steps[0];
+        assert_eq!(
+            (s.op.as_str(), &s.args),
+            ("set_class", &json!({"id": "repo-b", "class": "reference"}))
+        );
+        assert_eq!(s.text, "repo-b：類別 → 參考");
+        assert_eq!(p("repo-a 歸類為知識類").steps[0].args["class"], "knowledge");
+        assert_eq!(p("repo-a 改成 PM").steps[0].args["class"], "docs");
+        assert!(
+            never.1.lock().unwrap().is_empty(),
+            "規則對上就不問 provider"
+        );
+        // 類別對不上：不搶，交給 provider
+        let q = fixed(json!({"steps": []}));
+        plan_with(&d, "repo-a 改成每週檢查", &Scope::default(), &q).unwrap();
+        assert!(!q.1.lock().unwrap().is_empty());
+
+        let data = registry::load(&d).unwrap();
+        let plan = validate(
+            &data,
+            &json!({"steps": [
+                {"op": "set_class", "args": {"id": "repo-a", "class": "數據探索"}},
+                {"op": "set_class", "args": {"id": "repo-a", "class": "pm-ish"}},
+                {"op": "set_class", "args": {"id": "repo-a", "class": ""}},
+            ]}),
+            "mcp",
+        )
+        .unwrap();
+        assert_eq!(plan.steps[0].args["class"], "data");
+        assert!(plan.steps[1].error.as_deref().unwrap().contains("類別要是"));
+        assert_eq!(plan.steps[2].text, "repo-a：類別清掉（未分類）");
+        // 復原：原本未分類 → 清掉；原本是知識 → 回知識
+        assert_eq!(plan.steps[0].undo.as_ref().unwrap()["args"]["class"], "");
+        registry::set_class(&d, "repo-a", Some(RepoClass::Knowledge)).unwrap();
+        let data = registry::load(&d).unwrap();
+        let plan = validate(
+            &data,
+            &json!({"steps": [{"op": "set_class", "args": {"id": "repo-a", "class": "code"}}]}),
+            "mcp",
+        )
+        .unwrap();
+        assert_eq!(
+            plan.steps[0].undo.as_ref().unwrap()["args"]["class"],
+            "knowledge"
+        );
     }
 
     #[test]

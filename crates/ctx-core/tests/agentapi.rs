@@ -1392,6 +1392,25 @@ fn workbench_apply_previews_then_applies() {
     assert!(ev.body.starts_with("助手（agent）") && ev.body.contains("略過：切到牌組「g1」"));
 }
 
+/// 2026-10-18：agent 也改得了類別（同 App 助手的 set_class，走 repo_class action）。
+#[test]
+fn workbench_apply_sets_repo_class() {
+    let (_t, d) = ctx_core::testkit::spine_with_repos();
+    let here = registry::get_repo(&d, "repo-a").unwrap().path();
+    let steps = json!([{"op": "set_class", "args": {"id": "repo-b", "class": "參考"}}]);
+    let pre = api::workbench_apply(&d, &steps, false, Some(&here), false, "agent").unwrap();
+    assert_eq!(pre["steps"][0]["text"], "repo-b：類別 → 參考");
+    assert!(
+        registry::get_repo(&d, "repo-b").unwrap().class().is_none(),
+        "預覽不寫"
+    );
+    api::workbench_apply(&d, &steps, true, Some(&here), false, "agent").unwrap();
+    assert_eq!(
+        registry::get_repo(&d, "repo-b").unwrap().class(),
+        Some(registry::RepoClass::Reference)
+    );
+}
+
 #[test]
 fn workbench_apply_guards_cross_scope() {
     let (_t, d) = ctx_core::testkit::spine_with_repos();
