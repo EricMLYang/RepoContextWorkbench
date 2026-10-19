@@ -583,6 +583,36 @@ pub fn changes(root: &Path) -> Result<(Vec<Change>, usize)> {
     Ok((all, more))
 }
 
+/// 已 commit 但還沒 push 的檔：目前分支對上游（`git diff --name-only @{u}...HEAD`，合併基底到 HEAD 之間動過的檔）。
+/// 沒有上游分支（剛 init、沒 remote、分支沒 `-u`）＝空清單，不算錯；不是 git repo＝錯誤。
+/// 給檔案樹標「↑ 還沒 push」（跟還沒 commit 的變更一起上色）。超過 [`CHANGES_MAX`] 截掉。
+pub fn unpushed(root: &Path) -> Result<Vec<String>> {
+    if !root.join(".git").exists() {
+        return Err(Error::invalid(format!("不是 git repo：{}", root.display())));
+    }
+    let (code, out) = crate::crossref::git(
+        root,
+        &[
+            "--no-optional-locks",
+            "diff",
+            "--name-only",
+            "-z",
+            "@{u}...HEAD",
+        ],
+        GIT_TIMEOUT,
+    );
+    if code != 0 {
+        return Ok(Vec::new());
+    }
+    let mut all: Vec<String> = out
+        .split('\0')
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+    all.truncate(CHANGES_MAX);
+    Ok(all)
+}
+
 /// 單檔的差異：工作區對上一個 commit（`git diff HEAD`）；還沒追蹤的檔整份算新增；repo 還沒有任何 commit
 /// 就對暫存區。回 (差異文字, 有沒有截斷)。沒有差異＝空字串。`rel` 只能往下走（檔案可能已刪，所以不要求存在）。
 pub fn diff(root: &Path, rel: &str) -> Result<(String, bool)> {
@@ -1322,6 +1352,40 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("不是 git repo"));
+    }
+
+    #[test]
+    fn unpushed_lists_files_in_commits_ahead_of_upstream() {
+        let t = tempfile::tempdir().unwrap();
+        let g = crate::testkit::make_git_repo(t.path(), "g", 1, 0, true);
+        // 沒上游：空清單、不是錯
+        assert_eq!(unpushed(&g).unwrap(), Vec::<String>::new());
+        let remote = t.path().join("remote.git");
+        crate::testkit::git(t.path(), &["init", "-q", "--bare", "remote.git"], &[]);
+        crate::testkit::git(
+            &g,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+            &[],
+        );
+        crate::testkit::git(&g, &["push", "-q", "-u", "origin", "HEAD"], &[]);
+        assert_eq!(unpushed(&g).unwrap(), Vec::<String>::new());
+        // 多 commit 一筆沒 push：那筆動到的檔都列出來；還沒 commit 的不算在這裡
+        std::fs::write(g.join("later.md"), "之後\n").unwrap();
+        std::fs::write(g.join("notes").join("plan.md"), "## 計劃\n改了\n").unwrap();
+        crate::testkit::git(&g, &["add", "-A"], &[]);
+        crate::testkit::git(&g, &["commit", "-q", "-m", "later"], &[]);
+        std::fs::write(g.join("wip.md"), "草稿\n").unwrap();
+        let mut got = unpushed(&g).unwrap();
+        got.sort();
+        assert_eq!(
+            got,
+            vec!["later.md".to_string(), "notes/plan.md".to_string()]
+        );
+        crate::testkit::git(&g, &["push", "-q"], &[]);
+        assert_eq!(unpushed(&g).unwrap(), Vec::<String>::new());
+        let plain = t.path().join("plain");
+        std::fs::create_dir_all(&plain).unwrap();
+        assert!(unpushed(&plain).is_err());
     }
 
     #[test]

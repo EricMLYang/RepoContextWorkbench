@@ -2461,6 +2461,41 @@ button.filetab.home {
 .trow.picked .tlabel {
   color: var(--green);
 }
+/* git 狀態（跟 VS Code 一樣）：檔案照狀態上色＋右邊字母，資料夾含變更就上色＋一個點；寫在 picked 之後才蓋得過 */
+.trow .tgit {
+  margin-left: auto;
+  padding-right: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.trow .tpicked ~ .tgit {
+  margin-left: 4px;
+}
+.trow.git-modified .tlabel,
+.trow.git-modified .tgit,
+.trow.git-renamed .tlabel,
+.trow.git-renamed .tgit {
+  color: var(--amber);
+}
+.trow.git-added .tlabel,
+.trow.git-added .tgit,
+.trow.git-untracked .tlabel,
+.trow.git-untracked .tgit {
+  color: var(--green);
+}
+.trow.git-deleted .tlabel,
+.trow.git-deleted .tgit,
+.trow.git-conflicted .tlabel,
+.trow.git-conflicted .tgit {
+  color: var(--red);
+}
+.trow.file.git-deleted .tlabel {
+  text-decoration: line-through;
+}
+.trow.git-unpushed .tlabel,
+.trow.git-unpushed .tgit {
+  color: var(--blue);
+}
 #picktray {
   grid-area: main;
   align-self: end;

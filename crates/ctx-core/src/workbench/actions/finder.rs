@@ -171,7 +171,8 @@ fn palette_files(
         .collect()
 }
 
-/// Rust 才有（2026-10-14）：還沒 commit 的變更（看 agent 改了什麼；見 [`crate::filetree::changes`]）。
+/// Rust 才有（2026-10-14）：還沒 commit 的變更（看 agent 改了什麼；見 [`crate::filetree::changes`]）；
+/// 2026-10-19 起多回 `unpushed`（已 commit 沒 push 的檔，見 [`crate::filetree::unpushed`]）。
 pub(super) fn a_repo_changes(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     let ProfileArgs { id } = parse("repo_changes", p)?;
     let root = registry::get_repo(d, &id)?.path();
@@ -180,7 +181,9 @@ pub(super) fn a_repo_changes(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Res
         .iter()
         .map(|c| json!({"path": c.rel, "status": c.kind}))
         .collect();
-    Ok(json!({"ok": true, "id": id, "changes": changes, "more": more}))
+    // 已 commit 但還沒 push 的檔（檔案樹標 ↑）；沒上游就是空
+    let unpushed = crate::filetree::unpushed(&root)?;
+    Ok(json!({"ok": true, "id": id, "changes": changes, "more": more, "unpushed": unpushed}))
 }
 
 /// Rust 才有（2026-10-14）：單檔差異（見 [`crate::filetree::diff`]）。

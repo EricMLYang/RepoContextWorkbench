@@ -202,6 +202,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
 - **剪貼簿走殼層**（2026-10-19；Python 沒有）：所有「複製…」經 `lib/clipboard.ts` 的 `copyText`，Tauri 下呼叫殼命令
   `copy_text`（`tauri-plugin-clipboard-manager`，只在 Rust 端用），瀏覽器才退回 `navigator.clipboard`。原因：macOS WKWebView
   在 WebView 不是焦點時（剛從終端、選單列或別的視窗回來）會拒絕 Web API，使用者看到偶爾「無法複製到剪貼簿」。Windows：未測。
+- **檔案樹照 git 狀態上色**（2026-10-19；Python 沒有）：`repo_changes` 多回 `unpushed`（`git diff --name-only @{u}...HEAD`，
+  沒上游＝空）；前端 `lib/gitMarks.ts` 算每個路徑的記號——檔案照自己的狀態、資料夾取裡面最重的（衝突＞刪除＞修改＞改名＞
+  已暫存＞新檔＞沒 push），跟 VS Code 一樣上色＋字母／點。掛上、state 變、磁碟變動（合併 400ms）、視窗回前景時重讀。
 - **側欄排序、寬度與唯讀檢視器**（2026-10-11；Python 沒有）：牌組與組員可拖曳排序（Alt+↑↓ 也行）——action `reorder`
   （registry `reorder_groups`／`reorder_members`／`reorder_repos`：只換 registry.yaml 裡的順序、不是同一批就拒絕、
   不記 spine 事件）；左右側欄拖曳調寬（存本機偏好）。點檔案在主區開唯讀分頁——action `read_file`（`filetree::read_file`：

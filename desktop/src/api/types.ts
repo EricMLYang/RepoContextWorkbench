@@ -668,7 +668,14 @@ export interface ActionMap {
   /** Rust 才有：還沒 commit 的變更（git status）；不是 git repo 會失敗。 */
   repo_changes: {
     payload: { id: string };
-    result: { ok: true; id: string; changes: RepoChange[]; more: number };
+    result: {
+      ok: true;
+      id: string;
+      changes: RepoChange[];
+      more: number;
+      /** 已 commit 但還沒 push 的檔（相對路徑；沒上游分支＝空）。檔案樹標 ↑。 */
+      unpushed?: string[];
+    };
   };
   /** Rust 才有：範圍內每個 repo 還沒 commit 的變更（只回有變更的；git 失敗的帶 error）。 */
   scope_changes: {

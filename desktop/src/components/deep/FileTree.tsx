@@ -11,7 +11,8 @@ import { load as loadPref, save as savePref } from "../../lib/storage";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
 import { FILE_DRAG_TYPE } from "../../lib/view";
 import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
-import { samePick, useStore, useUi, useUiState, type Pick } from "../../store/context";
+import { MARK_LABEL, MARK_LETTER, gitMarks, type GitMark } from "../../lib/gitMarks";
+import { samePick, useSnapshot, useStore, useUi, useUiState, type Pick } from "../../store/context";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 
 interface DirState {
@@ -237,6 +238,7 @@ function NewEntryRow(props: {
 /**
  * 一個 repo 當根的檔案樹（VS Code 檔案總管風格）：展開資料夾才向引擎要下一層（action `repo_tree`）；
  * 磁碟上有變動（新增／刪除／改名）會自己更新（Tauri 殼監看展開中的資料夾）。
+ * git 狀態上色（跟 VS Code 一樣）：檔案照狀態上色＋右邊字母（M／A／D／R／U／!／↑ 沒 push），資料夾含變更就上色＋點。
  * 右鍵：複製路徑／相對路徑；鍵盤：↑↓ 移動、→ 展開、← 收合或回上層、Enter 開啟、⌥⌘C／⇧⌥⌘C 複製。
  * 展開狀態記在這台電腦。讀失敗保留上次的清單並顯示錯誤。
  */
@@ -268,6 +270,11 @@ export function RepoRoot(props: {
   const [creating, setCreating] = useState<Creating | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const treeRef = useRef<HTMLDivElement>(null);
+  const [marks, setMarks] = useState<Map<string, GitMark>>(() => new Map());
+  const [markNonce, setMarkNonce] = useState(0);
+  const markTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { state, lastStates } = useSnapshot();
+  const dirty = lastStates[id]?.dirty;
 
   const setOpen = (next: Set<string>) => {
     setOpenState(next);
@@ -298,6 +305,29 @@ export function RepoRoot(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // git 狀態（跟 VS Code 一樣上色）：掛上、state 變（agent 做完一輪）、磁碟變動、視窗回到前景時重讀；
+  // 看不到的樹不讀；不是 git repo 或讀失敗就不標（樹照常）
+  useEffect(() => {
+    if (!watching) return;
+    let live = true;
+    store
+      .action("repo_changes", { id })
+      .then((r) => {
+        if (live) setMarks(gitMarks(r.changes ?? [], r.unpushed ?? []));
+      })
+      .catch(() => {
+        if (live) setMarks(new Map());
+      });
+    return () => {
+      live = false;
+    };
+  }, [store, id, state, dirty, markNonce, watching]);
+  useEffect(() => {
+    const bump = () => setMarkNonce((n) => n + 1);
+    window.addEventListener("focus", bump);
+    return () => window.removeEventListener("focus", bump);
+  }, []);
+
   // 磁碟變動：只重讀受影響、而且讀過的資料夾（不閃「讀取中」，舊清單留著直到新的回來）
   useWatchDirs(store.backend, id, watching ? [...open] : []);
   useRepoChanged(store.backend, id, (paths) => {
@@ -308,6 +338,9 @@ export function RepoRoot(props: {
       if (open.has(p) && dirs[p]) hit.add(p);
     }
     for (const dir of hit) void load(dir);
+    // git 記號也要跟著變（agent 連續改檔時合併成一次）
+    if (markTimer.current) clearTimeout(markTimer.current);
+    markTimer.current = setTimeout(() => setMarkNonce((n) => n + 1), 400);
   });
 
   const toggle = (dir: string, want?: boolean) => {
@@ -515,6 +548,7 @@ export function RepoRoot(props: {
         const e = r.e;
         const isOpen = e.dir && open.has(e.path);
         const picked = isPicked(e);
+        const mark = marks.get(e.path);
         return (
           <div
             key={e.path}
@@ -522,7 +556,11 @@ export function RepoRoot(props: {
             aria-level={r.depth + 1}
             aria-expanded={e.dir ? isOpen : undefined}
             aria-selected={!e.dir && e.path === active}
-            aria-label={picked ? e.name + "（已加入脈絡）" : e.name}
+            aria-label={
+              e.name +
+              (picked ? "（已加入脈絡）" : "") +
+              (mark ? "（" + (e.dir ? "內有變更" : MARK_LABEL[mark]) + "）" : "")
+            }
             data-path={e.path}
             tabIndex={e.path === tabStop ? 0 : -1}
             className={
@@ -530,7 +568,8 @@ export function RepoRoot(props: {
               (e.dir ? " dir" : " file") +
               (!e.dir && e.path === active ? " selected" : "") +
               (picked ? " picked" : "") +
-              (e.ignored ? " ignored" : "")
+              (e.ignored ? " ignored" : "") +
+              (mark ? " git-" + mark : "")
             }
             style={pad}
             title={e.ignored ? e.path + "（被 .gitignore 忽略）" : e.path}
@@ -574,6 +613,11 @@ export function RepoRoot(props: {
             {picked ? (
               <span className="tpicked" aria-hidden="true">
                 ✓
+              </span>
+            ) : null}
+            {mark ? (
+              <span className="tgit" aria-hidden="true" title={MARK_LABEL[mark]}>
+                {e.dir ? "●" : MARK_LETTER[mark]}
               </span>
             ) : null}
           </div>

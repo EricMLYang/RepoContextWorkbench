@@ -571,6 +571,39 @@ describe("檔案分頁（像 IDE 的多根工作區）", () => {
     expect(write).toHaveBeenCalledWith("/r/a/docs/plan.md");
   });
 
+  it("檔案樹照 git 狀態上色（跟 VS Code 一樣）：檔案標字母、資料夾含變更標點、沒 push 標 ↑", async () => {
+    const base = treeBackend();
+    const backend = treeBackend({
+      action: vi.fn(async (name: string, p: { id?: string; dir?: string }) => {
+        if (name === "repo_changes")
+          return {
+            ok: true,
+            id: p.id,
+            changes: [{ path: "docs/plan.md", status: "modified" }],
+            more: 0,
+            unpushed: ["README.md"],
+          };
+        return base.action(name as never, p as never);
+      }) as never,
+    });
+    await openFiles(backend);
+    await act(async () =>
+      fireEvent.click(
+        within(document.getElementById("tab-files")!).getByRole("button", { name: "a" }),
+      ),
+    );
+    const docs = await screen.findByRole("treeitem", { name: "docs（內有變更）" });
+    expect(docs.classList.contains("git-modified")).toBe(true);
+    expect(docs.querySelector(".tgit")!.textContent).toBe("●");
+    const readme = screen.getByRole("treeitem", { name: "README.md（還沒 push）" });
+    expect(readme.classList.contains("git-unpushed")).toBe(true);
+    expect(readme.querySelector(".tgit")!.textContent).toBe("↑");
+    await act(async () => fireEvent.click(docs));
+    const plan = await screen.findByRole("treeitem", { name: "plan.md（已修改）" });
+    expect(plan.classList.contains("git-modified")).toBe(true);
+    expect(plan.querySelector(".tgit")!.textContent).toBe("M");
+  });
+
   it("殼層有 copyText（Tauri）就走殼層寫剪貼簿，不碰 WebView 的 navigator.clipboard；殼層失敗才退回", async () => {
     const copyText = vi.fn(async () => {});
     const backend = treeBackend({ copyText });
