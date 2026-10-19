@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { imeKey } from "../../lib/ime";
 import { langOf, tokenizeLine, type HlState, type Lang } from "../../lib/highlight";
 import type { FileContent } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
@@ -184,7 +185,7 @@ function FindBar(props: {
           setCur(0);
         }}
         onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing) return;
+          if (imeKey(e)) return;
           if (e.key === "Enter") {
             e.preventDefault();
             step(e.shiftKey ? -1 : 1);
@@ -341,7 +342,7 @@ function EditFindBar(props: {
           setCur(0);
         }}
         onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing) return;
+          if (imeKey(e)) return;
           if (e.key === "Enter") {
             e.preventDefault();
             step(e.shiftKey ? -1 : 1);
@@ -358,7 +359,7 @@ function EditFindBar(props: {
         spellCheck={false}
         onChange={(e) => setRep(e.target.value)}
         onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing) return;
+          if (imeKey(e)) return;
           if (e.key === "Enter") {
             e.preventDefault();
             replaceOne();

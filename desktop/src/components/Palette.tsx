@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { imeKey } from "../lib/ime";
 import type { PaletteResult, TermInfo } from "../api/types";
 import {
   STATUS_TXT,
@@ -285,7 +286,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing) return;
+            if (imeKey(e)) return;
             if (e.key === "Escape") {
               e.preventDefault();
               cancel();

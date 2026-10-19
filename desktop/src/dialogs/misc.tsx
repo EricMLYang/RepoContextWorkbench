@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { imeKey } from "../lib/ime";
 import type { GroupInfo } from "../api/types";
 import { AsyncButton } from "../components/AsyncButton";
 import { useSnapshot, useStore, useUi } from "../store/context";
@@ -201,7 +202,7 @@ export function Onboarding({ mode = "first" }: { mode?: "first" | "add" }) {
           placeholder="例如 /Users/you/Coding"
           onChange={(e) => setDir(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            if (e.key === "Enter" && !imeKey(e)) {
               e.preventDefault();
               void preview();
             }

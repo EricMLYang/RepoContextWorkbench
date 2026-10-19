@@ -7,6 +7,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
+import { imeKey } from "../../lib/ime";
 import {
   continueList,
   indent,
@@ -215,7 +216,7 @@ export function Editor(props: {
       onSave();
       return;
     }
-    if (e.nativeEvent.isComposing) return;
+    if (imeKey(e)) return;
     if (!markdown) {
       // 程式碼檔：Tab 縮排（照檔案原本的習慣：行首有 tab 就用 tab，否則 4 個空白），不要讓焦點跳走
       if (e.key === "Tab" && !mod && !e.altKey && !e.shiftKey) {

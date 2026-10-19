@@ -6,6 +6,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { imeKey } from "../../lib/ime";
 import type { TreeEntry } from "../../api/types";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
@@ -143,7 +144,7 @@ function RenameInput(props: {
         }}
         onKeyDown={(e) => {
           e.stopPropagation();
-          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+          if (e.key === "Enter" && !imeKey(e)) {
             e.preventDefault();
             void submit();
           } else if (e.key === "Escape") {
@@ -214,7 +215,7 @@ function NewEntryRow(props: {
           setError("");
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+          if (e.key === "Enter" && !imeKey(e)) {
             e.preventDefault();
             void submit();
           } else if (e.key === "Escape") {

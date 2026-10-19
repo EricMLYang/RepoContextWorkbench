@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { imeKey } from "../../lib/ime";
 import type { GroupNote } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
 import { continueList, indent } from "../../lib/mdedit";
@@ -195,7 +196,7 @@ export function NotesPane({
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.nativeEvent.isComposing) return;
+                if (imeKey(e)) return;
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                   e.preventDefault();
                   void submit();

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { imeKey } from "../lib/ime";
 import { scopeLabel } from "../lib/view";
 import { useSnapshot, useStore, useUi, useUiState } from "../store/context";
 
@@ -69,7 +70,7 @@ export function Composer(props: { open: boolean; focusSeq: number; onClose: () =
         value={view.draft}
         onChange={(e) => ui.setDraft(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !imeKey(e)) {
             e.preventDefault();
             void submit();
           }
