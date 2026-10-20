@@ -145,7 +145,7 @@
 | N-44 | 可維護 | `scripts/check.sh` 兩個靜默 bug：失敗訊息 `$name（` 在非 UTF-8 locale 變 unbound variable；cargo sweep 跑在 desktop/ 裡每次失敗 | R35 實際踩到 | 留痕 | P1 | 完成（e6261ee、0b38fe4） | R35 | R35 |
 | F-87 | 入口 | 檔案樹照列被 .gitignore 忽略的檔、畫灰色（跟 VS Code 一樣）；agent 產出常故意不進 git（draftagent/runs/） | 使用者 2026-10-17 問「為什麼看不到 runs 裡的檔」 | 脈絡 | P1 | 完成（a64fd13） | R35 | R35 |
 | F-88 | 任務圖 | 未結體檢：做事的 commit（feat／fix／perf／refactor）標題點名 `#N`＝可能已處理 | #72 修正 commit 寫了（#72）卻一直被當進行中；開 78 關 11 | 留痕 | P1 | 完成（439e955） | R35 | R35 |
-| N-45 | 效能 | 大參考 repo 的採集降頻：`reference` 類或只讀的大 repo，git 狀態快取幾分鐘（或不做 dirty 檢查），程式碼搜尋可設為不搜 | R35：context／hook 380ms，不含 orca 160ms；orca 每個 git 指令約 30ms | 脈絡 | P2 | 構想 | R35 | R35 |
+| N-45 | 效能 | 大參考 repo 的採集降頻：`reference` 類或只讀的大 repo，git 狀態快取幾分鐘（或不做 dirty 檢查），程式碼搜尋可設為不搜 | R35：context／hook 380ms，不含 orca 160ms；orca 每個 git 指令約 30ms | 脈絡 | P2 | 併入 F-89（參考類採集時當 external、不跑 git；R36 量 context 暖 182ms 已在預算內） | R35 | R36 |
 | F-89 | 入口 | repo 類別（六類：程式／領域 Agent／數據探索／文件・PM／知識／參考），依「怎樣算可靠」決定工作台與 agent 怎麼對待；第一版軟區分（標示＋開場規則），參考類不採集、不搜程式碼；之後在 `RepoClass` 加共同限制（`docs/REPO_CLASSES.md`） | 使用者 2026-10-18：orca 這種參考 repo、PM 專案、知識專案要被不同對待 | 脈絡、同介面 | P1 | 完成（第一版） | R35 | R35 |
 | F-90 | 入口 | 檔案樹照 git 狀態上色（跟 VS Code 一樣）：改的／新檔／已暫存／刪除／衝突，加「commit 了還沒 push」藍色 ↑；資料夾取裡面最重的 | 使用者 2026-10-20 要的 | 脈絡 | P1 | 完成（9e4591f） | R36 | R36 |
 | F-91 | 任務圖 | 收件匣判斷回顧卡「記結果…」、該重看卡「改判斷…」——人直接寫，不必開會話；沿用 log_decision 的 outcome_of／supersedes，source=manual | R35 量到判斷結果記錄率 0%，原因是卡上只有開會話／延期 | 留痕 | P1 | 完成（04762ef） | R36 | R36 |
