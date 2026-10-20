@@ -155,3 +155,4 @@
 | N-47 | 前端體驗 | 輸入法選字 Enter 不再換行／送出：WebKit 在 compositionend 後補送 isComposing=false 的 Enter，`lib/ime.ts` 照 ProseMirror 略過一次；10 處輸入框共用 | 使用者 2026-10-19 回報 | 同介面 | P1 | 完成（8747b3e） | R36 | R36 |
 | N-48 | 可維護 | MCP 呼叫紀錄記錯誤碼，`ctx health` 工具用量印失敗原因 | 真 spine：handoff 失敗 3 次查不出為什麼 | 留痕 | P2 | 完成（6266632） | R36 | R36 |
 | N-49 | 前端體驗 | 牌組卡狀態列溢出（button 全域 nowrap）、回答框提示被切、慢動作按鈕顯示已過秒數（N-09 的一半）；開場「上次交接」不再切在路徑中間 | 畫面預覽截圖每張都看得到；開場注入實際輸出 | 同介面 | P2 | 完成（7b3a36b、9a0a542） | R36 | R36 |
+| N-50 | 可維護 | 無障礙稽核自動化：axe-core 跑在 vitest（五個場景），serious／critical 為 0 才過；第一次就抓到側欄寬度把手缺 aria-valuenow | #12 一直沒做；N-09 的秒數也順手修了 aria-live 太吵 | 同介面 | P2 | 完成（本輪） | R36 | R36 |

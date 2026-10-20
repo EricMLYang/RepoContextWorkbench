@@ -48,7 +48,8 @@ export function useSavedWidths() {
 export function Resizer({ side }: { side: "left" | "right" }) {
   const spec = SPECS[side];
   const [active, setActive] = useState(false);
-  const [now, setNow] = useState<number | null>(null);
+  // 一掛上就有值：可聚焦的 separator 必須有 aria-valuenow（axe aria-required-attr）
+  const [now, setNow] = useState<number>(() => current(spec));
 
   const set = (w: number) => {
     const c = clamp(spec, w);
@@ -97,14 +98,14 @@ export function Resizer({ side }: { side: "left" | "right" }) {
       aria-label={spec.label}
       aria-valuemin={spec.min}
       aria-valuemax={spec.max}
-      aria-valuenow={now ?? undefined}
+      aria-valuenow={now}
       tabIndex={0}
       title="拖曳調整寬度；雙擊回預設"
       onPointerDown={onPointerDown}
       onKeyDown={onKeyDown}
       onDoubleClick={() => {
         apply(spec, null);
-        setNow(null);
+        setNow(current(spec));
         save(spec.key, null);
       }}
     />

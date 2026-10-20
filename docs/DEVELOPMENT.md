@@ -105,6 +105,9 @@ desktop/src（React，只管畫面）── IPC ┘
   改 hook、MCP 或開場注入後跑一次。
 - **GUI 實測**：使用者的 App 沒開時，`npx tauri build --no-bundle` 的執行檔帶 `--spine <副本>`（副本先拿掉 git remote），
   截圖只拍該 pid 的視窗（`screencapture -l`）、按鍵只送該 pid（`CGEventPostToPid`）；不要全域點擊或打字。
+- **無障礙稽核（自動化，#12 的 macOS 部分；2026-10-21）**：`desktop/src/test/a11y.test.tsx` 用 axe-core 對掛起來的 App
+  （工作區、牌組範圍、新建會話對話框、⌘K、右側欄）跑 WCAG 規則，serious／critical 要是 0；`npm test` 就會跑。
+  jsdom 算不了顏色對比（`color-contrast` 關掉），對比與真鍵盤流程仍要在真 App 看。新畫面加進這個測試的場景清單。
 - **一次性 shell 腳本的寫法**（2026-10-18 踩到，#100）：變數名後面緊貼全形標點或中文時一律 `${VAR}`（`"${BUILT}（"` 而不是
   `"$BUILT（"`）——背景或非 UTF-8 locale 下 bash 會把後面的位元組當成變數名的一部分，炸出 unbound variable；
   `set -u` 的腳本更是直接停。`install-app.sh`、`check.sh` 都中過。
