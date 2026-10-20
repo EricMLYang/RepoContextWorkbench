@@ -163,19 +163,30 @@ pub fn handle_message(
                 .unwrap_or_else(|| PathBuf::from(".")),
         };
         let started = std::time::Instant::now();
-        let (text, is_error) = match &tool.kind {
+        // (回給 agent 的文字, 是不是錯誤, 錯誤碼——health 統計失敗原因用)
+        let (text, is_error, code) = match &tool.kind {
             ToolKind::Work(f) => match f(spine_dir, &args, &here) {
-                Ok(v) => (text_of(&v), false),
-                Err(e) => (text_of(&work_error(&e)), true),
+                Ok(v) => (text_of(&v), false, None),
+                Err(e) => {
+                    let v = work_error(&e);
+                    let code = v["error"].as_str().unwrap_or("failed").to_string();
+                    (text_of(&v), true, Some(code))
+                }
             },
             // 錯誤原樣回 agent 自我修正（含 validator 拒寫）
             ToolKind::Admin(f) => match f(spine_dir, &args) {
-                Ok(s) => (s, false),
-                Err(e) => (e.to_string(), true),
+                Ok(s) => (s, false, None),
+                Err(e) => (e.to_string(), true, Some("failed".to_string())),
             },
         };
-        // Rust 才有（N-07）：每次呼叫記一行（ctx health 算工具用量與延遲）
-        ctx_core::health::record_call(spine_dir, name, started.elapsed().as_millis(), !is_error);
+        // Rust 才有（N-07）：每次呼叫記一行（ctx health 算工具用量、延遲與失敗原因）
+        ctx_core::health::record_call_with(
+            spine_dir,
+            name,
+            started.elapsed().as_millis(),
+            !is_error,
+            code.as_deref(),
+        );
         return Some(ok(json!({
             "content": [{"type": "text", "text": text}],
             "isError": is_error,

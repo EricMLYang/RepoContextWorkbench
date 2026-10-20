@@ -6,7 +6,7 @@
 //! - 推薦命中率：反芻推的新料有沒有被讀（引用）或拿來試
 //! - 判斷結果記錄率：滿回顧天數的判斷，有幾成記了結果（outcome）
 //! - 未結：期間開了幾項、關了幾項、現在逾期幾項
-//! - 工具用量：MCP 每次呼叫記在 `.state/metrics.jsonl`（[`record_call`]），算次數、平均毫秒、失敗數
+//! - 工具用量：MCP 每次呼叫記在 `.state/metrics.jsonl`（[`record_call`]），算次數、平均毫秒、失敗數與失敗原因（錯誤碼）
 //! - 名片覆蓋（F-57）：沒封存的 repo 有幾個寫了介紹／角色、還沒寫的是哪些（只看 registry，不讀 README）
 //!
 //! 全部只讀檔，不改任何東西。
@@ -29,14 +29,23 @@ fn metrics_path(spine_dir: &Path) -> PathBuf {
 
 /// MCP 每次工具呼叫記一行（`{"at","tool","ms","ok"}`）。寫不進去就算了——紀錄不能擋住工具。
 pub fn record_call(spine_dir: &Path, tool: &str, ms: u128, ok: bool) {
+    record_call_with(spine_dir, tool, ms, ok, None);
+}
+
+/// 同 [`record_call`]，失敗時多記錯誤碼（`"error":"cross_scope"`…）——health 才說得出失敗是為什麼
+/// （2026-10-21 之前只有失敗數，handoff 失敗 3 次查不出原因）。
+pub fn record_call_with(spine_dir: &Path, tool: &str, ms: u128, ok: bool, error: Option<&str>) {
     let p = metrics_path(spine_dir);
     if let Some(parent) = p.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let line = json!({
+    let mut line = json!({
         "at": Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         "tool": tool, "ms": ms as u64, "ok": ok,
     });
+    if let Some(code) = error.filter(|c| !ok && !c.is_empty()) {
+        line["error"] = json!(code);
+    }
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -232,7 +241,8 @@ pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result
     });
 
     // 工具用量
-    let mut tools: BTreeMap<String, (usize, u64, usize)> = BTreeMap::new();
+    // (次數, 總毫秒, 失敗數, 失敗原因→次數)
+    let mut tools: BTreeMap<String, (usize, u64, usize, BTreeMap<String, usize>)> = BTreeMap::new();
     if let Ok(text) = std::fs::read_to_string(metrics_path(spine_dir)) {
         for v in text
             .lines()
@@ -248,12 +258,21 @@ pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result
             e.1 += v["ms"].as_u64().unwrap_or(0);
             if v["ok"] != true {
                 e.2 += 1;
+                let code = v["error"].as_str().unwrap_or("?").to_string();
+                *e.3.entry(code).or_default() += 1;
             }
         }
     }
     let tool_rows: Vec<Value> = tools
         .iter()
-        .map(|(t, (n, ms, err))| json!({"tool": t, "calls": n, "avg_ms": ms / (*n as u64).max(1), "errors": err}))
+        .map(|(t, (n, ms, err, kinds))| {
+            let mut row =
+                json!({"tool": t, "calls": n, "avg_ms": ms / (*n as u64).max(1), "errors": err});
+            if !kinds.is_empty() {
+                row["error_kinds"] = json!(kinds);
+            }
+            row
+        })
         .collect();
 
     // 程式化呼叫（F-84）：期間幾次、今天幾次、平均多久、失敗幾次

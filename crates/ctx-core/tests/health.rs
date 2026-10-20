@@ -1,9 +1,10 @@
 //! Rust 才有（F-36／N-07）：健康指標。
 
 use chrono::{Duration, Local};
-use ctx_core::health::{health, record_agent_call, record_call};
+use ctx_core::health::{health, record_agent_call, record_call, record_call_with};
 use ctx_core::spine::append_event;
 use ctx_core::testkit::spine;
+use serde_json::json;
 
 #[test]
 fn health_counts_handoffs_loops_outcomes_and_tools() {
@@ -61,6 +62,10 @@ fn health_counts_handoffs_loops_outcomes_and_tools() {
     record_call(&d, "context_for", 120, true);
     record_call(&d, "context_for", 80, true);
     record_call(&d, "close_todo", 1, false);
+    record_call_with(&d, "handoff", 2, false, Some("cross_scope"));
+    record_call_with(&d, "handoff", 3, false, Some("cross_scope"));
+    record_call_with(&d, "handoff", 1, false, Some("bad_request"));
+    record_call_with(&d, "handoff", 5, true, Some("ignored-when-ok"));
     record_agent_call(&d, 4000, true, false, Some("haiku"));
     record_agent_call(&d, 2000, false, true, None);
     let h = health(&d, 14, None).unwrap();
@@ -93,6 +98,20 @@ fn health_counts_handoffs_loops_outcomes_and_tools() {
     assert_eq!(
         tools.iter().find(|t| t["tool"] == "close_todo").unwrap()["errors"],
         1
+    );
+    // 失敗原因：錯誤碼→次數；成功的不記；沒記錯誤碼的算「?」
+    let ho = tools.iter().find(|t| t["tool"] == "handoff").unwrap();
+    assert_eq!(
+        (ho["calls"].clone(), ho["errors"].clone()),
+        (json!(4), json!(3))
+    );
+    assert_eq!(
+        ho["error_kinds"],
+        json!({"cross_scope": 2, "bad_request": 1})
+    );
+    assert_eq!(
+        tools.iter().find(|t| t["tool"] == "close_todo").unwrap()["error_kinds"],
+        json!({"?": 1})
     );
 }
 

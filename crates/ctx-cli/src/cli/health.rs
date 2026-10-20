@@ -137,8 +137,20 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
         } else {
             out.push("- 工具用量：".into());
             for t in tools {
+                // 失敗原因（錯誤碼→次數）：有才印
+                let why = t["error_kinds"]
+                    .as_object()
+                    .map(|k| {
+                        k.iter()
+                            .map(|(code, n)| format!("{code} {n}"))
+                            .collect::<Vec<_>>()
+                            .join("、")
+                    })
+                    .filter(|w| !w.is_empty())
+                    .map(|w| format!("（{w}）"))
+                    .unwrap_or_default();
                 out.push(format!(
-                    "    {}：{} 次，平均 {}ms，失敗 {}",
+                    "    {}：{} 次，平均 {}ms，失敗 {}{why}",
                     s(t, "tool"),
                     s(t, "calls"),
                     s(t, "avg_ms"),

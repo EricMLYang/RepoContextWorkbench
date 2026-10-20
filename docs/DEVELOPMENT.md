@@ -105,6 +105,9 @@ desktop/src（React，只管畫面）── IPC ┘
   改 hook、MCP 或開場注入後跑一次。
 - **GUI 實測**：使用者的 App 沒開時，`npx tauri build --no-bundle` 的執行檔帶 `--spine <副本>`（副本先拿掉 git remote），
   截圖只拍該 pid 的視窗（`screencapture -l`）、按鍵只送該 pid（`CGEventPostToPid`）；不要全域點擊或打字。
+- **一次性 shell 腳本的寫法**（2026-10-18 踩到，#100）：變數名後面緊貼全形標點或中文時一律 `${VAR}`（`"${BUILT}（"` 而不是
+  `"$BUILT（"`）——背景或非 UTF-8 locale 下 bash 會把後面的位元組當成變數名的一部分，炸出 unbound variable；
+  `set -u` 的腳本更是直接停。`install-app.sh`、`check.sh` 都中過。
 - **畫面預覽（App 開著、或只想看排版時）**：`desktop/dev/preview.html` 用真的 App 元件＋固定假資料，`?scene=` 選場景
   （workspace／editor／code／assist／assist-empty）。`cd desktop && npm run preview:screens`，再用 headless 瀏覽器
   （獨立的 `--user-data-dir`、`--headless=new`，不開視窗、不碰使用者的瀏覽器）截圖：
