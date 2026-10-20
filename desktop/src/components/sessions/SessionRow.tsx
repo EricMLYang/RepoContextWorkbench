@@ -3,6 +3,7 @@ import type { TermInfo } from "../../api/types";
 import {
   sessionAwaitsTui,
   sessionDot,
+  sessionFresh,
   sessionHeadline,
   sessionMeta,
   sessionNeedsYou,
@@ -129,6 +130,17 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
           onClick={() => ui.selectTerm(s.sid)}
         >
           去處理
+        </button>
+      ) : null}
+      {sessionFresh(s) && where.repo ? (
+        // 做完一輪、還沒看：人下一步幾乎都是「看它改了什麼」——直接開那個 repo 的變更頁（不切會話、不算看過）
+        <button
+          type="button"
+          className="ghost small sessionreply"
+          title={"打開 " + where.repo + " 的變更頁：還沒 commit 的檔，點了看差異"}
+          onClick={() => ui.showRepo(where.repo!, "changes")}
+        >
+          看變更
         </button>
       ) : null}
       {canReply ? (

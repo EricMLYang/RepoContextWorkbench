@@ -2092,6 +2092,36 @@ describe("會話放進所屬牌組", () => {
     expect(within(stuck as HTMLElement).getByRole("button", { name: "回答…" })).toBeTruthy();
   });
 
+  it("做完一輪、還沒看的會話列有「看變更」：開那個 repo 的右側欄變更頁，不切會話", async () => {
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({
+          terms: [
+            term({
+              sid: "t7",
+              title: "做完的",
+              home_group: "產品開發",
+              agent_status: {
+                status: "finished",
+                text: "這一輪做完了",
+                at: "2026-10-14 02:00",
+                event: "stop",
+              },
+            }),
+          ] as never,
+        }),
+      ),
+    });
+    await mount(backend);
+    const row = screen.getByRole("button", { name: /做完的/ }).closest(".session")!;
+    await act(async () =>
+      fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "看變更" })),
+    );
+    expect(document.getElementById("repopanel")!.textContent).toContain("a");
+    expect(document.getElementById("panelpage-changes")!.hasAttribute("hidden")).toBe(false);
+    expect(document.getElementById("termtitle")!.textContent).not.toContain("做完的");
+  });
+
   it("記錄本次工作結果：存好後說記在哪、可以直接到活動看（UX 流程 C）", async () => {
     const backend = mockBackend({
       getState: vi.fn(async () =>
