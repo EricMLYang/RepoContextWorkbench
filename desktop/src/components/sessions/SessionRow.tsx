@@ -64,7 +64,8 @@ function ReplyBox({ s, onDone }: { s: TermInfo; onDone: () => void }) {
         autoFocus
         value={text}
         disabled={busy}
-        placeholder="回答它…（Enter 貼進會話、不送出；Esc 收起）"
+        placeholder="回答…（Enter 貼進會話，不送出）"
+        title="Enter 貼進會話的輸入框（不送出）；Esc 收起"
         aria-label={"回答「" + sessionHeadline(s) + "」"}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {

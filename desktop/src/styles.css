@@ -361,6 +361,7 @@ svg {
 .gcopy {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-width: 0;
 }
 .gname {
@@ -371,11 +372,23 @@ svg {
   font-weight: 550;
   font-size: 13px;
 }
+/* 慢動作按鈕的已過秒數 */
+.asyncsecs {
+  color: var(--sub);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+/* button 全域 nowrap：這列要能換行，不然「· 1 個做完沒看」會溢出卡片、壓到編輯鈕 */
 .gmeta {
   font-size: 11px;
   color: var(--sub);
   font-weight: 400;
   margin-top: 1px;
+  white-space: normal;
+  line-height: 1.4;
+}
+.gmeta .gseg {
+  white-space: nowrap;
 }
 .gcard.on .gname {
   color: #d6e5ff;

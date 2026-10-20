@@ -84,10 +84,26 @@ const GroupCard = memo(function GroupCard(props: {
           <span className="gcopy">
             <span className="gname">{title}</span>
             <span className="gmeta">
-              {groupMeta(g.members, lastStates)}
-              {live.length ? " · " + live.length + " 個會話" : ""}
-              {needs ? <span className="gneeds">{" · " + needs + " 個等你"}</span> : null}
-              {fresh ? <span className="gfresh">{" · " + fresh + " 個做完沒看"}</span> : null}
+              {/* 每段不可斷，只在「·」之間換行（側欄窄時不會斷成「1 個等／你」） */}
+              <span className="gseg">{groupMeta(g.members, lastStates)}</span>
+              {live.length ? (
+                <>
+                  {" · "}
+                  <span className="gseg">{live.length + " 個會話"}</span>
+                </>
+              ) : null}
+              {needs ? (
+                <>
+                  {" · "}
+                  <span className="gseg gneeds">{needs + " 個等你"}</span>
+                </>
+              ) : null}
+              {fresh ? (
+                <>
+                  {" · "}
+                  <span className="gseg gfresh">{fresh + " 個做完沒看"}</span>
+                </>
+              ) : null}
             </span>
           </span>
         </button>
