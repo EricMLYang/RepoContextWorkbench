@@ -85,7 +85,7 @@ export function RepoChanges({
               ui.openSession({ repo: id, repos: [id], task: r.text, origin: "review:" + id });
             }}
           >
-            請 Agent 審…
+            請 Agent 審查…
           </AsyncButton>
         ) : null}
         <button

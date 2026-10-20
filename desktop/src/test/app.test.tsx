@@ -1124,7 +1124,7 @@ describe("repo 右側欄與右鍵選單", () => {
     await waitFor(() => expect(sec.textContent).toContain("變更（2）"));
     expect(within(sec).getByLabelText("修改").textContent).toBe("M");
     await act(async () =>
-      fireEvent.click(within(sec).getByRole("button", { name: "請 Agent 審…" })),
+      fireEvent.click(within(sec).getByRole("button", { name: "請 Agent 審查…" })),
     );
     expect(backend.action).toHaveBeenCalledWith("review_brief", { id: "a" });
     expect(document.getElementById("detailtitle")!.textContent).toBe("開啟 Agent 會話");

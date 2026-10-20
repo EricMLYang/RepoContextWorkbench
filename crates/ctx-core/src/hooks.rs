@@ -38,6 +38,8 @@ const ROSTER_LINES: usize = 20;
 /// Rust 才有（N-28，2026-10-18）：開場注入的字元預算。超過就照 [`START_TRIMS`] 一層一層收，
 /// 收到最後一層還超過就照最後一層給（不砍未結、提醒與工作約定）。
 pub const START_BUDGET: usize = 3000;
+/// 開場「上次交接」最多印幾個字（完整的「完成」段；超過補「…」）。
+const HANDOFF_DONE_CHARS: usize = 240;
 
 /// 開場注入收斂的一層：新料最多幾筆、名冊介紹最多幾個字元（None＝不截）。
 #[derive(Debug, Clone, Copy)]
@@ -208,11 +210,18 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
     let ho = &ctx["last_handoff"];
     let lp = &ctx["last_progress"];
     if ho.is_object() {
+        // 「交接：」那行寫入時就截在 80 字（資料合約，跟 Python 同），常常切在路徑中間；
+        // 開場給人／agent 看的改用完整的「完成」段，太長才截並補「…」
+        let done = s(ho, "done");
+        let shown = if done.trim().is_empty() {
+            s(ho, "summary").to_string()
+        } else {
+            crate::pystr::clip(done.trim(), HANDOFF_DONE_CHARS)
+        };
         out.push(format!(
-            "上次交接（{}，{}）：{}",
+            "上次交接（{}，{}）：{shown}",
             s(ho, "at"),
-            s(ho, "source"),
-            s(ho, "summary")
+            s(ho, "source")
         ));
         if let Some(ns) = ho["next_step"].as_str().filter(|x| !x.is_empty()) {
             out.push(format!("  下次從這裡接：{ns}"));
@@ -256,7 +265,7 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
         }
         if total > 6 {
             out.push(format!(
-                "- …另 {} 項（用 next_work 看完整清單）",
+                "- …另 {} 項（next_work 或 ctx todo list 看完整清單）",
                 total - 6.min(loops.len())
             ));
         }
