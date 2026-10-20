@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { WorkbenchStore } from "../store/store";
 import { interruptCard, loopCard, makeScan, makeState, mockBackend } from "./fixtures";
@@ -127,6 +127,8 @@ async function violations(
 }
 
 describe("無障礙稽核（axe-core）", () => {
+  // 偏好（分頁、開著的檔）記在 localStorage：每個案例都從乾淨的狀態開始
+  beforeEach(() => localStorage.clear());
   afterEach(() => cleanup());
   it("工作區（全部範圍）沒有 serious／critical 違規", async () => {
     const found = await violations({ group: null, repos: null });
