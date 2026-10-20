@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useDetail } from "../dialogs/Modal";
+import { elapsedLabel, useElapsed } from "../lib/useElapsed";
 
 /** 超過這個秒數還沒回來，按鈕旁顯示已過秒數（N-09：慢動作要讓人知道還在跑）。 */
 export const SLOW_AFTER_S = 2;
@@ -22,12 +23,7 @@ export function AsyncButton(props: {
   const { run, children, className, disabled, onError, id, hidden, title } = props;
   const detail = useDetail();
   const [busy, setBusy] = useState(false);
-  const [secs, setSecs] = useState(0);
-  useEffect(() => {
-    if (!busy) return;
-    const t = setInterval(() => setSecs((n) => n + 1), 1000);
-    return () => clearInterval(t);
-  }, [busy]);
+  const secs = useElapsed(busy);
   return (
     <button
       type="button"
@@ -39,7 +35,6 @@ export function AsyncButton(props: {
       aria-busy={busy || undefined}
       onClick={async () => {
         if (busy) return;
-        setSecs(0);
         setBusy(true);
         try {
           await run();
@@ -53,7 +48,7 @@ export function AsyncButton(props: {
       {children}
       {busy && secs >= SLOW_AFTER_S ? (
         <span className="asyncsecs" aria-live="polite">
-          {" · " + secs + " 秒"}
+          {elapsedLabel(secs, SLOW_AFTER_S)}
         </span>
       ) : null}
     </button>

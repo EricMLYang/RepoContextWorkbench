@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { elapsedLabel, useElapsed } from "../../lib/useElapsed";
 import type { InboxCard } from "../../api/types";
 import { Icon, type IconName } from "../../lib/icons";
 import { actionLabel, cardDescription, primaryAction } from "../../lib/view";
@@ -13,6 +14,13 @@ const ICON: Partial<Record<InboxCard["kind"], IconName>> = {
   retro: "chat",
 };
 
+/** 卡片的 date＋time（YYYY-MM-DD HH:MM）到現在過了幾秒；拆不出來＝0。 */
+function sinceSecs(date?: string, time?: string): number {
+  if (!date || !time) return 0;
+  const at = new Date(`${date}T${time}:00`).getTime();
+  return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : 0;
+}
+
 /**
  * 收件匣卡：標題＋判定＋歸屬／時間＋一句理由；主要動作＋查看詳情＋更多。
  * 處理中卡只有轉圈沒有動作。
@@ -26,6 +34,10 @@ export const Card = memo(function Card(props: {
 }) {
   const { card: c, busy, error, onAction, onDetail } = props;
   const primary = primaryAction(c);
+  // N-09：按下去超過 2 秒在主按鈕後面顯示秒數；「處理中」卡（分析在背景跑）顯示從開始到現在過了多久
+  const secs = useElapsed(busy);
+  const pendingSince = c.kind === "pending" ? sinceSecs(c.date, c.time) : null;
+  useElapsed(pendingSince !== null, 15000);
   const desc = cardDescription(c);
   const verdict = "verdict" in c ? c.verdict : "";
   const due = c.kind === "loop" ? c.due : null;
@@ -53,6 +65,9 @@ export const Card = memo(function Card(props: {
             {due ? <span className="pill amber">{"到期 " + due}</span> : null}
           </div>
           {desc ? <p className="description">{desc}</p> : null}
+          {pendingSince !== null && pendingSince >= 30 ? (
+            <p className="description muted">{"處理中" + elapsedLabel(pendingSince, 30)}</p>
+          ) : null}
         </div>
       </div>
       {primary || c.kind !== "pending" || hasMore ? (
@@ -65,6 +80,7 @@ export const Card = memo(function Card(props: {
               onClick={() => onAction(c, primary)}
             >
               {actionLabel(primary)}
+              {busy ? <span className="asyncsecs">{elapsedLabel(secs)}</span> : null}
             </button>
           ) : null}
           {c.kind !== "pending" ? (
