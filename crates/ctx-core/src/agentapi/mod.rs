@@ -639,6 +639,24 @@ pub fn past_sessions(
               "resume": "在會話的 cwd 跑 claude --resume <id>"}))
 }
 
+/// 範圍內全部未結（`ctx todo list`；沒掛 MCP 的 agent 用，跟 `next_work` 同一份資料但不截）。
+/// 排序：逾期在前（最早到期的先）、再來有 due 的照 due、最後沒 due 的照開啟順序。
+pub fn list_todos(spine_dir: &Path, t: &Target) -> Result<Value> {
+    let w = where_am_i(spine_dir, t.cwd.as_deref())?;
+    let s = scope_of(spine_dir, &w, t)?;
+    let td = today();
+    let mut loops: Vec<Value> = open_loops(spine_dir, &s)?
+        .iter()
+        .map(|e| loop_dict(e, Some(&td)))
+        .collect();
+    loops.sort_by_key(|lp| {
+        let d = lp["due"].as_str().map(str::to_string);
+        (lp["overdue"] != true, d.is_none(), d.unwrap_or_default())
+    });
+    let overdue = loops.iter().filter(|lp| lp["overdue"] == true).count();
+    Ok(json!({"ok": true, "scope": s, "count": loops.len(), "overdue": overdue, "loops": loops}))
+}
+
 pub fn next_work(spine_dir: &Path, t: &Target, limit: usize) -> Result<Value> {
     let w = where_am_i(spine_dir, t.cwd.as_deref())?;
     let s = scope_of(spine_dir, &w, t)?;

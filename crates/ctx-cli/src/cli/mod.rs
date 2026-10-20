@@ -133,7 +133,7 @@ pub enum Cmd {
     },
     /// 記一筆判斷（decision），回傳可引用的 ref
     Log(agent::LogArgs),
-    /// 未結事項：add <文字> [--due] ／ close <#N> [--note] ／ review（體檢）／ brief <#N>（任務包）
+    /// 未結事項：add <文字> [--due] ／ close <#N> [--note] ／ list（全部）／ review（體檢）／ brief <#N>（任務包）
     Todo(agent::TodoArgs),
     /// 回報 agent 階段：working／waiting／blocked／done
     Status(agent::StatusArgs),

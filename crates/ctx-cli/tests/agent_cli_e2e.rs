@@ -177,6 +177,41 @@ fn test_setup_rejects_non_spine() {
     assert!(r.code == 3 && r.json()["error"] == "no_spine");
 }
 
+// Rust 才有（2026-10-20）：todo list——範圍內全部未結，逾期在前；沒掛 MCP 的 agent 用
+#[test]
+fn todo_list_shows_all_open_loops_overdue_first() {
+    let e = env_spine();
+    let c = ctx(e.tmp()).cwd(&e.impl_).env("REPOENGINE_SPINE", &e.sp);
+    assert_eq!(c.clone().run(&["todo", "add", "沒期限", "--json"]).code, 0);
+    assert_eq!(
+        c.clone()
+            .run(&["todo", "add", "早過期", "--due", "2020-01-01", "--json"])
+            .code,
+        0
+    );
+    assert_eq!(
+        c.clone()
+            .run(&["todo", "add", "很久以後", "--due", "2099-12-31", "--json"])
+            .code,
+        0
+    );
+    let v = c.clone().run(&["todo", "list", "--json"]).json();
+    assert_eq!(v["count"], 3);
+    assert_eq!(v["overdue"], 1);
+    let texts: Vec<&str> = v["loops"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|lp| lp["text"].as_str().unwrap())
+        .collect();
+    // 沒給 due 的會補預設期限（config openloop_default_due_days，幾天後），所以排在 2099 之前
+    assert_eq!(texts, vec!["早過期", "沒期限", "很久以後"]);
+    let r = c.run(&["todo", "list"]);
+    assert_eq!(r.code, 0);
+    assert!(r.stdout.contains("逾期 1"), "{}", r.stdout);
+    assert!(r.stdout.contains("已逾期"), "{}", r.stdout);
+}
+
 // Rust 才有（N-26）：todo review 預設精簡（進行中只給編號／文字／理由），--all 才全給
 #[test]
 fn todo_review_trims_by_default() {

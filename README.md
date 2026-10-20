@@ -158,7 +158,7 @@ ctx where                        # 我在哪：repo／組／主場
 ctx context                      # 開工脈絡：目標／上次交接／下一步／未結／最近事件
 ctx next                         # 下一步（每項附依據）
 ctx log "結論…依據…" [--supersedes <ref>] [--reopen-when "…"] [--outcome-of <ref>]
-ctx todo add "要做的事" ／ close '#3' --note "…" ／ review ／ brief '#3'
+ctx todo add "要做的事" ／ close '#3' --note "…" ／ list ／ review ／ brief '#3'
 ctx status waiting "在等使用者決定 X"
 ctx handoff --done "…" --next "…" --remaining "…"
 ctx sessions [--query 快取]      # 這個範圍過去的 Claude Code 會話（標題、最後回覆、claude --resume 指令）

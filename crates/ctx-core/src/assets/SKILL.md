@@ -98,6 +98,7 @@ ctx next --json                  # 下一步
 ctx log "結論…依據…" --json
 ctx todo add "要做的事" [--due 2026-10-01] --json
 ctx todo close '#3' --note "怎麼結的" --json
+ctx todo list --json              # 範圍內全部未結（next 只給前 5 項）
 ctx status waiting "在等使用者決定 X" --json
 ctx handoff --done "…" --next "…" [--remaining "…"] --json
 ctx search "一段文字" --json      # 或 --file 某張卡片.md；--no-code 只搜 md

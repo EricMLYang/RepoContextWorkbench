@@ -493,6 +493,8 @@ pub fn cmd_log(ctx: &Ctx, a: &LogArgs) -> CmdResult {
 pub enum TodoAction {
     Add,
     Close,
+    /// 範圍內全部未結（逾期在前）；沒掛 MCP 時代替 next_work 看完整清單
+    List,
     /// 體檢：哪些可能已處理（附證據）、哪些擱置太久（Rust 才有）
     Review,
     /// 任務包：把一項未結組成給全新會話的 markdown（目標／背景／輸入／限制／完成條件；Rust 才有）
@@ -502,7 +504,7 @@ pub enum TodoAction {
 #[derive(Args, Debug)]
 pub struct TodoArgs {
     pub action: TodoAction,
-    /// add：要做的事；close／brief：編號（#3 或 3）；review：不用
+    /// add：要做的事；close／brief：編號（#3 或 3）；list／review：不用
     #[arg(default_value = "")]
     pub text: String,
     /// YYYY-MM-DD
@@ -521,7 +523,7 @@ pub struct TodoArgs {
 }
 
 pub fn cmd_todo(ctx: &Ctx, a: &TodoArgs) -> CmdResult {
-    if a.text.is_empty() && !matches!(a.action, TodoAction::Review) {
+    if a.text.is_empty() && !matches!(a.action, TodoAction::Review | TodoAction::List) {
         return Err(fail(
             "bad_request",
             "todo add／close／brief 需要 <TEXT>（add：要做的事；close／brief：編號）",
@@ -530,6 +532,10 @@ pub fn cmd_todo(ctx: &Ctx, a: &TodoArgs) -> CmdResult {
         ));
     }
     match a.action {
+        TodoAction::List => {
+            let t = a.scope.target();
+            agent_call(ctx, |d| agentapi::list_todos(d, &t), h_list)
+        }
         TodoAction::Review => {
             let t = a.scope.target();
             let all = a.all;
@@ -608,6 +614,24 @@ fn trim_quiet_items(v: &mut Value) {
 }
 
 /// `todo review` 的人話：可能已處理（附證據）→ 擱置太久 → 其餘只算數量。
+fn h_list(r: &Value) -> String {
+    let mut out = vec![format!(
+        "未結（{}）：{} 項，逾期 {}",
+        s(&r["scope"], "label"),
+        s(r, "count"),
+        s(r, "overdue")
+    )];
+    for lp in arr(r, "loops") {
+        let due = match lp["due"].as_str() {
+            Some(d) if lp["overdue"] == true => format!("（due {d}，已逾期）"),
+            Some(d) => format!("（due {d}）"),
+            None => String::new(),
+        };
+        out.push(format!("- {} {}{}", s(lp, "id"), s(lp, "text"), due));
+    }
+    out.join("\n")
+}
+
 fn h_review(r: &Value) -> String {
     let c = &r["counts"];
     let mut out = vec![format!(
