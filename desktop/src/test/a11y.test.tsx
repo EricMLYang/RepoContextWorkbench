@@ -79,6 +79,19 @@ async function violations(
         };
       if (name === "repo_changes")
         return { ok: true, id: "a", changes: [{ path: "README.md", status: "modified" }], more: 0 };
+      if (name === "read_file")
+        return {
+          ok: true,
+          id: "a",
+          path: "README.md",
+          abs: "/r/a/README.md",
+          kind: "text",
+          text: "# 說明\n\n- [ ] 待辦\n",
+          editable: true,
+          version: "v1",
+          size: 20,
+        };
+      if (name === "backlinks") return { ok: true, id: "a", path: "README.md", links: [] };
       return { ok: true };
     }) as never,
   });
@@ -134,6 +147,27 @@ describe("無障礙稽核（axe-core）", () => {
   it("⌘K 開著時沒有違規", async () => {
     const found = await violations({ group: "產品開發", repos: null }, async () => {
       await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    });
+    expect(found, found.join("\n")).toEqual([]);
+  });
+  it("開著一份 md（檢視器＋編輯工具列）時沒有違規", async () => {
+    const found = await violations({ group: "產品開發", repos: null }, async () => {
+      await act(async () =>
+        fireEvent.click(
+          within(document.getElementById("tabs")!).getByRole("button", { name: "檔案" }),
+        ),
+      );
+      await act(async () =>
+        fireEvent.click(
+          within(document.getElementById("tab-files")!).getByRole("button", { name: "a" }),
+        ),
+      );
+      const readme = await screen.findByRole("treeitem", { name: /README\.md/ });
+      await act(async () => fireEvent.click(readme));
+      const viewer = document.querySelector(".viewer:not([hidden])") as HTMLElement | null;
+      expect(viewer).not.toBeNull();
+      await act(async () => fireEvent.click(within(viewer!).getByRole("button", { name: "編輯" })));
+      expect(viewer!.querySelector("textarea")).not.toBeNull();
     });
     expect(found, found.join("\n")).toEqual([]);
   });
