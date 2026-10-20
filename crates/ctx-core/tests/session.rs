@@ -83,10 +83,35 @@ fn test_build_with_repo_cwd_uses_mcp_config_flag() {
 #[test]
 fn test_ensure_mcp_json_idempotent() {
     let (_t, d) = spine();
-    let p1 = session::ensure_mcp_json_with(&d, &fake_ctx()).unwrap();
+    // 已存在、而且 command 還在：第二次給別的路徑也不動（Rust 版只在 command 不見時才重寫）
+    let real = d.join("ctx-bin");
+    std::fs::write(&real, "").unwrap();
+    let p1 = session::ensure_mcp_json_with(&d, &real).unwrap();
     let before = std::fs::read_to_string(&p1).unwrap();
     let p2 = session::ensure_mcp_json_with(&d, Path::new("/elsewhere/ctx")).unwrap();
     assert_eq!(std::fs::read_to_string(p2).unwrap(), before);
+}
+
+// Rust 才有（2026-10-21）：.mcp.json 裡的 command 不在了（例：install-app.sh 刪掉的 bundle）就重寫成現在的 ctx
+#[test]
+fn test_ensure_mcp_json_rewrites_when_command_is_gone() {
+    let (_t, d) = spine();
+    let gone = d.join("old-bundle").join("ctx");
+    std::fs::write(
+        d.join(".mcp.json"),
+        serde_json::json!({"mcpServers": {"repo_context": {
+            "command": gone.to_string_lossy(), "args": ["--spine", "x", "mcp"]}}})
+        .to_string(),
+    )
+    .unwrap();
+    let now = fake_ctx();
+    let p = session::ensure_mcp_json_with(&d, &now).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+    assert_eq!(
+        v["mcpServers"]["repo_context"]["command"],
+        now.to_string_lossy().as_ref()
+    );
+    assert_eq!(v["mcpServers"]["repo_context"]["args"][2], "mcp");
 }
 
 /// L4 bug 回歸：不給 group/repos（工作台的（全部）範圍）也要組得出會話。

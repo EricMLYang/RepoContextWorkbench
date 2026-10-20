@@ -26,6 +26,11 @@ pub const DEFAULT_TASK: &str =
     "先讀情境卡，用 3 行說明：你拿到哪些脈絡、這次預計產出什麼、哪些動作需要我先確認，再問我要做什麼";
 
 /// 對應 `session.ensure_mcp_json`：寫 spine repo 的 `.mcp.json`（已存在且含 repo_context 就不動）。回傳路徑。
+///
+/// Rust 才有（2026-10-21）：已存在但裡面的 `command` 已經不在（例：指向 build 目錄的 bundle，
+/// `install-app.sh` 裝完會刪掉那份）就重寫成現在的 ctx——不然 App 開的每場會話 MCP 都連不上
+/// （Claude Code 只說 ENOENT，agent 靜靜退回 CLI；10-18 重裝後整整兩天沒人發現）。
+/// 指到別處但存在的 command 照舊不動（使用者可能故意指到別支）。
 pub fn ensure_mcp_json(spine_dir: &Path) -> Result<PathBuf> {
     ensure_mcp_json_with(spine_dir, &ctx_exe()?)
 }
@@ -35,11 +40,12 @@ pub fn ensure_mcp_json_with(spine_dir: &Path, ctx: &Path) -> Result<PathBuf> {
     let p = spine_dir.join(".mcp.json");
     if let Ok(text) = std::fs::read_to_string(&p) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
-            if v.get("mcpServers")
-                .and_then(|m| m.get("repo_context"))
-                .is_some()
-            {
-                return Ok(p);
+            if let Some(entry) = v.get("mcpServers").and_then(|m| m.get("repo_context")) {
+                let cmd = entry.get("command").and_then(|c| c.as_str()).unwrap_or("");
+                if !cmd.is_empty() && Path::new(cmd).is_file() {
+                    return Ok(p);
+                }
+                // command 不見了（舊 bundle 被刪、搬過家）：往下重寫
             }
         }
     }
