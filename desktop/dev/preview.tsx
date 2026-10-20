@@ -495,6 +495,21 @@ if (scene === "diff-notes")
     });
   });
 if (scene === "ended-session") later(700, () => click(`button[aria-label="展開產品開發"]`));
+// 工作區分頁：tab-notes／tab-repos／tab-files／tab-activity／tab-relations（看各頁排版與空狀態）
+if (scene.startsWith("tab-")) {
+  const label = {
+    notes: "筆記",
+    repos: "Repo",
+    files: "檔案",
+    activity: "活動",
+    relations: "關係",
+  }[scene.slice(4)];
+  later(700, () => {
+    [...document.querySelectorAll<HTMLElement>("#tabs button")]
+      .find((b) => b.textContent?.trim().startsWith(label ?? "§"))
+      ?.click();
+  });
+}
 if (scene === "retro-form")
   later(700, () => {
     [...document.querySelectorAll<HTMLElement>("article.retro button")]
