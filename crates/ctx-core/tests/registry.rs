@@ -130,6 +130,31 @@ fn test_audit_unregistered_scan() {
         .any(|r| r.contains("未登記") && r.contains("secret-repo")));
 }
 
+// Rust 才有（2026-10-21）：.mcp.json 指到的 ctx 不在＝紅字；在＝不吵；沒有這個檔＝不吵（第一次開會話才寫）
+#[test]
+fn test_audit_flags_missing_mcp_command() {
+    let (_t, d) = spine();
+    let none: &[&std::path::Path] = &[];
+    let gone = d.join("gone").join("ctx");
+    std::fs::write(
+        d.join(".mcp.json"),
+        serde_json::json!({"mcpServers": {"repo_context": {"command": gone.to_string_lossy(), "args": []}}})
+            .to_string(),
+    )
+    .unwrap();
+    let reds = registry::audit(&d, none).unwrap();
+    assert!(reds[0].starts_with("[App 會話 MCP]"), "{reds:?}");
+    let real = d.join("ctx-bin");
+    std::fs::write(&real, "").unwrap();
+    std::fs::write(
+        d.join(".mcp.json"),
+        serde_json::json!({"mcpServers": {"repo_context": {"command": real.to_string_lossy(), "args": []}}})
+            .to_string(),
+    )
+    .unwrap();
+    assert!(registry::audit(&d, none).unwrap().is_empty());
+}
+
 #[test]
 fn test_audit_clean() {
     let (tmp, d) = spine();

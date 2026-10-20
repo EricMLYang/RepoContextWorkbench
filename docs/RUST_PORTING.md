@@ -172,6 +172,7 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
 - **`.mcp.json` 的 command 不見了就重寫**（2026-10-21；Python 永遠不動既有檔）：App 開會話用的 `<spine>/.mcp.json` 曾指向
   build 目錄的 bundle，`install-app.sh` 裝完刪掉那份後，10-18 起 App 開的每場會話 MCP 都 ENOENT、agent 靜靜退回 CLI。
   現在 command 不是存在的檔就重寫成目前的 ctx；指到別處但存在的照舊不動。
+  `ctx health` 的 setup 段與 `registry audit`（App 側欄「登記檢查」）都會把這種情況標成紅字。
 - **MCP 呼叫紀錄帶錯誤碼**（2026-10-21；N-07 延伸）：`.state/metrics.jsonl` 失敗那行多 `error`（`cross_scope`／`bad_request`／`failed`…），
   `ctx health` 工具用量印「失敗 3（cross_scope 2、bad_request 1）」；之前只有失敗數，查不出 agent 為什麼交接失敗。
 - **收件匣卡片上人直接寫判斷**（2026-10-20；Python 沒有）：判斷回顧卡「記結果…」＝action `decision_outcome`（log_decision 帶

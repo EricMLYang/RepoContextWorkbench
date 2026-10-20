@@ -186,8 +186,18 @@ pub fn audit_with<P: AsRef<Path>>(
     active_max_days: f64,
     dormant_min_days: f64,
 ) -> Result<Vec<String>> {
-    let data = load(spine_dir)?;
+    let sd = spine_dir.as_ref();
+    let data = load(sd)?;
     let mut reds = Vec::new();
+    // Rust 才有（2026-10-21）：App 開會話用的 .mcp.json 指到的 ctx 不在（10-18 重裝後指到被刪的 bundle，
+    // 每場會話 MCP 都連不上、兩天沒人發現）——放第一條，App 側欄「登記檢查」就看得到
+    let mcp = crate::session::mcp_json_status(sd);
+    if mcp["status"] == "command_missing" {
+        reds.push(format!(
+            "[App 會話 MCP] .mcp.json 指到的 ctx 不在（{}）：App 開的會話連不上 MCP、agent 只能退回 CLI；下次開會話會自動重寫",
+            mcp["command"].as_str().unwrap_or("")
+        ));
+    }
     let known = known_paths(&data.repos);
     for r in &data.repos {
         let (id, p) = (r.id(), r.path());
