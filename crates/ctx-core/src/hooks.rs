@@ -39,7 +39,7 @@ const ROSTER_LINES: usize = 20;
 /// 收到最後一層還超過就照最後一層給（不砍未結、提醒與工作約定）。
 pub const START_BUDGET: usize = 3000;
 /// 開場「上次交接」最多印幾個字（完整的「完成」段；超過補「…」）。
-const HANDOFF_DONE_CHARS: usize = 240;
+const HANDOFF_DONE_CHARS: usize = 160;
 
 /// 開場注入收斂的一層：新料最多幾筆、名冊介紹最多幾個字元（None＝不截）。
 #[derive(Debug, Clone, Copy)]
