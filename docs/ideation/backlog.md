@@ -147,3 +147,11 @@
 | F-88 | 任務圖 | 未結體檢：做事的 commit（feat／fix／perf／refactor）標題點名 `#N`＝可能已處理 | #72 修正 commit 寫了（#72）卻一直被當進行中；開 78 關 11 | 留痕 | P1 | 完成（439e955） | R35 | R35 |
 | N-45 | 效能 | 大參考 repo 的採集降頻：`reference` 類或只讀的大 repo，git 狀態快取幾分鐘（或不做 dirty 檢查），程式碼搜尋可設為不搜 | R35：context／hook 380ms，不含 orca 160ms；orca 每個 git 指令約 30ms | 脈絡 | P2 | 構想 | R35 | R35 |
 | F-89 | 入口 | repo 類別（六類：程式／領域 Agent／數據探索／文件・PM／知識／參考），依「怎樣算可靠」決定工作台與 agent 怎麼對待；第一版軟區分（標示＋開場規則），參考類不採集、不搜程式碼；之後在 `RepoClass` 加共同限制（`docs/REPO_CLASSES.md`） | 使用者 2026-10-18：orca 這種參考 repo、PM 專案、知識專案要被不同對待 | 脈絡、同介面 | P1 | 完成（第一版） | R35 | R35 |
+| F-90 | 入口 | 檔案樹照 git 狀態上色（跟 VS Code 一樣）：改的／新檔／已暫存／刪除／衝突，加「commit 了還沒 push」藍色 ↑；資料夾取裡面最重的 | 使用者 2026-10-20 要的 | 脈絡 | P1 | 完成（9e4591f） | R36 | R36 |
+| F-91 | 任務圖 | 收件匣判斷回顧卡「記結果…」、該重看卡「改判斷…」——人直接寫，不必開會話；沿用 log_decision 的 outcome_of／supersedes，source=manual | R35 量到判斷結果記錄率 0%，原因是卡上只有開會話／延期 | 留痕 | P1 | 完成（04762ef） | R36 | R36 |
+| F-92 | 執行層 | 會話「要你允許／回答」（Claude Code 停在權限／提問提示）跟 agent 回報的「卡住了」分開；前者給「去處理」切到終端，不給打字回答框 | hook 的 blocked 被叫「卡住了」、回答框對它沒用 | 同介面 | P1 | 完成（6f01c22） | R36 | R36 |
+| F-93 | 執行層 | `ctx todo list`：沒掛 MCP 的 agent 看全部未結（逾期在前）；開場溢出提示也指到它 | 這場 MCP 連不上，`ctx next` 只給前 5 項 | 同介面 | P2 | 完成（a1c374c） | R36 | R36 |
+| N-46 | 前端體驗 | 剪貼簿改走殼層 `copy_text`（tauri-plugin-clipboard-manager）：WKWebView 的 navigator.clipboard 在 WebView 不是焦點時拒絕，使用者看到偶爾「無法複製到剪貼簿」 | 使用者 2026-10-19 回報 | 同介面 | P1 | 完成（bc38782） | R36 | R36 |
+| N-47 | 前端體驗 | 輸入法選字 Enter 不再換行／送出：WebKit 在 compositionend 後補送 isComposing=false 的 Enter，`lib/ime.ts` 照 ProseMirror 略過一次；10 處輸入框共用 | 使用者 2026-10-19 回報 | 同介面 | P1 | 完成（8747b3e） | R36 | R36 |
+| N-48 | 可維護 | MCP 呼叫紀錄記錯誤碼，`ctx health` 工具用量印失敗原因 | 真 spine：handoff 失敗 3 次查不出為什麼 | 留痕 | P2 | 完成（6266632） | R36 | R36 |
+| N-49 | 前端體驗 | 牌組卡狀態列溢出（button 全域 nowrap）、回答框提示被切、慢動作按鈕顯示已過秒數（N-09 的一半）；開場「上次交接」不再切在路徑中間 | 畫面預覽截圖每張都看得到；開場注入實際輸出 | 同介面 | P2 | 完成（7b3a36b、9a0a542） | R36 | R36 |
