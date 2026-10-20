@@ -3,7 +3,7 @@
  * 給沒辦法開 App 實測時（使用者的 App 開著）用 headless 瀏覽器截圖看排版：
  *   npx vite --port 5199  →  http://localhost:5199/dev/preview.html?scene=editor
  * 場景：workspace（工作區＋右欄變更頁）、editor（md 分割編輯）、code（程式碼上色＋尋找）、
- *       assist（⌘K 請助手的計畫）、assist-empty（只打「?」）、tree-new（檔案樹新增檔案的輸入列）、
+ *       assist（⌘K 請助手的計畫）、assist-empty（只打「?」）、tree-new（檔案樹新增檔案的輸入列）、retro-form（判斷回顧「記結果…」表單）、
  *       panel-info（右欄資訊頁）、term-menu（終端列的「⋯」）、md-view（md 預覽＋反向連結）、
  *       edit-find（編輯中的尋找取代）、no-session（沒有會話、所有 repo）、palette（一般搜尋）、composer（請 Agent 分析想法）、
  *       rename（檔案樹 F2 改名）、tablist（開啟的檔案清單）
@@ -143,6 +143,33 @@ const state = {
   ],
   cards: [
     card("loop:#1", "loop", "驗證 Windows 版"),
+    {
+      ...card(
+        "retro:decision:2026-09-26-d4",
+        "retro",
+        "判斷回顧：採納「Agent 友善」改造：MCP 分工作／管理兩層",
+      ),
+      ref: "decision:2026-09-26-d4",
+      lines: ["20 天前的判斷，還沒記結果——後來怎樣？"],
+      actions: [
+        {
+          label: "記結果…",
+          action: "decision_outcome",
+          payload: { ref: "decision:2026-09-26-d4", group: "產品開發", repo: null },
+          primary: true,
+        },
+        {
+          label: "開會話回顧",
+          action: "term_create",
+          payload: { kind: "agent", group: "產品開發" },
+        },
+        {
+          label: "延 30 天",
+          action: "reopen_defer",
+          payload: { ref: "decision:2026-09-26-d4", days: 30 },
+        },
+      ],
+    },
     card("e1", "event", "交接：夜間迭代完成"),
     card("e2", "event", "判斷：助手一律先確認"),
   ],
@@ -468,6 +495,12 @@ if (scene === "diff-notes")
     });
   });
 if (scene === "ended-session") later(700, () => click(`button[aria-label="展開產品開發"]`));
+if (scene === "retro-form")
+  later(700, () => {
+    [...document.querySelectorAll<HTMLElement>("article.retro button")]
+      .find((b) => b.textContent === "記結果…")
+      ?.click();
+  });
 if (scene === "reply-box")
   later(700, () => {
     click(`button[aria-label="展開產品開發"]`);

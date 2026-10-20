@@ -15,7 +15,7 @@ SIZE=${2:-1440,900}
 shift $(( $# > 2 ? 2 : $# ))
 SCENES=("$@")
 if [ ${#SCENES[@]} -eq 0 ]; then
-  SCENES=(workspace editor code md-view assist assist-empty palette composer tree-new rename panel-info term-menu tablist edit-find no-session past-sessions diff-notes ended-session reply-box)
+  SCENES=(workspace editor code md-view assist assist-empty palette composer tree-new rename panel-info term-menu tablist edit-find no-session past-sessions diff-notes ended-session reply-box retro-form)
 fi
 CHROME=${CHROME:-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}
 [ -x "$CHROME" ] || { echo "找不到 Chrome：$CHROME（設 CHROME=…）"; exit 2; }
