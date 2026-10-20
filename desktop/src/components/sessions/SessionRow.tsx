@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { TermInfo } from "../../api/types";
 import {
+  sessionAwaitsTui,
   sessionDot,
   sessionHeadline,
   sessionMeta,
@@ -91,7 +92,13 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
   const on = view.activeSid === s.sid || (!!active && shellOwner(active) === s.sid);
   const where = sessionWhere(s);
   const [replying, setReplying] = useState(false);
-  const canReply = sessionNeedsYou(s) && s.kind === "agent";
+  // Claude Code 停在權限／提問提示：打字回答沒用，要切過去在終端按；其他等你的才給回答框
+  const awaitsTui = sessionAwaitsTui(s) && s.alive;
+  const canReply = sessionNeedsYou(s) && s.kind === "agent" && !awaitsTui;
+  // 等你時多一行它說了什麼；停在權限提示而沒有回覆預覽時，拿 hook 記的提示（例：要你允許 Bash）
+  const preview = sessionWantsYou(s)
+    ? s.last_reply || (awaitsTui ? s.agent_status?.text : null) || null
+    : null;
   return (
     <div className={"session" + (on ? " on" : "") + (inGroup ? " ingroup" : "")}>
       <button
@@ -111,11 +118,19 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
                 (where.repo ? where.repo : "整組")
               : sessionMeta(s)}
           </span>
-          {sessionWantsYou(s) && s.last_reply ? (
-            <span className="sessionpreview">{s.last_reply}</span>
-          ) : null}
+          {preview ? <span className="sessionpreview">{preview}</span> : null}
         </span>
       </button>
+      {awaitsTui ? (
+        <button
+          type="button"
+          className="ghost small sessionreply"
+          title="切到這個會話，在終端允許或回答（App 不會替你按 y）"
+          onClick={() => ui.selectTerm(s.sid)}
+        >
+          去處理
+        </button>
+      ) : null}
       {canReply ? (
         <button
           type="button"

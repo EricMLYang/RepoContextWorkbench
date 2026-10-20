@@ -362,13 +362,32 @@ export const STATUS_TXT: Record<string, string> = {
   exited: "已結束",
 };
 
+/**
+ * Claude Code 停在終端的權限／提問提示（hook `permission`／`notification` 寫的 blocked）：
+ * 不是卡住，是要你在終端按 y 或回答；App 不替你按鍵，只能切過去。
+ * agent 自己經 MCP 回報的 blocked（沒有 event）才是真的卡住。
+ */
+export function sessionAwaitsTui(s: TermInfo): boolean {
+  return (
+    s.agent_status?.status === "blocked" &&
+    ["permission", "notification"].includes(s.agent_status.event ?? "")
+  );
+}
+
+/** 狀態那幾個字（STATUS_TXT），hook 的 blocked 改說「要你允許／回答」。 */
+export function statusLabel(s: TermInfo): string {
+  if (!s.agent_status) return "";
+  if (sessionAwaitsTui(s)) return "要你允許／回答";
+  return STATUS_TXT[s.agent_status.status] || s.agent_status.status;
+}
+
 /** 程序活著不等於工作在推進：回報狀態只認脊椎留痕，沒有留痕就說沒有。 */
 export function reportLine(s: TermInfo): string {
   if (s.kind !== "agent") return "本機 Shell，不回報";
   if (s.agent_status)
     return (
       (s.agent_status.event ? "Claude Code「" : "Agent 回報「") +
-      (STATUS_TXT[s.agent_status.status] || s.agent_status.status) +
+      statusLabel(s) +
       "」" +
       s.agent_status.at.slice(11) +
       (s.agent_status.text ? "：" + s.agent_status.text : "")
@@ -444,7 +463,7 @@ export function sessionPair(
 /** 階段那幾個字；處理中且知道在用哪個工具時帶工具與分鐘數（F-82），超過 10 分沒結束改說「可能卡住」。 */
 export function statusText(s: TermInfo): string {
   if (!s.agent_status) return "";
-  const base = STATUS_TXT[s.agent_status.status] || s.agent_status.status;
+  const base = statusLabel(s);
   const working = s.alive && s.agent_status.status === "working";
   const t = working ? s.tool : null;
   // N-41：處理中卻 30 分鐘以上沒任何事件（引擎算好）

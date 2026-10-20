@@ -1966,6 +1966,47 @@ describe("會話放進所屬牌組", () => {
     expect(document.getElementById("termtitle")!.textContent).toContain("等我的");
   });
 
+  it("Claude Code 停在權限提示：標「要你允許／回答」、列出提示、按「去處理」切過去，不給打字回答框", async () => {
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({
+          terms: [
+            term({
+              sid: "t5",
+              title: "要允許的",
+              home_group: "產品開發",
+              agent_status: {
+                status: "blocked",
+                text: "要你允許 Bash：rm -rf dist",
+                at: "2026-10-14 01:05",
+                event: "permission",
+              },
+            }),
+            term({
+              sid: "t6",
+              title: "真卡住的",
+              home_group: "產品開發",
+              agent_status: { status: "blocked", text: "找不到測試資料", at: "2026-10-14 01:06" },
+            }),
+          ] as never,
+        }),
+      ),
+    });
+    await mount(backend);
+    const row = screen.getByRole("button", { name: /要允許的/ }).closest(".session")!;
+    expect(row.textContent).toContain("要你允許／回答");
+    expect(row.textContent).toContain("要你允許 Bash：rm -rf dist");
+    expect(within(row as HTMLElement).queryByRole("button", { name: "回答…" })).toBeNull();
+    await act(async () =>
+      fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "去處理" })),
+    );
+    expect(document.getElementById("termtitle")!.textContent).toContain("要允許的");
+    // agent 自己回報的 blocked 還是「卡住了」，可以打字回它
+    const stuck = screen.getByRole("button", { name: /真卡住的/ }).closest(".session")!;
+    expect(stuck.textContent).toContain("卡住了");
+    expect(within(stuck as HTMLElement).getByRole("button", { name: "回答…" })).toBeTruthy();
+  });
+
   it("記錄本次工作結果：存好後說記在哪、可以直接到活動看（UX 流程 C）", async () => {
     const backend = mockBackend({
       getState: vi.fn(async () =>

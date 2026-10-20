@@ -123,7 +123,7 @@ const state = {
         status: "blocked",
         text: "Bash：rm -rf dist",
         at: "01:40",
-        event: "permission-request",
+        event: "permission",
       },
     },
     {
