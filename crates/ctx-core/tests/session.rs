@@ -92,6 +92,21 @@ fn test_ensure_mcp_json_idempotent() {
     assert_eq!(std::fs::read_to_string(p2).unwrap(), before);
 }
 
+// Rust 才有（2026-10-21）：health 用的 .mcp.json 狀態
+#[test]
+fn test_mcp_json_status() {
+    let (_t, d) = spine();
+    assert_eq!(session::mcp_json_status(&d)["status"], "absent");
+    let real = d.join("ctx-bin");
+    std::fs::write(&real, "").unwrap();
+    session::ensure_mcp_json_with(&d, &real).unwrap();
+    assert_eq!(session::mcp_json_status(&d)["status"], "ok");
+    std::fs::remove_file(&real).unwrap();
+    let st = session::mcp_json_status(&d);
+    assert_eq!(st["status"], "command_missing");
+    assert_eq!(st["command"], real.to_string_lossy().as_ref());
+}
+
 // Rust 才有（2026-10-21）：.mcp.json 裡的 command 不在了（例：install-app.sh 刪掉的 bundle）就重寫成現在的 ctx
 #[test]
 fn test_ensure_mcp_json_rewrites_when_command_is_gone() {

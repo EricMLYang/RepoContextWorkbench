@@ -62,6 +62,28 @@ pub fn ensure_mcp_json_with(spine_dir: &Path, ctx: &Path) -> Result<PathBuf> {
     Ok(p)
 }
 
+/// `ctx health` 用：App 開會話的 `<spine>/.mcp.json` 狀態（Rust 才有，2026-10-21）。
+/// `{"status": "ok" | "absent" | "command_missing", "command": …}`——`command_missing` 是 10-18 那種
+/// 「指到被刪掉的 bundle」：下一次開會話會自動重寫，但先讓人看到。
+pub fn mcp_json_status(spine_dir: &Path) -> serde_json::Value {
+    let p = spine_dir.join(".mcp.json");
+    let Ok(text) = std::fs::read_to_string(&p) else {
+        return json!({"status": "absent", "command": null});
+    };
+    let cmd = serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|v| {
+            v["mcpServers"]["repo_context"]["command"]
+                .as_str()
+                .map(str::to_string)
+        });
+    match cmd {
+        Some(c) if Path::new(&c).is_file() => json!({"status": "ok", "command": c}),
+        Some(c) => json!({"status": "command_missing", "command": c}),
+        None => json!({"status": "absent", "command": null}),
+    }
+}
+
 /// [`build`] 的參數（對應 Python 的關鍵字參數）。`agent` 空＝claude。
 #[derive(Debug, Clone, Default)]
 pub struct SessionOpts<'a> {

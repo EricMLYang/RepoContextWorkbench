@@ -12,7 +12,9 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
     let mut v = ctx_core::health::health(&d, days, None)?;
     // F-74：agent 讀到的 skill 是不是這版的（讀 ~/.claude，所以不放在引擎的 health 裡）
     let skill = ctx_core::agentsetup::skill_status(&ctx_core::agentsetup::claude_home());
-    v["setup"] = serde_json::json!({"skill": skill});
+    // 2026-10-21：App 開會話用的 .mcp.json 指到的 ctx 還在不在（10-18 重裝後指到被刪的 bundle，兩天沒人發現）
+    let mcp_json = ctx_core::session::mcp_json_status(&d);
+    v["setup"] = serde_json::json!({"skill": skill, "mcp_json": mcp_json});
     ctx.emit(&v, |r| {
         let pct = |x: &Value| {
             x.as_f64()
@@ -167,6 +169,12 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                 "- 沒裝 repo-context skill：agent 不知道何時該用工具——跑 `ctx setup --claude`".into(),
             ),
             _ => {}
+        }
+        if r["setup"]["mcp_json"]["status"] == "command_missing" {
+            out.push(format!(
+                "- App 開會話用的 .mcp.json 指到的 ctx 不在（{}）：那些會話的 MCP 會連不上、agent 退回 CLI；下一次 App 開會話會自動重寫，現在要修就跑 `ctx session --print`",
+                s(&r["setup"]["mcp_json"], "command")
+            ));
         }
         out.join("\n")
     });
