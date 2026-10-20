@@ -47,9 +47,8 @@ export function AsyncButton(props: {
     >
       {children}
       {busy && secs >= SLOW_AFTER_S ? (
-        <span className="asyncsecs" aria-live="polite">
-          {elapsedLabel(secs, SLOW_AFTER_S)}
-        </span>
+        // 不掛 aria-live：每秒變一次會讓螢幕閱讀器一直唸；按鈕本身已 aria-busy
+        <span className="asyncsecs">{elapsedLabel(secs, SLOW_AFTER_S)}</span>
       ) : null}
     </button>
   );
