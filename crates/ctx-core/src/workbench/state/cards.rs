@@ -389,6 +389,12 @@ pub(super) fn reopen_cards(spine_dir: &Path, events: &[Event], scopes: &[Prov]) 
         m.insert(
             "actions".into(),
             json!([
+                // 人自己改判斷（最便宜；mark_primary 會把它當主按鈕）；維持原判斷就延期
+                act(
+                    "改判斷…",
+                    "decision_supersede",
+                    json!({"ref": r, "group": ev.kv("group"), "repo": ev.kv("repo")}),
+                ),
                 act("開會話重看", "term_create", Value::Object(session)),
                 act("延 14 天", "reopen_defer", json!({"ref": r, "days": 14})),
             ]),
@@ -399,7 +405,7 @@ pub(super) fn reopen_cards(spine_dir: &Path, events: &[Event], scopes: &[Prov]) 
 }
 
 /// Rust 才有（F-23）：判斷回顧——滿 14 天、還沒記結果的判斷，最舊的幾筆成卡。
-/// 出口：開會話回顧（任務帶好 outcome_of 做法）／延 30 天。
+/// 出口：記結果…（人直接寫，主按鈕）／開會話回顧（任務帶好 outcome_of 做法）／延 30 天。
 pub(super) const RETRO_CARDS: usize = 5;
 
 pub(super) fn retro_cards(spine_dir: &Path, events: &[Event], scopes: &[Prov]) -> Vec<Value> {
@@ -456,6 +462,12 @@ pub(super) fn retro_cards(spine_dir: &Path, events: &[Event], scopes: &[Prov]) -
             m.insert(
                 "actions".into(),
                 json!([
+                    // 人自己寫結果（最便宜；mark_primary 會把它當主按鈕）
+                    act(
+                        "記結果…",
+                        "decision_outcome",
+                        json!({"ref": r, "group": c["group"], "repo": c["repo"]}),
+                    ),
                     act("開會話回顧", "term_create", Value::Object(session)),
                     act("延 30 天", "reopen_defer", json!({"ref": r, "days": 30})),
                 ]),

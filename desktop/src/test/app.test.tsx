@@ -305,6 +305,67 @@ describe("任務包開會話（F-42）", () => {
   });
 });
 
+describe("判斷回顧卡（F-23）", () => {
+  it("主按鈕「記結果…」開表單，寫一句就呼叫 decision_outcome（帶 ref／組／repo）", async () => {
+    const card: StateCard = {
+      key: "retro:decision:2026-01-01-d1",
+      kind: "retro",
+      lane: "scope",
+      ref: "decision:2026-01-01-d1",
+      scope_kind: "group",
+      scope_label: "產品開發",
+      scope_repos: ["a", "b"],
+      date: "2026-01-01",
+      time: "09:00",
+      title: "判斷回顧：快取用 LRU",
+      lines: ["20 天前的判斷，還沒記結果——後來怎樣？"],
+      actions: [
+        {
+          label: "記結果…",
+          action: "decision_outcome",
+          payload: { ref: "decision:2026-01-01-d1", group: "產品開發", repo: null },
+          primary: true,
+        },
+        {
+          label: "開會話回顧",
+          action: "term_create",
+          payload: { kind: "agent", group: "產品開發", task: "回顧" },
+        },
+        {
+          label: "延 30 天",
+          action: "reopen_defer",
+          payload: { ref: "decision:2026-01-01-d1", days: 30 },
+        },
+      ],
+    };
+    const backend = mockBackend({ getState: vi.fn(async () => makeState({ cards: [card] })) });
+    await mount(backend);
+    const article = (await screen.findByText("判斷回顧：快取用 LRU")).closest("article")!;
+    await act(async () =>
+      fireEvent.click(within(article as HTMLElement).getByRole("button", { name: "記結果…" })),
+    );
+    const dialog = document.getElementById("detaildialog")!;
+    expect(dialog.textContent).toContain("這個判斷後來怎樣？");
+    // 空的不送
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "記下結果" })),
+    );
+    expect(backend.action).not.toHaveBeenCalledWith("decision_outcome", expect.anything());
+    fireEvent.change(dialog.querySelector("textarea")!, {
+      target: { value: "照做了，查詢 450ms → 120ms" },
+    });
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "記下結果" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("decision_outcome", {
+      ref: "decision:2026-01-01-d1",
+      group: "產品開發",
+      repo: null,
+      text: "照做了，查詢 450ms → 120ms",
+    });
+  });
+});
+
 describe("該重看的判斷卡（F-46）", () => {
   it("排在需要判斷之後自成一段；延 14 天呼叫 reopen_defer", async () => {
     const card: StateCard = {
@@ -320,6 +381,12 @@ describe("該重看的判斷卡（F-46）", () => {
       title: "該重看：先不做 Windows",
       lines: ["當初說的重看條件：2026-10-01 或 VDI 使用者回報"],
       actions: [
+        {
+          label: "改判斷…",
+          action: "decision_supersede",
+          payload: { ref: "decision:2026-01-01-d1", group: "產品開發", repo: null },
+          primary: true,
+        },
         {
           label: "開會話重看",
           action: "term_create",
@@ -338,12 +405,30 @@ describe("該重看的判斷卡（F-46）", () => {
     expect(article.textContent).toContain("當初說的重看條件");
     expect(document.body.textContent).toContain("該重看的判斷");
     await act(async () => fireEvent.click(article.querySelector(".more")!));
-    const dialog = document.getElementById("detaildialog")!;
+    let dialog = document.getElementById("detaildialog")!;
     const defer = [...dialog.querySelectorAll("button")].find((b) => b.textContent === "延 14 天")!;
     await act(async () => fireEvent.click(defer));
     expect(backend.action).toHaveBeenCalledWith("reopen_defer", {
       ref: "decision:2026-01-01-d1",
       days: 14,
+    });
+    // 主按鈕「改判斷…」：寫新判斷就 decision_supersede（帶 ref／組／repo）
+    await act(async () =>
+      fireEvent.click(within(article as HTMLElement).getByRole("button", { name: "改判斷…" })),
+    );
+    dialog = document.getElementById("detaildialog")!;
+    expect(dialog.textContent).toContain("現在怎麼判斷？");
+    fireEvent.change(dialog.querySelector("textarea")!, {
+      target: { value: "VDI 使用者變多，Windows 要做" },
+    });
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "記下新判斷" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("decision_supersede", {
+      ref: "decision:2026-01-01-d1",
+      group: "產品開發",
+      repo: null,
+      text: "VDI 使用者變多，Windows 要做",
     });
   });
 });

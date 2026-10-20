@@ -169,6 +169,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
 - **反芻推薦拿來試＋App 可見**（2026-10-10，ideation F-26／F-48；Python 沒有）：`ctx fresh --try <id>`／
   `agentapi::try_fresh` 在推薦所屬的組開待辦「試用：<檔名>（<ref>，反芻 <id>）」並把推薦標成 used（`used_at`）。
   App 收件匣多一種卡 `fresh`（`push_links` 那一批＝跟 agent 開場看到的同一批），動作 `fresh_try`／`fresh_dismiss`。
+- **收件匣卡片上人直接寫判斷**（2026-10-20；Python 沒有）：判斷回顧卡「記結果…」＝action `decision_outcome`（log_decision 帶
+  outcome_of）、該重看卡「改判斷…」＝`decision_supersede`（帶 supersedes），都是 source=manual、範圍照卡片的組／repo，
+  且是主按鈕；之前只能開會話或延期，判斷結果記錄率一直 0%。
 - **`ctx todo list`**（2026-10-20；Python 沒有）：範圍內全部未結、逾期在前，`--json` 跟 `next_work` 的 todo 同一種物件；
   沒掛 MCP 的 agent（CLI 模式）之前只能靠 `ctx next` 的前 5 項。
 - **任務包 `ctx todo brief #N`**（2026-10-10，ideation F-42；Python 沒有）：把一項未結組成給全新會話的 markdown——

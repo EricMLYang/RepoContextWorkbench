@@ -73,6 +73,7 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
   寫得出「什麼情況要重看」就帶 `reopen_when`（寫日期，到期時開場會提醒「該重看」）。
 - **判斷後來怎樣**：`log_decision` 帶 `outcome_of=<判斷的 ref>` 記一筆結果。提醒裡的「判斷回顧」就是在問這個。
 - **找過去的判斷**：`search_knowledge` 的 `decisions` 段（被取代的標出取代者、帶結果）。做新判斷前先查有沒有前例。
+- **看全部未結**：`ctx todo list --json`（逾期在前；`ctx next` 只給前 5 項）。
 - **未結體檢**：`ctx todo review --json`——哪些可能已處理（附證據）、哪些逾期沒動靜。確認後才 `close_todo`。
 - **交辦給新會話**：`ctx todo brief '#N'` 產生任務包（目標／背景／輸入／限制／完成條件）。
 - **關係建議**：`ctx registry suggest --json`；使用者同意才 `ctx registry relate`。
@@ -98,7 +99,6 @@ ctx next --json                  # 下一步
 ctx log "結論…依據…" --json
 ctx todo add "要做的事" [--due 2026-10-01] --json
 ctx todo close '#3' --note "怎麼結的" --json
-ctx todo list --json              # 範圍內全部未結（next 只給前 5 項）
 ctx status waiting "在等使用者決定 X" --json
 ctx handoff --done "…" --next "…" [--remaining "…"] --json
 ctx search "一段文字" --json      # 或 --file 某張卡片.md；--no-code 只搜 md

@@ -82,6 +82,40 @@ export function useRunAction(): RunAction {
         }
         return;
       }
+      if (
+        (a.action === "decision_outcome" || a.action === "decision_supersede") &&
+        !String(a.payload?.text ?? "").trim()
+      ) {
+        const outcome = a.action === "decision_outcome";
+        ui.openDetail({
+          title: outcome ? "這個判斷後來怎樣？" : "現在怎麼判斷？",
+          eyebrow: outcome ? "判斷回顧" : "該重看的判斷",
+          content: (
+            <DecisionForm
+              card={c}
+              action={a}
+              run={run}
+              question={
+                outcome
+                  ? "後來怎樣？（做得好不好、有沒有後悔、學到什麼）"
+                  : "新的判斷（第一行結論，後面寫依據）"
+              }
+              placeholder={
+                outcome
+                  ? "例：照做了，查詢從 450ms 降到 120ms；但快取失效的規則後來又改了一次"
+                  : "例：VDI 使用者變多，Windows 版要做；依據：10 月的三場會話都卡在這"
+              }
+              note={
+                outcome
+                  ? "會記成一筆結果、連回原判斷（agent 查判斷時看得到）；⌘Enter 送出。"
+                  : "會記成新判斷並標「取代」原判斷（原判斷留著、不再提醒）；維持原判斷就按「延 14 天」。⌘Enter 送出。"
+              }
+              button={outcome ? "記下結果" : "記下新判斷"}
+            />
+          ),
+        });
+        return;
+      }
       if (a.action === "tier" && a.payload?.tier === "paused" && !a.payload.resume_when) {
         ui.openDetail({
           title: "設定復工條件",
@@ -238,6 +272,68 @@ function PauseForm({ card, action, run }: { card: InboxCard; action: CardAction;
         什麼條件下恢復工作？
         <input ref={ref} value={value} onChange={(e) => setValue(e.target.value)} />
       </label>
+    </DetailLayout>
+  );
+}
+
+/**
+ * 卡片上人寫的判斷：判斷回顧「記結果…」（outcome_of）、該重看「改判斷…」（supersedes）。
+ * 一段話就好；寫完由引擎記成 decision 事件（source=manual），卡片就退場。
+ */
+function DecisionForm({
+  card,
+  action,
+  run,
+  question,
+  placeholder,
+  note,
+  button,
+}: {
+  card: InboxCard;
+  action: CardAction;
+  run: RunAction;
+  question: string;
+  placeholder: string;
+  note: string;
+  button: string;
+}) {
+  const { busy } = useSnapshot();
+  const { setError } = useDetail();
+  const ref = useAutoFocus<HTMLTextAreaElement>();
+  const [value, setValue] = useState("");
+  const submit = () => {
+    if (!value.trim()) {
+      setError("先寫一句。");
+      return;
+    }
+    void run(card, { ...action, payload: { ...action.payload, text: value.trim() } }, "dialog");
+  };
+  return (
+    <DetailLayout
+      actions={
+        <button type="button" className="primary" disabled={busy.has(card.key)} onClick={submit}>
+          {button}
+        </button>
+      }
+    >
+      <p className="dialogmessage">{card.title}</p>
+      <label className="field">
+        {question}
+        <textarea
+          ref={ref}
+          rows={4}
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+      </label>
+      <p className="small muted">{note}</p>
     </DetailLayout>
   );
 }

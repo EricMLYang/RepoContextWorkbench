@@ -584,6 +584,16 @@ export interface ActionMap {
     payload: { id: string };
     result: { ok: true; todo: string; group: string; ref: string; text: string };
   };
+  /** 判斷回顧卡「記結果…」：人直接寫這個判斷後來怎樣（Rust 引擎；log_decision 帶 outcome_of，manual）。 */
+  decision_outcome: {
+    payload: { ref: string; text: string; group?: string | null; repo?: string | null };
+    result: { ok: true; ref: string };
+  };
+  /** 該重看卡「改判斷…」：人直接寫新判斷取代原判斷（Rust 引擎；log_decision 帶 supersedes，manual）。 */
+  decision_supersede: {
+    payload: { ref: string; text: string; group?: string | null; repo?: string | null };
+    result: { ok: true; ref: string };
+  };
   /** 「該重看」延後（Rust 引擎 F-46）。 */
   reopen_defer: {
     payload: { ref: string; days: number };

@@ -83,6 +83,8 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("fresh_try", a_fresh_try),
     ("todo_brief", a_todo_brief),
     ("reopen_defer", a_reopen_defer),
+    ("decision_outcome", a_decision_outcome),
+    ("decision_supersede", a_decision_supersede),
     ("fresh_dismiss", a_fresh_dismiss),
     ("collide", a_collide),
     ("collide_rerun", a_collide_rerun),
@@ -362,6 +364,55 @@ fn a_reopen_defer(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> 
     let days = p.get("days").and_then(Value::as_i64).unwrap_or(14);
     let until = crate::agentapi::snooze_reopen(d, &r, days)?;
     Ok(json!({"ok": true, "until": until}))
+}
+
+/// Rust 才有（2026-10-20）：判斷回顧卡「記結果…」——人在 App 直接寫這個判斷後來怎樣
+/// （同 agent 的 `log_decision` 帶 `outcome_of`；source=manual）。範圍照卡片給的組／repo。
+/// 之前卡上只有「開會話回顧」與「延 30 天」，人明明十秒能寫卻沒地方寫，結果記錄率一直 0%。
+fn a_decision_outcome(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    decision_from_app(d, p, "decision_outcome", "後來怎樣", |r| {
+        crate::agentapi::DecisionExtra {
+            outcome_of: Some(r),
+            ..Default::default()
+        }
+    })
+}
+
+/// Rust 才有（2026-10-20）：該重看卡「改判斷…」——人在 App 直接寫新判斷，取代原判斷
+/// （同 agent 的 `log_decision` 帶 `supersedes`；source=manual）。取代了，該重看卡就退場。
+fn a_decision_supersede(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    decision_from_app(d, p, "decision_supersede", "新判斷", |r| {
+        crate::agentapi::DecisionExtra {
+            supersedes: Some(r),
+            ..Default::default()
+        }
+    })
+}
+
+/// 收件匣卡片上人寫的判斷（記結果／改判斷）共用：`ref`＋`text` 必填，範圍照卡片給的組／repo。
+fn decision_from_app(
+    d: &Path,
+    p: &Value,
+    name: &str,
+    what: &str,
+    extra: impl FnOnce(String) -> crate::agentapi::DecisionExtra,
+) -> Result<Value> {
+    let Some(r) = s(p, "ref") else {
+        return Err(Error::invalid(format!("{name} 需要 ref")));
+    };
+    let Some(text) = s(p, "text")
+        .map(|x| x.trim().to_string())
+        .filter(|x| !x.is_empty())
+    else {
+        return Err(Error::invalid(format!("{name} 需要 text（{what}）")));
+    };
+    let t = crate::agentapi::Target {
+        cwd: None,
+        group: s(p, "group"),
+        repos: s(p, "repo").map(|x| vec![x]),
+    };
+    let logged = crate::agentapi::log_decision_ext(d, &text, &t, None, &extra(r), true, "manual")?;
+    Ok(json!({"ok": true, "ref": logged.reference}))
 }
 
 /// Rust 才有（F-42）：未結事項的任務包（前端拿 markdown 當新會話的任務）。

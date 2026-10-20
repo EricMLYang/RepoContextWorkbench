@@ -1332,8 +1332,10 @@ fn reopen_cards_due_and_defer() {
     let rc = cards_of(&s, "reopen");
     assert_eq!(rc.len(), 1); // 沒日期的條件不成卡（agent 開場仍列為「有條件的判斷」）
     assert_eq!(rc[0]["title"], "該重看：先不做 Windows");
-    assert_eq!(rc[0]["actions"][0]["action"], "term_create");
-    assert!(rc[0]["actions"][0]["payload"]["task"]
+    assert_eq!(rc[0]["actions"][0]["action"], "decision_supersede");
+    assert_eq!(rc[0]["actions"][0]["primary"], true);
+    assert_eq!(rc[0]["actions"][1]["action"], "term_create");
+    assert!(rc[0]["actions"][1]["payload"]["task"]
         .as_str()
         .unwrap()
         .contains("supersedes decision:2026-01-01-d1"));
@@ -1345,6 +1347,40 @@ fn reopen_cards_due_and_defer() {
     .unwrap();
     assert!(r["until"].as_str().is_some());
     assert!(cards_of(&st(&d), "reopen").is_empty());
+}
+
+// Rust 才有（2026-10-20）：該重看卡「改判斷…」＝log_decision 帶 supersedes（manual）；取代了卡就退場
+#[test]
+fn reopen_card_superseded_from_app() {
+    let (_t, d) = spine_with_repos();
+    ev(
+        &d,
+        "decision",
+        "agent",
+        &["id:2026-01-01-d1", "group:g1"],
+        "先不做 Windows\n何時重看：2020-01-01",
+        ago(60 * 24 * 20),
+    );
+    assert_eq!(cards_of(&st(&d), "reopen").len(), 1);
+    let r = act(
+        &d,
+        "decision_supersede",
+        json!({"ref": "decision:2026-01-01-d1", "group": "g1", "text": "VDI 使用者變多，Windows 要做"}),
+    )
+    .unwrap();
+    assert_eq!(r["ok"], true);
+    assert!(cards_of(&st(&d), "reopen").is_empty());
+    let all = ctx_core::spine::iter_events(&d).unwrap();
+    let newer = all
+        .iter()
+        .find(|e| e.body.contains("Windows 要做"))
+        .expect("新判斷");
+    assert_eq!(newer.source, "manual");
+    assert!(
+        newer.body.contains("取代：decision:2026-01-01-d1"),
+        "{}",
+        newer.body
+    );
 }
 
 // Rust 才有（F-23）：判斷回顧卡；延 30 天後消失
@@ -1363,7 +1399,11 @@ fn retro_cards_and_defer() {
     let rc = cards_of(&s, "retro");
     assert_eq!(rc.len(), 1);
     assert_eq!(rc[0]["title"], "判斷回顧：快取用 LRU");
-    assert!(rc[0]["actions"][0]["payload"]["task"]
+    // 主按鈕是「記結果…」（人直接寫）；開會話的任務帶好 outcome_of 做法
+    assert_eq!(rc[0]["actions"][0]["action"], "decision_outcome");
+    assert_eq!(rc[0]["actions"][0]["primary"], true);
+    assert_eq!(rc[0]["actions"][0]["payload"]["group"], "g1");
+    assert!(rc[0]["actions"][1]["payload"]["task"]
         .as_str()
         .unwrap()
         .contains("outcome_of=decision:2026-01-01-d1"));
@@ -1374,6 +1414,53 @@ fn retro_cards_and_defer() {
     )
     .unwrap();
     assert!(cards_of(&st(&d), "retro").is_empty());
+}
+
+// Rust 才有（2026-10-20）：判斷回顧卡「記結果…」＝log_decision 帶 outcome_of（manual）；記了就不再問
+#[test]
+fn retro_card_outcome_written_from_app() {
+    let (_t, d) = spine_with_repos();
+    ev(
+        &d,
+        "decision",
+        "agent",
+        &["id:2026-01-01-d1", "group:g1"],
+        "快取用 LRU",
+        ago(60 * 24 * 20),
+    );
+    assert_eq!(cards_of(&st(&d), "retro").len(), 1);
+    assert!(act(
+        &d,
+        "decision_outcome",
+        json!({"ref": "decision:2026-01-01-d1"})
+    )
+    .is_err());
+    assert!(act(
+        &d,
+        "decision_outcome",
+        json!({"ref": "decision:2026-01-01-d1", "text": "  "})
+    )
+    .is_err());
+    let r = act(
+        &d,
+        "decision_outcome",
+        json!({"ref": "decision:2026-01-01-d1", "group": "g1", "text": "後來換成 LFU，查詢快 3 倍"}),
+    )
+    .unwrap();
+    assert_eq!(r["ok"], true);
+    assert!(!r["ref"].as_str().unwrap_or("").is_empty(), "{r}");
+    assert!(cards_of(&st(&d), "retro").is_empty());
+    let all = ctx_core::spine::iter_events(&d).unwrap();
+    let outcome = all
+        .iter()
+        .find(|e| e.body.contains("後來換成 LFU"))
+        .expect("結果事件");
+    assert_eq!(outcome.source, "manual");
+    assert!(
+        outcome.tokens.iter().any(|t| t.contains("2026-01-01-d1")),
+        "{:?}",
+        outcome.tokens
+    );
 }
 
 // Rust 才有（F-45）：延期間隔遞增 7 → 14 → 30，延 3 次以上提醒

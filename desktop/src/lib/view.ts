@@ -181,6 +181,8 @@ export function actionLabel(a: CardAction): string {
         collide_prefill: "請 Agent 分析這個問題…",
         close_loop: "完成跟進",
         collide_rerun: "重新分析",
+        decision_outcome: "記結果…",
+        decision_supersede: "改判斷…",
       } as Record<string, string>
     )[a.action] || a.label
   );
@@ -208,6 +210,8 @@ export function cardDetailText(c: InboxCard): string {
 /** 成功 toast：「〈動作〉：完成 · 檔名／下次提醒／日期」。 */
 export function actionToast(a: CardAction, r: Record<string, unknown>): string {
   const file = typeof r.file === "string" ? r.file : "";
+  if (a.action === "decision_outcome") return "已記下結果，連回原判斷";
+  if (a.action === "decision_supersede") return "已記下新判斷，取代原判斷";
   return (
     actionLabel(a) +
     "：完成" +
