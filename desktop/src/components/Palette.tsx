@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { imeKey } from "../lib/ime";
 import type { PaletteResult, TermInfo } from "../api/types";
 import {
-  STATUS_TXT,
+  statusLabel,
   sessionHeadline,
   sessionNeedsYou,
   sessionWantsYou,
@@ -425,7 +425,7 @@ function SessionItem({ term }: { term: TermInfo }) {
         <span className="palettename">{sessionHeadline(term)}</span>
         {needs ? (
           <span className={"pill " + (sessionNeedsYou(term) ? "palettewait" : "palettefresh")}>
-            {STATUS_TXT[term.agent_status!.status]}
+            {statusLabel(term)}
           </span>
         ) : null}
         <span className="spacer" />
