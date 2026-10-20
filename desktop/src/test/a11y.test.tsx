@@ -91,6 +91,16 @@ async function violations(
   const r = await axe.run(document.body, {
     rules: { "color-contrast": { enabled: false } },
   });
+  // A11Y_ALL=1 npx vitest run src/test/a11y.test.tsx：連 minor／moderate 都印出來看
+  if (process.env.A11Y_ALL)
+    console.log(
+      r.violations
+        .map(
+          (v) =>
+            `${v.id}（${v.impact}）${v.help}：` + v.nodes.map((n) => n.target.join(" ")).join("、"),
+        )
+        .join("\n"),
+    );
   return r.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")
     .map(

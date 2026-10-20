@@ -58,12 +58,14 @@ function Section({
   );
   return section.collapsed ? (
     <details className="cardsection">
-      <summary className="secttl">{title}</summary>
+      <summary className="secttl">
+        <h2>{title}</h2>
+      </summary>
       {inner}
     </details>
   ) : (
     <section className="cardsection">
-      <div className="secttl">{title}</div>
+      <h2 className="secttl">{title}</h2>
       {inner}
     </section>
   );

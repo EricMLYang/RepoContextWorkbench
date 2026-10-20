@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Resizer } from "../Resizer";
 import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
 import { useSnapshot, useStore, useUi, type PanelTab } from "../../store/context";
 import { RepoRoot } from "./FileTree";
@@ -180,6 +181,8 @@ export function RepoPanel({
         </div>
         <RepoProfileCard id={id} />
       </div>
+      {/* 寬度把手放在右側欄 landmark 裡（position: fixed；axe region） */}
+      <Resizer side="right" />
     </aside>
   );
 }

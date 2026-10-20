@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GroupInfo } from "./api/types";
 import { StatusBar, Toast, TopBar } from "./components/Chrome";
-import { Resizer, useSavedWidths } from "./components/Resizer";
+import { useSavedWidths } from "./components/Resizer";
 import { Sidebar } from "./components/Sidebar";
 import { SessionForm } from "./components/sessions/SessionDialogs";
 import { TerminalPanel } from "./components/sessions/TerminalPanel";
@@ -348,7 +348,6 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
             }}
           />
           <Sidebar />
-          <Resizer side="left" />
           <main id="main" className={files.length ? "withtabs" : undefined}>
             {files.length ? (
               <FileTabs
@@ -386,7 +385,6 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
             pasteRef={pasteRef}
           />
           {panelRepo ? <RepoPanel id={panelRepo} tab={panelTab} onTab={choosePanelTab} /> : null}
-          {panelRepo ? <Resizer side="right" /> : null}
           <StatusBar />
           <Toast />
           <PickerDialog

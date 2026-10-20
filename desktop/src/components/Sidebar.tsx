@@ -1,4 +1,5 @@
 import { sessionInGroup, shellOwner } from "../lib/view";
+import { Resizer } from "./Resizer";
 import type { TermInfo } from "../api/types";
 import { useSnapshot, useStore, useUi } from "../store/context";
 import { AsyncButton } from "./AsyncButton";
@@ -109,6 +110,8 @@ export function Sidebar() {
         </details>
         <span className="small muted">本機 Repo 工作台</span>
       </div>
+      {/* 寬度把手放在側欄 landmark 裡（position: fixed，位置不受影響；axe region） */}
+      <Resizer side="left" />
     </aside>
   );
 }

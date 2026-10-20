@@ -687,7 +687,7 @@ export function RepoRoot(props: {
 
   if (bare)
     return (
-      <section className="explorer bare" aria-label={"檔案：" + id}>
+      <section className="explorer bare" aria-label={"右側欄檔案：" + id}>
         <div className="explorerhead">
           <span className="eyebrow">檔案</span>
           {tools}

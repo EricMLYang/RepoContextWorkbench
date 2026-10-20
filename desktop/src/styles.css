@@ -680,6 +680,14 @@ svg {
 .secttl:first-child {
   margin-top: 2px;
 }
+/* 區段標題是 h2（無障礙的標題層級：h1 牌組名 → h2 區段 → h3 卡片）：h2.secttl 由 .secttl 決定外觀，
+   收合區段的 summary 裡那個 h2 要把 UA 的大小／粗細／邊距拿掉 */
+summary.secttl h2 {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  display: inline;
+}
 .secttl .n {
   font-size: 11px;
   color: var(--ink2);
