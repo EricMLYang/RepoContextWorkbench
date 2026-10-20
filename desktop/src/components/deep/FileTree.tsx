@@ -326,7 +326,11 @@ export function RepoRoot(props: {
   useEffect(() => {
     const bump = () => setMarkNonce((n) => n + 1);
     window.addEventListener("focus", bump);
-    return () => window.removeEventListener("focus", bump);
+    return () => {
+      window.removeEventListener("focus", bump);
+      // 磁碟變動合併用的計時器：卸載時清掉，不要對已卸載的樹 setState
+      if (markTimer.current) clearTimeout(markTimer.current);
+    };
   }, []);
 
   // 磁碟變動：只重讀受影響、而且讀過的資料夾（不閃「讀取中」，舊清單留著直到新的回來）
