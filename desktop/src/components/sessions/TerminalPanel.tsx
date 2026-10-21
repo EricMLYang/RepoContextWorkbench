@@ -22,6 +22,7 @@ import {
   sessionPair,
   sessionWhere,
 } from "../../lib/view";
+import { findPathHits, lineCells } from "../../lib/termLinks";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { confirmKillSpec, sessionResultSpec } from "./SessionDialogs";
 import { transcriptSpec } from "./Transcript";
@@ -159,11 +160,43 @@ export function TerminalPanel(props: {
         t.write("\r\n\x1b[2m[連線已中斷。可按「重新連線」，輸出仍保留。]\x1b[0m\r\n");
         setConnected(sid, false);
       });
+      // F-95：輸出裡的檔案路徑（`src/a.rs:12`）畫底線，點了在檢視器開、捲到那一行；
+      // 是不是登記的 repo 裡真有的檔交給引擎判斷（相對路徑照這個會話的目錄）
+      t.registerLinkProvider({
+        provideLinks(y, done) {
+          const line = t.buffer.active.getLine(y - 1);
+          if (!line) return done(undefined);
+          const { text, cellOf } = lineCells(line);
+          const hits = findPathHits(text);
+          done(
+            hits.length
+              ? hits.map((h) => ({
+                  text: h.text,
+                  range: {
+                    start: { x: cellOf[h.start] + 1, y },
+                    end: { x: cellOf[h.end - 1] + 1, y },
+                  },
+                  decorations: { underline: true, pointerCursor: true },
+                  activate: () => {
+                    store
+                      .action("locate_path", { text: h.text, sid })
+                      .then((r) =>
+                        ui.openFile(r.repo, r.path, r.line ? { line: r.line } : undefined),
+                      )
+                      .catch((e: unknown) =>
+                        store.toast(e instanceof Error ? e.message : String(e)),
+                      );
+                  },
+                }))
+              : undefined,
+          );
+        },
+      });
       t.onData((d) => stream.write(d));
       t.onResize(({ cols, rows }) => stream.resize(cols, rows));
       for (const [id, r] of recs.current) r.host.classList.toggle("on", id === sid);
     },
-    [store, dispose, setConnected],
+    [store, ui, dispose, setConnected],
   );
 
   // 清掉已不存在的會話

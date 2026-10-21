@@ -35,17 +35,20 @@ export function useFileTabs(toast: (msg: string) => void) {
 
   // opts.diff：開在「差異」模式（從變更清單點的）；已經開著就換成那個模式
   // opts.edit：剛新增的檔，打開就進編輯
+  // opts.line：捲到那一行（從終端點路徑來的）；已經開著也要捲
   const openFile = useCallback(
-    (repo: string, path: string, opts?: { diff?: boolean; edit?: boolean }) => {
+    (repo: string, path: string, opts?: { diff?: boolean; edit?: boolean; line?: number }) => {
       const f: OpenFile = opts?.diff
         ? { repo, path, diff: true }
         : opts?.edit
           ? { repo, path, edit: true }
-          : { repo, path };
+          : opts?.line
+            ? { repo, path, line: opts.line, seq: Date.now() }
+            : { repo, path };
       const k = fileKey(f);
       setFiles((prev) => {
         if (prev.some((x) => fileKey(x) === k))
-          return opts?.diff ? prev.map((x) => (fileKey(x) === k ? f : x)) : prev;
+          return opts?.diff || opts?.line ? prev.map((x) => (fileKey(x) === k ? f : x)) : prev;
         const next = [...prev, f];
         while (next.length > MAX_TABS) {
           const i = next.findIndex((x) => !dirtyRef.current.has(fileKey(x)));

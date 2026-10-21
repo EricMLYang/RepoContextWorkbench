@@ -19,6 +19,9 @@ export interface OpenFile {
   path: string;
   /** 開在「差異」模式（從變更清單點的）。 */
   diff?: boolean;
+  /** 一打開就捲到這一行（從終端點路徑來的，F-95）；`seq` 每次要求都換，同一行再點也會捲過去。 */
+  line?: number;
+  seq?: number;
   /** 一打開就進編輯（剛新增的檔）。 */
   edit?: boolean;
 }
@@ -527,6 +530,19 @@ export function FileViewer({
   const [saving, setSaving] = useState(false);
   // 上次存好的時間（編輯區下緣顯示；自動儲存不跳提示，靠這個知道存了沒）
   const [savedAt, setSavedAt] = useState("");
+  // F-95：從終端點路徑來的——md 預覽、差異沒有行號，先切到有行號的模式；內容到了再捲到那一行
+  const [askedLine, setAskedLine] = useState<number | undefined>(undefined);
+  if (askedLine !== file.seq) {
+    setAskedLine(file.seq);
+    if (file.line) setMode(isMarkdown(path) ? "source" : "view");
+  }
+  const jumpedSeq = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!file.line || !file.seq || jumpedSeq.current === file.seq) return;
+    if (content?.kind !== "text") return;
+    jumpedSeq.current = file.seq;
+    gotoLine(file.line);
+  });
   // HackMD 式：md 預設左寫右看；自動儲存（停手 1.5 秒存一次，衝突就停下來讓人選）
   const [layout, setLayoutState] = useState<EditLayout>(() =>
     loadPref<EditLayout>("editLayout", "split"),

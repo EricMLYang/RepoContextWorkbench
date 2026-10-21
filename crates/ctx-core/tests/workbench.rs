@@ -2672,6 +2672,49 @@ fn term_create_launch_flags_are_validated_and_inserted_after_the_agent_command()
     }
 }
 
+/// F-95：終端裡的路徑 → repo＋相對路徑＋行；相對路徑照會話目錄解析；repo 外、不存在的拒絕。
+#[test]
+fn locate_path_maps_terminal_text_to_a_registered_repo_file() {
+    let (t, d) = spine_with_repos();
+    let ra = ctx_core::registry::get_repo(&d, "repo-a").unwrap().path();
+    std::fs::create_dir_all(ra.join("src")).unwrap();
+    std::fs::write(ra.join("src/main.rs"), "fn main() {}\n").unwrap();
+    let abs = format!("{}:3:2", ra.join("src/main.rs").display());
+    let r = handle_action(&d, "locate_path", &json!({"text": abs}), None).unwrap();
+    assert_eq!(r["repo"], "repo-a");
+    assert_eq!(r["path"], "src/main.rs");
+    assert_eq!(r["line"], 3);
+    assert_eq!(r["col"], 2);
+    // 相對路徑：照會話的目錄（狀態檔記的 cwd）
+    let st = ctx_core::session_status::path_for(&d, "t1");
+    std::fs::create_dir_all(st.parent().unwrap()).unwrap();
+    std::fs::write(&st, json!({"status": "working", "cwd": ra}).to_string()).unwrap();
+    let r = handle_action(
+        &d,
+        "locate_path",
+        &json!({"text": "src/main.rs:9", "sid": "t1"}),
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        (r["path"].as_str(), r["line"].as_u64()),
+        (Some("src/main.rs"), Some(9))
+    );
+    let outside = t.path().join("outside.txt");
+    std::fs::write(&outside, "x").unwrap();
+    for (text, why) in [
+        (outside.display().to_string(), "不在任何登記的 repo"),
+        ("src/none.rs".to_string(), "找不到"),
+        (ra.join("src").display().to_string(), "找不到"),
+    ] {
+        let e = handle_action(&d, "locate_path", &json!({"text": text, "sid": "t1"}), None)
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains(why), "{text} → {e}");
+    }
+    assert!(ctx_core::workbench::actions::is_read_only("locate_path"));
+}
+
 /// F-63 App 助手：規則計畫照原樣給 App；執行完的紀錄落 presented [assist]（帶目前牌組）。
 #[test]
 fn assist_plan_and_log() {

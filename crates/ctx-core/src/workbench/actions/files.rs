@@ -174,3 +174,122 @@ pub(super) fn a_backlinks(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result
         .collect();
     Ok(json!({"ok": true, "id": id, "path": path, "items": items, "more": more}))
 }
+
+/// 終端裡的路徑字樣拆成 (路徑, 行, 欄)：`src/a.rs:12:5`、`a.rs(12,5)`、`"src/a.rs",`。
+/// 前後的引號、括號、句讀先拿掉。Rust 才有（F-95）。
+pub fn split_location(text: &str) -> (String, Option<u32>, Option<u32>) {
+    let t = text
+        .trim()
+        .trim_start_matches(['"', '\'', '(', '[', '<', '`'])
+        .trim_end_matches(['"', '\'', ')', ']', '>', '`', ',', '.', ';', ':']);
+    // a.rs(12,5) / a.rs(12)
+    if let Some((p, rest)) = t.split_once('(') {
+        let nums: Vec<Option<u32>> = rest
+            .trim_end_matches(')')
+            .split(',')
+            .map(|n| n.trim().parse().ok())
+            .collect();
+        if let [Some(l), rest @ ..] = nums.as_slice() {
+            return (p.to_string(), Some(*l), rest.first().copied().flatten());
+        }
+    }
+    let mut parts: Vec<&str> = t.rsplitn(3, ':').collect();
+    parts.reverse();
+    let num = |s: &str| s.parse::<u32>().ok().filter(|n| *n > 0);
+    match parts.as_slice() {
+        [p, l, c] if num(l).is_some() && num(c).is_some() => (p.to_string(), num(l), num(c)),
+        [a, b, l] if num(l).is_some() => (format!("{a}:{b}"), num(l), None),
+        [p, l] if num(l).is_some() => (p.to_string(), num(l), None),
+        _ => (t.to_string(), None, None),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct LocateArgs {
+    /// 終端上看到的那段字（可帶 `:行:欄`）。
+    text: String,
+    /// 哪個會話印的（相對路徑照它的目錄解析）。
+    #[serde(default)]
+    sid: Option<String>,
+}
+
+/// F-95（Rust 才有）：終端輸出裡的路徑 → 登記的哪個 repo、repo 內的相對路徑、第幾行。
+/// 相對路徑先照 agent 現在的目錄（hook 記的 `cwd`，開在 worktree 時是 worktree），再照會話開的目錄解析。
+/// 不在任何登記的 repo 裡、不是檔案：回錯（說明原因），不開任意路徑。
+pub(super) fn a_locate_path(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
+    let LocateArgs { text, sid } = parse("locate_path", p)?;
+    let (raw_path, line, col) = split_location(&text);
+    if raw_path.is_empty() {
+        return Err(Error::invalid("沒有路徑"));
+    }
+    let given = crate::fsutil::expanduser(&raw_path);
+    let mut bases: Vec<PathBuf> = Vec::new();
+    if let Some(sid) = sid.as_deref().filter(|s| !s.is_empty()) {
+        if let Some(c) = crate::session_status::read(d, sid)
+            .as_ref()
+            .and_then(|v| v.get("cwd"))
+            .and_then(Value::as_str)
+        {
+            bases.push(PathBuf::from(c));
+        }
+        if let Some(c) = t.and_then(|t| t.cwd(sid)) {
+            bases.push(c);
+        }
+    }
+    let candidates: Vec<PathBuf> = if given.is_absolute() {
+        vec![given]
+    } else {
+        bases.iter().map(|b| b.join(&given)).collect()
+    };
+    let Some(abs) = candidates
+        .iter()
+        .find(|c| c.is_file())
+        .and_then(|c| std::fs::canonicalize(c).ok())
+    else {
+        return Err(Error::invalid(format!("找不到這個檔：{raw_path}")));
+    };
+    let mut best: Option<(String, PathBuf)> = None;
+    for e in &registry::load(d)?.repos {
+        let Ok(root) = std::fs::canonicalize(e.path()) else {
+            continue;
+        };
+        if abs.starts_with(&root)
+            && best
+                .as_ref()
+                .is_none_or(|(_, r)| root.as_os_str().len() > r.as_os_str().len())
+        {
+            best = Some((e.id(), root));
+        }
+    }
+    let Some((id, root)) = best else {
+        return Err(Error::invalid(format!(
+            "這個檔不在任何登記的 repo 裡：{}",
+            abs.display()
+        )));
+    };
+    let rel = abs
+        .strip_prefix(&root)
+        .map_err(|_| Error::invalid("路徑不在 repo 裡"))?
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/");
+    Ok(json!({"ok": true, "repo": id, "path": rel, "line": line, "col": col}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_location;
+
+    #[test]
+    fn split_location_reads_line_and_column_suffixes() {
+        let s = |t: &str| split_location(t);
+        assert_eq!(s("src/a.rs:12:5"), ("src/a.rs".into(), Some(12), Some(5)));
+        assert_eq!(s("src/a.rs:12"), ("src/a.rs".into(), Some(12), None));
+        assert_eq!(s("(src/a.rs:12)."), ("src/a.rs".into(), Some(12), None));
+        assert_eq!(s("a.ts(30,2)"), ("a.ts".into(), Some(30), Some(2)));
+        assert_eq!(s("\"docs/x.md\","), ("docs/x.md".into(), None, None));
+        assert_eq!(s("C:/r/a.rs:7"), ("C:/r/a.rs".into(), Some(7), None));
+        assert_eq!(s("src/a.rs:"), ("src/a.rs".into(), None, None));
+    }
+}

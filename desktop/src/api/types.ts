@@ -766,6 +766,11 @@ export interface ActionMap {
       path: string;
     };
   };
+  /** Rust 才有（F-95）：終端裡的路徑字樣 → 登記的 repo＋相對路徑＋行欄（相對路徑照會話目錄）。只讀。 */
+  locate_path: {
+    payload: { text: string; sid?: string };
+    result: { ok: true; repo: string; path: string; line: number | null; col: number | null };
+  };
   /** Rust 才有（F-69）：repo 裡哪些 md 連到這個檔（照相對連結解析、跳過程式碼區塊；最多 50 則）。 */
   backlinks: {
     payload: { id: string; path: string };
