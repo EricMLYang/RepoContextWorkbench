@@ -270,6 +270,91 @@ pub fn locate(id: &str, cwd: Option<&str>, root: Option<&Path>) -> Option<PathBu
         .find(|p| p.is_file())
 }
 
+/// 交接包（F-103，抄 BAT `transcript-transfer`）：把一場會話濃縮成新會話讀得完的一頁——
+/// 你說過的話、動過的檔、跑過的指令、最後的回覆。思考與工具結果不帶（太長、新會話自己會再看）。
+/// 秘密（金鑰、token）先遮掉；回傳 (Markdown, 遮了幾處)。
+pub fn digest(tl: &Timeline, id: &str, cwd: Option<&str>, now: &str) -> (String, usize) {
+    let mut out = Vec::new();
+    out.push(format!(
+        "# 交接包：{}",
+        tl.title.as_deref().unwrap_or("（沒有標題的會話）")
+    ));
+    out.push(String::new());
+    out.push(format!(
+        "- 來源：Claude Code 會話 `{id}`{}",
+        cwd.map(|c| format!("（{c}）")).unwrap_or_default()
+    ));
+    out.push(format!("- 整理：{now}（ctx 自動整理，秘密已遮蔽）"));
+    if tl.truncated {
+        out.push("- 注意：這場會話很長，只整理了最後一段".to_string());
+    }
+    out.push(format!("- 完整逐字稿：{}", tl.path));
+    out.push(String::new());
+    out.push("## 你說過的話（依序）".to_string());
+    let said: Vec<&Frame> = tl
+        .frames
+        .iter()
+        .filter(|f| f.kind == FrameKind::You)
+        .collect();
+    if said.is_empty() {
+        out.push("（沒有）".to_string());
+    }
+    for (i, f) in said.iter().enumerate() {
+        out.push(format!("{}. {}", i + 1, one_line(&f.text, 400)));
+    }
+    // 動過的檔：Edit／Write／NotebookEdit 的路徑，依第一次出現排序、記次數
+    let mut files: Vec<(String, usize)> = Vec::new();
+    let mut cmds: Vec<String> = Vec::new();
+    for f in tl.frames.iter().filter(|f| f.kind == FrameKind::Tool) {
+        match f.tool.as_deref() {
+            Some("Edit" | "Write" | "MultiEdit" | "NotebookEdit") if !f.text.is_empty() => {
+                match files.iter_mut().find(|(p, _)| *p == f.text) {
+                    Some((_, n)) => *n += 1,
+                    None => files.push((f.text.clone(), 1)),
+                }
+            }
+            Some("Bash") if !f.text.is_empty() => cmds.push(format!(
+                "- `{}`{}",
+                one_line(&f.text, 160),
+                if f.error { " ✗" } else { "" }
+            )),
+            _ => {}
+        }
+    }
+    out.push(String::new());
+    out.push("## 動過的檔".to_string());
+    if files.is_empty() {
+        out.push("（沒有）".to_string());
+    }
+    for (p, n) in &files {
+        out.push(if *n > 1 {
+            format!("- {p}（{n} 次）")
+        } else {
+            format!("- {p}")
+        });
+    }
+    out.push(String::new());
+    out.push("## 跑過的指令（最後 15 個，✗＝失敗）".to_string());
+    if cmds.is_empty() {
+        out.push("（沒有）".to_string());
+    }
+    let skip = cmds.len().saturating_sub(15);
+    out.extend(cmds.into_iter().skip(skip));
+    out.push(String::new());
+    out.push("## 最後的回覆".to_string());
+    let replies: Vec<&Frame> = tl
+        .frames
+        .iter()
+        .filter(|f| f.kind == FrameKind::Reply)
+        .collect();
+    match replies.last() {
+        Some(f) => out.push(crate::pystr::clip(&f.text, 3_000)),
+        None => out.push("（沒有）".to_string()),
+    }
+    out.push(String::new());
+    crate::redact::redact_secrets(&out.join("\n"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -317,6 +402,32 @@ mod tests {
         assert!(f[4].error);
         assert_eq!(f[6].text, "看這張圖");
         assert_eq!(title.as_deref(), Some("跑測試"));
+    }
+
+    #[test]
+    fn digest_lists_prompts_files_commands_and_last_reply_with_secrets_masked() {
+        let (frames, title) = frames_of(&rows(&[
+            r#"{"type":"user","message":{"content":"修登入，token 是 ghp_abcdefghijklmnopqrstuvwxyz0123456789"}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"a","name":"Edit","input":{"file_path":"/r/login.rs"}},{"type":"tool_use","id":"b","name":"Edit","input":{"file_path":"/r/login.rs"}},{"type":"tool_use","id":"c","name":"Bash","input":{"command":"cargo test"}}]}}"#,
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"c","content":"fail","is_error":true}]}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"秘密的想法"},{"type":"text","text":"改好了"}]}}"#,
+            r#"{"type":"ai-title","aiTitle":"修登入"}"#,
+        ]));
+        let tl = Timeline {
+            frames,
+            truncated: false,
+            title,
+            path: "/p.jsonl".into(),
+        };
+        let (md, hidden) = digest(&tl, "abc", Some("/r"), "2026-10-22 00:10");
+        assert!(md.starts_with("# 交接包：修登入"), "{md}");
+        assert!(md.contains("1. 修登入，token 是"), "{md}");
+        assert!(!md.contains("ghp_abcdefghij"), "{md}");
+        assert!(hidden >= 1);
+        assert!(md.contains("- /r/login.rs（2 次）"), "{md}");
+        assert!(md.contains("- `cargo test` ✗"), "{md}");
+        assert!(md.contains("## 最後的回覆\n改好了"), "{md}");
+        assert!(!md.contains("秘密的想法"));
     }
 
     #[test]

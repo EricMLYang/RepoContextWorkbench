@@ -3018,3 +3018,10 @@ body.withpicks #main {
   color: var(--amber);
   font-weight: 600;
 }
+
+/* F-103 交接包 */
+.digesttext {
+  max-height: 55vh;
+  overflow: auto;
+  white-space: pre-wrap;
+}

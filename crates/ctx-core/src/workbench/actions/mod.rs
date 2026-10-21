@@ -127,6 +127,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("locate_path", files::a_locate_path),
     ("past_sessions", finder::a_past_sessions),
     ("session_transcript", finder::a_session_transcript),
+    ("session_digest", finder::a_session_digest),
     ("diff_notes_brief", finder::a_diff_notes_brief),
     ("assist_plan", a_assist_plan),
     ("assist_log", a_assist_log),

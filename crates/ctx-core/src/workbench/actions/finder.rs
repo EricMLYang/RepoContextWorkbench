@@ -285,7 +285,20 @@ struct TranscriptArgs {
 /// F-94（Rust 才有）：一場會話的逐字稿時間軸（你說的、回覆、思考、工具＋結果）。只讀。
 /// 給 `sid` 時，會話還沒觸發過任何 hook（剛開、還沒送出第一句）就沒有 Claude Code 會話 id，回錯說明。
 pub(super) fn a_session_transcript(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let TranscriptArgs { sid, id, cwd } = parse("session_transcript", p)?;
+    let (id, cwd, tl) = transcript_of(d, parse("session_transcript", p)?)?;
+    let mut out = serde_json::to_value(tl)?;
+    out["ok"] = json!(true);
+    out["id"] = json!(id);
+    out["cwd"] = json!(cwd);
+    Ok(out)
+}
+
+/// 找到並讀出這場會話的逐字稿：回傳 (Claude Code 會話 id, 目錄, 時間軸)。
+fn transcript_of(
+    d: &Path,
+    args: TranscriptArgs,
+) -> Result<(String, Option<String>, crate::timeline::Timeline)> {
+    let TranscriptArgs { sid, id, cwd } = args;
     let (id, cwd) = match (sid, id) {
         (_, Some(id)) => (id, cwd),
         (Some(sid), None) => {
@@ -304,8 +317,49 @@ pub(super) fn a_session_transcript(d: &Path, p: &Value, _t: Option<&dyn Terms>) 
         .ok_or_else(|| Error::invalid(format!("找不到這場會話的逐字稿：{id}")))?;
     let tl = crate::timeline::read(&path)
         .ok_or_else(|| Error::invalid(format!("讀不了逐字稿：{}", path.display())))?;
-    let mut out = serde_json::to_value(tl)?;
-    out["ok"] = json!(true);
-    out["id"] = json!(id);
-    Ok(out)
+    Ok((id, cwd, tl))
+}
+
+/// F-103（Rust 才有）：把一場會話整理成交接包（你說的話、動過的檔、跑過的指令、最後回覆；秘密遮掉），
+/// 存成 `groups/<所屬組或 adhoc>/materials/handoff-<時間>-<id 前 8 碼>.md`，給新會話讀。
+/// 回傳路徑、內容、遮了幾處、屬於哪個 repo（目錄在登記的 repo 底下才有，App 據此對那個 repo 開新會話）。
+pub(super) fn a_session_digest(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let (id, cwd, tl) = transcript_of(d, parse("session_digest", p)?)?;
+    let now = chrono::Local::now().naive_local();
+    let (text, hidden) = crate::timeline::digest(
+        &tl,
+        &id,
+        cwd.as_deref(),
+        &now.format("%Y-%m-%d %H:%M").to_string(),
+    );
+    let repo = cwd
+        .as_deref()
+        .and_then(|c| crate::history::resume_target(d, &id, c).ok())
+        .map(|(rid, _)| rid);
+    let owners: Vec<String> = match &repo {
+        Some(r) => registry::load(d)?
+            .groups
+            .iter()
+            .filter(|g| g.members().iter().any(|m| m == r))
+            .map(|g| g.name())
+            .collect(),
+        None => Vec::new(),
+    };
+    let dir = match owners.as_slice() {
+        [only] => only.as_str(),
+        _ => "adhoc",
+    };
+    let short: String = id.chars().take(8).collect();
+    let out = d.join("groups").join(dir).join("materials").join(format!(
+        "handoff-{}-{short}.md",
+        now.format("%Y%m%d-%H%M%S")
+    ));
+    if let Some(parent) = out.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    crate::fsutil::write_atomic(&out, text.as_bytes())?;
+    Ok(
+        json!({"ok": true, "path": out.to_string_lossy(), "text": text,
+              "hidden": hidden, "repo": repo, "group": owners.first()}),
+    )
 }

@@ -3,6 +3,7 @@ import type { TranscriptFrame } from "../../api/types";
 import { DetailLayout, useDetail } from "../../dialogs/Modal";
 import { copyText } from "../../lib/clipboard";
 import { useStore, useUi } from "../../store/context";
+import { AsyncButton } from "../AsyncButton";
 
 type Filter = "all" | "you" | "reply" | "tool";
 
@@ -78,6 +79,16 @@ export function Transcript(props: { sid?: string; id?: string; cwd?: string }) {
     <DetailLayout
       actions={
         <>
+          <AsyncButton
+            title="把這場會話濃縮成一頁（你說的話、動過的檔、跑過的指令、最後回覆；秘密遮掉），交給新會話"
+            disabled={!data}
+            run={async () => {
+              const r = await store.action("session_digest", sid ? { sid } : { id, cwd });
+              ui.openDetail(digestSpec(r));
+            }}
+          >
+            整理成交接包
+          </AsyncButton>
           <button type="button" onClick={() => setReload((n) => n + 1)}>
             重新讀取
           </button>
@@ -176,4 +187,73 @@ export function transcriptSpec(target: { sid?: string; id?: string; cwd?: string
     eyebrow: "TRANSCRIPT",
     content: <Transcript {...target} />,
   };
+}
+
+/** 交接包（F-103）：看一眼內容；目錄在登記的 repo 底下就能直接帶著它開新會話。 */
+export function Digest({
+  digest,
+}: {
+  digest: { path: string; text: string; hidden: number; repo: string | null; group: string | null };
+}) {
+  const store = useStore();
+  const ui = useUi();
+  const { close } = useDetail();
+  return (
+    <DetailLayout
+      actions={
+        <>
+          <AsyncButton
+            run={async () => {
+              await copyText(store.backend, digest.path);
+              store.toast("已複製交接包路徑");
+            }}
+          >
+            複製路徑
+          </AsyncButton>
+          {digest.repo ? (
+            <AsyncButton
+              className="primary"
+              run={async () => {
+                const r = await store.action("term_create", {
+                  kind: "agent",
+                  repo: digest.repo!,
+                  ...(digest.group ? { home_group: digest.group } : {}),
+                  task:
+                    "接手前一場會話：先讀交接包 " +
+                    digest.path +
+                    "，用 3 行說你接手了什麼、還剩什麼，再問我要從哪裡繼續",
+                  origin: "handoff",
+                });
+                await store.refreshState();
+                close();
+                ui.selectTerm(r.sid);
+                store.toast("新會話已開，帶著交接包");
+              }}
+            >
+              帶著它開新會話
+            </AsyncButton>
+          ) : (
+            <button type="button" className="primary" onClick={close}>
+              關閉
+            </button>
+          )}
+        </>
+      }
+    >
+      <p className="detailmeta">
+        {"存在：" + digest.path + (digest.hidden ? "（遮了 " + digest.hidden + " 處秘密）" : "")}
+      </p>
+      <pre className="digesttext">{digest.text}</pre>
+    </DetailLayout>
+  );
+}
+
+export function digestSpec(digest: {
+  path: string;
+  text: string;
+  hidden: number;
+  repo: string | null;
+  group: string | null;
+}) {
+  return { title: "交接包", eyebrow: "HANDOFF", content: <Digest digest={digest} /> };
 }

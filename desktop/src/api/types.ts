@@ -782,6 +782,20 @@ export interface ActionMap {
       path: string;
     };
   };
+  /** Rust 才有（F-103）：把一場會話整理成交接包（秘密遮掉），存到所屬組的 materials。 */
+  session_digest: {
+    payload: { sid?: string; id?: string; cwd?: string };
+    result: {
+      ok: true;
+      path: string;
+      text: string;
+      /** 遮了幾處秘密。 */
+      hidden: number;
+      /** 會話目錄所屬的登記 repo（沒有就不能直接對它開新會話）。 */
+      repo: string | null;
+      group: string | null;
+    };
+  };
   /** Rust 才有（F-95）：終端裡的路徑字樣 → 登記的 repo＋相對路徑＋行欄（相對路徑照會話目錄）。只讀。 */
   locate_path: {
     payload: { text: string; sid?: string };

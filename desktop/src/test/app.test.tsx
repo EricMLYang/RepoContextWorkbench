@@ -2196,6 +2196,48 @@ describe("會話放進所屬牌組", () => {
     expect(dialog.textContent).toContain("讀不到逐字稿：這個會話還沒有逐字稿");
   });
 
+  it("交接包（F-103）：逐字稿裡整理成交接包，帶著它對那個 repo 開新會話", async () => {
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({ terms: [term({ sid: "t1", home_group: "產品開發" })] as never }),
+      ),
+      action: vi.fn(async (name: string) => {
+        if (name === "session_transcript")
+          return { ok: true, id: "x", frames: [], truncated: false, title: null, path: "/p" };
+        if (name === "session_digest")
+          return {
+            ok: true,
+            path: "/sp/groups/產品開發/materials/handoff-1.md",
+            text: "# 交接包：修登入",
+            hidden: 1,
+            repo: "a",
+            group: "產品開發",
+          };
+        if (name === "term_create") return { ok: true, sid: "t9", title: "x" };
+        return { ok: true };
+      }) as never,
+    });
+    await mount(backend);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "回到會話" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "更多會話動作" })));
+    await act(async () =>
+      fireEvent.click(screen.getByRole("menuitem", { name: "逐字稿（完整對話與工具）" })),
+    );
+    const dialog = document.getElementById("detaildialog")!;
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "整理成交接包" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("session_digest", { sid: "t1" });
+    expect(dialog.textContent).toContain("遮了 1 處秘密");
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "帶著它開新會話" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith(
+      "term_create",
+      expect.objectContaining({ kind: "agent", repo: "a", home_group: "產品開發" }),
+    );
+  });
+
   it("自動繼續（F-98）：會話選單打開、送出次數與那句；開著的會話列標「自動 1/3」、可關掉", async () => {
     const backend = mockBackend({
       getState: vi.fn(async () =>
