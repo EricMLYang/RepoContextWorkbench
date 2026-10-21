@@ -7,6 +7,9 @@
  *       panel-info（右欄資訊頁）、term-menu（終端列的「⋯」）、md-view（md 預覽＋反向連結）、
  *       edit-find（編輯中的尋找取代）、no-session（沒有會話、所有 repo）、palette（一般搜尋）、composer（請 Agent 分析想法）、
  *       rename（檔案樹 F2 改名）、tablist（開啟的檔案清單）
+ * R37：transcript（逐字稿）、commands（插入 /指令）、prompts（常用 prompt）、auto-continue（自動繼續）、
+ *       launch-opts（開會話的權限／模型／worktree）、panel-extras（右欄 Worktree＋GitHub）、commits（最近的 commit＋差異）、
+ *       csv（表格預覽）、gauges（會話列小量表與出錯中斷）
  */
 import { createRoot } from "react-dom/client";
 import "../src/styles.css";
@@ -51,6 +54,8 @@ const files: Record<string, string> = {
   "docs/notes.md": NOTES,
   "src/main.rs": RS,
   "README.md": "# repo-a\n",
+  "data/users.csv":
+    'id,name,note,joined\n1,王小明,"說""好""，\n第二行",2026-10-01\n2,Alice,"a, b",2026-10-02\n3,Bob,,2026-10-03\n',
 };
 
 const term = {
@@ -71,6 +76,14 @@ const term = {
   // F-71：Claude Code 取的標題＋最後回覆
   ai_title: "整理登入頁的 UI",
   last_reply: "改好了：按鈕對齊、錯誤訊息改成紅字。要我順便補測試嗎？",
+  // F-97／F-98／F-100／F-101／F-102（R37）
+  claude_session: "8d110180-5810",
+  resume_cwd: "/Users/me/repo-a",
+  context_pct: 84,
+  model: "Opus",
+  subagents: 2,
+  cache_cold: false,
+  auto_continue: { prompt: "照計畫做下一步", max: 3, count: 1 },
 };
 const card = (key: string, kind: string, title: string) => ({
   key,
@@ -139,6 +152,26 @@ const state = {
         event: "tool-start",
       },
       tool: { label: "Bash：cargo build", minutes: 12, stalled: true },
+      context_pct: 37,
+      subagents: 0,
+      auto_continue: null,
+    },
+    {
+      // F-99：這一輪出錯中斷（StopFailure）＋F-100 快取已冷
+      ...term,
+      sid: "t5",
+      ai_title: "寫遷移腳本",
+      last_reply: null,
+      agent_status: {
+        status: "waiting",
+        text: "這一輪出錯中斷：5-hour limit reached",
+        at: "00:10",
+        event: "stop-failure",
+      },
+      context_pct: 12,
+      subagents: 0,
+      cache_cold: true,
+      auto_continue: null,
     },
   ],
   cards: [
@@ -382,6 +415,212 @@ const backend: Backend = {
     if (name === "repo_profile")
       return { ok: true, id: p.id, path: "/x", role: "實作", description: "登入服務" };
     if (name === "group_notes") return { ok: true, group: "產品開發", path: "/x", notes: [] };
+    if (name === "session_transcript")
+      return {
+        ok: true,
+        id: "8d110180-5810",
+        truncated: false,
+        title: "整理登入頁的 UI",
+        path: "/Users/me/.claude/projects/-Users-me-repo-a/8d110180-5810.jsonl",
+        frames: [
+          {
+            kind: "you",
+            text: "幫我整理登入頁：按鈕對齊、錯誤訊息改紅字",
+            at: "2026-10-16T01:00:00Z",
+          },
+          { kind: "thinking", text: "先看 LoginForm 的樣式…", at: "2026-10-16T01:00:03Z" },
+          {
+            kind: "tool",
+            tool: "Read",
+            text: "/Users/me/repo-a/src/LoginForm.tsx",
+            result: "export function LoginForm() {…",
+            at: null,
+          },
+          {
+            kind: "tool",
+            tool: "Bash",
+            text: "npm test -- LoginForm",
+            result: "FAIL  LoginForm › shows error\n  expected red",
+            error: true,
+            at: null,
+          },
+          {
+            kind: "tool",
+            tool: "Edit",
+            text: "/Users/me/repo-a/src/LoginForm.tsx",
+            result: "ok",
+            at: null,
+          },
+          {
+            kind: "reply",
+            text: "改好了：按鈕對齊、錯誤訊息改成紅字。要我順便補測試嗎？",
+            at: "2026-10-16T01:30:00Z",
+          },
+          { kind: "you", text: "好，補測試", at: "2026-10-16T01:31:00Z" },
+        ],
+      };
+    if (name === "agent_commands")
+      return {
+        ok: true,
+        cwd: "/Users/me/repo-a",
+        commands: [
+          {
+            name: "pm-ideation",
+            description: "以 PM 角度做一輪構想盤點",
+            kind: "skill",
+            source: "project",
+          },
+          { name: "frontend:lint", description: "跑前端 lint", kind: "command", source: "project" },
+          {
+            name: "repo-context",
+            description: "跨 repo 的工作脈絡與留痕",
+            kind: "skill",
+            source: "user",
+          },
+          {
+            name: "code-review:code-review",
+            description: "審查 PR",
+            kind: "command",
+            source: "plugin",
+          },
+        ],
+      };
+    if (name === "prompts")
+      return {
+        ok: true,
+        dir: "/Users/me/spine/prompts",
+        prompts: [
+          {
+            name: "做下一步",
+            text: "照計畫做下一步，做完一步就停下來說做了什麼",
+            updated: "2026-10-22 00:30",
+          },
+          {
+            name: "先列風險",
+            text: "動手前先列出風險與要我確認的地方",
+            updated: "2026-10-21 22:10",
+          },
+        ],
+      };
+    if (name === "repo_worktrees")
+      return {
+        ok: true,
+        id: p.id,
+        worktrees: [
+          {
+            path: "/Users/me/repo-a",
+            branch: "main",
+            head: "0123abcd",
+            main: true,
+            dirty: 2,
+            unique: 0,
+            locked: false,
+            prunable: false,
+            removable: false,
+          },
+          {
+            path: "/Users/me/repo-a/.claude/worktrees/agent-a0248",
+            branch: "worktree-agent-a0248",
+            head: "fedc9876",
+            main: false,
+            dirty: 0,
+            unique: 0,
+            locked: false,
+            prunable: false,
+            removable: true,
+          },
+          {
+            path: "/Users/me/repo-a/.claude/worktrees/ctx-1022-0130",
+            branch: "ctx-1022-0130",
+            head: "aaaa1111",
+            main: false,
+            dirty: 3,
+            unique: 2,
+            locked: false,
+            prunable: false,
+            removable: false,
+          },
+        ],
+      };
+    if (name === "repo_github")
+      return {
+        ok: true,
+        id: p.id,
+        prs: [
+          {
+            number: 42,
+            title: "登入頁錯誤訊息改紅字",
+            url: "https://github.com/me/repo-a/pull/42",
+            author: "me",
+            updated: new Date().toISOString(),
+            branch: "fix-login",
+            draft: false,
+            review: "REVIEW_REQUIRED",
+            labels: [],
+          },
+        ],
+        issues: [
+          {
+            number: 7,
+            title: "Windows 上登入按鈕跑版",
+            url: "https://github.com/me/repo-a/issues/7",
+            author: "alice",
+            updated: "2026-10-12T00:00:00Z",
+            labels: ["bug", "windows"],
+          },
+        ],
+      };
+    if (name === "repo_log")
+      return {
+        ok: true,
+        id: p.id,
+        commits: [
+          {
+            sha: "a1b2c3d4e5",
+            short: "a1b2c3d",
+            subject: "feat(login)：錯誤訊息改紅字",
+            author: "me",
+            at: new Date().toISOString(),
+          },
+          {
+            sha: "b2c3d4e5f6",
+            short: "b2c3d4e",
+            subject: "fix：按鈕對齊",
+            author: "me",
+            at: "2026-10-21T10:00:00+08:00",
+          },
+          {
+            sha: "c3d4e5f6a7",
+            short: "c3d4e5f",
+            subject: "docs：README",
+            author: "alice",
+            at: "2026-09-01T10:00:00+08:00",
+          },
+        ],
+      };
+    if (name === "commit_diff")
+      return {
+        ok: true,
+        id: p.id,
+        sha: p.sha,
+        truncated: false,
+        diff: [
+          "commit a1b2c3d4e5",
+          "Author: me <me@x>",
+          "Date:   2026-10-22T01:00:00+08:00",
+          "",
+          "feat(login)：錯誤訊息改紅字",
+          "",
+          " src/LoginForm.tsx | 3 ++-",
+          " 1 file changed, 2 insertions(+), 1 deletion(-)",
+          "",
+          "diff --git a/src/LoginForm.tsx b/src/LoginForm.tsx",
+          "@@ -10,3 +10,4 @@",
+          '-  <p className="err">{msg}</p>',
+          '+  <p className="err red">{msg}</p>',
+          "+  <Retry />",
+        ].join("\n"),
+      };
     return { ok: true };
   }) as never,
 };
@@ -413,6 +652,14 @@ if (scene === "diff-notes") {
 if (scene === "md-view") {
   put("openFiles", [{ repo: "repo-a", path: "docs/notes.md" }]);
   put("activeFile", "repo-a\u0000docs/notes.md");
+}
+if (scene === "csv") {
+  put("openFiles", [{ repo: "repo-a", path: "data/users.csv" }]);
+  put("activeFile", "repo-a\u0000data/users.csv");
+}
+if (scene === "panel-extras" || scene === "commits" || scene === "launch-opts") {
+  put("panelRepo", "repo-a");
+  put("panelTab", scene === "commits" ? "changes" : "info");
 }
 if (scene === "code") {
   put("openFiles", [{ repo: "repo-a", path: "src/main.rs" }]);
@@ -521,3 +768,46 @@ if (scene === "reply-box")
     click(`button[aria-label="展開產品開發"]`);
     later(200, () => click(".sessionreply"));
   });
+
+// R37 的新畫面：逐字稿、/指令、常用 prompt、自動繼續、開會話選項、worktree＋GitHub、最近的 commit
+const menuItem = (label: string) =>
+  [...document.querySelectorAll<HTMLElement>('#termmenu [role="menuitem"]')]
+    .find((b) => b.textContent?.startsWith(label))
+    ?.click();
+const viaTermMenu: Record<string, string> = {
+  transcript: "逐字稿",
+  commands: "插入 /指令",
+  prompts: "常用 prompt",
+  "auto-continue": "自動繼續",
+};
+if (viaTermMenu[scene])
+  later(600, () => {
+    click(".gsessions button");
+    later(1200, () => {
+      click("#termmore");
+      later(200, () => menuItem(viaTermMenu[scene]));
+    });
+  });
+if (scene === "launch-opts")
+  later(700, () =>
+    [...document.querySelectorAll<HTMLElement>("#repopanel button")]
+      .find((b) => b.textContent === "開啟 Agent 會話")
+      ?.click(),
+  );
+if (scene === "panel-extras")
+  later(700, () => {
+    document.querySelectorAll<HTMLDetailsElement>(".panelworktrees, .panelgithub").forEach((d) => {
+      d.open = true;
+      d.dispatchEvent(new Event("toggle"));
+    });
+  });
+if (scene === "commits")
+  later(700, () => {
+    const d = document.querySelector<HTMLDetailsElement>(".panelcommits");
+    if (d) {
+      d.open = true;
+      d.dispatchEvent(new Event("toggle"));
+    }
+    later(400, () => click(".commitrow"));
+  });
+if (scene === "gauges") later(700, () => click(`button[aria-label="展開產品開發"]`));

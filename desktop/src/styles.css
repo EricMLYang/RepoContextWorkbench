@@ -3129,6 +3129,8 @@ body.withpicks #main {
 .commitdiff {
   max-height: 60vh;
   overflow: auto;
+  font-family: "Cascadia Code", Consolas, Menlo, monospace;
+  font-size: 12px;
 }
 
 /* F-105 插入 /指令 */

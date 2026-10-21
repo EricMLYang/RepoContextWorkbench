@@ -100,9 +100,12 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
   const canReply = sessionNeedsYou(s) && s.kind === "agent" && !awaitsTui;
   // 等你時多一行它說了什麼；停在權限提示而沒有回覆預覽時，拿 hook 記的提示（例：要你允許 Bash）
   const gauges = sessionGauges(s);
-  const preview = sessionWantsYou(s)
-    ? s.last_reply || (awaitsTui ? s.agent_status?.text : null) || null
-    : null;
+  // F-99：出錯中斷的先講原因（額度、過載…），比上一輪的回覆要緊
+  const preview = sessionFailed(s)
+    ? s.agent_status?.text || null
+    : sessionWantsYou(s)
+      ? s.last_reply || (awaitsTui ? s.agent_status?.text : null) || null
+      : null;
   return (
     <div className={"session" + (on ? " on" : "") + (inGroup ? " ingroup" : "")}>
       <button
