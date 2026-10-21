@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findPathHits, lineCells } from "../lib/termLinks";
+import { findInLines, findPathHits, lineCells } from "../lib/termLinks";
 
 const texts = (line: string) => findPathHits(line).map((h) => h.text);
 
@@ -41,5 +41,16 @@ describe("終端輸出裡的路徑（F-95）", () => {
     const { text, cellOf } = lineCells(line);
     expect(text).toBe("改 a");
     expect(cellOf).toEqual([0, 2, 3]);
+  });
+});
+
+describe("終端內搜尋（F-111）", () => {
+  it("每行所有出現位置、不分大小寫、空字串沒有結果", () => {
+    expect(findInLines(["Error: x", "ok", "error error"], "error")).toEqual([
+      { y: 0, start: 0, end: 5 },
+      { y: 2, start: 0, end: 5 },
+      { y: 2, start: 6, end: 11 },
+    ]);
+    expect(findInLines(["a"], "")).toEqual([]);
   });
 });

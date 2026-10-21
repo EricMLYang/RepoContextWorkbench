@@ -60,3 +60,27 @@ export function lineCells(line: { length: number; getCell(x: number): CellLike |
   }
   return { text, cellOf };
 }
+
+export interface TermHit {
+  /** 第幾行（buffer 的 0 起算）。 */
+  y: number;
+  /** 字串裡的起點（含）與終點（不含），配 [lineCells] 換成格子。 */
+  start: number;
+  end: number;
+}
+
+/** 終端內搜尋（F-111）：每行找出所有出現的位置（不分大小寫），由上到下。 */
+export function findInLines(lines: string[], query: string): TermHit[] {
+  const q = query.toLowerCase();
+  if (!q) return [];
+  const out: TermHit[] = [];
+  lines.forEach((line, y) => {
+    const l = line.toLowerCase();
+    let i = l.indexOf(q);
+    while (i >= 0) {
+      out.push({ y, start: i, end: i + q.length });
+      i = l.indexOf(q, i + q.length);
+    }
+  });
+  return out;
+}

@@ -3053,3 +3053,15 @@ body.withpicks #main {
   color: var(--sub);
   text-align: right;
 }
+
+/* F-111 終端內搜尋 */
+.termfind {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.termfind input {
+  width: 160px;
+  height: 24px;
+  font-size: 12px;
+}

@@ -22,7 +22,7 @@ import {
   sessionPair,
   sessionWhere,
 } from "../../lib/view";
-import { findPathHits, lineCells } from "../../lib/termLinks";
+import { findInLines, findPathHits, lineCells, type TermHit } from "../../lib/termLinks";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { autoContinueSpec, confirmKillSpec, sessionResultSpec } from "./SessionDialogs";
 import { transcriptSpec } from "./Transcript";
@@ -87,6 +87,14 @@ export function TerminalPanel(props: {
     [],
   );
   const [height, setHeight] = useState(260);
+  // F-111：終端內搜尋（掃 xterm 的緩衝，選起找到的那段並捲過去）
+  const [finding, setFinding] = useState(false);
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<TermHit[]>([]);
+  const [hitAt, setHitAt] = useState(-1);
+  const cellsRef = useRef<number[][]>([]);
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const openFindRef = useRef<() => void>(() => {});
   const dragging = useRef(false);
   const attachGen = useRef(new Map<string, number>());
 
@@ -191,6 +199,19 @@ export function TerminalPanel(props: {
               : undefined,
           );
         },
+      });
+      // F-111：⌘F（Windows／Linux：Ctrl+Shift+F）在終端裡找；這個鍵不送進程序
+      t.attachCustomKeyEventHandler((e) => {
+        const mac = /mac/i.test(navigator.platform);
+        if (
+          e.type === "keydown" &&
+          e.key.toLowerCase() === "f" &&
+          (mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && e.shiftKey)
+        ) {
+          openFindRef.current();
+          return false;
+        }
+        return true;
       });
       t.onData((d) => stream.write(d));
       t.onResize(({ cols, rows }) => stream.resize(cols, rows));
@@ -299,6 +320,61 @@ export function TerminalPanel(props: {
   }, [ui, store, openShellFor]);
 
   const info: TermInfo | undefined = terms.find((s) => s.sid === activeSid);
+
+  const activeTerm = () => (activeSid ? recs.current.get(activeSid)?.t : undefined);
+  /** 選起第 i 個結果、捲到畫面中間。 */
+  const showHit = (list: TermHit[], i: number) => {
+    const t = activeTerm();
+    const h = list[i];
+    if (!t || !h) return;
+    const cells = cellsRef.current[h.y] || [];
+    const x0 = cells[h.start] ?? h.start;
+    const x1 = cells[h.end - 1] ?? h.end - 1;
+    const wide = t.buffer.active.getLine(h.y)?.getCell(x1)?.getWidth() ?? 1;
+    t.select(x0, h.y, x1 + Math.max(1, wide) - x0);
+    t.scrollToLine(Math.max(0, h.y - Math.floor(t.rows / 2)));
+    setHitAt(i);
+  };
+  const runFind = (q: string) => {
+    setQuery(q);
+    const t = activeTerm();
+    if (!t) return;
+    const buf = t.buffer.active;
+    const texts: string[] = [];
+    const cells: number[][] = [];
+    for (let y = 0; y < buf.length; y++) {
+      const line = buf.getLine(y);
+      const lc = line ? lineCells(line) : { text: "", cellOf: [] };
+      texts.push(lc.text);
+      cells.push(lc.cellOf);
+    }
+    cellsRef.current = cells;
+    const found = findInLines(texts, q);
+    setHits(found);
+    if (!found.length) {
+      t.clearSelection();
+      setHitAt(-1);
+      return;
+    }
+    // 從最後面（最新的輸出）開始找
+    showHit(found, found.length - 1);
+  };
+  const stepFind = (dir: 1 | -1) => {
+    if (!hits.length) return;
+    showHit(hits, (hitAt + dir + hits.length) % hits.length);
+  };
+  const closeFind = () => {
+    setFinding(false);
+    activeTerm()?.clearSelection();
+    activeTerm()?.focus();
+  };
+  useEffect(() => {
+    openFindRef.current = () => {
+      setFinding(true);
+      setCollapsed(false);
+      setTimeout(() => findInputRef.current?.select(), 0);
+    };
+  });
 
   // F-97：帶著同樣的前文岔出一場新會話（新的 Claude Code 會話 id），這一場照常跑
   const forkSession = (t: TermInfo) => {
@@ -452,6 +528,61 @@ export function TerminalPanel(props: {
           {title}
         </span>
         <span className="spacer" />
+        {finding ? (
+          <form
+            className="termfind"
+            role="search"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (hits.length) stepFind(-1);
+              else runFind(query);
+            }}
+          >
+            <input
+              ref={findInputRef}
+              type="search"
+              value={query}
+              placeholder="在終端裡找"
+              aria-label="在終端裡找"
+              onChange={(e) => runFind(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  closeFind();
+                } else if (e.key === "Enter" && e.shiftKey) {
+                  e.preventDefault();
+                  stepFind(1);
+                }
+              }}
+            />
+            <span className="small muted" aria-live="polite">
+              {query ? (hits.length ? hitAt + 1 + "/" + hits.length : "找不到") : ""}
+            </span>
+            <button
+              type="button"
+              className="ghost small"
+              aria-label="上一個"
+              title="上一個（Enter）"
+              disabled={!hits.length}
+              onClick={() => stepFind(-1)}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              className="ghost small"
+              aria-label="下一個"
+              title="下一個（Shift+Enter）"
+              disabled={!hits.length}
+              onClick={() => stepFind(1)}
+            >
+              ↓
+            </button>
+            <button type="button" className="ghost small" aria-label="關閉尋找" onClick={closeFind}>
+              ×
+            </button>
+          </form>
+        ) : null}
         <button
           type="button"
           id="termreconnect"
@@ -515,6 +646,9 @@ export function TerminalPanel(props: {
                       run: () => ui.openDetail(autoContinueSpec(info)),
                     },
                   ]
+                : []),
+              ...(attached
+                ? [{ label: "在終端裡找（⌘F）", run: () => openFindRef.current() }]
                 : []),
               // 只打開紀錄表單；不會結束程序、也不會 commit
               { label: "記錄本次工作結果…", run: () => ui.openDetail(sessionResultSpec(info)) },
