@@ -73,6 +73,17 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
         let task = s(p, "task");
         let agent = s(p, "agent").unwrap_or_else(|| "claude".into());
         let home = home_group_for(d, s(p, "home_group"), repo.as_deref())?;
+        // 旗標不合就在寫會話料、留痕之前拒絕
+        if !flags.is_empty() && !session::is_claude_code(d, &agent)? {
+            return Err(Error::invalid(format!(
+                "{agent} 不是 Claude Code：權限模式、模型、worktree 只有 Claude Code 支援"
+            )));
+        }
+        if flags.worktree.is_some() && repo.is_none() {
+            return Err(Error::invalid(
+                "隔離的 worktree 只能對單一 repo 開（組的會話跑在 spine 目錄）",
+            ));
+        }
         let plan = session::build(
             d,
             SessionOpts {
@@ -86,16 +97,6 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
         )?;
         // 會話狀態（Rust 才有）：Claude Code 多帶一份只有三個 hook 的設定（做完／要你允許／你送出），
         // 不動使用者的 ~/.claude/settings.json；寫不出設定檔就照舊開（只是看不到「等你」）
-        if !flags.is_empty() && !plan.claude_code {
-            return Err(Error::invalid(format!(
-                "{agent} 不是 Claude Code：權限模式、模型、worktree 只有 Claude Code 支援"
-            )));
-        }
-        if flags.worktree.is_some() && repo.is_none() {
-            return Err(Error::invalid(
-                "隔離的 worktree 只能對單一 repo 開（組的會話跑在 spine 目錄）",
-            ));
-        }
         let mut argv = plan.cmd;
         if plan.claude_code && plan.flags_at <= argv.len() {
             argv.splice(plan.flags_at..plan.flags_at, flags.argv());
@@ -131,12 +132,13 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
     Ok(json!({"ok": true, "sid": sid, "title": title}))
 }
 
-/// F-96／F-97／F-108：開會話的選填旗標。`worktree: true`＝自動取名 `ctx-月日-時分`；`fork` 只對接續有效。
+/// F-96／F-97／F-108：開會話的選填旗標。`worktree: true`＝自動取名 `ctx-月日-時分秒`（同一分鐘開兩個也不撞）；`fork` 只對接續有效。
 fn launch_flags(p: &Value, resuming: bool) -> Result<session::LaunchFlags> {
     let worktree = match p.get("worktree") {
-        Some(Value::Bool(true)) => {
-            Some(format!("ctx-{}", chrono::Local::now().format("%m%d-%H%M")))
-        }
+        Some(Value::Bool(true)) => Some(format!(
+            "ctx-{}",
+            chrono::Local::now().format("%m%d-%H%M%S")
+        )),
         Some(Value::String(w)) => Some(w.clone()),
         _ => None,
     };

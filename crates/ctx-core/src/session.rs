@@ -253,6 +253,18 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
     })
 }
 
+/// config 裡這個 agent 是不是 Claude Code（`mcp: mcp-config`：吃 `--settings`、`--permission-mode` 這些旗標）。
+/// 不認得的 agent 回錯。Rust 才有（F-96）。
+pub fn is_claude_code(spine_dir: &Path, agent: &str) -> Result<bool> {
+    let cfg = config::load(spine_dir)?;
+    let agents = cfg.agents();
+    agents
+        .iter()
+        .find(|(k, _)| k == agent)
+        .map(|(_, s)| s.mcp == "mcp-config")
+        .ok_or_else(|| Error::invalid(format!("未知 agent: {agent}")))
+}
+
 /// 接續一場過去的 Claude Code 會話（F-72，Rust 才有）：config 裡這個 agent 的指令＋`--resume <id>`。
 /// 回傳 (argv, flags_at)。只有 Claude Code（`mcp: mcp-config`）會接續；id 要先用
 /// [`crate::history::valid_session_id`] 驗過。不寫情境卡、不留 presented——是回到舊對話，不是開新工作。

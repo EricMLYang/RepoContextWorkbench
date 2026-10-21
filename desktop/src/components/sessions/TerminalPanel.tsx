@@ -335,6 +335,14 @@ export function TerminalPanel(props: {
 
   const info: TermInfo | undefined = terms.find((s) => s.sid === activeSid);
 
+  // 換了會話：舊的搜尋結果指的是上一個終端的緩衝，清掉（搜尋框留著，Enter 會在新的終端重找）
+  const [findSid, setFindSid] = useState(activeSid);
+  if (findSid !== activeSid) {
+    setFindSid(activeSid);
+    setHits([]);
+    setHitAt(-1);
+  }
+
   const activeTerm = () => (activeSid ? recs.current.get(activeSid)?.t : undefined);
   /** 選起第 i 個結果、捲到畫面中間。 */
   const showHit = (list: TermHit[], i: number) => {

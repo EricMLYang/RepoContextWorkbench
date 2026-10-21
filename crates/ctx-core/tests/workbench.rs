@@ -2589,6 +2589,50 @@ fn group_name_with_space_events_stay_in_scope_lane() {
     assert_eq!(rec["scope_label"], "PM Group", "{rec}");
 }
 
+/// F-96：不是 Claude Code 的 agent 帶權限模式等旗標＝在寫會話料、留痕之前就拒絕。
+#[test]
+fn launch_flags_on_a_non_claude_agent_are_rejected_before_anything_is_written() {
+    let (_t, d) = spine_with_repos();
+    let cfg = d.join("config.yaml");
+    let text = std::fs::read_to_string(&cfg).unwrap();
+    std::fs::write(
+        &cfg,
+        format!(
+            "{text}\nagents:\n  codex:\n    cmd: [codex]\n    mcp: none\n    prompt_flag: []\n"
+        ),
+    )
+    .unwrap();
+    let terms = ArgvTerms(Default::default());
+    let count = || walkdir_count(&d.join("groups"));
+    let before = count();
+    let e = handle_action(
+        &d,
+        "term_create",
+        &json!({"kind": "agent", "agent": "codex", "repo": "repo-a", "model": "o3"}),
+        Some(&terms),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(e.contains("不是 Claude Code"), "{e}");
+    assert_eq!(count(), before, "被拒的不留會話料");
+    assert!(terms.0.lock().unwrap().is_empty());
+}
+
+fn walkdir_count(p: &std::path::Path) -> usize {
+    let Ok(rd) = std::fs::read_dir(p) else {
+        return 0;
+    };
+    rd.flatten()
+        .map(|e| {
+            if e.path().is_dir() {
+                walkdir_count(&e.path())
+            } else {
+                1
+            }
+        })
+        .sum()
+}
+
 /// config 的 claude 是包裝指令（["npx", "claude"]）：--settings 插在整個指令之後，不插進中間。
 #[test]
 fn term_create_inserts_settings_after_wrapped_agent_command() {
