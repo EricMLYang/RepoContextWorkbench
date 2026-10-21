@@ -3065,3 +3065,39 @@ body.withpicks #main {
   height: 24px;
   font-size: 12px;
 }
+
+/* F-107 worktree */
+.panelworktrees {
+  margin: 10px 12px;
+}
+.wtlist {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+}
+.wtrow {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.wthead {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.wtbranch {
+  font-weight: 600;
+  font-size: 12px;
+}
+.wtpath {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wthead .warn {
+  color: var(--amber);
+}
+.wtconfirm {
+  display: inline-flex;
+  gap: 4px;
+}

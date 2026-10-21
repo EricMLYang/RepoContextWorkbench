@@ -226,6 +226,23 @@ export interface PastSession {
 export type PermissionMode =
   "manual" | "acceptEdits" | "plan" | "auto" | "dontAsk" | "bypassPermissions";
 
+/** repo 掛出去的一個 git worktree（F-107，引擎 `worktrees::Worktree`）。 */
+export interface WorktreeInfo {
+  path: string;
+  branch: string | null;
+  head: string;
+  /** 主 worktree（repo 本身）。 */
+  main: boolean;
+  /** 沒 commit 的檔數；目錄不在了＝null。 */
+  dirty: number | null;
+  /** 只在這裡的 commit 數（別的分支與遠端都沒有）。 */
+  unique: number;
+  locked: boolean;
+  prunable: boolean;
+  /** 乾淨、沒有獨有 commit、沒鎖：可以安全移除。 */
+  removable: boolean;
+}
+
 /** 逐字稿時間軸的一框（F-94，引擎 `timeline::Frame`）。 */
 export interface TranscriptFrame {
   kind: "you" | "reply" | "thinking" | "tool" | "compact";
@@ -796,6 +813,13 @@ export interface ActionMap {
       group: string | null;
     };
   };
+  /** Rust 才有（F-107）：repo 掛出去的 worktree。只讀。 */
+  repo_worktrees: {
+    payload: { id: string };
+    result: { ok: true; id: string; worktrees: WorktreeInfo[] };
+  };
+  /** Rust 才有（F-107）：移除一個乾淨的 worktree（不加 --force，分支留著）。 */
+  worktree_remove: { payload: { id: string; path: string }; result: { ok: true } };
   /** Rust 才有（F-95）：終端裡的路徑字樣 → 登記的 repo＋相對路徑＋行欄（相對路徑照會話目錄）。只讀。 */
   locate_path: {
     payload: { text: string; sid?: string };

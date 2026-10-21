@@ -277,6 +277,37 @@ pub(super) fn a_locate_path(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
     Ok(json!({"ok": true, "repo": id, "path": rel, "line": line, "col": col}))
 }
 
+#[derive(serde::Deserialize)]
+struct WorktreeArgs {
+    id: String,
+    #[serde(default)]
+    path: String,
+}
+
+/// F-107（Rust 才有）：repo 掛出去的 worktree（分支、沒 commit 的檔數、只在這裡的 commit、能不能移除）。只讀。
+pub(super) fn a_repo_worktrees(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let WorktreeArgs { id, .. } = parse("repo_worktrees", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let list: Vec<Value> = crate::worktrees::list(&root)?
+        .into_iter()
+        .map(|w| {
+            let removable = w.removable();
+            let mut v = serde_json::to_value(w).unwrap_or_default();
+            v["removable"] = json!(removable);
+            v
+        })
+        .collect();
+    Ok(json!({"ok": true, "id": id, "worktrees": list}))
+}
+
+/// F-107（Rust 才有）：移除一個乾淨的 worktree（`git worktree remove`，不加 --force；分支留著）。
+pub(super) fn a_worktree_remove(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let WorktreeArgs { id, path } = parse("worktree_remove", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    crate::worktrees::remove(&root, &path)?;
+    Ok(json!({"ok": true}))
+}
+
 #[cfg(test)]
 mod tests {
     use super::split_location;

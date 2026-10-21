@@ -5,6 +5,7 @@ import { useSnapshot, useStore, useUi, type PanelTab } from "../../store/context
 import { RepoRoot } from "./FileTree";
 import { RepoChanges } from "./RepoChanges";
 import { RepoProfileCard } from "./RepoProfileCard";
+import { RepoWorktrees } from "./RepoWorktrees";
 
 /** 一行狀態：有才顯示，沒採集到寫「—」。 */
 function Fact({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
@@ -179,6 +180,7 @@ export function RepoPanel({
             開啟 Agent 會話
           </button>
         </div>
+        <RepoWorktrees key={id} id={id} />
         <RepoProfileCard id={id} />
       </div>
       {/* 寬度把手放在右側欄 landmark 裡（position: fixed；axe region） */}

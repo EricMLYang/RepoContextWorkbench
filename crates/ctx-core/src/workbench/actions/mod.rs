@@ -125,6 +125,8 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("save_image", a_save_image),
     ("backlinks", a_backlinks),
     ("locate_path", files::a_locate_path),
+    ("repo_worktrees", files::a_repo_worktrees),
+    ("worktree_remove", files::a_worktree_remove),
     ("past_sessions", finder::a_past_sessions),
     ("session_transcript", finder::a_session_transcript),
     ("session_digest", finder::a_session_digest),
@@ -164,6 +166,7 @@ const READ_ONLY: &[&str] = &[
     "assist_recent",
     "backlinks",
     "locate_path",
+    "repo_worktrees",
     "past_sessions",
     "session_transcript",
     "diff_notes_brief",
@@ -207,7 +210,13 @@ pub fn handle_action(
 
 /// 會改變 repo 採集結果的 action（tier、延後問句卡、移除 repo、類別——參考類不採集）：結果多帶 `rescan: true`，前端照它重新採集。
 /// Rust 才有（2026-10-13，原本前端寫死這份清單）。
-const RESCAN_AFTER: &[&str] = &["tier", "defer", "remove_repo", "repo_class"];
+const RESCAN_AFTER: &[&str] = &[
+    "tier",
+    "defer",
+    "remove_repo",
+    "repo_class",
+    "worktree_remove",
+];
 
 /// 把 payload 解析成型別化參數。**新 action 一律用這個**（缺欄位、型別不對都在這裡擋下）；
 /// 下面那組 `raw`／`s`／`int` 只給照抄 Python 版的舊 action（`payload.get(k) or …` 的語意），合併回 main 後換掉。

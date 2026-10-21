@@ -29,6 +29,7 @@ import {
 } from "../lib/view";
 import { interruptCard, loopCard, makeScan, makeState } from "./fixtures";
 import { tabLabels } from "../components/viewer/FileTabs";
+import { worktreeState } from "../components/deep/RepoWorktrees";
 
 describe("按鈕文案與主次", () => {
   it("主要動作照引擎標的 primary；有建議落點時文案是「存入〈repo〉」", () => {
@@ -389,5 +390,27 @@ describe("會話列小量表與出錯中斷（F-99～F-102）", () => {
     const st = { status: "waiting", text: "這一輪出錯中斷：額度", at: "x", event: "stop-failure" };
     expect(sessionFailed({ ...base, agent_status: st } as never)).toBe(true);
     expect(sessionFailed({ ...base, agent_status: { ...st, event: "stop" } } as never)).toBe(false);
+  });
+});
+
+describe("worktree 狀態一句話（F-107）", () => {
+  const w = {
+    path: "/r/wt",
+    branch: "x",
+    head: "0123abcd",
+    main: false,
+    dirty: 0,
+    unique: 0,
+    locked: false,
+    prunable: false,
+    removable: true,
+  };
+  it("乾淨、沒 commit 的檔、只在這裡的 commit、鎖住、目錄不在", () => {
+    expect(worktreeState(w)).toBe("乾淨");
+    expect(worktreeState({ ...w, dirty: 2, unique: 1, locked: true })).toBe(
+      "2 檔沒 commit · 1 個 commit 只在這裡 · 鎖住",
+    );
+    expect(worktreeState({ ...w, dirty: null })).toBe("目錄已不在");
+    expect(worktreeState({ ...w, prunable: true })).toBe("目錄已不在");
   });
 });
