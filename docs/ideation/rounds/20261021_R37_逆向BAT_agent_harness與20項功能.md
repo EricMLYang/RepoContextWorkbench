@@ -87,6 +87,9 @@ BAT 的計畫書寫明：依它讀到的方案政策（文件記載 2026-06-15 �
 | F-113 | 完成：⌘V 剪貼簿是圖（截圖）且是 agent 會話 → 引擎 `save_pasted_image` 存到 spine 的 `.state/session_images/`（不放 repo、7 天清、同秒不撞名）→ 貼 `@路徑`。註：Claude Code 自己的 Ctrl+V 讀系統剪貼簿本來就能用；這項補的是 WebView 的 ⌘V（原本貼不出東西）；從 Finder 拖檔進來 Tauri 預設攔掉，沒做 | （本筆） |
 
 ## E. 這輪沒驗到的、下一步
+- **真 CLI 驗過的**（2026-10-22 00:31，一次 `claude -p`／haiku、暫存目錄、只載專案設定）：Claude Code 2.1.306 接受多了 `StopFailure`／`SubagentStart`／`SubagentStop` 的設定檔，也接受 `--model=haiku`、`--permission-mode=plan` 的等號形式；`Stop` 寫出 `stop_id`；拿這份真逐字稿跑 `timeline::read`／`digest`、`auto_continue::take`（第一次送「繼續」、同一次 Stop 第二次不送）都對。測完把暫存的專案資料夾刪了。
+- 自我審查修掉的：非 Claude Code agent 帶旗標時原本先寫了會話料才拒絕；worktree 自動名稱同一分鐘會撞；換會話時終端搜尋結果殘留；監看合併窗口可能漏看 Stop；出錯中斷的會話列沒寫原因；commit 差異不是等寬字。
+- 無障礙：axe 多三個 R37 場景（逐字稿、三個會話對話框、右欄三段展開），各級違規都是 0。
 - **全部只有單元／元件測試**（Rust 新增約 20 個、前端新增約 20 個），沒在真 App 點過；手動驗收清單在 `docs/TESTING.md` §8d（16 項）。
 - **Windows（VDI）全部沒測**：特別是 F-111 的 Ctrl+Shift+F、F-112 的 `explorer <url>`、F-95 的 `C:\` 路徑。
 - 新 hook（StopFailure、SubagentStart／Stop）只有**新開的會話**才會掛上（設定檔每次開會話重寫）。
