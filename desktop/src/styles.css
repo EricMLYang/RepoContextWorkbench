@@ -3005,3 +3005,16 @@ body.withpicks #main {
   align-items: center;
   font-size: 13px;
 }
+
+/* F-100／F-101／F-102 會話列小量表 */
+.sessiongauges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--sub);
+}
+.sessiongauges .gauge.warn {
+  color: var(--amber);
+  font-weight: 600;
+}

@@ -73,7 +73,8 @@ BAT 的計畫書寫明：依它讀到的方案政策（文件記載 2026-06-15 �
 |---|---|---|
 | F-94＋F-104 | 完成：`timeline.rs`（真逐字稿 57MB 只讀尾 8MB、48ms）、action `session_transcript`、終端 ⋯「逐字稿」與過去的會話「逐字稿」、「我說的」可貼回 | f51e940 |
 | F-96＋F-97＋F-108 | 完成：`session::LaunchFlags`（`PermissionMode` 列舉、名稱白名單、一律等號形式免得吞掉開場 prompt）；開會話表單「權限／模型／隔離 worktree」；終端 ⋯ 與過去的會話「分岔」（`--fork-session`） | 956ba27 |
-| F-95 | 完成：前端 `lib/termLinks.ts` 找候選（網址、and/or 不算；全形字換算格子）、xterm link provider；引擎 `locate_path`（相對路徑先照 hook 記的 cwd、再照會話目錄；只開登記 repo 裡的檔）；檢視器 `line` 捲到那行（md 先切原始碼） | （本筆） |
+| F-95 | 完成：前端 `lib/termLinks.ts` 找候選（網址、and/or 不算；全形字換算格子）、xterm link provider；引擎 `locate_path`（相對路徑先照 hook 記的 cwd、再照會話目錄；只開登記 repo 裡的檔）；檢視器 `line` 捲到那行（md 先切原始碼） | 2bc0a74 |
+| F-99＋F-100＋F-101＋F-102 | 完成：多掛 `StopFailure`（→ 等你「這一輪出錯中斷：原因」＋會話列「繼續」貼進輸入框）、`SubagentStart／Stop`（`<sid>.sub/<agent_id>` 標記檔，免讀改寫競爭；2 小時沒收尾不算）；statusLine 另寫 `<sid>.meter.json`（context %、模型，變了才寫）；停下超過 60 分＝`cache_cold` | （本筆） |
 
 ## 來源
 - BAT 原始碼：`node-sidecar/src/handlers/claude-send.mjs`（buildQueryOptions L944–1010）、`lib/live-query.mjs`、`handlers/claude-permission.mjs`、`src-tauri/src/codex_app_server.rs`、`runtimes/claude-cli-*.mjs`、`plans/claude-cli-transcript-agent-plan.md`、`plans/claude-channel-agent-plan.md`、`lib/transcript-transfer.mjs`、`lib/harness-noise.mjs`、README（Auto-Continue、Cache Cost Awareness、Statusline）。

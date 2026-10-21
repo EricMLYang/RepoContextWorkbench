@@ -56,6 +56,12 @@ pub enum StatusHook {
     ToolStart,
     /// `PostToolUse`：工具結束 → working，拿掉 `tool`（F-82）
     ToolEnd,
+    /// `StopFailure`：這一輪因 API 錯誤（額度、過載…）中斷 → waiting「這一輪出錯中斷：…」（F-99）
+    StopFailure,
+    /// `SubagentStart`：開了一個子 agent → 記一個標記檔，不動狀態（F-102）
+    SubagentStart,
+    /// `SubagentStop`：子 agent 結束 → 拿掉標記檔（F-102）
+    SubagentStop,
 }
 
 impl StatusHook {
@@ -70,6 +76,9 @@ impl StatusHook {
             StatusHook::Statusline => "statusline",
             StatusHook::ToolStart => "tool-start",
             StatusHook::ToolEnd => "tool-end",
+            StatusHook::StopFailure => "stop-failure",
+            StatusHook::SubagentStart => "subagent-start",
+            StatusHook::SubagentStop => "subagent-stop",
         }
     }
 }
@@ -98,14 +107,94 @@ pub fn read(spine_dir: &Path, sid: &str) -> Option<Value> {
         .filter(|v| v.get("status").and_then(Value::as_str).is_some())
 }
 
-/// 會話結束：刪掉它的狀態檔（沒有就算了）。
+/// 會話結束：刪掉它的狀態檔、用量檔、子 agent 標記（沒有就算了）。
 pub fn clear(spine_dir: &Path, sid: &str) {
-    let _ = std::fs::remove_file(path_for(spine_dir, sid));
+    let p = path_for(spine_dir, sid);
+    let _ = std::fs::remove_file(&p);
+    drop_extras(&p);
+}
+
+/// 狀態檔旁邊的兩樣東西：用量檔與子 agent 標記資料夾（程序結束就沒意義了）。
+fn drop_extras(status: &Path) {
+    let _ = std::fs::remove_file(meter_path(status));
+    let _ = std::fs::remove_dir_all(subagents_dir(status));
+}
+
+/// 每場會話的用量（F-101）：statusLine 給的 context 用量 % 與模型，`<sid>.meter.json`（跟狀態檔分開寫，不互蓋）。
+pub fn meter_path(status: &Path) -> PathBuf {
+    status.with_extension("meter.json")
+}
+
+/// 子 agent 標記（F-102）：`<sid>.sub/<agent_id>`，一個子 agent 一個空檔——
+/// 同時開好幾個也不會互相覆蓋計數（不做讀改寫）。
+pub fn subagents_dir(status: &Path) -> PathBuf {
+    status.with_extension("sub")
+}
+
+/// 子 agent 標記超過幾小時就不算（沒收到 SubagentStop：中斷、當掉）。
+const SUBAGENT_STALE_HOURS: u64 = 2;
+
+/// 這場會話現在有幾個子 agent 在跑。
+pub fn subagent_count(spine_dir: &Path, sid: &str) -> usize {
+    let Ok(rd) = std::fs::read_dir(subagents_dir(&path_for(spine_dir, sid))) else {
+        return 0;
+    };
+    let fresh = |e: &std::fs::DirEntry| {
+        e.metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age.as_secs() < SUBAGENT_STALE_HOURS * 3600)
+    };
+    rd.flatten().filter(fresh).count()
+}
+
+/// 這場會話的用量檔（context %、模型）；沒有＝None。
+pub fn meter(spine_dir: &Path, sid: &str) -> Option<Value> {
+    let s = std::fs::read_to_string(meter_path(&path_for(spine_dir, sid))).ok()?;
+    serde_json::from_str(&s).ok()
+}
+
+/// statusLine 每輪都來：context 用量 % 或模型變了才寫（整數 %，一輪寫一次），回傳有沒有寫。
+pub fn record_meter(status: &Path, context: Option<u64>, model: Option<&str>) -> bool {
+    if context.is_none() && model.is_none() {
+        return false;
+    }
+    let p = meter_path(status);
+    let v = json!({"context": context, "model": model});
+    let same = std::fs::read_to_string(&p)
+        .ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .is_some_and(|prev| prev == v);
+    !same && crate::fsutil::write_atomic(&p, v.to_string().as_bytes()).is_ok()
+}
+
+/// SubagentStart／SubagentStop：加或拿掉一個標記檔。agent_id 只收英數與 `-_`（拼進路徑）。
+fn record_subagent(status: &Path, start: bool, payload: &Value) -> bool {
+    let Some(id) = payload
+        .get("agent_id")
+        .and_then(Value::as_str)
+        .filter(|id| {
+            (1..=80).contains(&id.len())
+                && id
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        })
+    else {
+        return false;
+    };
+    let dir = subagents_dir(status);
+    if start {
+        std::fs::create_dir_all(&dir).is_ok() && std::fs::write(dir.join(id), b"").is_ok()
+    } else {
+        std::fs::remove_file(dir.join(id)).is_ok()
+    }
 }
 
 /// 程序結束（F-78）：記得 Claude Code 會話 id 的就留一份 `exited`（標題、id、目錄）給「接續」用；
 /// 沒有 id（hook 從沒觸發）就照舊刪掉。App 重開時 [`clear_all`] 一起清。
 pub fn retire(spine_dir: &Path, sid: &str) {
+    drop_extras(&path_for(spine_dir, sid));
     let keep = read(spine_dir, sid).filter(|v| {
         v.get("claude_session")
             .and_then(Value::as_str)
@@ -148,8 +237,14 @@ pub fn clear_all(spine_dir: &Path) {
     };
     for e in rd.flatten() {
         let p = e.path();
-        if p.extension().and_then(|x| x.to_str()) == Some("json") {
-            let _ = std::fs::remove_file(p);
+        match p.extension().and_then(|x| x.to_str()) {
+            Some("json") => {
+                let _ = std::fs::remove_file(p);
+            }
+            Some("sub") if p.is_dir() => {
+                let _ = std::fs::remove_dir_all(p);
+            }
+            _ => {}
         }
     }
 }
@@ -176,6 +271,9 @@ pub fn settings_file(spine_dir: &Path, ctx: &Path) -> Result<PathBuf> {
             "PreToolUse": [{"hooks": cmd(StatusHook::ToolStart)}],
             "PostToolUse": [{"hooks": cmd(StatusHook::ToolEnd)}],
             "UserPromptSubmit": [{"hooks": cmd(StatusHook::Prompt)}],
+            "StopFailure": [{"hooks": cmd(StatusHook::StopFailure)}],
+            "SubagentStart": [{"hooks": cmd(StatusHook::SubagentStart)}],
+            "SubagentStop": [{"hooks": cmd(StatusHook::SubagentStop)}],
         },
         // F-83：額度餘光——statusLine 每輪給的 rate_limits 寫到 .state/usage.json；這條不印東西，
         // 那場會話的終端就沒有 statusline（使用者 2026-10-16 接受）
@@ -222,7 +320,23 @@ fn status_of(event: StatusHook, payload: &Value) -> Option<(AgentStatus, String)
                 None => "處理中".to_string(),
             },
         )),
-        StatusHook::Statusline => None,
+        StatusHook::StopFailure => {
+            let why = ["error_details", "error"]
+                .iter()
+                .find_map(|k| {
+                    payload
+                        .get(*k)
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|v| !v.is_empty())
+                })
+                .unwrap_or("API 錯誤");
+            Some((
+                AgentStatus::Waiting,
+                crate::pystr::take_chars(&format!("這一輪出錯中斷：{why}"), TEXT_MAX).to_string(),
+            ))
+        }
+        StatusHook::Statusline | StatusHook::SubagentStart | StatusHook::SubagentStop => None,
     }
 }
 
@@ -313,6 +427,9 @@ pub fn record_hook(
         return false;
     }
     let payload = crate::hooks::parse_payload(stdin);
+    if matches!(event, StatusHook::SubagentStart | StatusHook::SubagentStop) {
+        return record_subagent(&path, event == StatusHook::SubagentStart, &payload);
+    }
     let Some((status, text)) = status_of(event, &payload) else {
         return false;
     };
@@ -427,6 +544,53 @@ fn transcript_bits(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stop_failure_waits_with_the_reason_and_subagents_are_counted_by_marker_files() {
+        let t = tempfile::tempdir().unwrap();
+        let d = t.path();
+        let target = path_for(d, "t1");
+        let tgt = target.to_str();
+        assert!(record_hook(
+            StatusHook::StopFailure,
+            r#"{"error":"rate_limit","error_details":"5-hour limit reached"}"#,
+            tgt,
+            None
+        ));
+        let v = read(d, "t1").unwrap();
+        assert_eq!(v["status"], "waiting");
+        assert_eq!(v["event"], "stop-failure");
+        assert_eq!(v["text"], "這一輪出錯中斷：5-hour limit reached");
+        // 子 agent：一個一個標記，不動狀態；壞的 id 不寫
+        for id in ["a1", "a2"] {
+            let body = format!(r#"{{"agent_id":"{id}","agent_type":"Explore"}}"#);
+            assert!(record_hook(StatusHook::SubagentStart, &body, tgt, None));
+        }
+        assert!(!record_hook(
+            StatusHook::SubagentStart,
+            r#"{"agent_id":"../x"}"#,
+            tgt,
+            None
+        ));
+        assert_eq!(subagent_count(d, "t1"), 2);
+        assert!(record_hook(
+            StatusHook::SubagentStop,
+            r#"{"agent_id":"a1"}"#,
+            tgt,
+            None
+        ));
+        assert_eq!(subagent_count(d, "t1"), 1);
+        assert_eq!(read(d, "t1").unwrap()["event"], "stop-failure");
+        // 用量：變了才寫
+        assert!(record_meter(&target, Some(41), Some("Opus")));
+        assert!(!record_meter(&target, Some(41), Some("Opus")));
+        assert!(record_meter(&target, Some(42), Some("Opus")));
+        assert_eq!(meter(d, "t1").unwrap()["context"], 42);
+        // 程序結束：標記與用量一起清
+        clear(d, "t1");
+        assert_eq!(subagent_count(d, "t1"), 0);
+        assert!(meter(d, "t1").is_none());
+    }
 
     #[test]
     fn hook_writes_only_to_our_status_files() {

@@ -189,6 +189,13 @@ export interface TermInfo {
   resume_cwd?: string | null;
   /** Rust 才有（F-82）：處理中正在用的工具（PreToolUse 記的）；`stalled`＝超過 10 分鐘沒結束（可能卡住，也可能只是慢）。 */
   tool?: { label: string; minutes: number; stalled: boolean } | null;
+  /** Rust 才有（F-101）：這場會話的 context 用量 %（statusLine 寫的）與模型。 */
+  context_pct?: number | null;
+  model?: string | null;
+  /** Rust 才有（F-102）：在跑的子 agent 數。 */
+  subagents?: number;
+  /** Rust 才有（F-100）：停在你這邊超過一小時——提示快取多半過期，下一句會整份重算。 */
+  cache_cold?: boolean;
 }
 
 /** 過去的一場 Claude Code 會話（F-72，引擎 `history::PastSession`）。 */

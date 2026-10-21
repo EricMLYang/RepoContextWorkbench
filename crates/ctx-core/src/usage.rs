@@ -117,6 +117,12 @@ pub fn record(stdin: &str, target: Option<&str>, now: Option<NaiveDateTime>) -> 
     let Some(mut out) = summarize(&payload, now) else {
         return false;
     };
+    // F-101：這場會話自己的 context 用量 %、模型（usage.json 是全部會話共用一份，看不出是誰的）
+    crate::session_status::record_meter(
+        &status_path,
+        out["context"].as_u64(),
+        out["model"].as_str(),
+    );
     let p = state_dir.join("usage.json");
     // 內容沒變就不寫（忽略 at：一分鐘內 statusline 會來幾十次）
     if let Some(prev) = std::fs::read_to_string(&p)

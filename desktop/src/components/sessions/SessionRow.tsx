@@ -3,7 +3,9 @@ import type { TermInfo } from "../../api/types";
 import {
   sessionAwaitsTui,
   sessionDot,
+  sessionFailed,
   sessionFresh,
+  sessionGauges,
   sessionHeadline,
   sessionMeta,
   sessionNeedsYou,
@@ -97,6 +99,7 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
   const awaitsTui = sessionAwaitsTui(s) && s.alive;
   const canReply = sessionNeedsYou(s) && s.kind === "agent" && !awaitsTui;
   // 等你時多一行它說了什麼；停在權限提示而沒有回覆預覽時，拿 hook 記的提示（例：要你允許 Bash）
+  const gauges = sessionGauges(s);
   const preview = sessionWantsYou(s)
     ? s.last_reply || (awaitsTui ? s.agent_status?.text : null) || null
     : null;
@@ -120,8 +123,34 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
               : sessionMeta(s)}
           </span>
           {preview ? <span className="sessionpreview">{preview}</span> : null}
+          {gauges.length ? (
+            <span className="sessiongauges">
+              {gauges.map((g) => (
+                <span key={g.text} className={"gauge" + (g.warn ? " warn" : "")} title={g.title}>
+                  {g.text}
+                </span>
+              ))}
+            </span>
+          ) : null}
         </span>
       </button>
+      {sessionFailed(s) ? (
+        // F-99：額度、過載中斷——切過去把「繼續」貼進輸入框（不送出，額度還沒回來就先別按 Enter）
+        <AsyncButton
+          className="ghost small sessionreply"
+          title="切到這個會話，把「繼續」貼進輸入框（不送出）"
+          onError={(m) => store.toast(m)}
+          run={async () => {
+            ui.selectTerm(s.sid);
+            const title = await pasteWhenReady(ui, "繼續");
+            store.toast(
+              title ? `已貼到「${title}」（看額度回來了再按 Enter）` : "會話還沒接上，再按一次",
+            );
+          }}
+        >
+          繼續
+        </AsyncButton>
+      ) : null}
       {awaitsTui ? (
         <button
           type="button"

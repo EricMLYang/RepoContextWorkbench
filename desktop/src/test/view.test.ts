@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { usageText } from "../components/Chrome";
 import type { InboxCard, QuestionCard } from "../api/types";
 import {
+  sessionFailed,
+  sessionGauges,
   draggedFileAbs,
   firstNeedingYou,
   reportLine,
@@ -351,5 +353,41 @@ describe("額度餘光（F-83）", () => {
         warn: true,
       }),
     ).toBe("7d 90%（10-20 09:00 重置）");
+  });
+});
+
+describe("會話列小量表與出錯中斷（F-99～F-102）", () => {
+  const base = {
+    sid: "t1",
+    title: "claude",
+    alive: true,
+    kind: "agent" as const,
+    origin: null,
+    scope: null,
+    scope_repos: null,
+    started: null,
+    task: null,
+    report: null,
+    report_basis: "",
+  };
+  it("情境 %（80% 以上醒目）、子 agent、快取冷了；結束的與 shell 不畫", () => {
+    const g = sessionGauges({
+      ...base,
+      context_pct: 85,
+      model: "Opus",
+      subagents: 2,
+      cache_cold: true,
+    });
+    expect(g.map((x) => x.text)).toEqual(["情境 85%", "子 agent 2", "快取已冷"]);
+    expect(g[0].warn).toBe(true);
+    expect(g[0].title).toContain("Opus");
+    expect(sessionGauges({ ...base, context_pct: 30 })[0].warn).toBe(false);
+    expect(sessionGauges({ ...base, alive: false, context_pct: 30 })).toEqual([]);
+    expect(sessionGauges({ ...base, kind: "shell", context_pct: 30 })).toEqual([]);
+  });
+  it("StopFailure 寫的狀態＝出錯中斷", () => {
+    const st = { status: "waiting", text: "這一輪出錯中斷：額度", at: "x", event: "stop-failure" };
+    expect(sessionFailed({ ...base, agent_status: st } as never)).toBe(true);
+    expect(sessionFailed({ ...base, agent_status: { ...st, event: "stop" } } as never)).toBe(false);
   });
 });

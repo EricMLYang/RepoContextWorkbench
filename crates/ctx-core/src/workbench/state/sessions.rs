@@ -123,6 +123,28 @@ pub(super) fn annotate_terms_with(
                         .and_then(|s| tool_in_progress(s, Local::now().naive_local()))
                         .unwrap_or(Value::Null),
                 );
+                // F-101：這場會話的 context 用量 %、模型（statusLine 寫的）；F-102：在跑的子 agent 數
+                let sid = tget(t, "sid").unwrap_or("");
+                let meter = crate::session_status::meter(spine_dir, sid);
+                rec.insert(
+                    "context_pct".into(),
+                    meter.as_ref().map_or(Value::Null, |m| m["context"].clone()),
+                );
+                rec.insert(
+                    "model".into(),
+                    meter.as_ref().map_or(Value::Null, |m| m["model"].clone()),
+                );
+                rec.insert(
+                    "subagents".into(),
+                    json!(crate::session_status::subagent_count(spine_dir, sid)),
+                );
+                // F-100：停下來超過一小時＝提示快取多半過期了，下一句會整份重算
+                rec.insert(
+                    "cache_cold".into(),
+                    json!(own
+                        .as_ref()
+                        .is_some_and(|s| cache_cold(s, Local::now().naive_local()))),
+                );
                 // 依據要說得出口：範圍認得出來就講範圍，認不出來就說沒再過濾
                 let basis = match (&group, &ids) {
                     (Some(g), _) => format!("會話開始後、範圍內（{g}）的脊椎留痕"),
@@ -138,6 +160,28 @@ pub(super) fn annotate_terms_with(
             Value::Object(rec)
         })
         .collect()
+}
+
+/// F-100：停下來（做完、等你、卡住）超過幾分鐘就提示快取冷了。Claude Code 的提示快取最長一小時。
+pub const CACHE_COLD_MINUTES: i64 = 60;
+
+/// 會話停在你這邊（不是處理中、也沒結束）超過 [`CACHE_COLD_MINUTES`]。
+fn cache_cold(own: &Value, now: NaiveDateTime) -> bool {
+    let idle = own
+        .get("status")
+        .and_then(Value::as_str)
+        .and_then(AgentStatus::parse)
+        .is_some_and(|st| {
+            matches!(
+                st,
+                AgentStatus::Finished | AgentStatus::Waiting | AgentStatus::Blocked
+            )
+        });
+    idle && own
+        .get("at")
+        .and_then(Value::as_str)
+        .and_then(|a| NaiveDateTime::parse_from_str(a, "%Y-%m-%d %H:%M").ok())
+        .is_some_and(|at| (now - at).num_minutes() >= CACHE_COLD_MINUTES)
 }
 
 /// hook 狀態檔裡 `tool: {label, since}` → `{label, minutes, stalled}`；不是 working、沒有 tool、時間壞掉＝None。
@@ -412,6 +456,20 @@ mod decay_tests {
 
     fn at(s: &str) -> NaiveDateTime {
         NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap()
+    }
+
+    #[test]
+    fn cache_goes_cold_an_hour_after_the_session_stops() {
+        let st = |status: &str| json!({"status": status, "at": "2026-10-18 10:00"});
+        assert!(!cache_cold(&st("finished"), at("2026-10-18 10:59")));
+        assert!(cache_cold(&st("finished"), at("2026-10-18 11:00")));
+        assert!(cache_cold(&st("waiting"), at("2026-10-18 12:00")));
+        assert!(!cache_cold(&st("working"), at("2026-10-18 12:00")));
+        assert!(!cache_cold(&st("exited"), at("2026-10-18 12:00")));
+        assert!(!cache_cold(
+            &json!({"status": "finished"}),
+            at("2026-10-18 12:00")
+        ));
     }
 
     #[test]

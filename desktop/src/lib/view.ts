@@ -512,6 +512,39 @@ export function sessionTooltip(s: TermInfo): string {
   );
 }
 
+/** context 用量到幾 % 就標醒目（再過去 Claude Code 會自動壓縮，前文會被摘要掉）。 */
+export const CONTEXT_WARN_PCT = 80;
+
+/** 會話列的小量表（F-100／F-101／F-102）：context 用量、子 agent、快取冷了。只有活著的 agent 會話。 */
+export function sessionGauges(s: TermInfo): { text: string; title: string; warn?: boolean }[] {
+  if (!s.alive || s.kind !== "agent") return [];
+  const out: { text: string; title: string; warn?: boolean }[] = [];
+  if (typeof s.context_pct === "number")
+    out.push({
+      text: "情境 " + s.context_pct + "%",
+      title:
+        "context 已用 " +
+        s.context_pct +
+        "%" +
+        (s.model ? "（" + s.model + "）" : "") +
+        "；滿了 Claude Code 會自動壓縮，前文會變成摘要",
+      warn: s.context_pct >= CONTEXT_WARN_PCT,
+    });
+  if (s.subagents)
+    out.push({ text: "子 agent " + s.subagents, title: "這場會話開的子 agent 還在跑" });
+  if (s.cache_cold)
+    out.push({
+      text: "快取已冷",
+      title: "停了超過一小時，提示快取多半過期：下一句會整份重算 context（比較慢、比較耗額度）",
+    });
+  return out;
+}
+
+/** 這一輪因 API 錯誤（額度、過載…）中斷了（F-99，Claude Code 的 StopFailure）。 */
+export function sessionFailed(s: TermInfo): boolean {
+  return !!s.alive && s.agent_status?.event === "stop-failure";
+}
+
 /** 會話在等你（agent 回報等你／卡住，或 Claude Code 停住要你允許／回答）。做完一輪不算（F-80）。 */
 export function sessionNeedsYou(s: TermInfo): boolean {
   return !!s.alive && !!s.agent_status && ["waiting", "blocked"].includes(s.agent_status.status);

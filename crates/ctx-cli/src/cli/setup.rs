@@ -29,6 +29,12 @@ pub enum HookEvent {
     ToolStart,
     /// Rust 才有（F-82）：工具結束（Claude Code `PostToolUse`）→「處理中」
     ToolEnd,
+    /// Rust 才有（F-99）：這一輪因 API 錯誤中斷（Claude Code `StopFailure`）→「等你：這一輪出錯中斷」
+    StopFailure,
+    /// Rust 才有（F-102）：開了子 agent（Claude Code `SubagentStart`）→ 記標記，不動狀態
+    SubagentStart,
+    /// Rust 才有（F-102）：子 agent 結束（Claude Code `SubagentStop`）
+    SubagentStop,
 }
 
 impl HookEvent {
@@ -53,6 +59,9 @@ impl HookEvent {
             HookEvent::Statusline => StatusHook::Statusline,
             HookEvent::ToolStart => StatusHook::ToolStart,
             HookEvent::ToolEnd => StatusHook::ToolEnd,
+            HookEvent::StopFailure => StatusHook::StopFailure,
+            HookEvent::SubagentStart => StatusHook::SubagentStart,
+            HookEvent::SubagentStop => StatusHook::SubagentStop,
         })
     }
 }
