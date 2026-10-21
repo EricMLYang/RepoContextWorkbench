@@ -2613,6 +2613,65 @@ fn term_create_inserts_settings_after_wrapped_agent_command() {
     assert!(argv[2].starts_with("--settings="), "{argv:?}");
 }
 
+/// F-96／F-97／F-108：開會話選權限模式、模型、隔離 worktree；接續時可分岔。值都先驗過、用等號形式。
+#[test]
+fn term_create_launch_flags_are_validated_and_inserted_after_the_agent_command() {
+    let (_t, d) = spine_with_repos();
+    let ra = ctx_core::registry::get_repo(&d, "repo-a").unwrap().path();
+    let terms = ArgvTerms(Default::default());
+    let open = |p: Value| handle_action(&d, "term_create", &p, Some(&terms));
+    open(json!({"kind": "agent", "repo": "repo-a", "permission_mode": "plan", "model": "sonnet[1m]", "worktree": "fix-login"})).unwrap();
+    let argv = terms.0.lock().unwrap()[0].clone();
+    assert_eq!(argv[0], "claude");
+    assert!(argv[1].starts_with("--settings="), "{argv:?}");
+    assert_eq!(
+        &argv[2..5],
+        [
+            "--permission-mode=plan",
+            "--model=sonnet[1m]",
+            "--worktree=fix-login"
+        ]
+    );
+    // worktree: true＝自動取名
+    open(json!({"kind": "agent", "repo": "repo-a", "worktree": true})).unwrap();
+    let argv = terms.0.lock().unwrap()[1].clone();
+    assert!(argv[2].starts_with("--worktree=ctx-"), "{argv:?}");
+    // 分岔：接續＋--fork-session
+    open(json!({"kind": "agent", "resume": "aaaaaaaa-0001", "cwd": ra, "fork": true})).unwrap();
+    let argv = terms.0.lock().unwrap()[2].clone();
+    assert!(argv.contains(&"--fork-session".to_string()), "{argv:?}");
+    assert_eq!(&argv[argv.len() - 2..], ["--resume", "aaaaaaaa-0001"]);
+    for (bad, why) in [
+        (
+            json!({"kind": "agent", "repo": "repo-a", "permission_mode": "yolo"}),
+            "權限模式",
+        ),
+        (
+            json!({"kind": "agent", "repo": "repo-a", "model": "--dangerously"}),
+            "模型",
+        ),
+        (
+            json!({"kind": "agent", "repo": "repo-a", "worktree": "../x"}),
+            "worktree",
+        ),
+        (
+            json!({"kind": "agent", "group": "g1", "worktree": true}),
+            "單一 repo",
+        ),
+        (
+            json!({"kind": "agent", "repo": "repo-a", "fork": true}),
+            "分岔",
+        ),
+        (
+            json!({"kind": "agent", "resume": "aaaaaaaa-0001", "cwd": ra, "worktree": true}),
+            "接續",
+        ),
+    ] {
+        let e = open(bad.clone()).unwrap_err().to_string();
+        assert!(e.contains(why), "{bad} → {e}");
+    }
+}
+
 /// F-63 App 助手：規則計畫照原樣給 App；執行完的紀錄落 presented [assist]（帶目前牌組）。
 #[test]
 fn assist_plan_and_log() {

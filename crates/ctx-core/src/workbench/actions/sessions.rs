@@ -41,6 +41,7 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
     };
     let kind = raw(p, "kind").unwrap_or_else(|| "shell".into());
     let resume = s(p, "resume");
+    let flags = launch_flags(p, resume.is_some())?;
     let (sid, title) = if let (true, Some(id)) = (kind == "agent", resume) {
         // F-72：接續過去的 Claude Code 會話——在它原本的目錄跑 `claude --resume <id>`（目錄要在登記的 repo 底下）
         let agent = s(p, "agent").unwrap_or_else(|| "claude".into());
@@ -51,6 +52,7 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
         if let Ok(f) = file {
             argv.insert(at, format!("--settings={}", f.display()));
         }
+        argv.splice(at..at, flags.argv());
         let home = home_group_for(d, s(p, "home_group"), Some(&rid))?;
         terms.create_agent(AgentLaunch {
             agent,
@@ -84,8 +86,19 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
         )?;
         // 會話狀態（Rust 才有）：Claude Code 多帶一份只有三個 hook 的設定（做完／要你允許／你送出），
         // 不動使用者的 ~/.claude/settings.json；寫不出設定檔就照舊開（只是看不到「等你」）
+        if !flags.is_empty() && !plan.claude_code {
+            return Err(Error::invalid(format!(
+                "{agent} 不是 Claude Code：權限模式、模型、worktree 只有 Claude Code 支援"
+            )));
+        }
+        if flags.worktree.is_some() && repo.is_none() {
+            return Err(Error::invalid(
+                "隔離的 worktree 只能對單一 repo 開（組的會話跑在 spine 目錄）",
+            ));
+        }
         let mut argv = plan.cmd;
         if plan.claude_code && plan.flags_at <= argv.len() {
+            argv.splice(plan.flags_at..plan.flags_at, flags.argv());
             let file =
                 crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
             if let Ok(f) = file {
@@ -116,6 +129,32 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
         terms.create_shell(cwd.as_deref(), s(p, "origin"))?
     };
     Ok(json!({"ok": true, "sid": sid, "title": title}))
+}
+
+/// F-96／F-97／F-108：開會話的選填旗標。`worktree: true`＝自動取名 `ctx-月日-時分`；`fork` 只對接續有效。
+fn launch_flags(p: &Value, resuming: bool) -> Result<session::LaunchFlags> {
+    let worktree = match p.get("worktree") {
+        Some(Value::Bool(true)) => {
+            Some(format!("ctx-{}", chrono::Local::now().format("%m%d-%H%M")))
+        }
+        Some(Value::String(w)) => Some(w.clone()),
+        _ => None,
+    };
+    let fork = p.get("fork") == Some(&Value::Bool(true));
+    if fork && !resuming {
+        return Err(Error::invalid("分岔要從一場既有的會話岔出（缺 resume）"));
+    }
+    if worktree.is_some() && resuming {
+        return Err(Error::invalid(
+            "接續舊會話時不能另開 worktree（它原本在哪就回哪）",
+        ));
+    }
+    session::LaunchFlags::new(
+        s(p, "permission_mode").as_deref(),
+        s(p, "model").as_deref(),
+        worktree.as_deref(),
+        fork,
+    )
 }
 
 pub(super) fn a_term_kill(_d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {

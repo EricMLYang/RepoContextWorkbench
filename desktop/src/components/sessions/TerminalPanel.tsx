@@ -266,6 +266,25 @@ export function TerminalPanel(props: {
   }, [ui, store, openShellFor]);
 
   const info: TermInfo | undefined = terms.find((s) => s.sid === activeSid);
+
+  // F-97：帶著同樣的前文岔出一場新會話（新的 Claude Code 會話 id），這一場照常跑
+  const forkSession = (t: TermInfo) => {
+    if (!t.claude_session || !t.resume_cwd) return;
+    store
+      .action("term_create", {
+        kind: "agent",
+        resume: t.claude_session,
+        cwd: t.resume_cwd,
+        fork: true,
+        task: "分岔：" + (t.ai_title || t.title),
+      })
+      .then(async (r) => {
+        await store.refreshState();
+        ui.selectTerm(r.sid);
+        store.toast("已岔出新會話");
+      })
+      .catch((e: unknown) => store.toast(e instanceof Error ? e.message : String(e)));
+  };
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
 
@@ -450,6 +469,9 @@ export function TerminalPanel(props: {
                         ),
                     },
                   ]
+                : []),
+              ...(info.claude_session && info.resume_cwd
+                ? [{ label: "岔出新會話（這場不動）", run: () => forkSession(info) }]
                 : []),
               // 只打開紀錄表單；不會結束程序、也不會 commit
               { label: "記錄本次工作結果…", run: () => ui.openDetail(sessionResultSpec(info)) },

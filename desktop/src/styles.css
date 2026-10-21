@@ -2988,3 +2988,20 @@ body.withpicks #main {
   overflow: auto;
   margin: 4px 0 0;
 }
+
+/* F-96／F-108 開會話的 Claude Code 選項 */
+.launchopts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 12px;
+}
+.launchopts .field {
+  margin: 10px 0;
+}
+.launchopts .check {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+}

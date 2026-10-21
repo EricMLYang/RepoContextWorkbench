@@ -95,6 +95,24 @@ export function PastSessions() {
               </AsyncButton>
               <AsyncButton
                 className="ghost small"
+                title="帶著這場的前文開一場新的（新的會話 id），原本那場不動"
+                run={async () => {
+                  const r = await store.action("term_create", {
+                    kind: "agent",
+                    resume: s.id,
+                    cwd: s.cwd,
+                    fork: true,
+                    task: "分岔：" + s.title,
+                  });
+                  await store.refreshState();
+                  close();
+                  ui.selectTerm(r.sid);
+                }}
+              >
+                分岔
+              </AsyncButton>
+              <AsyncButton
+                className="ghost small"
                 run={async () => {
                   await copyText(store.backend, resumeCommand(s));
                   setCopied(s.id);

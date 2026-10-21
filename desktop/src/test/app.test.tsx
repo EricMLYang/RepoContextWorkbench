@@ -2448,6 +2448,45 @@ describe("會話放進所屬牌組", () => {
     const dialog = document.getElementById("detaildialog")!;
     expect(dialog.textContent).toContain("產品開發 › a");
   });
+
+  it("開會話選權限模式、模型、隔離 worktree（F-96／F-108）：只帶有選的，下次記得", async () => {
+    const backend = mockBackend({
+      action: vi.fn(async (name: string) =>
+        name === "term_create" ? { ok: true, sid: "t9", title: "x" } : { ok: true },
+      ) as never,
+    });
+    const store = new WorkbenchStore(backend, { group: "產品開發", repos: null });
+    render(<App store={store} autoStart={false} />);
+    await act(async () => {
+      await store.refreshAll();
+    });
+    const card = document.querySelector('.gcard[data-key="產品開發"]')!;
+    await act(async () =>
+      fireEvent.click(within(card as HTMLElement).getByRole("button", { name: /展開/ })),
+    );
+    fireEvent.contextMenu(within(card as HTMLElement).getByRole("button", { name: /^a/ }));
+    await act(async () =>
+      fireEvent.click(screen.getByRole("menuitem", { name: "開啟 Agent 會話…" })),
+    );
+    const dialog = document.getElementById("detaildialog")!;
+    fireEvent.change(within(dialog).getByLabelText("權限"), { target: { value: "plan" } });
+    fireEvent.change(within(dialog).getByLabelText("模型"), { target: { value: " opus " } });
+    fireEvent.click(within(dialog).getByLabelText(/隔離的 git worktree/));
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "開始會話" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith(
+      "term_create",
+      expect.objectContaining({ permission_mode: "plan", model: "opus", worktree: true }),
+    );
+    expect(
+      JSON.parse(
+        localStorage.getItem(
+          Object.keys(localStorage).find((k) => k.endsWith("permission_mode"))!,
+        )!,
+      ),
+    ).toBe("plan");
+  });
 });
 
 describe("牌組筆記", () => {

@@ -286,6 +286,128 @@ pub fn resume_argv(
     Ok((cmd, spec.cmd.len()))
 }
 
+/// Claude Code 的權限模式（F-96；`claude --permission-mode` 的選項，2.1.306）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PermissionMode {
+    /// 每個工具都問你（Claude Code 的預設）
+    Manual,
+    /// 改檔不問，其他照問
+    AcceptEdits,
+    /// 先只讀、提計畫，你同意才動手
+    Plan,
+    /// 由 Claude Code 自己判斷哪些要問
+    Auto,
+    /// 沒預先允許的一律拒絕、不問
+    DontAsk,
+    /// 全部不問（危險）
+    BypassPermissions,
+}
+
+impl PermissionMode {
+    pub const ALL: [PermissionMode; 6] = [
+        PermissionMode::Manual,
+        PermissionMode::AcceptEdits,
+        PermissionMode::Plan,
+        PermissionMode::Auto,
+        PermissionMode::DontAsk,
+        PermissionMode::BypassPermissions,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PermissionMode::Manual => "manual",
+            PermissionMode::AcceptEdits => "acceptEdits",
+            PermissionMode::Plan => "plan",
+            PermissionMode::Auto => "auto",
+            PermissionMode::DontAsk => "dontAsk",
+            PermissionMode::BypassPermissions => "bypassPermissions",
+        }
+    }
+}
+
+impl std::str::FromStr for PermissionMode {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self> {
+        PermissionMode::ALL
+            .into_iter()
+            .find(|m| m.as_str() == s)
+            .ok_or_else(|| Error::invalid(format!("不認得的權限模式：{s}")))
+    }
+}
+
+/// 開 Claude Code 會話時另外帶的旗標（F-96 權限模式與模型、F-97 分岔、F-108 隔離的 worktree）。
+/// 一律用等號形式（`--model=opus`）：開場的帶料 prompt 是位置參數，空格形式的選填值會把它吞掉。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LaunchFlags {
+    pub permission_mode: Option<PermissionMode>,
+    pub model: Option<String>,
+    /// 在 Claude Code 自己建的 git worktree 裡跑（名稱）。
+    pub worktree: Option<String>,
+    /// 接續時岔出新的會話 id，原會話不動（只對 `--resume` 有意義）。
+    pub fork: bool,
+}
+
+/// 名稱只收英數與 `._-`（模型另收 `[]`，例 `sonnet[1m]`），不給拼出別的旗標或路徑。
+fn plain_name(s: &str, max: usize, extra: &[char]) -> bool {
+    (1..=max).contains(&s.len())
+        && !s.starts_with(['-', '.'])
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c) || extra.contains(&c))
+}
+
+impl LaunchFlags {
+    /// 驗證後組起來；空字串＝沒選。
+    pub fn new(
+        permission_mode: Option<&str>,
+        model: Option<&str>,
+        worktree: Option<&str>,
+        fork: bool,
+    ) -> Result<Self> {
+        fn pick(v: Option<&str>) -> Option<&str> {
+            v.map(str::trim).filter(|v| !v.is_empty())
+        }
+        let permission_mode = pick(permission_mode).map(str::parse).transpose()?;
+        let model = match pick(model) {
+            Some(m) if plain_name(m, 64, &['[', ']']) => Some(m.to_string()),
+            Some(m) => return Err(Error::invalid(format!("模型名稱不對：{m}"))),
+            None => None,
+        };
+        let worktree = match pick(worktree) {
+            Some(w) if plain_name(w, 48, &[]) => Some(w.to_string()),
+            Some(w) => return Err(Error::invalid(format!("worktree 名稱不對：{w}"))),
+            None => None,
+        };
+        Ok(LaunchFlags {
+            permission_mode,
+            model,
+            worktree,
+            fork,
+        })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        *self == LaunchFlags::default()
+    }
+
+    /// 要插在 agent 指令後面的旗標。
+    pub fn argv(&self) -> Vec<String> {
+        let mut v = Vec::new();
+        if let Some(m) = self.permission_mode {
+            v.push(format!("--permission-mode={}", m.as_str()));
+        }
+        if let Some(m) = &self.model {
+            v.push(format!("--model={m}"));
+        }
+        if let Some(w) = &self.worktree {
+            v.push(format!("--worktree={w}"));
+        }
+        if self.fork {
+            v.push("--fork-session".to_string());
+        }
+        v
+    }
+}
+
 /// Python `subprocess.list2cmdline`（Windows 命令列引號規則）。
 pub fn list2cmdline(args: &[String]) -> String {
     let mut out: Vec<String> = Vec::new();

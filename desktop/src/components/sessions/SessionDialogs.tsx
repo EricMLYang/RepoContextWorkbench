@@ -1,10 +1,29 @@
 import { useEffect, useRef, useState } from "react";
-import type { TermInfo } from "../../api/types";
+import type { PermissionMode, TermInfo } from "../../api/types";
 import { DetailLayout, useAutoFocus, useDetail } from "../../dialogs/Modal";
 import { load, save } from "../../lib/storage";
 import { reportLine, sessionTarget } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
+
+/** 權限模式的選項（F-96；空＝照 Claude Code 自己的設定）。 */
+export const PERMISSION_MODES: { value: PermissionMode | ""; label: string }[] = [
+  { value: "", label: "照 Claude Code 的設定" },
+  { value: "manual", label: "每個工具都問我" },
+  { value: "acceptEdits", label: "改檔不問，其他照問" },
+  { value: "plan", label: "先提計畫，我同意才動手" },
+  { value: "auto", label: "由 Claude Code 判斷要不要問" },
+  { value: "dontAsk", label: "沒預先允許的一律拒絕" },
+  { value: "bypassPermissions", label: "全部不問（危險）" },
+];
+
+/** 模型的常用別名（也可以打全名）。 */
+const MODEL_HINTS = ["fable", "opus", "sonnet", "haiku"];
+
+/** 這個 agent 是不是 Claude Code（config 的 key；只有它吃權限模式、模型、worktree）。 */
+export function isClaudeAgent(agent: string): boolean {
+  return /^claude/i.test(agent);
+}
 
 /** 開會話表單：選 Agent、寫任務；範圍在開啟時就固定。 */
 export function SessionForm({
@@ -24,6 +43,14 @@ export function SessionForm({
     return agents.includes(remembered) ? remembered : agents[0] || "";
   });
   const [task, setTask] = useState(initialTask);
+  const [mode, setMode] = useState<PermissionMode | "">(() => {
+    const m = load<string>("permission_mode", "");
+    return PERMISSION_MODES.find((x) => x.value === m)?.value ?? "";
+  });
+  const [model, setModel] = useState(() => load("model", ""));
+  const [worktree, setWorktree] = useState(false);
+  const claude = isClaudeAgent(agent);
+  const single = typeof payload.repo === "string" && !!payload.repo;
   const taskRef = useRef<HTMLTextAreaElement>(null);
   return (
     <DetailLayout
@@ -33,12 +60,21 @@ export function SessionForm({
           disabled={!agents.length}
           run={async () => {
             save("agent", agent);
+            save("permission_mode", mode);
+            save("model", model.trim());
             const r = await store.action("term_create", {
               ...payload,
               kind: "agent",
               agent,
               task: task.trim(),
               origin: (payload.origin as string) || "scope",
+              ...(claude
+                ? {
+                    ...(mode ? { permission_mode: mode } : {}),
+                    ...(model.trim() ? { model: model.trim() } : {}),
+                    ...(worktree && single ? { worktree: true } : {}),
+                  }
+                : {}),
             });
             close();
             await store.refreshState();
@@ -69,6 +105,44 @@ export function SessionForm({
           ))}
         </select>
       </label>
+      {claude ? (
+        <div className="launchopts">
+          <label className="field">
+            權限
+            <select value={mode} onChange={(e) => setMode(e.target.value as PermissionMode | "")}>
+              {PERMISSION_MODES.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            模型
+            <input
+              list="modelhints"
+              value={model}
+              placeholder="照 Claude Code 的設定"
+              onChange={(e) => setModel(e.target.value)}
+            />
+            <datalist id="modelhints">
+              {MODEL_HINTS.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+          </label>
+          {single ? (
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={worktree}
+                onChange={(e) => setWorktree(e.target.checked)}
+              />
+              在隔離的 git worktree 裡做（不動你目前的工作目錄；做完要自己合併）
+            </label>
+          ) : null}
+        </div>
+      ) : null}
       <label className="field">
         這次想完成什麼？
         <textarea

@@ -206,6 +206,10 @@ export interface PastSession {
   path: string;
 }
 
+/** Claude Code 的權限模式（F-96，引擎 `session::PermissionMode`）。 */
+export type PermissionMode =
+  "manual" | "acceptEdits" | "plan" | "auto" | "dontAsk" | "bypassPermissions";
+
 /** 逐字稿時間軸的一框（F-94，引擎 `timeline::Frame`）。 */
 export interface TranscriptFrame {
   kind: "you" | "reply" | "thinking" | "tool" | "compact";
@@ -830,6 +834,14 @@ export interface ActionMap {
       resume?: string;
       /** Rust 才有（F-77）：接續時的第一句（例：請它補交接）。 */
       prompt?: string;
+      /** Rust 才有（F-96）：Claude Code 的權限模式（`--permission-mode`）。 */
+      permission_mode?: PermissionMode;
+      /** Rust 才有（F-96）：模型別名或全名（`--model`）。 */
+      model?: string;
+      /** Rust 才有（F-108）：在 Claude Code 自己建的 git worktree 跑；true＝自動取名。只能對單一 repo。 */
+      worktree?: boolean | string;
+      /** Rust 才有（F-97）：接續時岔出新會話（`--fork-session`），原會話不動。 */
+      fork?: boolean;
     } & ScopePayload;
     result: { ok: true; sid: string; title: string };
   };
