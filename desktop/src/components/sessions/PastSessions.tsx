@@ -4,6 +4,7 @@ import { DetailLayout, useDetail } from "../../dialogs/Modal";
 import { copyText } from "../../lib/clipboard";
 import { useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
+import { transcriptSpec } from "./Transcript";
 
 /** 在終端自己接續用的指令。 */
 export function resumeCommand(s: PastSession): string {
@@ -101,6 +102,13 @@ export function PastSessions() {
               >
                 {copied === s.id ? "已複製" : "複製指令"}
               </AsyncButton>
+              <button
+                type="button"
+                className="ghost small"
+                onClick={() => ui.openDetail(transcriptSpec({ id: s.id, cwd: s.cwd }, s.title))}
+              >
+                逐字稿
+              </button>
             </div>
           </li>
         ))}

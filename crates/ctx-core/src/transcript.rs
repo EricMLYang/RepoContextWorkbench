@@ -79,7 +79,7 @@ fn assistant_text(o: &Value) -> Option<String> {
 /// 壓縮摘要的開頭（舊版逐字稿沒有 `isCompactSummary` 旗標時靠這句認）。
 const COMPACT_PREFIX: &str = "this session is being continued from a previous conversation";
 /// 壓縮摘要列（N-40）：模型確實讀到了，但不是人打的——不能當第一句。
-fn is_compact_summary(o: &Value, text: &str) -> bool {
+pub(crate) fn is_compact_summary(o: &Value, text: &str) -> bool {
     o.get("isCompactSummary") == Some(&Value::Bool(true))
         || text
             .get(..COMPACT_PREFIX.len())
@@ -90,7 +90,7 @@ fn is_compact_summary(o: &Value, text: &str) -> bool {
 /// 背景任務通知（`origin.kind: task-notification`／`promptSource: system`）、本機指令的 caveat（有 `isMeta`）、
 /// 斜線指令（`<command-name>/clear…`，沒有任何旗標）、工具中斷標記。人沒打過字，不能當標題或第一句。
 /// 開頭是 `<` 標籤的一律不算（跟 backfill `compact` 同一條規則；人打的提示幾乎不會以標籤開頭）。
-fn is_harness_noise(o: &Value, text: &str) -> bool {
+pub(crate) fn is_harness_noise(o: &Value, text: &str) -> bool {
     o.get("isMeta") == Some(&Value::Bool(true))
         || o.get("promptSource").and_then(Value::as_str) == Some("system")
         || o.get("origin")

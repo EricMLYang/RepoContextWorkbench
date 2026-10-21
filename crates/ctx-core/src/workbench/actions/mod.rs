@@ -123,6 +123,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("save_image", a_save_image),
     ("backlinks", a_backlinks),
     ("past_sessions", finder::a_past_sessions),
+    ("session_transcript", finder::a_session_transcript),
     ("diff_notes_brief", finder::a_diff_notes_brief),
     ("assist_plan", a_assist_plan),
     ("assist_log", a_assist_log),
@@ -158,6 +159,7 @@ const READ_ONLY: &[&str] = &[
     "assist_recent",
     "backlinks",
     "past_sessions",
+    "session_transcript",
     "diff_notes_brief",
 ];
 

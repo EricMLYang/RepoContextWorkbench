@@ -2727,6 +2727,15 @@ fn term_create_resume_runs_claude_resume_in_the_session_dir() {
     assert!(ctx_core::workbench::actions::is_read_only("past_sessions"));
     let r = handle_action(&d, "past_sessions", &json!({"group": "g1"}), None).unwrap();
     assert!(r["sessions"].is_array());
+    // F-94：逐字稿是唯讀；會話還沒送出第一句（沒有 Claude Code 會話 id）、id 不對：說明原因
+    assert!(ctx_core::workbench::actions::is_read_only(
+        "session_transcript"
+    ));
+    let e = handle_action(&d, "session_transcript", &json!({"sid": "s9"}), None).unwrap_err();
+    assert!(e.to_string().contains("送出第一句"), "{e}");
+    let e = handle_action(&d, "session_transcript", &json!({"id": "../x"}), None).unwrap_err();
+    assert!(e.to_string().contains("找不到"), "{e}");
+    assert!(handle_action(&d, "session_transcript", &json!({}), None).is_err());
 }
 
 #[test]

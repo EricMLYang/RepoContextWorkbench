@@ -269,3 +269,43 @@ pub(super) fn a_diff_notes_brief(d: &Path, p: &Value, _t: Option<&dyn Terms>) ->
     }
     Ok(json!({"ok": true, "text": lines.join("\n"), "count": notes.len()}))
 }
+
+#[derive(serde::Deserialize)]
+struct TranscriptArgs {
+    /// App 會話（從它的狀態檔拿 Claude Code 會話 id 與目錄）。
+    #[serde(default)]
+    sid: Option<String>,
+    /// 或直接給 Claude Code 會話 id（過去的會話）。
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    cwd: Option<String>,
+}
+
+/// F-94（Rust 才有）：一場會話的逐字稿時間軸（你說的、回覆、思考、工具＋結果）。只讀。
+/// 給 `sid` 時，會話還沒觸發過任何 hook（剛開、還沒送出第一句）就沒有 Claude Code 會話 id，回錯說明。
+pub(super) fn a_session_transcript(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let TranscriptArgs { sid, id, cwd } = parse("session_transcript", p)?;
+    let (id, cwd) = match (sid, id) {
+        (_, Some(id)) => (id, cwd),
+        (Some(sid), None) => {
+            let st = crate::session_status::read(d, &sid).unwrap_or_default();
+            let field = |k: &str| st.get(k).and_then(Value::as_str).map(str::to_string);
+            let Some(id) = field("claude_session") else {
+                return Err(Error::invalid(
+                    "這個會話還沒有逐字稿：送出第一句之後才會有（或它不是 Claude Code 會話）",
+                ));
+            };
+            (id, cwd.or_else(|| field("cwd")))
+        }
+        (None, None) => return Err(Error::invalid("缺 sid 或 id")),
+    };
+    let path = crate::timeline::locate(&id, cwd.as_deref(), None)
+        .ok_or_else(|| Error::invalid(format!("找不到這場會話的逐字稿：{id}")))?;
+    let tl = crate::timeline::read(&path)
+        .ok_or_else(|| Error::invalid(format!("讀不了逐字稿：{}", path.display())))?;
+    let mut out = serde_json::to_value(tl)?;
+    out["ok"] = json!(true);
+    out["id"] = json!(id);
+    Ok(out)
+}

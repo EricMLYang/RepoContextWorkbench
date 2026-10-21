@@ -2153,6 +2153,49 @@ describe("會話放進所屬牌組", () => {
     expect(document.getElementById("tab-activity")!.classList.contains("on")).toBe(true);
   });
 
+  it("逐字稿（F-94）：從會話選單打開，篩「我說的」，錯誤結果標紅；讀失敗把原因寫出來", async () => {
+    const frames = [
+      { kind: "you", text: "幫我跑測試", at: "2026-10-21T01:00:00Z" },
+      { kind: "thinking", text: "先看看", at: null },
+      { kind: "reply", text: "好", at: null },
+      { kind: "tool", text: "cargo test", at: null, tool: "Bash", result: "失敗", error: true },
+    ];
+    let fail = false;
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({ terms: [term({ sid: "t1", home_group: "產品開發" })] as never }),
+      ),
+      action: vi.fn(async (name: string) => {
+        if (name === "session_transcript") {
+          if (fail) throw new Error("這個會話還沒有逐字稿");
+          return { ok: true, id: "x", frames, truncated: false, title: "跑測試", path: "/p.jsonl" };
+        }
+        return { ok: true };
+      }) as never,
+    });
+    await mount(backend);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "回到會話" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "更多會話動作" })));
+    await act(async () =>
+      fireEvent.click(screen.getByRole("menuitem", { name: "逐字稿（完整對話與工具）" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("session_transcript", { sid: "t1" });
+    const dialog = document.getElementById("detaildialog")!;
+    const list = within(dialog).getByRole("list", { name: "逐字稿" });
+    expect(list.querySelectorAll("li")).toHaveLength(4);
+    expect(list.querySelector(".txerr")!.textContent).toContain("cargo test");
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "我說的 1" })),
+    );
+    expect(list.querySelectorAll("li")).toHaveLength(1);
+    expect(within(dialog).getByRole("button", { name: "貼回會話" })).toBeTruthy();
+    fail = true;
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "重新讀取" })),
+    );
+    expect(dialog.textContent).toContain("讀不到逐字稿：這個會話還沒有逐字稿");
+  });
+
   it("牌組的會話在牌組區塊裡（寫 repo），其他的在下面；終端標題寫「組 › repo」", async () => {
     const backend = mockBackend({
       getState: vi.fn(async () =>

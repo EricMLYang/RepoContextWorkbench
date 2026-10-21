@@ -71,6 +71,7 @@ BAT 的計畫書寫明：依它讀到的方案政策（文件記載 2026-06-15 �
 ## D. 進度（每做完一項更新）
 | ID | 狀態 | commit |
 |---|---|---|
+| F-94＋F-104 | 完成：`timeline.rs`（真逐字稿 57MB 只讀尾 8MB、48ms）、action `session_transcript`、終端 ⋯「逐字稿」與過去的會話「逐字稿」、「我說的」可貼回 | （本筆） |
 
 ## 來源
 - BAT 原始碼：`node-sidecar/src/handlers/claude-send.mjs`（buildQueryOptions L944–1010）、`lib/live-query.mjs`、`handlers/claude-permission.mjs`、`src-tauri/src/codex_app_server.rs`、`runtimes/claude-cli-*.mjs`、`plans/claude-cli-transcript-agent-plan.md`、`plans/claude-channel-agent-plan.md`、`lib/transcript-transfer.mjs`、`lib/harness-noise.mjs`、README（Auto-Continue、Cache Cost Awareness、Statusline）。

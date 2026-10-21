@@ -206,6 +206,18 @@ export interface PastSession {
   path: string;
 }
 
+/** 逐字稿時間軸的一框（F-94，引擎 `timeline::Frame`）。 */
+export interface TranscriptFrame {
+  kind: "you" | "reply" | "thinking" | "tool" | "compact";
+  /** 你說的／回覆／思考的文字；工具是「做什麼」（指令、路徑…）。 */
+  text: string;
+  at: string | null;
+  tool?: string;
+  /** 工具結果預覽（結果回來了才有）。 */
+  result?: string;
+  error?: boolean;
+}
+
 /** App 助手的一步（引擎驗證過；error 有值＝不能執行）。 */
 export interface AssistStep {
   op:
@@ -736,6 +748,19 @@ export interface ActionMap {
   past_sessions: {
     payload: ScopePayload & { limit?: number; query?: string };
     result: { ok: true; sessions: PastSession[] };
+  };
+  /** Rust 才有（F-94）：一場會話的逐字稿時間軸（App 會話給 sid；過去的會話給 id＋cwd）。只讀。 */
+  session_transcript: {
+    payload: { sid?: string; id?: string; cwd?: string };
+    result: {
+      ok: true;
+      id: string;
+      frames: TranscriptFrame[];
+      /** 檔案太大只讀了尾巴，或框數超過上限只留最後的。 */
+      truncated: boolean;
+      title: string | null;
+      path: string;
+    };
   };
   /** Rust 才有（F-69）：repo 裡哪些 md 連到這個檔（照相對連結解析、跳過程式碼區塊；最多 50 則）。 */
   backlinks: {

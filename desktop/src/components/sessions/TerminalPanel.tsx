@@ -24,6 +24,7 @@ import {
 } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { confirmKillSpec, sessionResultSpec } from "./SessionDialogs";
+import { transcriptSpec } from "./Transcript";
 
 interface TermRec {
   t: Terminal;
@@ -439,6 +440,17 @@ export function TerminalPanel(props: {
             id="termmenu"
             title={info.title || "會話"}
             items={[
+              ...(info.kind === "agent"
+                ? [
+                    {
+                      label: "逐字稿（完整對話與工具）",
+                      run: () =>
+                        ui.openDetail(
+                          transcriptSpec({ sid: info.sid }, info.ai_title || info.title),
+                        ),
+                    },
+                  ]
+                : []),
               // 只打開紀錄表單；不會結束程序、也不會 commit
               { label: "記錄本次工作結果…", run: () => ui.openDetail(sessionResultSpec(info)) },
               {

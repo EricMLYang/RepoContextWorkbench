@@ -2928,3 +2928,63 @@ body.withpicks #main {
   width: 100%;
   margin-bottom: 8px;
 }
+
+/* F-94 逐字稿 */
+.txfilters {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.txfilters .on {
+  background: rgba(145, 183, 255, 0.18);
+  font-weight: 600;
+}
+.txlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 62vh;
+  overflow: auto;
+}
+.txf {
+  padding: 6px 8px;
+  border-left: 3px solid var(--line);
+  margin-bottom: 6px;
+}
+.txf.tx-you {
+  border-left-color: var(--blue);
+}
+.txf.tx-reply {
+  border-left-color: var(--green);
+}
+.txf.tx-tool {
+  border-left-color: var(--sub);
+}
+.txf.txerr {
+  border-left-color: var(--red);
+}
+.txhead {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.txkind {
+  font-weight: 600;
+}
+.txpaste {
+  margin-left: auto;
+}
+.txtext {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.txtool {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.txresult {
+  max-height: 200px;
+  overflow: auto;
+  margin: 4px 0 0;
+}

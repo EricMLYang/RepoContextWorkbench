@@ -46,6 +46,7 @@ pub mod spine;
 pub mod status;
 pub mod summary;
 pub mod term;
+pub mod timeline;
 pub mod timer;
 pub mod transcript;
 pub mod upstream;
