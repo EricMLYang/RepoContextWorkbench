@@ -80,6 +80,7 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 - **新料拿來試**：`ctx fresh --try <id>` 在推薦所屬的組開一個帶出處的待辦。
 - **之前談過的會話**：使用者提到「上次那個…」時，`ctx sessions --query <詞> --json` 找範圍內過去的 Claude Code 會話
   （標題、最後回覆、`claude --resume` 指令、逐字稿 `path`）；交接沒寫到的細節再去逐字稿找，別憑印象。
+  要接手一場會話：`ctx sessions --digest <id>` 印出交接包（你說的話、動過的檔、跑過的指令、最後回覆，秘密已遮），比整份逐字稿短。
 
 ## 範圍規則
 

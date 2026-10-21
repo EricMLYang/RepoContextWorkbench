@@ -299,3 +299,34 @@ fn test_assist_plans_then_applies() {
     let r = c.clone().run(&["assist", "打開筆記分頁", "--yes"]);
     assert!(r.code == 0 && r.stdout.contains("只在 App 做") && r.stdout.contains("沒有能做的步驟"));
 }
+
+/// F-103：`ctx sessions --digest <id>` 印交接包（逐字稿在 CLAUDE_CONFIG_DIR 底下），秘密遮掉；找不到說明。
+#[test]
+fn test_sessions_digest_prints_a_redacted_handoff() {
+    let e = env_spine();
+    let home = e.tmp().join("home");
+    let proj = home.join(".claude/projects/-r-app");
+    std::fs::create_dir_all(&proj).unwrap();
+    let id = "02908d1e-7843-436e-9629-55eaa75fdb85";
+    std::fs::write(
+        proj.join(format!("{id}.jsonl")),
+        [
+            r#"{"type":"user","message":{"content":"修登入，key 是 sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789"}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"改好了"}]}}"#,
+        ]
+        .join("\n"),
+    )
+    .unwrap();
+    let c = ctx(e.tmp())
+        .cwd(&e.impl_)
+        .home(&home)
+        .env("REPOENGINE_SPINE", &e.sp);
+    let r = c.run(&["sessions", "--digest", id, "--json"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let text = r.json()["text"].as_str().unwrap().to_string();
+    assert!(text.contains("1. 修登入"), "{text}");
+    assert!(!text.contains("abcdefghijklmnop"), "{text}");
+    assert!(text.contains("## 最後的回覆\n改好了"), "{text}");
+    let r = c.run(&["sessions", "--digest", "ffffffff-0000-0000"]);
+    assert_ne!(r.code, 0);
+}

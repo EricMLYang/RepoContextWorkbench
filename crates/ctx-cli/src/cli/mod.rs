@@ -130,6 +130,9 @@ pub enum Cmd {
         /// 只列標題／第一句／最後回覆／repo／分支含這些詞的（空白分開，都要有）
         #[arg(long)]
         query: Option<String>,
+        /// 把這場會話（Claude Code 會話 id）整理成交接包：你說的話、動過的檔、指令、最後回覆，秘密遮掉（不寫檔）
+        #[arg(long, value_name = "ID")]
+        digest: Option<String>,
     },
     /// 記一筆判斷（decision），回傳可引用的 ref
     Log(agent::LogArgs),
@@ -212,9 +215,13 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Context(s) => agent::cmd_context(ctx, s),
         Next { scope, limit } => agent::cmd_next(ctx, scope, *limit),
         Sessions {
+            digest: Some(id), ..
+        } => agent::cmd_session_digest(ctx, id),
+        Sessions {
             scope,
             limit,
             query,
+            ..
         } => agent::cmd_sessions(ctx, scope, *limit, query.as_deref()),
         Log(a) => agent::cmd_log(ctx, a),
         Todo(a) => agent::cmd_todo(ctx, a),

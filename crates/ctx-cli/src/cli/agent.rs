@@ -414,6 +414,24 @@ pub fn cmd_sessions(ctx: &Ctx, sc: &Scoped, limit: i64, query: Option<&str>) -> 
     )
 }
 
+/// `ctx sessions --digest <id>`（F-103，Rust 才有）：跟 App「整理成交接包」同一份內容，只印不寫檔。
+pub fn cmd_session_digest(ctx: &Ctx, id: &str) -> CmdResult {
+    agent_call(
+        ctx,
+        |_d| {
+            let path = ctx_core::timeline::locate(id, None, None)
+                .ok_or_else(|| ctx_core::Error::invalid(format!("找不到這場會話的逐字稿：{id}")))?;
+            let tl = ctx_core::timeline::read(&path).ok_or_else(|| {
+                ctx_core::Error::invalid(format!("讀不了逐字稿：{}", path.display()))
+            })?;
+            let now = chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
+            let (text, hidden) = ctx_core::timeline::digest(&tl, id, None, &now);
+            Ok(serde_json::json!({"id": id, "path": path, "hidden": hidden, "text": text}))
+        },
+        |r| s(r, "text"),
+    )
+}
+
 fn h_sessions(r: &Value) -> String {
     let mut out = vec![format!("# 過去的會話（{}）", s(&r["scope"], "label"))];
     let list = arr(r, "sessions");
