@@ -119,8 +119,9 @@ desktop/src（React，只管畫面）── IPC ┘
   看得到排版與上色，看不到 Tauri 才有的東西（終端、檔案監看、原生對話框），那些仍要真 App 實測。
   滑鼠事件送 pid 不生效（視窗不是 key window），點擊流程要人來點。
 - **磁碟衛生（2026-10-17）**：只留有用的產物，不累積。`target/debug` 曾長到 39 GB（相依升級、切分支留下的舊版 `.rlib`，cargo 從不回收）。
-  規則：`scripts/check.sh` 跑完自動 `cargo sweep --time 7`（要先 `cargo install cargo-sweep`；沒裝只提醒），
-  只刪 7 天沒被任何 build 用到的產物，不影響增量編譯速度。全清（`cargo clean --profile dev`）只在 sweep 之後還是太大時才做，
+  規則：`scripts/check.sh` 跑完自動 `cargo sweep --time 2`（要先 `cargo install cargo-sweep`；沒裝只提醒），
+  只刪 2 天沒被任何 build 用到的產物，再刪 2 天沒動的 `target/debug/incremental/*`（sweep 不管這裡），不影響今天的增量編譯。
+  2026-10-22 改：原本 7 天，密集開發 4 天就留下 7 GiB 舊版產物＋1.6 GB 舊 incremental（target 19 GB → 11 GB）。全清（`cargo clean --profile dev`）只在 sweep 之後還是太大時才做，
   代價是下一次重編相依約 5～10 分鐘。App 舊版備份在 `~/.cache/repo-context/app-backups/`，`scripts/install-app.sh` 自動只留 3 份（每份約 19 MB）。
 
 ## 8. 資訊安全

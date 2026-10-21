@@ -32,15 +32,18 @@ if [ "$what" != rust ]; then
   step lint npm run -s lint
   step prettier npm run -s format:check
 fi
-# 磁碟衛生（docs/DEVELOPMENT.md §7）：build 產物只留最近 7 天用到的；沒裝 cargo-sweep 就提醒一句、不算失敗。
+# 磁碟衛生（docs/DEVELOPMENT.md §7）：build 產物只留最近 2 天用到的；沒裝 cargo-sweep 就提醒一句、不算失敗。
 if [ "$what" != front ]; then
   # 前端那段 cd 進 desktop 之後，相對的 $0 會解到 desktop/scripts/..（曾讓 sweep 一直跑在 desktop 裡失敗）
   cd "$root" || exit 2
   if command -v cargo-sweep >/dev/null 2>&1; then
-    cargo sweep --time 7 >/dev/null 2>&1 || echo "（cargo sweep 失敗，略過）"
+    cargo sweep --time 2 >/dev/null 2>&1 || echo "（cargo sweep 失敗，略過）"
   else
     echo "（沒裝 cargo-sweep：target/ 會越長越大，cargo install cargo-sweep 後這裡會自動掃）"
   fi
+  # sweep 不管 incremental：每種編譯設定各留一份、舊的不回收。2 天沒動的整個刪掉（頂多下次多編一次）。
+  [ -d target/debug/incremental ] &&
+    find target/debug/incremental -mindepth 1 -maxdepth 1 -type d -mtime +1 -exec rm -rf {} + 2>/dev/null
 fi
 echo "exit=$fail"
 exit $fail

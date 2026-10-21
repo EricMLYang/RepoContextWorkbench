@@ -97,5 +97,16 @@ BAT 的計畫書寫明：依它讀到的方案政策（文件記載 2026-06-15 �
 - #129 的 9 個 worktree：F-107 已能在 App 裡一鍵移除，**沒替使用者按**。
 - 刻意不做：自己跑 Agent SDK（計費路徑與「同一個介面」都會變）、Codex app-server 轉譯、遠端／手機、Mermaid（大依賴）。
 
+## F. 安裝與重啟後的測試（2026-10-22 06:52）
+- **已裝**：`bash scripts/install-app.sh --prebuilt`（bundle 是 00:43 用 `3783500` 編的；舊版備份在 `~/.cache/repo-context/app-backups/20261022-065232/`），`ctx 0.2.0`、`~/.local/bin/ctx` 指向新版；`ctx setup --claude` 已重寫 skill（多了 `--digest` 與 `ctx worktrees`），MCP 與 SessionStart／End hook 原本就在。
+- **重啟後要測的**（使用者）：
+  1. 從 Dock／Finder 開 App（確認是 /Applications 那份），**新開**一場 Claude Code 會話（舊會話不會有 StopFailure／Subagent hook）。
+  2. 照 `docs/TESTING.md` §8d 的 16 項點，macOS 欄打勾；有問題記下哪一項＋看到什麼。
+  3. 先點最容易出事的四項：8d-7 自動繼續（字＋Enter 分兩次送，Claude Code 輸入框沒實測過）、8d-4 路徑可點、8d-11 ⌘F、8d-16 ⌘V 貼圖。
+  4. 終端跑 `ctx sessions --digest <會話id>`、`ctx worktrees RepoContextWorkbench`，確認 CLI 跟 App 看到同一份。
+  5. Windows（VDI）全部未測。
+- **研究整理**：逆向結論與兩家 SDK 介紹另寫到 `card_notes/024_AI_Research/20261022_CodingAgentHarness/`（card_notes `7615a8b0`）。
+- **磁碟**：`target/` 19 GB → 11 GB（`cargo sweep --time 1` 清 7 GiB 舊版產物、刪 164 個一天沒動的 `incremental/` 目錄）；`check.sh` 改成 sweep 2 天＋清 2 天沒動的 incremental（原本 7 天，密集開發 4 天就累積 8 GB）。
+
 ## 來源
 - BAT 原始碼：`node-sidecar/src/handlers/claude-send.mjs`（buildQueryOptions L944–1010）、`lib/live-query.mjs`、`handlers/claude-permission.mjs`、`src-tauri/src/codex_app_server.rs`、`runtimes/claude-cli-*.mjs`、`plans/claude-cli-transcript-agent-plan.md`、`plans/claude-channel-agent-plan.md`、`lib/transcript-transfer.mjs`、`lib/harness-noise.mjs`、README（Auto-Continue、Cache Cost Awareness、Statusline）。
