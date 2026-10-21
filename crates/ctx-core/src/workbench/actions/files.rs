@@ -343,6 +343,20 @@ pub(super) fn a_repo_github(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Resu
     Ok(out)
 }
 
+#[derive(serde::Deserialize)]
+struct SessionImageArgs {
+    ext: String,
+    base64: String,
+}
+
+/// F-113（Rust 才有）：貼給 agent 會話的圖存到 spine 的 `.state/session_images/`（不放 repo 裡），回傳絕對路徑。
+pub(super) fn a_session_image(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let SessionImageArgs { ext, base64 } = parse("session_image", p)?;
+    let dir = d.join(".state").join("session_images");
+    let abs = crate::filetree::save_pasted_image(&dir, &ext, &base64)?;
+    Ok(json!({"ok": true, "abs": abs.to_string_lossy()}))
+}
+
 #[cfg(test)]
 mod tests {
     use super::split_location;

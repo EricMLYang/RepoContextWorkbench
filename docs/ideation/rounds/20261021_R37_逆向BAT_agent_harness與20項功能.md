@@ -83,7 +83,8 @@ BAT 的計畫書寫明：依它讀到的方案政策（文件記載 2026-06-15 �
 | F-109 | 完成：引擎 `gitlog.rs`（`git log` 用 0x1f／0x1e 分欄不怕標題裡的符號；`git show` sha 只收十六進位，逾時、512KB 上限）；右側欄「變更」頁下方「最近的 commit」（展開才讀）→ 點開看差異、可把 sha 貼給會話 | 546807b |
 | F-105 | 完成：引擎 `agentcmds.rs`（專案 `.claude/skills`／`commands`、`~/.claude` 的、適用這個目錄的 plugin；只讀 front matter 8KB；同名專案優先）；action `agent_commands`（照會話的 cwd）；終端 ⋯「插入 /指令…」可篩選、點了貼 `/名字 `。本機實測 15 個、3ms | 1c52bf5 |
 | F-106 | 完成：引擎 `prompts.rs`（spine 的 `prompts/<名稱>.md`，一句一檔、人可直接改；名稱擋路徑字元；改名＝寫新刪舊）；action `prompts`／`prompt_save`／`prompt_remove`；終端 ⋯「常用 prompt…」（篩選、貼進會話、改、刪要再按一次）、逐字稿「我說的」每句「存成常用」 | 9354504 |
-| F-112 | 完成：引擎 `github.rs`（使用者自己的 `gh pr list`／`gh issue list --json`，12 秒逾時，沒裝 gh／沒登入照 gh 的話說明）；action `repo_github`；殼多 `open_url`（只開 http(s)；macOS `open`、Windows `explorer` **未在 VDI 測過**）；右側欄「資訊」頁 GitHub 段（展開才讀）。本 repo 實測 1.2s | （本筆） |
+| F-112 | 完成：引擎 `github.rs`（使用者自己的 `gh pr list`／`gh issue list --json`，12 秒逾時，沒裝 gh／沒登入照 gh 的話說明）；action `repo_github`；殼多 `open_url`（只開 http(s)；macOS `open`、Windows `explorer` **未在 VDI 測過**）；右側欄「資訊」頁 GitHub 段（展開才讀）。本 repo 實測 1.2s | 7c2b017 |
+| F-113 | 完成：⌘V 剪貼簿是圖（截圖）且是 agent 會話 → 引擎 `save_pasted_image` 存到 spine 的 `.state/session_images/`（不放 repo、7 天清、同秒不撞名）→ 貼 `@路徑`。註：Claude Code 自己的 Ctrl+V 讀系統剪貼簿本來就能用；這項補的是 WebView 的 ⌘V（原本貼不出東西）；從 Finder 拖檔進來 Tauri 預設攔掉，沒做 | （本筆） |
 
 ## 來源
 - BAT 原始碼：`node-sidecar/src/handlers/claude-send.mjs`（buildQueryOptions L944–1010）、`lib/live-query.mjs`、`handlers/claude-permission.mjs`、`src-tauri/src/codex_app_server.rs`、`runtimes/claude-cli-*.mjs`、`plans/claude-cli-transcript-agent-plan.md`、`plans/claude-channel-agent-plan.md`、`lib/transcript-transfer.mjs`、`lib/harness-noise.mjs`、README（Auto-Continue、Cache Cost Awareness、Statusline）。

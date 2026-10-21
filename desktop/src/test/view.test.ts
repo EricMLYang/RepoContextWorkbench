@@ -33,6 +33,7 @@ import { worktreeState } from "../components/deep/RepoWorktrees";
 import { commitWhen } from "../components/deep/RepoCommits";
 import { filterCommands } from "../components/sessions/AgentCommands";
 import { githubMeta } from "../components/deep/RepoGithub";
+import { imageExt } from "../components/sessions/TerminalPanel";
 
 describe("按鈕文案與主次", () => {
   it("主要動作照引擎標的 primary；有建議落點時文案是「存入〈repo〉」", () => {
@@ -459,5 +460,13 @@ describe("GitHub 一筆的副標（F-112）", () => {
         labels: ["bug"],
       }),
     ).toBe("me · fix · 草稿 · 要求修改 · bug");
+  });
+});
+
+describe("貼圖給會話（F-113）", () => {
+  it("只收引擎認得的格式", () => {
+    expect(imageExt("image/png")).toBe("png");
+    expect(imageExt("image/jpeg")).toBe("jpg");
+    expect(imageExt("image/svg+xml")).toBeNull();
   });
 });

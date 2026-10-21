@@ -435,6 +435,56 @@ pub fn save_image(root: &Path, rel: &str, b64: &str) -> Result<PathBuf> {
     Ok(abs)
 }
 
+/// 貼給 agent 會話的圖留幾天（F-113）。
+const PASTED_KEEP_DAYS: u64 = 7;
+
+/// 會話貼上或拖進來的圖（F-113）：存到 `dir/<時間>-<序號>.<ext>`（不放 repo 裡，免得變成沒追蹤的檔），
+/// 存之前先清掉超過 [`PASTED_KEEP_DAYS`] 天的。格式與大小限制同 [`save_image`]。回傳絕對路徑。
+pub fn save_pasted_image(dir: &Path, ext: &str, b64: &str) -> Result<PathBuf> {
+    let ext = ext.trim_start_matches('.').to_lowercase();
+    let probe = PathBuf::from(format!("x.{ext}"));
+    if ext.is_empty() || image_mime(&probe).is_none_or(|m| m == "image/svg+xml") {
+        return Err(Error::invalid(format!(
+            "只收 png／jpg／gif／webp／bmp 圖片：.{ext}"
+        )));
+    }
+    let bytes = unbase64(b64).ok_or_else(|| Error::invalid("圖片資料壞了（不是 base64）"))?;
+    if bytes.is_empty() || bytes.len() as u64 > IMAGE_MAX {
+        return Err(Error::invalid("圖片是空的或超過 8 MB"));
+    }
+    std::fs::create_dir_all(dir)?;
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            let old = e
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .is_some_and(|age| age.as_secs() > PASTED_KEEP_DAYS * 86_400);
+            if old {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    for n in 1..1000 {
+        let target = dir.join(format!("{stamp}-{n}.{ext}"));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+        {
+            Ok(mut f) => {
+                f.write_all(&bytes)?;
+                return Ok(target);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Err(Error::invalid("同一秒貼了太多張圖"))
+}
+
 /// [`base64`] 的反向（忽略空白；壞字元回 None）。
 fn unbase64(s: &str) -> Option<Vec<u8>> {
     let val = |c: u8| -> Option<u32> {
@@ -1402,5 +1452,18 @@ mod tests {
                 kind: ChangeKind::Renamed
             }]
         );
+    }
+    #[test]
+    fn pasted_images_go_to_their_own_folder_with_unique_names() {
+        let t = tempfile::tempdir().unwrap();
+        let d = t.path().join("imgs");
+        let a = save_pasted_image(&d, "PNG", "iVBORw0KGgo=").unwrap();
+        let b = save_pasted_image(&d, ".png", "iVBORw0KGgo=").unwrap();
+        assert_ne!(a, b);
+        assert!(a.starts_with(&d) && a.extension().unwrap() == "png");
+        assert_eq!(std::fs::read(&a).unwrap(), b"\x89PNG\r\n\x1a\n");
+        assert!(save_pasted_image(&d, "svg", "PHN2Zz4=").is_err());
+        assert!(save_pasted_image(&d, "png", "@@@").is_err());
+        assert!(save_pasted_image(&d, "", "iVBORw0KGgo=").is_err());
     }
 }

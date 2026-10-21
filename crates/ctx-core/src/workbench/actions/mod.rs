@@ -123,6 +123,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("create_entry", a_create_entry),
     ("rename_entry", a_rename_entry),
     ("save_image", a_save_image),
+    ("session_image", files::a_session_image),
     ("backlinks", a_backlinks),
     ("locate_path", files::a_locate_path),
     ("repo_worktrees", files::a_repo_worktrees),

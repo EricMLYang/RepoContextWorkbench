@@ -47,6 +47,18 @@ function loadXterm() {
   return xtermModules;
 }
 
+/** 剪貼簿圖片的 MIME → 副檔名（引擎只收這幾種）；其他＝null。 */
+export function imageExt(mime: string): string | null {
+  const m: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/bmp": "bmp",
+  };
+  return m[mime] ?? null;
+}
+
 const COLLAPSED_H = 44;
 const MIN_H = 100;
 
@@ -682,7 +694,37 @@ export function TerminalPanel(props: {
           {collapsed ? "展開" : "收合"}
         </button>
       </div>
-      <div id="termbody" ref={bodyRef} hidden={collapsed}>
+      <div
+        id="termbody"
+        ref={bodyRef}
+        hidden={collapsed}
+        onPasteCapture={(e) => {
+          // F-113：⌘V 剪貼簿裡是圖（截圖）→ 存到 spine 的 .state/session_images/，把 @路徑 貼進 agent 會話
+          if (info?.kind !== "agent") return;
+          const file = [...e.clipboardData.items]
+            .find((it) => it.kind === "file" && it.type.startsWith("image/"))
+            ?.getAsFile();
+          const ext = file ? imageExt(file.type) : null;
+          if (!file || !ext) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64 = String(reader.result).split(",")[1] ?? "";
+            store
+              .action("session_image", { ext, base64 })
+              .then((r) => {
+                if (!pasteActive(pathForTerminal(r.abs, "agent")))
+                  store.toast("會話沒有連上，圖存在 " + r.abs);
+                else store.toast("已貼上圖片（存在 spine 的 .state/session_images，7 天後清掉）");
+              })
+              .catch((err: unknown) =>
+                store.toast(err instanceof Error ? err.message : String(err)),
+              );
+          };
+          reader.readAsDataURL(file);
+        }}
+      >
         <div id="termempty" className="muted" hidden={!!info}>
           從左側選擇會話，繼續你的工作。
         </div>

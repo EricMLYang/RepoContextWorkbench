@@ -870,6 +870,8 @@ export interface ActionMap {
     payload: { sid?: string; cwd?: string };
     result: { ok: true; cwd: string | null; commands: AgentCommand[] };
   };
+  /** Rust 才有（F-113）：貼給 agent 會話的圖存到 spine 的 .state/session_images/（不放 repo），回傳絕對路徑。 */
+  session_image: { payload: { ext: string; base64: string }; result: { ok: true; abs: string } };
   /** Rust 才有（F-112）：repo 在 GitHub 上開著的 PR 與 issue（用使用者自己的 gh）。只讀。 */
   repo_github: {
     payload: { id: string };
