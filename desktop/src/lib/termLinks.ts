@@ -2,8 +2,9 @@
  * 終端輸出裡看起來像檔案路徑的字（F-95）：`src/a.rs:12:5`、`./x.md`、`/abs/path.ts(3,1)`、`README.md:4`。
  * 這裡只找「長得像」的位置給 xterm 畫底線；點下去才交給引擎（`locate_path`）判斷是不是登記的 repo 裡真的有的檔。
  */
+// 分隔符號認 `/` 與 `\`（Windows／VDI：`src\lib\a.ts:12`、`C:\repo\a.rs`）
 const CANDIDATE =
-  /(?:~|\.{1,2})?\/?(?:[\w.@+-]+\/)+[\w.@+-]+(?::\d+(?::\d+)?|\(\d+(?:,\s?\d+)?\))?|[\w@+-][\w.@+-]*\.[A-Za-z][A-Za-z0-9]{0,7}(?::\d+(?::\d+)?|\(\d+(?:,\s?\d+)?\))/g;
+  /(?:[A-Za-z]:[\\/]|~[\\/]|\.{1,2}[\\/]|[\\/])?(?:[\w.@+-]+[\\/])+[\w.@+-]+(?::\d+(?::\d+)?|\(\d+(?:,\s?\d+)?\))?|[\w@+-][\w.@+-]*\.[A-Za-z][A-Za-z0-9]{0,7}(?::\d+(?::\d+)?|\(\d+(?:,\s?\d+)?\))/g;
 
 export interface PathHit {
   /** 字串裡的起點（含）與終點（不含）。 */
@@ -26,8 +27,8 @@ export function findPathHits(line: string): PathHit[] {
       continue; // 網址的後半
     if (text.startsWith("//")) continue;
     const bare = text.replace(/(?::\d+(?::\d+)?|\(\d+(?:,\s?\d+)?\))$/, "");
-    const last = bare.split("/").pop() ?? "";
-    const rooted = /^(?:\/|\.{1,2}\/|~\/)/.test(bare);
+    const last = bare.split(/[\\/]/).pop() ?? "";
+    const rooted = /^(?:[\\/]|\.{1,2}[\\/]|~[\\/]|[A-Za-z]:[\\/])/.test(bare);
     const hasExt = /\.[A-Za-z][A-Za-z0-9]{0,7}$/.test(last);
     if (!rooted && !hasExt) continue;
     if (bare === "/" || /^\.+$/.test(bare)) continue;

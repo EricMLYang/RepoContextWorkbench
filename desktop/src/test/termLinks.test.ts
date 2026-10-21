@@ -16,6 +16,13 @@ describe("終端輸出裡的路徑（F-95）", () => {
     ]);
   });
 
+  it("Windows 的反斜線與磁碟代號（VDI）", () => {
+    expect(texts("edited src\\lib\\view.ts:12 and C:\\repo\\a.rs(3,1)")).toEqual([
+      "src\\lib\\view.ts:12",
+      "C:\\repo\\a.rs(3,1)",
+    ]);
+  });
+
   it("網址、and/or、沒有行號的單一字詞不算", () => {
     expect(texts("open https://example.com/a/b.html now")).toEqual([]);
     expect(texts("yes and/or no; version 1.2.3; main.rs is fine")).toEqual([]);
