@@ -37,6 +37,35 @@ async function violations(
               at: "2026-10-14 01:05",
               event: "permission",
             },
+            // R37：會話列小量表
+            claude_session: "8d110180-5810",
+            resume_cwd: "/r/a",
+            context_pct: 84,
+            model: "Opus",
+            subagents: 2,
+            auto_continue: { prompt: "繼續", max: 3, count: 1 },
+          },
+          {
+            // R37 F-99：出錯中斷（「繼續」按鈕）＋快取已冷
+            sid: "t2",
+            title: "claude · a",
+            alive: true,
+            kind: "agent",
+            origin: null,
+            scope: "a",
+            scope_repos: ["a"],
+            started: "2026-10-12 09:00",
+            task: null,
+            report: null,
+            report_basis: "",
+            home_group: "產品開發",
+            agent_status: {
+              status: "waiting",
+              text: "這一輪出錯中斷：rate limit",
+              at: "2026-10-14 01:05",
+              event: "stop-failure",
+            },
+            cache_cold: true,
           },
         ] as never,
       }),
@@ -92,6 +121,94 @@ async function violations(
           size: 20,
         };
       if (name === "backlinks") return { ok: true, id: "a", path: "README.md", links: [] };
+      if (name === "session_transcript")
+        return {
+          ok: true,
+          id: "x",
+          truncated: false,
+          title: "t",
+          path: "/p.jsonl",
+          frames: [
+            { kind: "you", text: "跑測試", at: "2026-10-14T01:00:00Z" },
+            { kind: "thinking", text: "嗯", at: null },
+            { kind: "tool", tool: "Bash", text: "npm test", result: "fail", error: true, at: null },
+            { kind: "reply", text: "好了", at: null },
+          ],
+        };
+      if (name === "prompts")
+        return {
+          ok: true,
+          dir: "/sp/prompts",
+          prompts: [{ name: "下一步", text: "照計畫做下一步", updated: "2026-10-22 00:30" }],
+        };
+      if (name === "agent_commands")
+        return {
+          ok: true,
+          cwd: "/r/a",
+          commands: [{ name: "lint", description: "跑 lint", kind: "command", source: "project" }],
+        };
+      if (name === "repo_worktrees")
+        return {
+          ok: true,
+          id: "a",
+          worktrees: [
+            {
+              path: "/r/a",
+              branch: "main",
+              head: "0123abcd",
+              main: true,
+              dirty: 0,
+              unique: 0,
+              locked: false,
+              prunable: false,
+              removable: false,
+            },
+            {
+              path: "/r/a/wt",
+              branch: "x",
+              head: "fedcba98",
+              main: false,
+              dirty: 0,
+              unique: 0,
+              locked: false,
+              prunable: false,
+              removable: true,
+            },
+          ],
+        };
+      if (name === "repo_github")
+        return {
+          ok: true,
+          id: "a",
+          prs: [
+            {
+              number: 1,
+              title: "修登入",
+              url: "https://github.com/o/a/pull/1",
+              author: "me",
+              updated: null,
+              branch: "fix",
+              draft: false,
+              review: null,
+              labels: [],
+            },
+          ],
+          issues: [],
+        };
+      if (name === "repo_log")
+        return {
+          ok: true,
+          id: "a",
+          commits: [
+            {
+              sha: "a1b2c3d4",
+              short: "a1b2c3d",
+              subject: "修好登入",
+              author: "me",
+              at: "2026-10-14T01:00:00Z",
+            },
+          ],
+        };
       return { ok: true };
     }) as never,
   });
@@ -170,6 +287,54 @@ describe("無障礙稽核（axe-core）", () => {
       expect(viewer).not.toBeNull();
       await act(async () => fireEvent.click(within(viewer!).getByRole("button", { name: "編輯" })));
       expect(viewer!.querySelector("textarea")).not.toBeNull();
+    });
+    expect(found, found.join("\n")).toEqual([]);
+  });
+  const openTermMenuItem = async (label: string) => {
+    // 側欄第一場會話（有小量表的那場）
+    await act(async () => fireEvent.click(document.querySelector<HTMLElement>(".session button")!));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "更多會話動作" })));
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: label })));
+  };
+  it("R37：逐字稿對話框開著時沒有違規", async () => {
+    const found = await violations({ group: "產品開發", repos: null }, () =>
+      openTermMenuItem("逐字稿（完整對話與工具）"),
+    );
+    expect(found, found.join("\n")).toEqual([]);
+  });
+  it("R37：常用 prompt、插入 /指令、自動繼續對話框開著時沒有違規", async () => {
+    for (const label of ["常用 prompt…", "插入 /指令…", "自動繼續（1/3）…"]) {
+      const found = await violations({ group: "產品開發", repos: null }, () =>
+        openTermMenuItem(label),
+      );
+      expect(found, label + "\n" + found.join("\n")).toEqual([]);
+      cleanup();
+      localStorage.clear();
+    }
+  });
+  it("R37：右側欄展開 Worktree、GitHub、最近的 commit 時沒有違規", async () => {
+    const found = await violations({ group: "產品開發", repos: null }, async () => {
+      await act(async () =>
+        fireEvent.click(
+          within(document.getElementById("tabs")!).getByRole("button", { name: "Repo" }),
+        ),
+      );
+      await act(async () =>
+        fireEvent.click(
+          within(document.getElementById("deeptable")!).getByRole("button", { name: "a" }),
+        ),
+      );
+      for (const sel of [".panelworktrees", ".panelgithub", ".panelcommits"]) {
+        const d = document.querySelector<HTMLDetailsElement>(sel)!;
+        expect(d, sel).not.toBeNull();
+        await act(async () => {
+          d.open = true;
+          d.dispatchEvent(new Event("toggle"));
+        });
+      }
+      expect(document.querySelector(".wtrow")).not.toBeNull();
+      expect(document.querySelector(".ghrow")).not.toBeNull();
+      expect(document.querySelector(".commitrow")).not.toBeNull();
     });
     expect(found, found.join("\n")).toEqual([]);
   });
