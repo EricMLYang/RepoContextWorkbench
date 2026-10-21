@@ -4,6 +4,7 @@
 //! `.state/` 底下的 JSON）與 MCP 介面是合約，不隨語言改。搬遷規約見 `docs/RUST_PORTING.md`。
 
 pub mod agentapi;
+pub mod agentcmds;
 pub mod agentmark;
 pub mod agents;
 pub mod agentsetup;

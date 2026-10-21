@@ -363,3 +363,25 @@ pub(super) fn a_session_digest(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> R
               "hidden": hidden, "repo": repo, "group": owners.first()}),
     )
 }
+
+#[derive(serde::Deserialize)]
+struct CommandsArgs {
+    #[serde(default)]
+    sid: Option<String>,
+    #[serde(default)]
+    cwd: Option<String>,
+}
+
+/// F-105（Rust 才有）：這個會話（或目錄）打得出哪些 `/指令`——skill、自訂指令、plugin。只讀。
+/// 目錄：給了 `cwd` 就用它；否則照會話（hook 記的 cwd，再來是會話開的目錄）。
+pub(super) fn a_agent_commands(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
+    let CommandsArgs { sid, cwd } = parse("agent_commands", p)?;
+    let dir = cwd.map(PathBuf::from).or_else(|| {
+        let sid = sid.as_deref()?;
+        crate::session_status::read(d, sid)
+            .and_then(|v| v.get("cwd").and_then(Value::as_str).map(PathBuf::from))
+            .or_else(|| t.and_then(|t| t.cwd(sid)))
+    });
+    let list = crate::agentcmds::list(dir.as_deref(), None);
+    Ok(json!({"ok": true, "cwd": dir.map(|d| d.to_string_lossy().into_owned()), "commands": list}))
+}

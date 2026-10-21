@@ -132,6 +132,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("past_sessions", finder::a_past_sessions),
     ("session_transcript", finder::a_session_transcript),
     ("session_digest", finder::a_session_digest),
+    ("agent_commands", finder::a_agent_commands),
     ("diff_notes_brief", finder::a_diff_notes_brief),
     ("assist_plan", a_assist_plan),
     ("assist_log", a_assist_log),
@@ -173,6 +174,7 @@ const READ_ONLY: &[&str] = &[
     "commit_diff",
     "past_sessions",
     "session_transcript",
+    "agent_commands",
     "diff_notes_brief",
 ];
 

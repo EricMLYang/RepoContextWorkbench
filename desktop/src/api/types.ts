@@ -226,6 +226,14 @@ export interface PastSession {
 export type PermissionMode =
   "manual" | "acceptEdits" | "plan" | "auto" | "dontAsk" | "bypassPermissions";
 
+/** 會話打得出來的一個 `/指令`（F-105，引擎 `agentcmds::AgentCommand`）。 */
+export interface AgentCommand {
+  name: string;
+  description: string;
+  kind: "skill" | "command";
+  source: "user" | "project" | "plugin";
+}
+
 /** 一個 commit（F-109，引擎 `gitlog::Commit`）。 */
 export interface CommitInfo {
   sha: string;
@@ -822,6 +830,11 @@ export interface ActionMap {
       repo: string | null;
       group: string | null;
     };
+  };
+  /** Rust 才有（F-105）：這個會話（或目錄）打得出哪些 `/指令`。只讀。 */
+  agent_commands: {
+    payload: { sid?: string; cwd?: string };
+    result: { ok: true; cwd: string | null; commands: AgentCommand[] };
   };
   /** Rust 才有（F-109）：repo 最近的 commit（目前分支，新的在前）。只讀。 */
   repo_log: {

@@ -3130,3 +3130,31 @@ body.withpicks #main {
   max-height: 60vh;
   overflow: auto;
 }
+
+/* F-105 插入 /指令 */
+.cmdlist {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 55vh;
+  overflow: auto;
+}
+.cmdrow {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 4px 8px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  padding: 6px;
+}
+.cmdname {
+  font-family: Menlo, monospace;
+  font-size: 12px;
+}
+.cmddesc {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

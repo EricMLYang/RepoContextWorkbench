@@ -31,6 +31,7 @@ import { interruptCard, loopCard, makeScan, makeState } from "./fixtures";
 import { tabLabels } from "../components/viewer/FileTabs";
 import { worktreeState } from "../components/deep/RepoWorktrees";
 import { commitWhen } from "../components/deep/RepoCommits";
+import { filterCommands } from "../components/sessions/AgentCommands";
 
 describe("按鈕文案與主次", () => {
   it("主要動作照引擎標的 primary；有建議落點時文案是「存入〈repo〉」", () => {
@@ -424,5 +425,20 @@ describe("commit 時間（F-109）", () => {
     expect(commitWhen(new Date(2026, 9, 12).toISOString(), now)).toBe("10 天前");
     expect(commitWhen(new Date(2026, 7, 1).toISOString(), now)).toBe("2026-08-01");
     expect(commitWhen("壞的", now)).toBe("");
+  });
+});
+
+describe("/指令篩選（F-105）", () => {
+  const c = (name: string, description: string) => ({
+    name,
+    description,
+    kind: "skill" as const,
+    source: "user" as const,
+  });
+  it("名稱或說明，每個字都要有、不分大小寫", () => {
+    const list = [c("pm-ideation", "構想盤點"), c("Code-Review", "審查 PR"), c("lint", "跑 lint")];
+    expect(filterCommands(list, "review pr").map((x) => x.name)).toEqual(["Code-Review"]);
+    expect(filterCommands(list, "構想").map((x) => x.name)).toEqual(["pm-ideation"]);
+    expect(filterCommands(list, "").length).toBe(3);
   });
 });
