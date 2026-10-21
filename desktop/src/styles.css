@@ -3158,3 +3158,26 @@ body.withpicks #main {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* F-106 常用 prompt */
+.promptlist {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 55vh;
+  overflow: auto;
+}
+.promptrow {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.prompthead {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.prompttext {
+  white-space: pre-wrap;
+  max-height: 4.5em;
+  overflow: hidden;
+}

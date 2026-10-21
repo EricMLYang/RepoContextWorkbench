@@ -27,6 +27,7 @@ import { useSnapshot, useStore, useUi } from "../../store/context";
 import { autoContinueSpec, confirmKillSpec, sessionResultSpec } from "./SessionDialogs";
 import { transcriptSpec } from "./Transcript";
 import { agentCommandsSpec } from "./AgentCommands";
+import { promptLibrarySpec } from "./PromptLibrary";
 
 interface TermRec {
   t: Terminal;
@@ -636,7 +637,10 @@ export function TerminalPanel(props: {
                   ]
                 : []),
               ...(info.kind === "agent" && info.alive
-                ? [{ label: "插入 /指令…", run: () => ui.openDetail(agentCommandsSpec(info.sid)) }]
+                ? [
+                    { label: "插入 /指令…", run: () => ui.openDetail(agentCommandsSpec(info.sid)) },
+                    { label: "常用 prompt…", run: () => ui.openDetail(promptLibrarySpec()) },
+                  ]
                 : []),
               ...(info.claude_session && info.resume_cwd
                 ? [{ label: "岔出新會話（這場不動）", run: () => forkSession(info) }]

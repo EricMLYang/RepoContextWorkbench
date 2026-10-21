@@ -4,6 +4,7 @@ import { DetailLayout, useDetail } from "../../dialogs/Modal";
 import { copyText } from "../../lib/clipboard";
 import { useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
+import { promptLibrarySpec } from "./PromptLibrary";
 
 type Filter = "all" | "you" | "reply" | "tool";
 
@@ -151,6 +152,16 @@ export function Transcript(props: { sid?: string; id?: string; cwd?: string }) {
                   }}
                 >
                   貼回會話
+                </button>
+              ) : null}
+              {f.kind === "you" ? (
+                <button
+                  type="button"
+                  className="ghost small"
+                  title="存成常用 prompt（spine 的 prompts/）"
+                  onClick={() => ui.openDetail(promptLibrarySpec(f.text))}
+                >
+                  存成常用
                 </button>
               ) : null}
             </div>

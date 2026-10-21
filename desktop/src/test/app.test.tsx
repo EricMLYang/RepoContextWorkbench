@@ -2238,6 +2238,52 @@ describe("會話放進所屬牌組", () => {
     );
   });
 
+  it("常用 prompt（F-106）：會話選單打開、新增一句、刪除要再按一次", async () => {
+    let saved = [{ name: "做下一步", text: "照計畫做下一步", updated: "2026-10-22 00:30" }];
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({ terms: [term({ sid: "t1", home_group: "產品開發" })] as never }),
+      ),
+      action: vi.fn(async (name: string, p: { name?: string; text?: string }) => {
+        if (name === "prompts") return { ok: true, dir: "/sp/prompts", prompts: saved };
+        if (name === "prompt_save") {
+          saved = [{ name: p.name!, text: p.text!, updated: "now" }, ...saved];
+          return { ok: true, prompt: saved[0] };
+        }
+        if (name === "prompt_remove") {
+          saved = saved.filter((x) => x.name !== p.name);
+          return { ok: true };
+        }
+        return { ok: true };
+      }) as never,
+    });
+    await mount(backend);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "回到會話" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "更多會話動作" })));
+    await act(async () => fireEvent.click(screen.getByRole("menuitem", { name: "常用 prompt…" })));
+    const dialog = document.getElementById("detaildialog")!;
+    expect(dialog.textContent).toContain("照計畫做下一步");
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "新增…" })));
+    fireEvent.change(within(dialog).getByLabelText("名稱（也是檔名）"), {
+      target: { value: "先列風險" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("內容"), {
+      target: { value: "動手前先列風險" },
+    });
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "存" })));
+    expect(backend.action).toHaveBeenCalledWith("prompt_save", {
+      name: "先列風險",
+      text: "動手前先列風險",
+    });
+    expect(dialog.textContent).toContain("動手前先列風險");
+    const del = within(dialog).getAllByRole("button", { name: "刪除…" })[0];
+    await act(async () => fireEvent.click(del));
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "確定刪除" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("prompt_remove", { name: "先列風險" });
+  });
+
   it("自動繼續（F-98）：會話選單打開、送出次數與那句；開著的會話列標「自動 1/3」、可關掉", async () => {
     const backend = mockBackend({
       getState: vi.fn(async () =>

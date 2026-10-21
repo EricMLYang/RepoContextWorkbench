@@ -226,6 +226,13 @@ export interface PastSession {
 export type PermissionMode =
   "manual" | "acceptEdits" | "plan" | "auto" | "dontAsk" | "bypassPermissions";
 
+/** 一句常用 prompt（F-106，引擎 `prompts::Prompt`；存在 spine 的 `prompts/<name>.md`）。 */
+export interface SavedPrompt {
+  name: string;
+  text: string;
+  updated: string;
+}
+
 /** 會話打得出來的一個 `/指令`（F-105，引擎 `agentcmds::AgentCommand`）。 */
 export interface AgentCommand {
   name: string;
@@ -831,6 +838,17 @@ export interface ActionMap {
       group: string | null;
     };
   };
+  /** Rust 才有（F-106）：常用 prompt，最近改的在前。只讀。 */
+  prompts: {
+    payload: Record<string, never>;
+    result: { ok: true; dir: string; prompts: SavedPrompt[] };
+  };
+  /** Rust 才有（F-106）：存一句（同名覆蓋；rename_from＝改名）。 */
+  prompt_save: {
+    payload: { name: string; text: string; rename_from?: string };
+    result: { ok: true; prompt: SavedPrompt };
+  };
+  prompt_remove: { payload: { name: string }; result: { ok: true } };
   /** Rust 才有（F-105）：這個會話（或目錄）打得出哪些 `/指令`。只讀。 */
   agent_commands: {
     payload: { sid?: string; cwd?: string };

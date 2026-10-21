@@ -385,3 +385,39 @@ pub(super) fn a_agent_commands(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Re
     let list = crate::agentcmds::list(dir.as_deref(), None);
     Ok(json!({"ok": true, "cwd": dir.map(|d| d.to_string_lossy().into_owned()), "commands": list}))
 }
+
+#[derive(serde::Deserialize)]
+struct PromptArgs {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    rename_from: Option<String>,
+}
+
+/// F-106（Rust 才有）：常用 prompt（spine 的 `prompts/*.md`），最近改的在前。只讀。
+pub(super) fn a_prompts(d: &Path, _p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    Ok(
+        json!({"ok": true, "dir": crate::prompts::dir(d).to_string_lossy(),
+              "prompts": crate::prompts::list(d)}),
+    )
+}
+
+/// F-106（Rust 才有）：存一句常用 prompt（同名覆蓋；`rename_from`＝改名）。
+pub(super) fn a_prompt_save(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let PromptArgs {
+        name,
+        text,
+        rename_from,
+    } = parse("prompt_save", p)?;
+    let saved = crate::prompts::save(d, &name, &text, rename_from.as_deref())?;
+    Ok(json!({"ok": true, "prompt": saved}))
+}
+
+/// F-106（Rust 才有）：刪一句常用 prompt。
+pub(super) fn a_prompt_remove(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let PromptArgs { name, .. } = parse("prompt_remove", p)?;
+    crate::prompts::remove(d, &name)?;
+    Ok(json!({"ok": true}))
+}

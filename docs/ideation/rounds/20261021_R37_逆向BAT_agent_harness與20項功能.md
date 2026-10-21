@@ -81,7 +81,8 @@ BAT 的計畫書寫明：依它讀到的方案政策（文件記載 2026-06-15 �
 | F-111 | 完成：不加 search addon——掃 xterm 緩衝（`lineCells` 換算全形格子）＋`findInLines`，`select`／`scrollToLine`；⌘F（Windows／Linux：Ctrl+Shift+F）不送進程序；從最新輸出往回找 | a44c1f9 |
 | F-107 | 完成：引擎 `worktrees.rs`（porcelain 解析；沒 commit 的檔數；只在這裡的 commit＝`rev-list HEAD --not --exclude=<自己的分支> --branches --remotes`；乾淨、沒獨有 commit、沒鎖才可移除，`git worktree remove` 不加 --force、分支留著）；右側欄「資訊」頁 Worktree 段（展開才讀、移除要再按一次確定）。真 repo 實測：#129 的 9 個全部「乾淨、可移除」，382ms | 178818b |
 | F-109 | 完成：引擎 `gitlog.rs`（`git log` 用 0x1f／0x1e 分欄不怕標題裡的符號；`git show` sha 只收十六進位，逾時、512KB 上限）；右側欄「變更」頁下方「最近的 commit」（展開才讀）→ 點開看差異、可把 sha 貼給會話 | 546807b |
-| F-105 | 完成：引擎 `agentcmds.rs`（專案 `.claude/skills`／`commands`、`~/.claude` 的、適用這個目錄的 plugin；只讀 front matter 8KB；同名專案優先）；action `agent_commands`（照會話的 cwd）；終端 ⋯「插入 /指令…」可篩選、點了貼 `/名字 `。本機實測 15 個、3ms | （本筆） |
+| F-105 | 完成：引擎 `agentcmds.rs`（專案 `.claude/skills`／`commands`、`~/.claude` 的、適用這個目錄的 plugin；只讀 front matter 8KB；同名專案優先）；action `agent_commands`（照會話的 cwd）；終端 ⋯「插入 /指令…」可篩選、點了貼 `/名字 `。本機實測 15 個、3ms | 1c52bf5 |
+| F-106 | 完成：引擎 `prompts.rs`（spine 的 `prompts/<名稱>.md`，一句一檔、人可直接改；名稱擋路徑字元；改名＝寫新刪舊）；action `prompts`／`prompt_save`／`prompt_remove`；終端 ⋯「常用 prompt…」（篩選、貼進會話、改、刪要再按一次）、逐字稿「我說的」每句「存成常用」 | （本筆） |
 
 ## 來源
 - BAT 原始碼：`node-sidecar/src/handlers/claude-send.mjs`（buildQueryOptions L944–1010）、`lib/live-query.mjs`、`handlers/claude-permission.mjs`、`src-tauri/src/codex_app_server.rs`、`runtimes/claude-cli-*.mjs`、`plans/claude-cli-transcript-agent-plan.md`、`plans/claude-channel-agent-plan.md`、`lib/transcript-transfer.mjs`、`lib/harness-noise.mjs`、README（Auto-Continue、Cache Cost Awareness、Statusline）。
