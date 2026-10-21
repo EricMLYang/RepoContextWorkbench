@@ -9,6 +9,7 @@ import { useStore, useUi } from "../../store/context";
 import { load as loadPref, save as savePref } from "../../lib/storage";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 import { Editor, taskIndex, type EditLayout, type EditorHandle } from "./Editor";
+import { parseDelimited, tableDelimiter } from "../../lib/csv";
 import { lineOffset, linkForDrop, mdHeadings, relPath, slug, toggleTask } from "../../lib/mdedit";
 import { clearMatches, findRanges, showMatches } from "../../lib/findText";
 import type { DiffNote } from "../../lib/view";
@@ -40,6 +41,48 @@ function fmtSize(n: number) {
 const isMarkdown = (p: string) => /\.(md|markdown|mdx)$/i.test(p);
 /** 預設自動換行的（文章類）；程式碼預設不換行、可橫向捲。 */
 const isProse = (p: string) => isMarkdown(p) || /\.(txt|rst|adoc|org|log)$/i.test(p);
+/** 有「預覽」可切的（md 畫成文件、CSV／TSV 畫成表格）；原始碼另一個按鈕。 */
+const hasPreview = (p: string) => isMarkdown(p) || tableDelimiter(p) !== null;
+
+/** 一次最多畫幾列表格（再多請看原始碼）。 */
+const TABLE_ROWS = 1000;
+
+/** CSV／TSV 表格預覽（F-110）：第一列當標題、第一欄固定行號；只畫前 [TABLE_ROWS] 列。 */
+function CsvTable({ text, delim }: { text: string; delim: string }) {
+  const { rows, more } = useMemo(() => parseDelimited(text, delim, TABLE_ROWS + 1), [text, delim]);
+  if (!rows.length) return <p className="muted">（空的表格）</p>;
+  const [head, ...body] = rows;
+  const shown = body.slice(0, TABLE_ROWS);
+  const width = Math.max(...rows.map((r) => r.length));
+  const pad = (r: string[]) => [...r, ...Array<string>(Math.max(0, width - r.length)).fill("")];
+  return (
+    <div className="csvview">
+      <table>
+        <thead>
+          <tr>
+            <th className="csvn">#</th>
+            {pad(head).map((h, i) => (
+              <th key={i}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((r, i) => (
+            <tr key={i}>
+              <td className="csvn">{i + 1}</td>
+              {pad(r).map((c, j) => (
+                <td key={j}>{c}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {more || body.length > TABLE_ROWS ? (
+        <p className="small muted">只畫前 {TABLE_ROWS} 列；完整內容請看「原始碼」。</p>
+      ) : null}
+    </div>
+  );
+}
 
 /**
  * md 裡的相對連結 → repo 內路徑（`/` 開頭＝repo 根目錄）。跳出 repo 回 null。
@@ -534,7 +577,7 @@ export function FileViewer({
   const [askedLine, setAskedLine] = useState<number | undefined>(undefined);
   if (askedLine !== file.seq) {
     setAskedLine(file.seq);
-    if (file.line) setMode(isMarkdown(path) ? "source" : "view");
+    if (file.line) setMode(hasPreview(path) ? "source" : "view");
   }
   const jumpedSeq = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -776,7 +819,7 @@ export function FileViewer({
       !e.altKey &&
       k === "l" &&
       content?.kind === "text" &&
-      (draft !== null || !md || mode === "source")
+      (draft !== null || !hasPreview(path) || mode === "source")
     ) {
       e.preventDefault();
       setGoto(true);
@@ -852,7 +895,7 @@ export function FileViewer({
   const crumbs = path.replace(/\\/g, "/").split("/");
   // 低頻動作收進「⋯」：換行（看程式碼／原始碼時）、複製路徑、重新讀取（有未存修改時不給）
   const moreItems: MenuItem[] = [];
-  if (!editing && content?.kind === "text" && (!md || mode === "source"))
+  if (!editing && content?.kind === "text" && (!hasPreview(path) || mode === "source"))
     moreItems.push({ label: wrap ? "關閉自動換行" : "自動換行", run: () => setWrap(!wrap) });
   if (md)
     moreItems.push({
@@ -893,9 +936,9 @@ export function FileViewer({
                 aria-pressed={mode === "view"}
                 onClick={() => setMode("view")}
               >
-                {md && content?.kind === "text" ? "預覽" : "內容"}
+                {hasPreview(path) && content?.kind === "text" ? "預覽" : "內容"}
               </button>
-              {md && content?.kind === "text" ? (
+              {hasPreview(path) && content?.kind === "text" ? (
                 <button
                   type="button"
                   className="small ghost"
@@ -1218,6 +1261,8 @@ export function FileViewer({
                   <Markdown text={content.text} hooks={hooks} />
                   <Backlinks repo={repo} path={path} nonce={nonce} />
                 </div>
+              ) : tableDelimiter(path) && mode === "view" ? (
+                <CsvTable text={content.text} delim={tableDelimiter(path)!} />
               ) : (
                 <CodeView text={content.text} wrap={wrap} lang={md ? null : langOf(path)} />
               )}

@@ -3025,3 +3025,31 @@ body.withpicks #main {
   overflow: auto;
   white-space: pre-wrap;
 }
+
+/* F-110 CSV／TSV 表格預覽 */
+.csvview {
+  overflow: auto;
+  max-height: 100%;
+}
+.csvview table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.csvview th,
+.csvview td {
+  border: 1px solid var(--line);
+  padding: 3px 8px;
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-wrap;
+  max-width: 420px;
+}
+.csvview thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+.csvview .csvn {
+  color: var(--sub);
+  text-align: right;
+}

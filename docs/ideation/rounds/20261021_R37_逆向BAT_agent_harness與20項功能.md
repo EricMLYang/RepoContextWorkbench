@@ -76,7 +76,8 @@ BAT 的計畫書寫明：依它讀到的方案政策（文件記載 2026-06-15 �
 | F-95 | 完成：前端 `lib/termLinks.ts` 找候選（網址、and/or 不算；全形字換算格子）、xterm link provider；引擎 `locate_path`（相對路徑先照 hook 記的 cwd、再照會話目錄；只開登記 repo 裡的檔）；檢視器 `line` 捲到那行（md 先切原始碼） | 2bc0a74 |
 | F-99＋F-100＋F-101＋F-102 | 完成：多掛 `StopFailure`（→ 等你「這一輪出錯中斷：原因」＋會話列「繼續」貼進輸入框）、`SubagentStart／Stop`（`<sid>.sub/<agent_id>` 標記檔，免讀改寫競爭；2 小時沒收尾不算）；statusLine 另寫 `<sid>.meter.json`（context %、模型，變了才寫）；停下超過 60 分＝`cache_cold` | e2417aa |
 | F-98 | 完成：引擎 `auto_continue.rs`（`.state/auto_continue/<sid>.json`；`take` 只認順利做完的 Stop、每次 Stop 帶 `stop_id` 只送一次、到上限停；你自己送別的話 `UserPromptSubmit` 歸零）；殼的監看回呼呼叫 `tick` 寫進 PTY（字與 Enter 分兩次）；終端 ⋯「自動繼續…」、會話列「自動 1/3」 | 16c4f37 |
-| F-103 | 完成：`timeline::digest`（你說的話、動過的檔＋次數、最後 15 個指令＋失敗標記、最後回覆；思考與工具結果不帶；`redact_secrets` 遮秘密）；action `session_digest` 存到所屬組 `materials/handoff-*.md`；逐字稿「整理成交接包」→「帶著它開新會話」 | （本筆） |
+| F-103 | 完成：`timeline::digest`（你說的話、動過的檔＋次數、最後 15 個指令＋失敗標記、最後回覆；思考與工具結果不帶；`redact_secrets` 遮秘密）；action `session_digest` 存到所屬組 `materials/handoff-*.md`；逐字稿「整理成交接包」→「帶著它開新會話」 | 74605fc |
+| F-110 | 完成：`lib/csv.ts`（RFC 4180：引號裡的分隔符號、換行、`""`；BOM、CRLF）；檢視器 CSV／TSV 預設表格（標題列固定、行號欄、前 1,000 列），「原始碼」看原文、從終端點路徑來的切原始碼 | （本筆） |
 
 ## 來源
 - BAT 原始碼：`node-sidecar/src/handlers/claude-send.mjs`（buildQueryOptions L944–1010）、`lib/live-query.mjs`、`handlers/claude-permission.mjs`、`src-tauri/src/codex_app_server.rs`、`runtimes/claude-cli-*.mjs`、`plans/claude-cli-transcript-agent-plan.md`、`plans/claude-channel-agent-plan.md`、`lib/transcript-transfer.mjs`、`lib/harness-noise.mjs`、README（Auto-Continue、Cache Cost Awareness、Statusline）。
