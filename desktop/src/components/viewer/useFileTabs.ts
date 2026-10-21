@@ -14,7 +14,15 @@ export function useFileTabs(toast: (msg: string) => void) {
   const [activeFile, setActiveFile] = useState<string | null>(() =>
     load<string | null>("activeFile", null),
   );
-  useEffect(() => save("openFiles", files), [files]);
+  // 捲到第幾行是一次性的（F-95）：不記進本機，重開 App 不會再捲、md 也不會被切去原始碼
+  useEffect(
+    () =>
+      save(
+        "openFiles",
+        files.map((f) => ({ ...f, line: undefined, seq: undefined })),
+      ),
+    [files],
+  );
   useEffect(() => save("activeFile", activeFile), [activeFile]);
   const [dirtyFiles, setDirtyFiles] = useState<ReadonlySet<string>>(() => new Set());
   const dirtyRef = useRef(dirtyFiles);
