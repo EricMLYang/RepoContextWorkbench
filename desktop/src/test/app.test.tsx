@@ -2776,6 +2776,20 @@ describe("⌘K 找 repo／牌組", () => {
   const opts = () => within(screen.getByRole("listbox", { name: "結果" })).getAllByRole("option");
   const noBox = () => screen.queryByRole("combobox", { name: "搜尋或執行指令" });
 
+  it("「>」指令有「常用 prompt…」（R37 F-106），選了開常用 prompt 對話框", async () => {
+    const backend = backendWithPalette();
+    (backend.action as ReturnType<typeof vi.fn>).mockImplementation(async (name: string) =>
+      name === "prompts" ? { ok: true, dir: "/sp/prompts", prompts: [] } : { ok: true },
+    );
+    await mount(backend);
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    fireEvent.change(box(), { target: { value: ">prompt" } });
+    expect(opts()[0].textContent).toContain("常用 prompt…");
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter" }));
+    expect(noBox()).toBeNull();
+    expect(document.getElementById("detaildialog")!.textContent).toContain("還沒有常用 prompt");
+  });
+
   it("「?」請助手：先給計畫、驗證不過的不能勾、執行走原本的 action、記一筆（F-63）", async () => {
     const plan = {
       ok: true,

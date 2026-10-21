@@ -9,7 +9,10 @@ import {
   sessionWhere,
 } from "../lib/view";
 import { AssistDialog } from "../dialogs/AssistDialog";
-import { useSnapshot, useStore, useUi } from "../store/context";
+import { useSnapshot, useStore, useUi, useUiState } from "../store/context";
+import { agentCommandsSpec } from "./sessions/AgentCommands";
+import { promptLibrarySpec } from "./sessions/PromptLibrary";
+import { transcriptSpec } from "./sessions/Transcript";
 
 /** 打字後多久才問引擎（毫秒）——邊打邊找，不必每個字都問。 */
 const DEBOUNCE_MS = 120;
@@ -155,7 +158,37 @@ export function Palette({ onClose }: { onClose: () => void }) {
   }, [store, wantRecent]);
 
   const { state } = useSnapshot();
+  const { activeSid } = useUiState();
+  // 目前選著的 agent 會話（R37：逐字稿、/指令要對它）
+  const activeAgent = (state.terms || []).find(
+    (t) => t.sid === activeSid && t.kind === "agent" && t.alive,
+  );
   const commands: Command[] = [
+    {
+      id: "prompts",
+      label: "常用 prompt…",
+      keys: "prompt snippet 常用 片段",
+      run: () => ui.openDetail(promptLibrarySpec()),
+    },
+    ...(activeAgent
+      ? [
+          {
+            id: "transcript",
+            label: "目前會話的逐字稿",
+            keys: "transcript 逐字稿 history 紀錄",
+            run: () =>
+              ui.openDetail(
+                transcriptSpec({ sid: activeAgent.sid }, activeAgent.ai_title || activeAgent.title),
+              ),
+          },
+          {
+            id: "slash",
+            label: "插入 /指令（目前會話）…",
+            keys: "slash command skill 指令",
+            run: () => ui.openDetail(agentCommandsSpec(activeAgent.sid)),
+          },
+        ]
+      : []),
     {
       id: "note",
       label: "寫組筆記（目前牌組）",
