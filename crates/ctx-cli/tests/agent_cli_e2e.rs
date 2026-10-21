@@ -330,3 +330,49 @@ fn test_sessions_digest_prints_a_redacted_handoff() {
     let r = c.run(&["sessions", "--digest", "ffffffff-0000-0000"]);
     assert_ne!(r.code, 0);
 }
+
+/// F-107：`ctx worktrees <repo>` 列出掛出去的 worktree，`--remove` 只移除乾淨的（分支留著）。
+#[test]
+fn test_worktrees_lists_and_removes_only_clean_ones() {
+    let e = env_spine();
+    let wt = e.tmp().join("impl-wt");
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&e.impl_)
+        .args(["worktree", "add", "-q", "-b", "side"])
+        .arg(&wt)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let c = ctx(e.tmp()).cwd(&e.impl_).env("REPOENGINE_SPINE", &e.sp);
+    let r = c.run(&["worktrees", "impl", "--json"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let list = r.json()["worktrees"].as_array().unwrap().clone();
+    assert_eq!(list.len(), 2);
+    let side = list.iter().find(|w| w["branch"] == "side").unwrap();
+    assert_eq!(side["removable"], true);
+    std::fs::write(wt.join("dirty.txt"), "x").unwrap();
+    let r = c.run(&[
+        "worktrees",
+        "impl",
+        "--remove",
+        side["path"].as_str().unwrap(),
+    ]);
+    assert_ne!(r.code, 0, "有沒 commit 的檔不能移除");
+    std::fs::remove_file(wt.join("dirty.txt")).unwrap();
+    let r = c.run(&[
+        "worktrees",
+        "impl",
+        "--remove",
+        side["path"].as_str().unwrap(),
+        "--json",
+    ]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert_eq!(r.json()["worktrees"].as_array().unwrap().len(), 1);
+    assert!(!wt.exists());
+    assert_ne!(c.run(&["worktrees", "nope"]).code, 0);
+}

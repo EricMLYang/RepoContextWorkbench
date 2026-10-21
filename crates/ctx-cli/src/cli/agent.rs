@@ -432,6 +432,74 @@ pub fn cmd_session_digest(ctx: &Ctx, id: &str) -> CmdResult {
     )
 }
 
+/// `ctx worktrees <repo> [--remove <path>]`（F-107，Rust 才有）：跟 App 右側欄同一套規則。
+pub fn cmd_worktrees(ctx: &Ctx, repo: &str, remove: Option<&str>) -> CmdResult {
+    agent_call(
+        ctx,
+        |d| {
+            let root = ctx_core::registry::get_repo(d, repo)?.path();
+            if let Some(p) = remove {
+                ctx_core::worktrees::remove(&root, p)?;
+            }
+            let list: Vec<Value> = ctx_core::worktrees::list(&root)?
+                .into_iter()
+                .map(|w| {
+                    let removable = w.removable();
+                    let mut v = serde_json::to_value(w).unwrap_or_default();
+                    v["removable"] = Value::Bool(removable);
+                    v
+                })
+                .collect();
+            Ok(serde_json::json!({"repo": repo, "removed": remove, "worktrees": list}))
+        },
+        h_worktrees,
+    )
+}
+
+fn h_worktrees(r: &Value) -> String {
+    let mut out = Vec::new();
+    if has(r, "removed") {
+        out.push(format!("已移除：{}（分支留著）", s(r, "removed")));
+    }
+    out.push(format!("# {} 的 worktree", s(r, "repo")));
+    for w in arr(r, "worktrees") {
+        if w["main"] == true {
+            continue;
+        }
+        let mut state = Vec::new();
+        match w["dirty"].as_u64() {
+            None => state.push("目錄已不在".to_string()),
+            Some(0) => state.push("乾淨".to_string()),
+            Some(n) => state.push(format!("{n} 檔沒 commit")),
+        }
+        if let Some(n) = w["unique"].as_u64().filter(|n| *n > 0) {
+            state.push(format!("{n} 個 commit 只在這裡"));
+        }
+        if w["locked"] == true {
+            state.push("鎖住".into());
+        }
+        let branch = if has(w, "branch") {
+            s(w, "branch")
+        } else {
+            format!("（detached {}）", s(w, "head"))
+        };
+        out.push(format!(
+            "- {branch}：{}{}",
+            state.join("、"),
+            if w["removable"] == true {
+                "（可移除）"
+            } else {
+                ""
+            }
+        ));
+        out.push(format!("  {}", s(w, "path")));
+    }
+    if out.len() == 1 || (out.len() == 2 && has(r, "removed")) {
+        out.push("（沒有掛出去的 worktree）".into());
+    }
+    out.join("\n")
+}
+
 fn h_sessions(r: &Value) -> String {
     let mut out = vec![format!("# 過去的會話（{}）", s(&r["scope"], "label"))];
     let list = arr(r, "sessions");

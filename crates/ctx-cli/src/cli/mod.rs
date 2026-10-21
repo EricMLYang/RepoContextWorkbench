@@ -134,6 +134,14 @@ pub enum Cmd {
         #[arg(long, value_name = "ID")]
         digest: Option<String>,
     },
+    /// repo 掛出去的 git worktree：分支、沒 commit 的檔、只在這裡的 commit、能不能移除（Rust 才有）
+    Worktrees {
+        /// 登記的 repo id
+        repo: String,
+        /// 移除這個 worktree（要乾淨、沒有只在這裡的 commit；不加 --force，分支留著）
+        #[arg(long, value_name = "PATH")]
+        remove: Option<String>,
+    },
     /// 記一筆判斷（decision），回傳可引用的 ref
     Log(agent::LogArgs),
     /// 未結事項：add <文字> [--due] ／ close <#N> [--note] ／ list（全部）／ review（體檢）／ brief <#N>（任務包）
@@ -223,6 +231,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
             query,
             ..
         } => agent::cmd_sessions(ctx, scope, *limit, query.as_deref()),
+        Worktrees { repo, remove } => agent::cmd_worktrees(ctx, repo, remove.as_deref()),
         Log(a) => agent::cmd_log(ctx, a),
         Todo(a) => agent::cmd_todo(ctx, a),
         Status(a) => agent::cmd_status(ctx, a),
