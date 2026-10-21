@@ -24,7 +24,7 @@ import {
 } from "../../lib/view";
 import { findPathHits, lineCells } from "../../lib/termLinks";
 import { useSnapshot, useStore, useUi } from "../../store/context";
-import { confirmKillSpec, sessionResultSpec } from "./SessionDialogs";
+import { autoContinueSpec, confirmKillSpec, sessionResultSpec } from "./SessionDialogs";
 import { transcriptSpec } from "./Transcript";
 
 interface TermRec {
@@ -505,6 +505,16 @@ export function TerminalPanel(props: {
                 : []),
               ...(info.claude_session && info.resume_cwd
                 ? [{ label: "岔出新會話（這場不動）", run: () => forkSession(info) }]
+                : []),
+              ...(info.kind === "agent" && info.alive
+                ? [
+                    {
+                      label: info.auto_continue
+                        ? `自動繼續（${info.auto_continue.count}/${info.auto_continue.max}）…`
+                        : "自動繼續…",
+                      run: () => ui.openDetail(autoContinueSpec(info)),
+                    },
+                  ]
                 : []),
               // 只打開紀錄表單；不會結束程序、也不會 commit
               { label: "記錄本次工作結果…", run: () => ui.openDetail(sessionResultSpec(info)) },

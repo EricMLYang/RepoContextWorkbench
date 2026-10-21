@@ -34,7 +34,9 @@ use files::{
 };
 use finder::{a_file_diff, a_palette, a_repo_changes, a_scope_changes};
 use namecard::{a_describe_repo, a_repo_class, a_repo_profile};
-use sessions::{a_session_draft, a_session_result, a_session_seen, a_term_create, a_term_kill};
+use sessions::{
+    a_auto_continue, a_session_draft, a_session_result, a_session_seen, a_term_create, a_term_kill,
+};
 
 /// 會話清冊（`TermManager` 的那幾個操作）。殼給真的，測試給假的。
 pub trait Terms {
@@ -138,6 +140,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("term_kill", a_term_kill),
     ("session_seen", a_session_seen),
     ("session_result", a_session_result),
+    ("auto_continue", a_auto_continue),
 ];
 
 /// 不寫入任何東西的 action：殼不發 `workbench://changed`（否則展開資料夾、開檔都會讓前端重抓整份 state）。

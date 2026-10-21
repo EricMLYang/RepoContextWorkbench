@@ -196,6 +196,15 @@ export interface TermInfo {
   subagents?: number;
   /** Rust 才有（F-100）：停在你這邊超過一小時——提示快取多半過期，下一句會整份重算。 */
   cache_cold?: boolean;
+  /** Rust 才有（F-98）：自動繼續（開著才有）。 */
+  auto_continue?: AutoContinue | null;
+}
+
+/** 自動繼續的設定與計數（F-98，引擎 `auto_continue::AutoContinue`）。 */
+export interface AutoContinue {
+  prompt: string;
+  max: number;
+  count: number;
 }
 
 /** 過去的一場 Claude Code 會話（F-72，引擎 `history::PastSession`）。 */
@@ -863,6 +872,11 @@ export interface ActionMap {
   session_result: {
     payload: { sid: string; text: string };
     result: { ok: true; date: string; time: string };
+  };
+  /** Rust 才有（F-98）：開／改（計數歸零）或關這個會話的自動繼續。 */
+  auto_continue: {
+    payload: { sid: string; max?: number; prompt?: string; off?: boolean };
+    result: { ok: true; auto_continue: AutoContinue | null };
   };
 }
 

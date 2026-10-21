@@ -82,8 +82,19 @@ impl AppState {
             n.changed("term-exit");
         });
         let n = self.notifier.clone();
+        let weak = Arc::downgrade(&terms);
+        let sp = spine.to_path_buf();
         // 監看失敗不擋啟動：前端還有 5 秒輪詢當保險
-        let watcher = SpineWatcher::start(spine, move |reason| n.changed(reason)).ok();
+        let watcher = SpineWatcher::start(spine, move |reason| {
+            // F-98：會話做完一輪 → 開了自動繼續的，由引擎決定要不要替你送下一句（殼只轉寫進 PTY）
+            if reason.ends_with(".json") {
+                if let Some(t) = weak.upgrade() {
+                    ctx_core::auto_continue::tick(&sp, &t);
+                }
+            }
+            n.changed(reason)
+        })
+        .ok();
         g.spine = Some(spine.to_path_buf());
         g.terms = Some(terms);
         g.watcher = watcher;

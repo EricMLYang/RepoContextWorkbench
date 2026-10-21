@@ -208,3 +208,30 @@ pub(super) fn a_session_result(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Re
     )?;
     Ok(json!({"ok": true, "date": ev.date, "time": ev.time}))
 }
+
+/// F-98（Rust 才有）：開、改或關這個會話的自動繼續。`off: true`＝關；否則開（`max` 次、`prompt` 那句，計數歸零）。
+/// 只對還活著的 agent 會話（引擎查得到這個 sid 時）。
+pub(super) fn a_auto_continue(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
+    let sid = raw(p, "sid").unwrap_or_default();
+    if let Some(info) = t.and_then(|t| t.info(&sid)) {
+        if !info.alive || info.kind != crate::term::TermKind::Agent {
+            return Err(Error::invalid("只有執行中的 agent 會話能自動繼續"));
+        }
+    } else if t.is_some() {
+        return Err(Error::invalid(format!("未知會話: {}", shown(p, "sid"))));
+    }
+    if p.get("off") == Some(&Value::Bool(true)) {
+        crate::auto_continue::off(d, &sid);
+        return Ok(json!({"ok": true, "auto_continue": null}));
+    }
+    let max = match p.get("max") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(
+            v.as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .ok_or_else(|| Error::invalid("max 必須是正整數"))?,
+        ),
+    };
+    let a = crate::auto_continue::set(d, &sid, max, s(p, "prompt").as_deref())?;
+    Ok(json!({"ok": true, "auto_continue": a}))
+}

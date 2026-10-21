@@ -2196,6 +2196,44 @@ describe("會話放進所屬牌組", () => {
     expect(dialog.textContent).toContain("讀不到逐字稿：這個會話還沒有逐字稿");
   });
 
+  it("自動繼續（F-98）：會話選單打開、送出次數與那句；開著的會話列標「自動 1/3」、可關掉", async () => {
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({
+          terms: [
+            term({
+              sid: "t1",
+              home_group: "產品開發",
+              auto_continue: { prompt: "繼續", max: 3, count: 1 },
+            }),
+          ] as never,
+        }),
+      ),
+    });
+    await mount(backend);
+    expect(document.querySelector(".sessiongauges")!.textContent).toContain("自動 1/3");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "回到會話" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "更多會話動作" })));
+    await act(async () =>
+      fireEvent.click(screen.getByRole("menuitem", { name: "自動繼續（1/3）…" })),
+    );
+    const dialog = document.getElementById("detaildialog")!;
+    fireEvent.change(within(dialog).getByLabelText("最多送幾次（1～20）"), {
+      target: { value: "5" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/要送的話/), {
+      target: { value: "照計畫做下一步" },
+    });
+    await act(async () =>
+      fireEvent.click(within(dialog).getByRole("button", { name: "更新（計數歸零）" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("auto_continue", {
+      sid: "t1",
+      max: 5,
+      prompt: "照計畫做下一步",
+    });
+  });
+
   it("牌組的會話在牌組區塊裡（寫 repo），其他的在下面；終端標題寫「組 › repo」", async () => {
     const backend = mockBackend({
       getState: vi.fn(async () =>

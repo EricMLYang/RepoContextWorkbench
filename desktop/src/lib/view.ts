@@ -530,6 +530,17 @@ export function sessionGauges(s: TermInfo): { text: string; title: string; warn?
         "；滿了 Claude Code 會自動壓縮，前文會變成摘要",
       warn: s.context_pct >= CONTEXT_WARN_PCT,
     });
+  if (s.auto_continue)
+    out.push({
+      text: "自動 " + s.auto_continue.count + "/" + s.auto_continue.max,
+      title:
+        "自動繼續：做完一輪就送「" +
+        s.auto_continue.prompt +
+        "」，最多 " +
+        s.auto_continue.max +
+        " 次（你自己說話就歸零）",
+      warn: s.auto_continue.count >= s.auto_continue.max,
+    });
   if (s.subagents)
     out.push({ text: "子 agent " + s.subagents, title: "這場會話開的子 agent 還在跑" });
   if (s.cache_cold)

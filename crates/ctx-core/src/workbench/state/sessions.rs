@@ -138,6 +138,13 @@ pub(super) fn annotate_terms_with(
                     "subagents".into(),
                     json!(crate::session_status::subagent_count(spine_dir, sid)),
                 );
+                // F-98：自動繼續（開著才有：那句、上限、已送幾次）
+                rec.insert(
+                    "auto_continue".into(),
+                    crate::auto_continue::get(spine_dir, sid)
+                        .and_then(|a| serde_json::to_value(a).ok())
+                        .unwrap_or(Value::Null),
+                );
                 // F-100：停下來超過一小時＝提示快取多半過期了，下一句會整份重算
                 rec.insert(
                     "cache_cold".into(),

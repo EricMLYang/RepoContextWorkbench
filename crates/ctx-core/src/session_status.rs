@@ -112,6 +112,7 @@ pub fn clear(spine_dir: &Path, sid: &str) {
     let p = path_for(spine_dir, sid);
     let _ = std::fs::remove_file(&p);
     drop_extras(&p);
+    crate::auto_continue::off(spine_dir, sid);
 }
 
 /// 狀態檔旁邊的兩樣東西：用量檔與子 agent 標記資料夾（程序結束就沒意義了）。
@@ -195,6 +196,7 @@ fn record_subagent(status: &Path, start: bool, payload: &Value) -> bool {
 /// 沒有 id（hook 從沒觸發）就照舊刪掉。App 重開時 [`clear_all`] 一起清。
 pub fn retire(spine_dir: &Path, sid: &str) {
     drop_extras(&path_for(spine_dir, sid));
+    crate::auto_continue::off(spine_dir, sid);
     let keep = read(spine_dir, sid).filter(|v| {
         v.get("claude_session")
             .and_then(Value::as_str)
@@ -232,6 +234,7 @@ pub fn mark_seen(spine_dir: &Path, sid: &str) -> bool {
 
 /// App 重開：前一次的會話都不在了（sid 會重新從頭編），全部清掉，只刪 `*.json`。
 pub fn clear_all(spine_dir: &Path) {
+    crate::auto_continue::clear_all(spine_dir);
     let Ok(rd) = std::fs::read_dir(dir(spine_dir)) else {
         return;
     };
@@ -467,6 +470,19 @@ pub fn record_hook(
                 .format("%Y-%m-%d %H:%M:%S")
                 .to_string(),
         });
+    }
+    // F-98：每一次 Stop 一個 id——自動繼續靠它分辨「同一次做完」（看過了、重寫狀態都不會變）
+    if event == StatusHook::Stop {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default();
+        rec["stop_id"] = json!(nanos.to_string());
+    }
+    // F-98：你自己送出的話（不是自動繼續送的那句）→ 自動繼續的計數歸零
+    if event == StatusHook::Prompt {
+        let said = payload.get("prompt").and_then(Value::as_str).unwrap_or("");
+        crate::auto_continue::on_prompt(&path, said);
     }
     let (title, reply) = transcript_bits(event, &payload, &path);
     // F-78：接續用的 Claude Code 會話 id 與目錄（每個 hook 都帶；這次沒帶就沿用上一筆）

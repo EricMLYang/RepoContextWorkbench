@@ -330,3 +330,81 @@ export function ConfirmKill({ term }: { term: TermInfo }) {
 export function confirmKillSpec(term: TermInfo) {
   return { title: "結束這個會話程序？", eyebrow: "SESSION", content: <ConfirmKill term={term} /> };
 }
+
+/**
+ * 自動繼續（F-98）：這一輪順利做完就替你送一句，最多 N 次；你自己說了別的就歸零。
+ * 出錯中斷、要你允許或回答時不送。狀態在主機，關掉視窗也照常。
+ */
+export function AutoContinueForm({ term }: { term: TermInfo }) {
+  const store = useStore();
+  const { close } = useDetail();
+  const cur = term.auto_continue;
+  const [max, setMax] = useState(String(cur?.max ?? 3));
+  const [prompt, setPrompt] = useState(cur?.prompt ?? "繼續");
+  const first = useAutoFocus<HTMLInputElement>();
+  return (
+    <DetailLayout
+      actions={
+        <>
+          {cur ? (
+            <AsyncButton
+              run={async () => {
+                await store.action("auto_continue", { sid: term.sid, off: true });
+                await store.refreshState();
+                store.toast("已關掉自動繼續");
+                close();
+              }}
+            >
+              關掉
+            </AsyncButton>
+          ) : null}
+          <AsyncButton
+            className="primary"
+            run={async () => {
+              await store.action("auto_continue", {
+                sid: term.sid,
+                max: Number(max),
+                prompt: prompt.trim(),
+              });
+              await store.refreshState();
+              store.toast("自動繼續已開：最多 " + max + " 次");
+              close();
+            }}
+          >
+            {cur ? "更新（計數歸零）" : "開啟"}
+          </AsyncButton>
+        </>
+      }
+    >
+      <p className="sumsrc">
+        這一輪<strong>順利做完</strong>就替你送下面這句，最多送幾次；你自己送出別的話就重新算。
+        出錯中斷、要你允許或回答時不會送。離開前記得關掉——它會一直用額度。
+      </p>
+      {cur ? (
+        <p className="detailmeta">{"目前：已送 " + cur.count + "／" + cur.max + " 次"}</p>
+      ) : null}
+      <label className="field">
+        最多送幾次（1～20）
+        <input
+          ref={first}
+          type="number"
+          min={1}
+          max={20}
+          value={max}
+          onChange={(e) => setMax(e.target.value)}
+        />
+      </label>
+      <label className="field">
+        要送的話
+        <input value={prompt} placeholder="繼續" onChange={(e) => setPrompt(e.target.value)} />
+        <span className="small muted">
+          寫具體一點比較好，例：「照計畫做下一步，做完一步就停」。
+        </span>
+      </label>
+    </DetailLayout>
+  );
+}
+
+export function autoContinueSpec(term: TermInfo) {
+  return { title: "自動繼續", eyebrow: "AUTO-CONTINUE", content: <AutoContinueForm term={term} /> };
+}

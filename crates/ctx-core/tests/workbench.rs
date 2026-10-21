@@ -2715,6 +2715,36 @@ fn locate_path_maps_terminal_text_to_a_registered_repo_file() {
     assert!(ctx_core::workbench::actions::is_read_only("locate_path"));
 }
 
+/// F-98：自動繼續的開關走 action；設定錯的值說明原因。
+#[test]
+fn auto_continue_action_sets_and_clears() {
+    let (_t, d) = spine_with_repos();
+    let r = handle_action(
+        &d,
+        "auto_continue",
+        &json!({"sid": "t1", "max": 5, "prompt": "下一步"}),
+        None,
+    )
+    .unwrap();
+    assert_eq!(r["auto_continue"]["max"], 5);
+    assert_eq!(r["auto_continue"]["count"], 0);
+    assert_eq!(
+        ctx_core::auto_continue::get(&d, "t1").unwrap().prompt,
+        "下一步"
+    );
+    assert!(handle_action(&d, "auto_continue", &json!({"sid": "t1", "max": 0}), None).is_err());
+    assert!(handle_action(&d, "auto_continue", &json!({"sid": "t1", "max": "x"}), None).is_err());
+    assert!(!ctx_core::workbench::actions::is_read_only("auto_continue"));
+    handle_action(
+        &d,
+        "auto_continue",
+        &json!({"sid": "t1", "off": true}),
+        None,
+    )
+    .unwrap();
+    assert!(ctx_core::auto_continue::get(&d, "t1").is_none());
+}
+
 /// F-63 App 助手：規則計畫照原樣給 App；執行完的紀錄落 presented [assist]（帶目前牌組）。
 #[test]
 fn assist_plan_and_log() {
