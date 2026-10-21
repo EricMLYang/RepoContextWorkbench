@@ -22,6 +22,7 @@ pub mod error;
 pub mod exe;
 pub mod filetree;
 pub mod fsutil;
+pub mod github;
 pub mod gitlog;
 pub mod health;
 pub mod history;

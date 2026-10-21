@@ -52,6 +52,8 @@ export interface Backend {
    * 前端一律經 `lib/clipboard.ts` 的 copyText：有這個就用、沒有退回 Web API。
    */
   copyText?(text: string): Promise<void>;
+  /** 選配（Tauri 才有）：用系統瀏覽器開 http(s) 網址（WebView 裡的連結不會自己開）。沒有就退回 window.open。 */
+  openUrl?(url: string): Promise<void>;
   /**
    * 選配：後端主動通知「資料變了」（Tauri 事件 `workbench://changed`）。
    * 有這個就不用靠 5 秒輪詢才看到變化；回傳取消訂閱。

@@ -333,6 +333,16 @@ pub(super) fn a_commit_diff(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Resu
     Ok(json!({"ok": true, "id": id, "sha": sha, "diff": diff, "truncated": truncated}))
 }
 
+/// F-112（Rust 才有）：repo 在 GitHub 上開著的 PR 與 issue（用使用者自己的 `gh`）。只讀。
+pub(super) fn a_repo_github(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let WorktreeArgs { id, .. } = parse("repo_github", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let mut out = crate::github::open_items(&root)?;
+    out["ok"] = json!(true);
+    out["id"] = json!(id);
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::split_location;

@@ -121,6 +121,7 @@ export function createTauriBackend(
     action: (name, payload) => run("run_action", { name, payload: payload ?? {} }),
     pickFolder: () => run<string | null>("pick_folder"),
     copyText: (text) => run<void>("copy_text", { text }),
+    openUrl: (url) => run<void>("open_url", { url }),
     watchTree: (repos) => run<void>("watch_tree", { repos }),
     onRepoChanged(cb) {
       let stop: (() => void) | null = null;

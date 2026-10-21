@@ -329,6 +329,29 @@ fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
         .map_err(|e| format!("無法複製到剪貼簿：{e}"))
 }
 
+/// 用系統預設瀏覽器開網址（F-112：GitHub 的 PR／issue）。只開 http(s)，不開檔案或其他協定。
+/// macOS 走 `open`；Windows 走 `explorer`（未在 VDI 測過）；其他走 `xdg-open`。
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    let url = url.trim();
+    if !(url.starts_with("https://") || url.starts_with("http://"))
+        || url.contains(char::is_whitespace)
+    {
+        return Err(format!("只開 http(s) 網址：{url}"));
+    }
+    #[cfg(target_os = "macos")]
+    let prog = "open";
+    #[cfg(target_os = "windows")]
+    let prog = "explorer";
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let prog = "xdg-open";
+    std::process::Command::new(prog)
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("打不開瀏覽器：{e}"))
+}
+
 /// 檔案樹要跟著磁碟變：前端給「每個 repo 展開中的資料夾」（`{id: [相對路徑…]}`，`""`＝根），
 /// 殼只監看這些 repo、只報這些資料夾裡的變動。空物件＝全部停掉。查不到的 repo 略過。
 #[tauri::command]
@@ -419,6 +442,7 @@ pub fn run() {
             run_action,
             pick_folder,
             copy_text,
+            open_url,
             watch_tree,
             terminal::term_open,
             terminal::term_write,

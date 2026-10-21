@@ -3181,3 +3181,24 @@ body.withpicks #main {
   max-height: 4.5em;
   overflow: hidden;
 }
+
+/* F-112 GitHub */
+.panelgithub {
+  margin: 10px 12px;
+}
+.ghlist {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+}
+.ghrow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  padding: 4px 6px;
+}
+.ghtitle {
+  font-size: 12px;
+}

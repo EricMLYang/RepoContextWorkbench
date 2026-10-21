@@ -226,6 +226,22 @@ export interface PastSession {
 export type PermissionMode =
   "manual" | "acceptEdits" | "plan" | "auto" | "dontAsk" | "bypassPermissions";
 
+/** GitHub 上開著的一筆 PR 或 issue（F-112，引擎 `github::slim`）。 */
+export interface GithubItem {
+  number: number;
+  title: string;
+  url: string;
+  author: string | null;
+  /** ISO 8601。 */
+  updated: string | null;
+  /** PR 才有。 */
+  branch?: string | null;
+  draft?: boolean;
+  /** PR 的審查結果（APPROVED／CHANGES_REQUESTED／REVIEW_REQUIRED）。 */
+  review?: string | null;
+  labels: string[];
+}
+
 /** 一句常用 prompt（F-106，引擎 `prompts::Prompt`；存在 spine 的 `prompts/<name>.md`）。 */
 export interface SavedPrompt {
   name: string;
@@ -853,6 +869,11 @@ export interface ActionMap {
   agent_commands: {
     payload: { sid?: string; cwd?: string };
     result: { ok: true; cwd: string | null; commands: AgentCommand[] };
+  };
+  /** Rust 才有（F-112）：repo 在 GitHub 上開著的 PR 與 issue（用使用者自己的 gh）。只讀。 */
+  repo_github: {
+    payload: { id: string };
+    result: { ok: true; id: string; prs: GithubItem[]; issues: GithubItem[] };
   };
   /** Rust 才有（F-109）：repo 最近的 commit（目前分支，新的在前）。只讀。 */
   repo_log: {

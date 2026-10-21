@@ -7,6 +7,7 @@ import { RepoChanges } from "./RepoChanges";
 import { RepoCommits } from "./RepoCommits";
 import { RepoProfileCard } from "./RepoProfileCard";
 import { RepoWorktrees } from "./RepoWorktrees";
+import { RepoGithub } from "./RepoGithub";
 
 /** 一行狀態：有才顯示，沒採集到寫「—」。 */
 function Fact({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
@@ -183,6 +184,7 @@ export function RepoPanel({
           </button>
         </div>
         <RepoWorktrees key={id} id={id} />
+        <RepoGithub key={"gh-" + id} id={id} />
         <RepoProfileCard id={id} />
       </div>
       {/* 寬度把手放在右側欄 landmark 裡（position: fixed；axe region） */}

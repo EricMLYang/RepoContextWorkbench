@@ -32,6 +32,7 @@ import { tabLabels } from "../components/viewer/FileTabs";
 import { worktreeState } from "../components/deep/RepoWorktrees";
 import { commitWhen } from "../components/deep/RepoCommits";
 import { filterCommands } from "../components/sessions/AgentCommands";
+import { githubMeta } from "../components/deep/RepoGithub";
 
 describe("按鈕文案與主次", () => {
   it("主要動作照引擎標的 primary；有建議落點時文案是「存入〈repo〉」", () => {
@@ -440,5 +441,23 @@ describe("/指令篩選（F-105）", () => {
     expect(filterCommands(list, "review pr").map((x) => x.name)).toEqual(["Code-Review"]);
     expect(filterCommands(list, "構想").map((x) => x.name)).toEqual(["pm-ideation"]);
     expect(filterCommands(list, "").length).toBe(3);
+  });
+});
+
+describe("GitHub 一筆的副標（F-112）", () => {
+  it("作者、分支、草稿、審查、標籤", () => {
+    expect(
+      githubMeta({
+        number: 1,
+        title: "x",
+        url: "u",
+        author: "me",
+        updated: null,
+        branch: "fix",
+        draft: true,
+        review: "CHANGES_REQUESTED",
+        labels: ["bug"],
+      }),
+    ).toBe("me · fix · 草稿 · 要求修改 · bug");
   });
 });
