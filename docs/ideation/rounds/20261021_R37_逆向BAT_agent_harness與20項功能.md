@@ -86,5 +86,13 @@ BAT 的計畫書寫明：依它讀到的方案政策（文件記載 2026-06-15 �
 | F-112 | 完成：引擎 `github.rs`（使用者自己的 `gh pr list`／`gh issue list --json`，12 秒逾時，沒裝 gh／沒登入照 gh 的話說明）；action `repo_github`；殼多 `open_url`（只開 http(s)；macOS `open`、Windows `explorer` **未在 VDI 測過**）；右側欄「資訊」頁 GitHub 段（展開才讀）。本 repo 實測 1.2s | 7c2b017 |
 | F-113 | 完成：⌘V 剪貼簿是圖（截圖）且是 agent 會話 → 引擎 `save_pasted_image` 存到 spine 的 `.state/session_images/`（不放 repo、7 天清、同秒不撞名）→ 貼 `@路徑`。註：Claude Code 自己的 Ctrl+V 讀系統剪貼簿本來就能用；這項補的是 WebView 的 ⌘V（原本貼不出東西）；從 Finder 拖檔進來 Tauri 預設攔掉，沒做 | （本筆） |
 
+## E. 這輪沒驗到的、下一步
+- **全部只有單元／元件測試**（Rust 新增約 20 個、前端新增約 20 個），沒在真 App 點過；手動驗收清單在 `docs/TESTING.md` §8d（16 項）。
+- **Windows（VDI）全部沒測**：特別是 F-111 的 Ctrl+Shift+F、F-112 的 `explorer <url>`、F-95 的 `C:\` 路徑。
+- 新 hook（StopFailure、SubagentStart／Stop）只有**新開的會話**才會掛上（設定檔每次開會話重寫）。
+- 自動繼續（F-98）寫 PTY 的「字＋Enter」分兩次（隔 250ms）；Claude Code 的輸入框把太快的字＋Enter 當貼上的行為沒實測過。
+- #129 的 9 個 worktree：F-107 已能在 App 裡一鍵移除，**沒替使用者按**。
+- 刻意不做：自己跑 Agent SDK（計費路徑與「同一個介面」都會變）、Codex app-server 轉譯、遠端／手機、Mermaid（大依賴）。
+
 ## 來源
 - BAT 原始碼：`node-sidecar/src/handlers/claude-send.mjs`（buildQueryOptions L944–1010）、`lib/live-query.mjs`、`handlers/claude-permission.mjs`、`src-tauri/src/codex_app_server.rs`、`runtimes/claude-cli-*.mjs`、`plans/claude-cli-transcript-agent-plan.md`、`plans/claude-channel-agent-plan.md`、`lib/transcript-transfer.mjs`、`lib/harness-noise.mjs`、README（Auto-Continue、Cache Cost Awareness、Statusline）。

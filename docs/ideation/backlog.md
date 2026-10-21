@@ -156,23 +156,23 @@
 | N-48 | 可維護 | MCP 呼叫紀錄記錯誤碼，`ctx health` 工具用量印失敗原因 | 真 spine：handoff 失敗 3 次查不出為什麼 | 留痕 | P2 | 完成（6266632） | R36 | R36 |
 | N-49 | 前端體驗 | 牌組卡狀態列溢出（button 全域 nowrap）、回答框提示被切、慢動作按鈕顯示已過秒數（N-09 的一半）；開場「上次交接」不再切在路徑中間 | 畫面預覽截圖每張都看得到；開場注入實際輸出 | 同介面 | P2 | 完成（7b3a36b、9a0a542） | R36 | R36 |
 | N-50 | 可維護 | 無障礙稽核自動化：axe-core 跑在 vitest（五個場景），serious／critical 為 0 才過；第一次就抓到側欄寬度把手缺 aria-valuenow | #12 一直沒做；N-09 的秒數也順手修了 aria-live 太吵 | 同介面 | P2 | 完成（本輪） | R36 | R36 |
-| F-94 | 會話 | 會話逐字稿檢視：你／回覆／工具／thinking 時間軸（終端捲掉的也看得到） | 留痕、脈絡 | BAT claude-cli-frames | P2 | 排入 | R37 | R37 |
-| F-95 | 瀏覽 | 終端輸出裡的檔案路徑可點（path:line → 檢視器開檔捲到那行） | 同介面 | BAT PathLinker | P2 | 排入 | R37 | R37 |
-| F-96 | 會話 | 開會話選項：權限模式、模型（白名單值） | 同介面 | BAT permission modes、/model | P2 | 排入 | R37 | R37 |
-| F-97 | 會話 | 會話分岔：`claude --resume <id> --fork-session` | 脈絡 | BAT session fork | P2 | 排入 | R37 | R37 |
-| F-98 | 會話 | 自動繼續：做完自動再送一句、最多 N 次、你送出就歸零；狀態放主機 | 同介面 | BAT /auto-continue | P2 | 排入 | R37 | R37 |
-| F-99 | 會話 | 這一輪出錯中斷（StopFailure）→ 會話列一鍵繼續 | 留痕 | BAT InterruptedTurnCard | P2 | 排入 | R37 | R37 |
-| F-100 | 會話 | 快取過期提示：閒置超過 1 小時的會話標出 | 脈絡 | BAT cache TTL／expiry warning | P2 | 排入 | R37 | R37 |
-| F-101 | 會話 | 每場會話的 context 用量 %（statusLine 的 context_window 寫進會話狀態） | 脈絡 | BAT statusline Context % | P2 | 排入 | R37 | R37 |
-| F-102 | 會話 | 子 agent 在跑幾個（SubagentStart／Stop hook） | 留痕 | BAT subagent tracking | P2 | 排入 | R37 | R37 |
-| F-103 | 會話 | 會話整理成去敏交接包，帶著開新會話 | 脈絡、留痕 | BAT agent-context-transfer | P2 | 排入 | R37 | R37 |
-| F-104 | 會話 | 你說過的話（prompt 歷史）可貼回會話 | 同介面 | BAT per-terminal prompt history | P2 | 排入 | R37 | R37 |
-| F-105 | 會話 | 這個 repo 的會話可用的 skills／指令清單 | 脈絡 | BAT Skills & Agents panels | P2 | 排入 | R37 | R37 |
-| F-106 | 會話 | 常用 prompt 庫：spine 的 prompts/*.md，⌘K 插入 | 留痕、同介面 | BAT snippet manager | P2 | 排入 | R37 | R37 |
-| F-107 | 瀏覽 | worktree 管理：列出、乾淨與否、獨有 commit、一鍵移除 | 脈絡 | BAT worktree handler；#129 | P2 | 排入 | R37 | R37 |
-| F-108 | 會話 | 在隔離的 worktree 開 agent 會話（claude --worktree） | 同介面 | BAT worktree preset | P2 | 排入 | R37 | R37 |
-| F-109 | 瀏覽 | 最近的 commit 與單一 commit 的差異 | 脈絡、留痕 | BAT GitPanel | P2 | 排入 | R37 | R37 |
-| F-110 | 瀏覽 | CSV／TSV 表格預覽 | 同介面 | BAT CsvPreview | P2 | 排入 | R37 | R37 |
-| F-111 | 瀏覽 | 終端內搜尋（⌘F） | 同介面 | BAT Ctrl+F | P2 | 排入 | R37 | R37 |
-| F-112 | 瀏覽 | GitHub PR／issue 清單（gh） | 脈絡 | BAT GitHubPanel | P2 | 排入 | R37 | R37 |
-| F-113 | 會話 | 圖片貼進 agent 會話（存檔後貼 @路徑） | 同介面 | BAT image attachment | P2 | 排入 | R37 | R37 |
+| F-94 | 會話 | 會話逐字稿檢視：你／回覆／工具／thinking 時間軸（終端捲掉的也看得到） | 留痕、脈絡 | BAT claude-cli-frames | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-95 | 瀏覽 | 終端輸出裡的檔案路徑可點（path:line → 檢視器開檔捲到那行） | 同介面 | BAT PathLinker | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-96 | 會話 | 開會話選項：權限模式、模型（白名單值） | 同介面 | BAT permission modes、/model | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-97 | 會話 | 會話分岔：`claude --resume <id> --fork-session` | 脈絡 | BAT session fork | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-98 | 會話 | 自動繼續：做完自動再送一句、最多 N 次、你送出就歸零；狀態放主機 | 同介面 | BAT /auto-continue | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-99 | 會話 | 這一輪出錯中斷（StopFailure）→ 會話列一鍵繼續 | 留痕 | BAT InterruptedTurnCard | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-100 | 會話 | 快取過期提示：閒置超過 1 小時的會話標出 | 脈絡 | BAT cache TTL／expiry warning | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-101 | 會話 | 每場會話的 context 用量 %（statusLine 的 context_window 寫進會話狀態） | 脈絡 | BAT statusline Context % | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-102 | 會話 | 子 agent 在跑幾個（SubagentStart／Stop hook） | 留痕 | BAT subagent tracking | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-103 | 會話 | 會話整理成去敏交接包，帶著開新會話 | 脈絡、留痕 | BAT agent-context-transfer | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-104 | 會話 | 你說過的話（prompt 歷史）可貼回會話 | 同介面 | BAT per-terminal prompt history | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-105 | 會話 | 這個 repo 的會話可用的 skills／指令清單 | 脈絡 | BAT Skills & Agents panels | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-106 | 會話 | 常用 prompt 庫：spine 的 prompts/*.md，⌘K 插入 | 留痕、同介面 | BAT snippet manager | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-107 | 瀏覽 | worktree 管理：列出、乾淨與否、獨有 commit、一鍵移除 | 脈絡 | BAT worktree handler；#129 | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-108 | 會話 | 在隔離的 worktree 開 agent 會話（claude --worktree） | 同介面 | BAT worktree preset | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-109 | 瀏覽 | 最近的 commit 與單一 commit 的差異 | 脈絡、留痕 | BAT GitPanel | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-110 | 瀏覽 | CSV／TSV 表格預覽 | 同介面 | BAT CsvPreview | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-111 | 瀏覽 | 終端內搜尋（⌘F） | 同介面 | BAT Ctrl+F | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-112 | 瀏覽 | GitHub PR／issue 清單（gh） | 脈絡 | BAT GitHubPanel | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
+| F-113 | 會話 | 圖片貼進 agent 會話（存檔後貼 @路徑） | 同介面 | BAT image attachment | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
