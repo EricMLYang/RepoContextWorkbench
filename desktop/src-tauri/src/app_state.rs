@@ -86,11 +86,10 @@ impl AppState {
         let sp = spine.to_path_buf();
         // 監看失敗不擋啟動：前端還有 5 秒輪詢當保險
         let watcher = SpineWatcher::start(spine, move |reason| {
-            // F-98：會話做完一輪 → 開了自動繼續的，由引擎決定要不要替你送下一句（殼只轉寫進 PTY）
-            if reason.ends_with(".json") {
-                if let Some(t) = weak.upgrade() {
-                    ctx_core::auto_continue::tick(&sp, &t);
-                }
+            // F-98：會話做完一輪 → 開了自動繼續的，由引擎決定要不要替你送下一句（殼只轉寫進 PTY）。
+            // 不看 reason：合併窗口裡只報第一個變動的檔，狀態檔可能排在後面；tick 只讀幾個小檔，每次都看
+            if let Some(t) = weak.upgrade() {
+                ctx_core::auto_continue::tick(&sp, &t);
             }
             n.changed(reason)
         })
