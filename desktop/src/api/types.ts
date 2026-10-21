@@ -226,6 +226,16 @@ export interface PastSession {
 export type PermissionMode =
   "manual" | "acceptEdits" | "plan" | "auto" | "dontAsk" | "bypassPermissions";
 
+/** 一個 commit（F-109，引擎 `gitlog::Commit`）。 */
+export interface CommitInfo {
+  sha: string;
+  short: string;
+  subject: string;
+  author: string;
+  /** ISO 8601（帶時區）。 */
+  at: string;
+}
+
 /** repo 掛出去的一個 git worktree（F-107，引擎 `worktrees::Worktree`）。 */
 export interface WorktreeInfo {
   path: string;
@@ -812,6 +822,16 @@ export interface ActionMap {
       repo: string | null;
       group: string | null;
     };
+  };
+  /** Rust 才有（F-109）：repo 最近的 commit（目前分支，新的在前）。只讀。 */
+  repo_log: {
+    payload: { id: string; limit?: number };
+    result: { ok: true; id: string; commits: CommitInfo[] };
+  };
+  /** Rust 才有（F-109）：一個 commit 的說明、統計與差異。只讀。 */
+  commit_diff: {
+    payload: { id: string; sha: string };
+    result: { ok: true; id: string; sha: string; diff: string; truncated: boolean };
   };
   /** Rust 才有（F-107）：repo 掛出去的 worktree。只讀。 */
   repo_worktrees: {

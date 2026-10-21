@@ -6,7 +6,7 @@ import { useStore, useUi } from "../../store/context";
 const DIFF_CAP = 4000;
 
 /** 差異的一行屬於哪種（上色用）。 */
-function diffLineKind(l: string): string {
+export function diffLineKind(l: string): string {
   if (l.startsWith("+++") || l.startsWith("---")) return "meta";
   if (l.startsWith("+")) return "add";
   if (l.startsWith("-")) return "del";

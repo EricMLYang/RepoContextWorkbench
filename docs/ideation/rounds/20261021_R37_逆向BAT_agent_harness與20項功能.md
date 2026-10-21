@@ -79,7 +79,8 @@ BAT 的計畫書寫明：依它讀到的方案政策（文件記載 2026-06-15 �
 | F-103 | 完成：`timeline::digest`（你說的話、動過的檔＋次數、最後 15 個指令＋失敗標記、最後回覆；思考與工具結果不帶；`redact_secrets` 遮秘密）；action `session_digest` 存到所屬組 `materials/handoff-*.md`；逐字稿「整理成交接包」→「帶著它開新會話」 | 74605fc |
 | F-110 | 完成：`lib/csv.ts`（RFC 4180：引號裡的分隔符號、換行、`""`；BOM、CRLF）；檢視器 CSV／TSV 預設表格（標題列固定、行號欄、前 1,000 列），「原始碼」看原文、從終端點路徑來的切原始碼 | 3d4da32 |
 | F-111 | 完成：不加 search addon——掃 xterm 緩衝（`lineCells` 換算全形格子）＋`findInLines`，`select`／`scrollToLine`；⌘F（Windows／Linux：Ctrl+Shift+F）不送進程序；從最新輸出往回找 | a44c1f9 |
-| F-107 | 完成：引擎 `worktrees.rs`（porcelain 解析；沒 commit 的檔數；只在這裡的 commit＝`rev-list HEAD --not --exclude=<自己的分支> --branches --remotes`；乾淨、沒獨有 commit、沒鎖才可移除，`git worktree remove` 不加 --force、分支留著）；右側欄「資訊」頁 Worktree 段（展開才讀、移除要再按一次確定）。真 repo 實測：#129 的 9 個全部「乾淨、可移除」，382ms | （本筆） |
+| F-107 | 完成：引擎 `worktrees.rs`（porcelain 解析；沒 commit 的檔數；只在這裡的 commit＝`rev-list HEAD --not --exclude=<自己的分支> --branches --remotes`；乾淨、沒獨有 commit、沒鎖才可移除，`git worktree remove` 不加 --force、分支留著）；右側欄「資訊」頁 Worktree 段（展開才讀、移除要再按一次確定）。真 repo 實測：#129 的 9 個全部「乾淨、可移除」，382ms | 178818b |
+| F-109 | 完成：引擎 `gitlog.rs`（`git log` 用 0x1f／0x1e 分欄不怕標題裡的符號；`git show` sha 只收十六進位，逾時、512KB 上限）；右側欄「變更」頁下方「最近的 commit」（展開才讀）→ 點開看差異、可把 sha 貼給會話 | （本筆） |
 
 ## 來源
 - BAT 原始碼：`node-sidecar/src/handlers/claude-send.mjs`（buildQueryOptions L944–1010）、`lib/live-query.mjs`、`handlers/claude-permission.mjs`、`src-tauri/src/codex_app_server.rs`、`runtimes/claude-cli-*.mjs`、`plans/claude-cli-transcript-agent-plan.md`、`plans/claude-channel-agent-plan.md`、`lib/transcript-transfer.mjs`、`lib/harness-noise.mjs`、README（Auto-Continue、Cache Cost Awareness、Statusline）。

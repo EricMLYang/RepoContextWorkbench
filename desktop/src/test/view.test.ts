@@ -30,6 +30,7 @@ import {
 import { interruptCard, loopCard, makeScan, makeState } from "./fixtures";
 import { tabLabels } from "../components/viewer/FileTabs";
 import { worktreeState } from "../components/deep/RepoWorktrees";
+import { commitWhen } from "../components/deep/RepoCommits";
 
 describe("按鈕文案與主次", () => {
   it("主要動作照引擎標的 primary；有建議落點時文案是「存入〈repo〉」", () => {
@@ -412,5 +413,16 @@ describe("worktree 狀態一句話（F-107）", () => {
     );
     expect(worktreeState({ ...w, dirty: null })).toBe("目錄已不在");
     expect(worktreeState({ ...w, prunable: true })).toBe("目錄已不在");
+  });
+});
+
+describe("commit 時間（F-109）", () => {
+  it("今天寫時分、昨天、N 天前、一個月以上寫日期", () => {
+    const now = new Date(2026, 9, 22, 12, 0);
+    expect(commitWhen(new Date(2026, 9, 22, 9, 5).toISOString(), now)).toBe("今天 09:05");
+    expect(commitWhen(new Date(2026, 9, 21, 23, 0).toISOString(), now)).toBe("昨天");
+    expect(commitWhen(new Date(2026, 9, 12).toISOString(), now)).toBe("10 天前");
+    expect(commitWhen(new Date(2026, 7, 1).toISOString(), now)).toBe("2026-08-01");
+    expect(commitWhen("壞的", now)).toBe("");
   });
 });

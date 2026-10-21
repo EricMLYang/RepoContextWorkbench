@@ -4,6 +4,7 @@ import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
 import { useSnapshot, useStore, useUi, type PanelTab } from "../../store/context";
 import { RepoRoot } from "./FileTree";
 import { RepoChanges } from "./RepoChanges";
+import { RepoCommits } from "./RepoCommits";
 import { RepoProfileCard } from "./RepoProfileCard";
 import { RepoWorktrees } from "./RepoWorktrees";
 
@@ -127,6 +128,7 @@ export function RepoPanel({
         hidden={tab !== "changes"}
       >
         <RepoChanges id={id} onCount={onCount} />
+        <RepoCommits key={id} id={id} />
       </div>
       <div
         role="tabpanel"

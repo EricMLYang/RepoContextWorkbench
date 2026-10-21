@@ -3101,3 +3101,32 @@ body.withpicks #main {
   display: inline-flex;
   gap: 4px;
 }
+
+/* F-109 最近的 commit */
+.panelcommits {
+  margin: 10px 12px;
+}
+.commitlist {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+}
+.commitrow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  padding: 4px 6px;
+}
+.commitsubject {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.commitdiff {
+  max-height: 60vh;
+  overflow: auto;
+}

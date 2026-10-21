@@ -308,6 +308,31 @@ pub(super) fn a_worktree_remove(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> 
     Ok(json!({"ok": true}))
 }
 
+#[derive(serde::Deserialize)]
+struct LogArgs {
+    id: String,
+    #[serde(default)]
+    limit: Option<usize>,
+    #[serde(default)]
+    sha: String,
+}
+
+/// F-109（Rust 才有）：repo 最近的 commit（目前分支，新的在前；預設 20 個）。只讀。
+pub(super) fn a_repo_log(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let LogArgs { id, limit, .. } = parse("repo_log", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let commits = crate::gitlog::log(&root, limit.unwrap_or(20));
+    Ok(json!({"ok": true, "id": id, "commits": commits}))
+}
+
+/// F-109（Rust 才有）：一個 commit 的說明、統計與差異（`git show`）。只讀。
+pub(super) fn a_commit_diff(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let LogArgs { id, sha, .. } = parse("commit_diff", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let (diff, truncated) = crate::gitlog::show(&root, &sha)?;
+    Ok(json!({"ok": true, "id": id, "sha": sha, "diff": diff, "truncated": truncated}))
+}
+
 #[cfg(test)]
 mod tests {
     use super::split_location;
