@@ -99,6 +99,7 @@ BAT 的計畫書寫明：依它讀到的方案政策（文件記載 2026-06-15 �
 
 ## F. 安裝與重啟後的測試（2026-10-22 06:52）
 - **已裝**：`bash scripts/install-app.sh --prebuilt`（bundle 是 00:43 用 `3783500` 編的；舊版備份在 `~/.cache/repo-context/app-backups/20261022-065232/`），`ctx 0.2.0`、`~/.local/bin/ctx` 指向新版；`ctx setup --claude` 已重寫 skill（多了 `--digest` 與 `ctx worktrees`），MCP 與 SessionStart／End hook 原本就在。
+- **更正（10-23）**：安裝當時 App 其實開著（10-21 22:22 起的那個），腳本的 `pgrep` 沒算上層行程所以沒偵測到，照樣換了檔案——/Applications 是新版，但執行中的仍是舊版，**要 ⌘Q 再重開才會是新版**。腳本已改 `pgrep -a`。
 - **重啟後要測的**（使用者）：
   1. 從 Dock／Finder 開 App（確認是 /Applications 那份），**新開**一場 Claude Code 會話（舊會話不會有 StopFailure／Subagent hook）。
   2. 照 `docs/TESTING.md` §8d 的 16 項點，macOS 欄打勾；有問題記下哪一項＋看到什麼。
