@@ -521,7 +521,7 @@ export function sessionGauges(s: TermInfo): { text: string; title: string; warn?
   const out: { text: string; title: string; warn?: boolean }[] = [];
   if (typeof s.context_pct === "number")
     out.push({
-      text: "情境 " + s.context_pct + "%",
+      text: "context " + s.context_pct + "%",
       title:
         "context 已用 " +
         s.context_pct +

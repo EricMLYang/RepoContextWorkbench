@@ -375,7 +375,7 @@ describe("會話列小量表與出錯中斷（F-99～F-102）", () => {
     report: null,
     report_basis: "",
   };
-  it("情境 %（80% 以上醒目）、子 agent、快取冷了；結束的與 shell 不畫", () => {
+  it("context %（80% 以上醒目）、子 agent、快取冷了；結束的與 shell 不畫", () => {
     const g = sessionGauges({
       ...base,
       context_pct: 85,
@@ -383,7 +383,7 @@ describe("會話列小量表與出錯中斷（F-99～F-102）", () => {
       subagents: 2,
       cache_cold: true,
     });
-    expect(g.map((x) => x.text)).toEqual(["情境 85%", "子 agent 2", "快取已冷"]);
+    expect(g.map((x) => x.text)).toEqual(["context 85%", "子 agent 2", "快取已冷"]);
     expect(g[0].warn).toBe(true);
     expect(g[0].title).toContain("Opus");
     expect(sessionGauges({ ...base, context_pct: 30 })[0].warn).toBe(false);
