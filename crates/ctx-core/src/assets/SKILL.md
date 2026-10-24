@@ -38,6 +38,8 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 - 引用時標出 repo 與 commit（read_from 回傳的 `file_commit`／`commit`）。
 - `repo_status` 看某個 repo 的現況：最近變化、沒 commit 的檔、正在跑的 dev server
   （啟動後有沒有檔案又改過＝改了要不要重開）、失效的跨 repo 路徑、上游變動。
+- 使用者提到畫面（「根據畫面」「我正在看的」「這個檔」「這段」）才呼叫 `what_user_sees`：回工作台 App 主區開著的檔
+  （絕對路徑、看得到第幾行、md 停在哪個標題、有沒有沒存的修改）或工作區分頁。沒提就別看。
 
 ## 同組成員與 repo 名片（Rust 版）
 
@@ -107,6 +109,7 @@ ctx search "一段文字" --json      # 或 --file 某張卡片.md；--no-code �
 ctx resolve notes:書摘 --json     # 名字 → 路徑
 ctx read notes:書摘/ch01.md --json [--lines 10-40]
 ctx ask notes "問題" --json       # 唯讀 agent，慢、花錢
+ctx screen --json                # 使用者在 App 畫面上看什麼（被問到才用）
 ctx repo [<repo>] --json          # 狀態卡（--since 7d；人看時會記已讀，--peek 不記）
 ctx refs check                    # 失效的跨 repo 路徑＋上游變動＋建議 export
 ```

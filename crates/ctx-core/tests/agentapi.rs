@@ -1465,3 +1465,50 @@ fn session_end_records_how_to_resume_when_the_id_is_valid() {
         Some((id.to_string(), w.impl_.to_string_lossy().into_owned()))
     );
 }
+
+/// 2026-10-24 使用者畫面：App 經 `screen` action 回報，agent 問了才讀（同 repo、絕對路徑、沒存的修改）；
+/// 不合法的回報被擋；App 關掉清掉後說沒有回報。
+#[test]
+fn what_user_sees_reads_what_the_app_reported() {
+    use ctx_core::screen;
+    use ctx_core::workbench::handle_action;
+    let w = two_groups();
+    std::fs::write(w.impl_.join("src").join("app.rs"), "fn main() {}\n").unwrap();
+
+    let none = screen::what_user_sees(&w.sp, Some(&w.impl_)).unwrap();
+    assert!(none.screen.is_none() && none.summary.contains("沒有回報"));
+
+    let report = json!({"view": {"kind": "file", "repo": "impl", "path": "src/app.rs",
+                                 "mode": "source", "lines": [1, 30], "unsaved": true},
+                        "group": "產品", "panel": {"repo": "impl", "tab": "changes"}});
+    let r = handle_action(&w.sp, "screen", &report, None).unwrap();
+    assert_eq!(r["changed"], true);
+    assert_eq!(
+        handle_action(&w.sp, "screen", &report, None).unwrap()["changed"],
+        false
+    );
+    assert!(ctx_core::workbench::is_read_only("screen"));
+
+    let seen = screen::what_user_sees(&w.sp, Some(&w.impl_)).unwrap();
+    assert_eq!(seen.same_repo, Some(true));
+    assert!(seen.abs.as_deref().unwrap().ends_with("app.rs"));
+    assert!(seen.summary.contains("impl:src/app.rs") && seen.summary.contains("第 1–30 行"));
+    assert!(seen.summary.contains("「產品」") && seen.summary.contains("「變更」"));
+    assert!(seen.hint.unwrap().contains("還沒存"));
+    let other = screen::what_user_sees(&w.sp, Some(&w.notes)).unwrap();
+    assert_eq!(other.same_repo, Some(false));
+
+    let ws = json!({"view": {"kind": "workspace", "tab": "inbox"}});
+    handle_action(&w.sp, "screen", &ws, None).unwrap();
+    let seen = screen::what_user_sees(&w.sp, Some(&w.impl_)).unwrap();
+    assert!(seen.summary.contains("「收件匣」") && seen.abs.is_none());
+
+    let bad = json!({"view": {"kind": "file", "repo": "impl"}});
+    assert!(handle_action(&w.sp, "screen", &bad, None).is_err());
+
+    screen::clear(&w.sp);
+    assert!(screen::what_user_sees(&w.sp, None)
+        .unwrap()
+        .screen
+        .is_none());
+}

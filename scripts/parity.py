@@ -76,6 +76,7 @@ MCP_EXTRA_TOOLS = {
     "registry_describe": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
     "workbench_apply": "改工作台設定 workbench_apply（F-63 App 助手同一份白名單，2026-10-15，Rust 才有）",
     "registry_class": "repo 類別 registry_class（2026-10-18，Rust 才有，docs/REPO_CLASSES.md）",
+    "what_user_sees": "使用者畫面 what_user_sees（2026-10-24，Rust 才有：App 回報主區在看什麼，agent 被問才讀）",
 }
 
 

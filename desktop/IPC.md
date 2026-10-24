@@ -90,6 +90,7 @@ Rust 端簽名建議：
 | `term_create` | `{kind: "agent"\|"shell", agent?, task?, origin?, group?, repos?, repo?, cwd?, home_group?}`（`home_group` Rust 才有：所屬牌組，只給畫面歸類——前端只送目前選的組當提示，對單一 repo 開時由引擎判斷（提示的組有這個 repo 就用它，否則只有一個組有它才算）；沒給用 `group`；`state.terms[]` 有它才多一個 `home_group` 鍵） | `sid`, `title` |
 | `term_kill` | `{sid}` | — |
 | `session_seen` | `{sid}`（Rust 才有，F-80：你看過這個會話了——做完沒看→看過了；引擎在 `.state/session_status/<sid>.json` 記 `seen: true`，下一個 hook 事件就消失） | `changed`（沒狀態檔或已記過＝false） |
+| `screen` | `{view: {kind: "file", repo, path, mode: view\|source\|diff\|edit, lines?: [a, b], heading?, unsaved?} \| {kind: "workspace", tab}, group?, panel?: {repo, tab}}`（Rust 才有，2026-10-24：主區在看什麼，寫 `.state/screen.json`；agent 被問「根據畫面」才用 MCP `what_user_sees` 讀；不發 changed） | `changed`（跟上次一樣＝false） |
 | `session_result` | `{sid, text}` | `date`, `time` |
 | `repo_tree`（Rust 才有） | `{id, dir?}`（`dir` 相對 repo 根目錄，空＝根） | `root`, `dir`, `entries: [{name, path, abs, dir, ignored}]`（`ignored`＝被 .gitignore 忽略，照列、App 畫灰色；`.git` 不列）, `more` |
 | `group_add_folder`（Rust 才有） | `{path, group?}` | `id`, `registered`, `group` |

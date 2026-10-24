@@ -433,6 +433,31 @@ pub fn cmd_session_digest(ctx: &Ctx, id: &str) -> CmdResult {
 }
 
 /// `ctx worktrees <repo> [--remove <path>]`（F-107，Rust 才有）：跟 App 右側欄同一套規則。
+pub fn cmd_screen(ctx: &Ctx, cwd: &Option<String>) -> CmdResult {
+    let c = cwd_path(cwd);
+    agent_call(
+        ctx,
+        |d| {
+            Ok(serde_json::to_value(ctx_core::screen::what_user_sees(
+                d,
+                c.as_deref(),
+            )?)?)
+        },
+        h_screen,
+    )
+}
+
+fn h_screen(r: &Value) -> String {
+    let mut out = vec![s(r, "summary")];
+    if has(r, "abs") {
+        out.push(format!("檔案：{}", s(r, "abs")));
+    }
+    if has(r, "hint") {
+        out.push(s(r, "hint"));
+    }
+    out.join("\n")
+}
+
 pub fn cmd_worktrees(ctx: &Ctx, repo: &str, remove: Option<&str>) -> CmdResult {
     agent_call(
         ctx,

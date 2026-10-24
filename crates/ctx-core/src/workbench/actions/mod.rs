@@ -152,6 +152,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("session_seen", a_session_seen),
     ("session_result", a_session_result),
     ("auto_continue", a_auto_continue),
+    ("screen", a_screen),
 ];
 
 /// 不寫入任何東西的 action：殼不發 `workbench://changed`（否則展開資料夾、開檔都會讓前端重抓整份 state）。
@@ -183,6 +184,8 @@ const READ_ONLY: &[&str] = &[
     "agent_commands",
     "prompts",
     "diff_notes_brief",
+    // 只寫 `.state/screen.json`（給 agent 問「使用者在看什麼」），畫面不必重抓
+    "screen",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -230,6 +233,12 @@ const RESCAN_AFTER: &[&str] = &[
     "repo_class",
     "worktree_remove",
 ];
+
+/// App 主區換檔、換模式、捲動停下、換分頁：記下使用者在看什麼（agent 被問到才讀；見 [`crate::screen`]）。
+fn a_screen(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let changed = crate::screen::record(d, parse("screen", p)?)?;
+    Ok(json!({"ok": true, "changed": changed}))
+}
 
 /// 把 payload 解析成型別化參數。**新 action 一律用這個**（缺欄位、型別不對都在這裡擋下）；
 /// 下面那組 `raw`／`s`／`int` 只給照抄 Python 版的舊 action（`payload.get(k) or …` 的語意），合併回 main 後換掉。

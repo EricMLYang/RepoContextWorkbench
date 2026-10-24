@@ -1,5 +1,5 @@
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
-import type { GroupInfo } from "../api/types";
+import type { GroupInfo, ScreenFileDetail } from "../api/types";
 import type { Snapshot, WorkbenchStore } from "./store";
 
 export const StoreContext = createContext<WorkbenchStore | null>(null);
@@ -74,6 +74,10 @@ export interface Ui {
   toggleGroup(key: string): void;
   renameOpenGroup(from: string, to: string): void;
   forgetOpenGroup(name: string): void;
+  /** 正在看的檔案分頁登記怎麼量自己的畫面（看法、看得到的行）；收起時給 null。agent 被問「根據畫面」才讀。 */
+  reportFileView(repo: string, path: string, measure: (() => ScreenFileDetail) | null): void;
+  /** 畫面捲動了：停下來再回報。 */
+  screenChanged(): void;
 }
 
 /** 會變的畫面狀態；只有要跟著它重畫的元件才訂閱。 */

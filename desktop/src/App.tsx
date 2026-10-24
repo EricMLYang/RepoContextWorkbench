@@ -13,6 +13,7 @@ import { PickTray } from "./components/PickTray";
 import { FileTabs } from "./components/viewer/FileTabs";
 import { FileViewer, fileKey } from "./components/viewer/FileViewer";
 import { useFileTabs } from "./components/viewer/useFileTabs";
+import { ScreenReporter } from "./store/screen";
 import { Onboarding } from "./dialogs/misc";
 import { DetailDialog } from "./dialogs/Modal";
 import { PickerDialog } from "./dialogs/PickerDialog";
@@ -162,6 +163,19 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     renamePath,
   } = useFileTabs(toast);
 
+  // ── 回報畫面（agent 被問「根據畫面」才讀；停下來才送）──
+  const [screen] = useState(() => new ScreenReporter(store));
+  useEffect(() => {
+    screen.setBase({
+      file: shownFileObj ? { repo: shownFileObj.repo, path: shownFileObj.path } : null,
+      tab,
+      panel: panelRepo ? { repo: panelRepo, tab: panelTab } : null,
+    });
+  }, [screen, shownFileObj, tab, panelRepo, panelTab]);
+  // 換牌組也要回報（範圍在 store 裡，不在這裡的 state）
+  useEffect(() => store.subscribe(screen.schedule), [store, screen]);
+  useEffect(() => () => screen.stop(), [screen]);
+
   // ── 終端 ──
   const [activeSid, setActiveSid] = useState<string | null>(null);
   const [termCollapsed, setTermCollapsed] = useState(true);
@@ -232,6 +246,8 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
           if (s.delete(from)) s.add(to);
         }),
       forgetOpenGroup: (name) => updateOpen((s) => s.delete(name)),
+      reportFileView: (repo, path, measure) => screen.setDetail(repo, path, measure),
+      screenChanged: screen.schedule,
     }),
     [
       store,
@@ -248,6 +264,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       setActiveFile,
       updateOpen,
       updatePicks,
+      screen,
     ],
   );
   const uiState: UiState = useMemo(

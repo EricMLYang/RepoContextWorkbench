@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { imeKey } from "../../lib/ime";
 import { langOf, tokenizeLine, type HlState, type Lang } from "../../lib/highlight";
-import type { FileContent } from "../../api/types";
+import type { FileContent, ScreenFileDetail } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
 import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
@@ -188,6 +188,36 @@ function CodeView({ text, wrap, lang }: { text: string; wrap: boolean; lang: Lan
       ) : null}
     </>
   );
+}
+
+/** 有行號的看法（程式碼、原始碼）裡，主區看得到的第一行與最後一行（從 1 起算）；沒有行號＝undefined。 */
+function visibleLines(body: Element, box: DOMRect): [number, number] | undefined {
+  const rows = body.querySelectorAll<HTMLElement>(".codeview .cl");
+  if (!rows.length) return undefined;
+  // 行是照順序排的：二分找第一個底邊在框內的、最後一個頂邊在框內的
+  const first = (pred: (r: DOMRect) => boolean) => {
+    let lo = 0;
+    let hi = rows.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (pred(rows[mid].getBoundingClientRect())) hi = mid;
+      else lo = mid + 1;
+    }
+    return lo;
+  };
+  const a = first((r) => r.bottom > box.top);
+  const b = first((r) => r.top >= box.bottom) - 1;
+  return a < rows.length && b >= a ? [a + 1, b + 1] : undefined;
+}
+
+/** md 預覽：主區頂端所在的那一節標題（頂端以上最後一個標題）；還在第一個標題之前＝undefined。 */
+function topHeading(body: Element, box: DOMRect): string | undefined {
+  let found: string | undefined;
+  for (const h of body.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")) {
+    if (h.getBoundingClientRect().top > box.top + 8) break;
+    found = h.textContent?.trim().slice(0, 80) || found;
+  }
+  return found;
 }
 
 /**
@@ -892,6 +922,36 @@ export function FileViewer({
 
   const md = isMarkdown(path);
   const editing = draft !== null;
+  // 回報畫面（agent 被問「根據畫面」才讀）：看法、看得到的行、md 停在哪個標題、有沒有沒存的修改。
+  // 量的函式每次重畫換成最新的；主區捲動停下來才量
+  const measureRef = useRef<() => ScreenFileDetail>(() => ({ mode: "view" }));
+  useEffect(() => {
+    measureRef.current = () => {
+      if (editing) return dirty ? { mode: "edit", unsaved: true } : { mode: "edit" };
+      const out: ScreenFileDetail = { mode };
+      const body = bodyRef.current;
+      const box = body?.closest("#main")?.getBoundingClientRect();
+      if (!body || !box) return out;
+      const lines = visibleLines(body, box);
+      if (lines) out.lines = lines;
+      const heading = md && mode === "view" ? topHeading(body, box) : undefined;
+      if (heading) out.heading = heading;
+      return out;
+    };
+  });
+  useEffect(() => {
+    if (hidden) return;
+    ui.reportFileView(repo, path, () => measureRef.current());
+    const main = bodyRef.current?.closest("#main");
+    main?.addEventListener("scroll", ui.screenChanged, { passive: true });
+    return () => {
+      main?.removeEventListener("scroll", ui.screenChanged);
+      ui.reportFileView(repo, path, null);
+    };
+  }, [hidden, repo, path, ui]);
+  useEffect(() => {
+    if (!hidden) ui.screenChanged();
+  }, [hidden, mode, editing, dirty, content, ui]);
   const crumbs = path.replace(/\\/g, "/").split("/");
   // 低頻動作收進「⋯」：換行（看程式碼／原始碼時）、複製路徑、重新讀取（有未存修改時不給）
   const moreItems: MenuItem[] = [];

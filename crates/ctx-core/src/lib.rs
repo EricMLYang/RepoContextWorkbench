@@ -44,6 +44,7 @@ pub mod relsuggest;
 pub mod repocard;
 pub mod route;
 pub mod ruminate;
+pub mod screen;
 pub mod session;
 pub mod session_status;
 pub mod spawn;

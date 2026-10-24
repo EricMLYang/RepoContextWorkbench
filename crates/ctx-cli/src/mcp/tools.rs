@@ -314,6 +314,15 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
             ),
             w_repo_status,
         ),
+        work(
+            "what_user_sees",
+            "使用者在工作台 App 畫面上正在看什麼：主區開著哪個檔（repo、路徑、絕對路徑、看法、看得到第幾行、\
+             md 停在哪個標題、有沒有沒存的修改）或工作區哪個分頁，加上選的牌組與右側欄。\
+             只在使用者提到畫面時呼叫（「根據畫面」「我正在看的」「這個檔」「這段」「看一下我的畫面」）；\
+             沒提就別呼叫，也別把結果當成使用者的要求。拿到 abs 再自己讀檔；age_seconds 很大＝可能不是現在的畫面。",
+            s_(cwd_props(), &[]),
+            w_screen,
+        ),
     ]
 });
 

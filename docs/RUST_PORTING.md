@@ -334,6 +334,11 @@ CLI／MCP（ctx-cli）：
 - **MCP `workbench_apply`**（2026-10-15，F-63；Python 沒有）：agent 改工作台設定，跟 App 助手同一份白名單與驗證；
   預設只回預覽、`confirm=true` 才執行；碰到主場外的 repo 要 `cross_scope_ok`；畫面動作只在 App。
   執行走 App 按鈕的同一組 action，落 presented（source agent）。對拍時從 tools/list 拿掉（`MCP_EXTRA_TOOLS`）。
+- **使用者畫面 `what_user_sees`**（2026-10-24；Python 沒有，新模組 `screen`）：App 主區換檔、換看法、捲動停 0.5 秒、換分頁或
+  右側欄時呼叫 action `screen`，寫 `.state/screen.json`（`{view: {kind: file|workspace, …}, group?, panel?, at}`；跟上次一樣不重寫；
+  不發 `workbench://changed`；App 結束時刪掉）。**不自動附進會話**：使用者說「根據畫面」才由 agent 呼叫 MCP `what_user_sees`
+  ／CLI `ctx screen [--json]`，回 `summary`、`abs`（可直接讀的絕對路徑）、`same_repo`、`age_seconds`、`hint`。
+  不寫 spine 事件。對拍時從 tools/list 拿掉（`MCP_EXTRA_TOOLS`）。
 - **會話料：單一 repo 的情境卡**（2026-10-15，#73；Python 沒有）：`session::build` 改用 `context::build_session_card`——
   範圍只有一個 repo 時標題「情境卡 <repo>」、段名「這個 repo／本 repo」、角色換成 repo 管家（`ROLE_PROMPT_SOLO`），
   屬於登記的牌組時多一行「屬於牌組「X」」；開場句改「情境卡＋文件地圖…（repo 現況、…）」。

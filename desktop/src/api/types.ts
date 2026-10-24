@@ -657,6 +657,26 @@ export interface ScopePayload {
   repos?: string[] | null;
 }
 
+/** 檔案分頁的看法（`screen` action）。 */
+export type ScreenFileMode = "view" | "source" | "diff" | "edit";
+
+/** 檔案分頁自己知道的那部分畫面（看法、看得到的行、md 停在哪個標題、有沒有沒存的修改）。 */
+export interface ScreenFileDetail {
+  mode: ScreenFileMode;
+  lines?: [number, number];
+  heading?: string;
+  unsaved?: boolean;
+}
+
+/** 回報給引擎的畫面（`ctx_core::screen::ScreenInput`）。 */
+export interface ScreenReport {
+  view:
+    | ({ kind: "file"; repo: string; path: string } & ScreenFileDetail)
+    | { kind: "workspace"; tab: "inbox" | "notes" | "repos" | "files" | "activity" | "relations" };
+  group?: string;
+  panel?: { repo: string; tab: "files" | "changes" | "info" };
+}
+
 export interface ActionMap {
   ack: { payload: Record<string, never>; result: { ok: true } };
   /** Rust 才有（N-37）：只把目前範圍的一般未讀標為已讀。 */
@@ -990,6 +1010,8 @@ export interface ActionMap {
     payload: { sid: string; max?: number; prompt?: string; off?: boolean };
     result: { ok: true; auto_continue: AutoContinue | null };
   };
+  /** Rust 才有（2026-10-24）：主區在看什麼（agent 被問「根據畫面」才讀）。跟上次一樣＝`changed: false`。 */
+  screen: { payload: ScreenReport; result: { ok: true; changed: boolean } };
 }
 
 export type ActionName = keyof ActionMap;

@@ -134,6 +134,11 @@ pub enum Cmd {
         #[arg(long, value_name = "ID")]
         digest: Option<String>,
     },
+    /// 使用者在工作台 App 畫面上正在看什麼：開著的檔（路徑、看得到的行）或工作區分頁、牌組、右側欄（Rust 才有）
+    Screen {
+        #[arg(long)]
+        cwd: Option<String>,
+    },
     /// repo 掛出去的 git worktree：分支、沒 commit 的檔、只在這裡的 commit、能不能移除（Rust 才有）
     Worktrees {
         /// 登記的 repo id
@@ -231,6 +236,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
             query,
             ..
         } => agent::cmd_sessions(ctx, scope, *limit, query.as_deref()),
+        Screen { cwd } => agent::cmd_screen(ctx, cwd),
         Worktrees { repo, remove } => agent::cmd_worktrees(ctx, repo, remove.as_deref()),
         Log(a) => agent::cmd_log(ctx, a),
         Todo(a) => agent::cmd_todo(ctx, a),
