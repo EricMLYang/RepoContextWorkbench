@@ -1002,27 +1002,50 @@ td button {
   align-items: center;
   gap: 10px;
   flex: none;
+  background: #1a202a;
 }
 .termlabel {
   font-size: 12px;
   font-weight: 650;
 }
-/* 終端標題列：這個會話屬於哪個組 › 哪個 repo */
+/* 終端標題列的身分區：哪個 agent（＋模型）、屬於哪個組 › 哪個 repo、這場叫什麼——一眼認得出在跟誰說話 */
+.termagent {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 2px 10px;
+  border-radius: 7px;
+  background: #2e2645;
+  border: 1px solid #54457f;
+  color: #ddd2fb;
+}
+.termmodel {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--violet);
+}
 .termwhere {
   flex-shrink: 0;
   max-width: 40%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  padding: 1px 8px;
-  border-radius: 999px;
+  font-size: 13px;
+  padding: 2px 10px;
+  border-radius: 7px;
   background: #253047;
   border: 1px solid #3a4d72;
   color: #d6e5ff;
 }
 .termwhere strong {
   font-weight: 650;
+}
+.termwhere span:last-child:not([aria-hidden]) {
+  font-weight: 650;
+  color: #fff;
 }
 /* agent 會話和它的 Terminal 共用終端版面：標題列的切換鈕 */
 .termswitch {
@@ -1043,9 +1066,19 @@ td button {
   color: #d6e5ff;
 }
 #termtitle {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.termname {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.termdetail {
+  font-size: 12px;
+  color: var(--sub);
 }
 #termbar button {
   min-height: 28px;
@@ -1369,6 +1402,9 @@ dialog::backdrop {
   }
   #termtitle {
     max-width: 120px;
+  }
+  .termmodel {
+    display: none;
   }
   #termbar button {
     padding: 2px 5px;

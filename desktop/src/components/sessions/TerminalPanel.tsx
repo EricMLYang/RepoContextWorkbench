@@ -19,6 +19,7 @@ import {
   FILE_DRAG_TYPE,
   pathForTerminal,
   reportLine,
+  sessionHeadline,
   sessionPair,
   sessionWhere,
 } from "../../lib/view";
@@ -461,12 +462,12 @@ export function TerminalPanel(props: {
   const attached = !!activeSid && activeSid in conn;
   const connected = !!activeSid && conn[activeSid];
   const where = pair ? sessionWhere(pair.agent) : info ? sessionWhere(info) : null;
-  const title = info
-    ? info.title +
-      " · " +
-      reportLine(info) +
-      (attached && !connected ? " · 連線已中斷（畫面可能不是最新）" : "")
-    : "尚未選擇會話";
+  // 標題列：這場叫什麼（醒目）＋它最近回報了什麼（淡）
+  const name = info ? sessionHeadline(info) : "尚未選擇會話";
+  const detail = info
+    ? reportLine(info) + (attached && !connected ? " · 連線已中斷（畫面可能不是最新）" : "")
+    : "";
+  const agentInfo = pair?.agent ?? (info?.kind === "agent" ? info : undefined);
 
   return (
     <section
@@ -538,6 +539,15 @@ export function TerminalPanel(props: {
         ) : (
           <span className="termlabel">終端</span>
         )}
+        {agentInfo ? (
+          <span
+            className="termagent"
+            title={"這是 Claude Code 會話" + (agentInfo.model ? "，模型 " + agentInfo.model : "")}
+          >
+            Claude Code
+            {agentInfo.model ? <span className="termmodel">{agentInfo.model}</span> : null}
+          </span>
+        ) : null}
         {where ? (
           <span id="termwhere" className="termwhere" title={"這個會話屬於：" + where.label}>
             {where.group ? <strong>{where.group}</strong> : null}
@@ -546,8 +556,9 @@ export function TerminalPanel(props: {
             {!where.group && !where.repo ? <span>{where.label}</span> : null}
           </span>
         ) : null}
-        <span id="termtitle" className="small muted">
-          {title}
+        <span id="termtitle" title={info ? info.title + "\n" + detail : undefined}>
+          <span className="termname">{name}</span>
+          {detail ? <span className="termdetail"> · {detail}</span> : null}
         </span>
         <span className="spacer" />
         {finding ? (
