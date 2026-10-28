@@ -539,7 +539,7 @@ def main():
 
     # ── 讀（初始狀態）──
     C("instructions", ["instructions"], spine=False,
-      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|同組成員與 repo 名片)（Rust 版）\n.*?(?=\n## )", "", s, flags=re.S))
+      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片)（Rust 版）\n.*?(?=\n## )", "", s, flags=re.S))
     C("registry list", ["registry", "list"])
     C("registry list --json", ["registry", "list", "--json"])
     C("registry relations", ["registry", "relations"])

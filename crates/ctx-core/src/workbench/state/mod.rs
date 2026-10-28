@@ -501,6 +501,10 @@ pub fn api_state(
         if let Some(u) = crate::usage::read(spine_dir) {
             o.insert("usage".into(), u);
         }
+        // Rust 才有（2026-10-28）：Codex 的額度（讀 Codex 自己的會話紀錄；沒裝、沒用過就沒有這個鍵）
+        if let Some(u) = crate::usage::codex() {
+            o.insert("codex_usage".into(), u);
+        }
     }
     Ok(st)
 }

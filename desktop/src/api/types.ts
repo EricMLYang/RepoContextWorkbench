@@ -421,22 +421,31 @@ export interface Health {
   };
 }
 
-/** Claude Code 額度餘光（F-83；引擎從 statusLine 的 `rate_limits` 寫 `.state/usage.json`，這裡只排版）。 */
+/**
+ * 額度餘光（F-83；引擎排好，這裡只排版）。Claude：App 會話的 statusLine 回報（`.state/usage.json`）；
+ * Codex（2026-10-28）：引擎讀 Codex 自己的會話紀錄，形狀一樣。
+ */
 export interface UsageWindow {
   /** 已用百分比（0–100，整數） */
   used: number;
   /** 什麼時候重置（引擎排好的本地時間字串）；不知道＝null */
   resets: string | null;
+  /** 還有幾分鐘重置（引擎讀的時候算；舊資料沒有） */
+  resets_in_min?: number;
 }
 export interface Usage {
   at: string; // "YYYY-MM-DD HH:MM"
   five_hour: UsageWindow | null;
   seven_day: UsageWindow | null;
-  /** 這場會話的 context 用了幾 %；沒有＝null */
-  context: number | null;
-  model: string | null;
+  /** 這場會話的 context 用了幾 %；沒有＝null（只有 Claude） */
+  context?: number | null;
+  model?: string | null;
+  /** Codex 的方案（plus、pro…） */
+  plan?: string | null;
   /** 任一視窗 ≥ 80% */
   warn: boolean;
+  /** 幾分鐘前更新的（引擎讀的時候算） */
+  age_min?: number;
 }
 
 /** 檔案清單的一列（path＝相對 repo 根目錄，abs＝絕對路徑；都由引擎給，前端不拼路徑）。 */
@@ -539,6 +548,8 @@ export interface WorkbenchState {
   health?: Health;
   /** Rust 才有（F-83）：Claude Code 額度餘光；沒收過 statusLine 就沒有這個鍵。 */
   usage?: Usage | null;
+  /** Rust 才有（2026-10-28）：Codex 額度；沒裝、沒用過就沒有這個鍵。 */
+  codex_usage?: Usage | null;
   /** Rust 才有（F-80）：活著的 agent 會話裡在等你／做完沒看各幾個（殼的徽章用；前端牌組卡自己算每組的）。 */
   attention?: { needs_you: number; finished_unseen: number; working: number };
   /** 碰到目前範圍、還沒設的關係建議；沒有建議時引擎不給這個鍵。 */

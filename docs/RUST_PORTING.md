@@ -358,6 +358,12 @@ CLI／MCP（ctx-cli）：
   App 狀態列「5h 62%（23:10 重置） · 7d 31%」、≥80% 變琥珀，`ctx health` 也印一行。這條指令不印東西，所以 App 開的會話
   終端沒有 statusline（使用者接受；他機器上原本的 statusline 是 Orca 裝的、也不輸出）。**欄位名照 Orca 的解析器寫，還沒抓過
   真 payload 驗證**（🔗）——第一次真用後看 `usage_raw.json`。
+- **額度：剩餘時間＋Codex**（2026-10-28；Python 沒有）：`usage.json` 的視窗多 `resets_at`（epoch 秒）；`usage::read` 讀出來時補
+  `resets_in_min`、`age_min`（舊檔沒有 `resets_at` 就只有 `age_min`）。新增 `usage::codex()`：讀 `$CODEX_HOME/sessions`（預設 `~/.codex`）
+  最新兩天裡最近改過的 `rollout-*.jsonl` 尾巴 512 KB，取最後一筆 `payload.rate_limits`（`primary／secondary` 依 `window_minutes`
+  分成 `five_hour`／`seven_day`，`plan_type` → `plan`），形狀跟 Claude 一樣；檔案大小與修改時間沒變就用快取。`api_state` 多 `codex_usage`，
+  `ctx health` 多一行 Codex。不另起 Codex 程序、不打網路（Orca 走 app-server RPC＋後端 API）。App 狀態列
+  「Claude 5h 62%（2.5 hr 後重置）· 週 31%（3.2 天後重置）  Codex …」，超過 30 分鐘沒更新變淡、標「N 前」。
 - **這組標為已讀 `ack_scope`**（2026-10-15，N-37；Python 沒有）：`.state/seen_scopes.json`（範圍鍵 → 時間），
   `build_state` 藏起該範圍在那之前的一般未讀卡；全域 `last_seen.txt`、`ack`、`unread` 清單都不變。
 - **CLI `ctx assist "<一句話>" [--yes]`**（2026-10-15，F-63；Python 沒有）：跟 ⌘K「?」、MCP `workbench_apply` 同一份白名單；

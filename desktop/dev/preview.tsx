@@ -108,11 +108,20 @@ const state = {
   // F-83：額度餘光（狀態列右下）
   usage: {
     at: "2026-10-16 20:50",
-    five_hour: { used: 62, resets: "23:10" },
-    seven_day: { used: 31, resets: "10-20 09:00" },
+    five_hour: { used: 62, resets: "23:10", resets_in_min: 150 },
+    seven_day: { used: 31, resets: "10-20 09:00", resets_in_min: 4608 },
     context: 41,
     model: "Opus",
     warn: false,
+    age_min: 3,
+  },
+  codex_usage: {
+    at: "2026-10-16 19:10",
+    five_hour: { used: 3, resets: "23:56", resets_in_min: 186 },
+    seven_day: { used: 0, resets: "10-22 14:56", resets_in_min: 8526 },
+    plan: "plus",
+    warn: false,
+    age_min: 100,
   },
   terms: [
     term,

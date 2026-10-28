@@ -98,7 +98,7 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
         let c = &r["agent_calls"];
         if c["calls"].as_u64().unwrap_or(0) > 0 || s(c, "policy") == "off" {
             out.push(format!(
-                "- 程式化呼叫（claude -p：碰撞判定、ask_repo、助手、backfill；另計額度）：期間 {} 次（今天 {}、平均 {:.1} 秒、失敗 {}）；config provider.programmatic＝{}",
+                "- 程式化呼叫（claude -p：碰撞判定、ask_repo、助手、backfill；用訂閱登入時吃同一份額度）：期間 {} 次（今天 {}、平均 {:.1} 秒、失敗 {}）；config provider.programmatic＝{}",
                 s(c, "calls"),
                 s(c, "today"),
                 c["avg_ms"].as_f64().unwrap_or(0.0) / 1000.0,
@@ -106,27 +106,32 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                 s(c, "policy")
             ));
         }
-        // F-83：額度餘光（App 會話的 statusLine 回報）
-        if let Some(u) = ctx_core::usage::read(&d) {
-            let win = |k: &str, label: &str| {
-                u[k].as_object().map(|w| {
-                    format!(
-                        "{label} {}%{}",
-                        w["used"].as_u64().unwrap_or(0),
-                        w["resets"]
-                            .as_str()
-                            .map(|r| format!("（{r} 重置）"))
-                            .unwrap_or_default()
-                    )
-                })
-            };
-            let parts: Vec<String> = [win("five_hour", "5h"), win("seven_day", "7d")]
+        // F-83：額度餘光（Claude＝App 會話的 statusLine 回報；Codex＝Codex 自己的會話紀錄）
+        let win = |u: &Value, k: &str, label: &str| {
+            u[k].as_object().map(|w| {
+                format!(
+                    "{label} {}%{}",
+                    w["used"].as_u64().unwrap_or(0),
+                    w["resets"]
+                        .as_str()
+                        .map(|r| format!("（{r} 重置）"))
+                        .unwrap_or_default()
+                )
+            })
+        };
+        let usages = [
+            ("Claude Code", ctx_core::usage::read(&d)),
+            ("Codex", ctx_core::usage::codex()),
+        ];
+        for (name, u) in usages {
+            let Some(u) = u else { continue };
+            let parts: Vec<String> = [win(&u, "five_hour", "5h"), win(&u, "seven_day", "7d")]
                 .into_iter()
                 .flatten()
                 .collect();
             if !parts.is_empty() {
                 out.push(format!(
-                    "- Claude Code 額度：{}（{} 更新{}）",
+                    "- {name} 額度：{}（{} 更新{}）",
                     parts.join("、"),
                     s(&u, "at"),
                     if u["warn"] == true { "；已過 80%" } else { "" }

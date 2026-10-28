@@ -53,18 +53,57 @@ export function TopBar({ onHome }: { onHome: () => void }) {
   );
 }
 
-/** 額度餘光一格（F-83）：`5h 62%（23:10 重置）· 7d 30%`；任一視窗 ≥80% 變琥珀。沒收過就不顯示。 */
-export function usageText(u: Usage | null | undefined): string {
+/** 幾分鐘 → 「45 分」「2.5 hr」「3.2 天」（10 以上不帶小數）。 */
+export function spanText(min: number): string {
+  const one = (n: number) => (n < 10 ? String(Math.round(n * 10) / 10) : String(Math.round(n)));
+  if (min < 60) return Math.max(0, Math.round(min)) + " 分";
+  if (min < 24 * 60) return one(min / 60) + " hr";
+  return one(min / (24 * 60)) + " 天";
+}
+
+/** 「2.5 hr」後面接中文要空一格，「45 分」不用。 */
+const then = (span: string, word: string) => (/[a-z]$/i.test(span) ? span + " " : span) + word;
+
+/** 超過這麼久沒更新就變淡、標「N 前」（數字可能已經不是現在的）。 */
+export const USAGE_STALE_MIN = 30;
+
+/**
+ * 額度餘光一格（F-83）：`Claude 5h 62%（2.5 hr 後重置）· 週 31%（3.2 天後重置）`；舊資料沒有剩餘時間就寫時刻。
+ * 很久沒更新的尾巴加「· 45 分前」。沒收過就空字串。
+ */
+export function usageText(label: string, u: Usage | null | undefined): string {
   if (!u) return "";
-  const win = (label: string, w: UsageWindow | null) =>
-    w ? `${label} ${w.used}%` + (w.resets ? `（${w.resets} 重置）` : "") : "";
-  return [win("5h", u.five_hour), win("7d", u.seven_day)].filter(Boolean).join(" · ");
+  const win = (name: string, w: UsageWindow | null) =>
+    w
+      ? `${name} ${w.used}%` +
+        (typeof w.resets_in_min === "number"
+          ? `（${then(spanText(w.resets_in_min), "後重置")}）`
+          : w.resets
+            ? `（${w.resets} 重置）`
+            : "")
+      : "";
+  const parts = [win("5h", u.five_hour), win("週", u.seven_day)].filter(Boolean);
+  if (!parts.length) return "";
+  const stale =
+    typeof u.age_min === "number" && u.age_min >= USAGE_STALE_MIN
+      ? " · " + then(spanText(u.age_min), "前")
+      : "";
+  return label + " " + parts.join(" · ") + stale;
+}
+
+function usageClass(u: Usage): string | undefined {
+  const c = [
+    u.warn ? "usagewarn" : "",
+    typeof u.age_min === "number" && u.age_min >= USAGE_STALE_MIN ? "usagestale" : "",
+  ].filter(Boolean);
+  return c.length ? c.join(" ") : undefined;
 }
 
 export function StatusBar() {
   const { scope, scanAt, state } = useSnapshot();
   const alive = (state.terms || []).filter((s) => s.alive).length;
-  const usage = usageText(state.usage);
+  const usage = usageText("Claude", state.usage);
+  const codex = usageText("Codex", state.codex_usage);
   return (
     <footer id="status">
       <span id="scanscope">{"範圍：" + scopeLabel(scope)}</span>
@@ -73,15 +112,31 @@ export function StatusBar() {
       {usage ? (
         <span
           id="usage"
-          className={state.usage?.warn ? "usagewarn" : undefined}
+          className={usageClass(state.usage!)}
           title={
-            "Claude Code 訂閱額度（App 會話的 statusLine 回報，最後更新 " +
+            "Claude 訂閱額度：整個帳號的用量（claude.ai、其他終端用掉的也算），只在 App 開的 Claude Code 會話跑完一輪時更新；" +
+            "最後更新 " +
             state.usage!.at +
-            (state.usage!.model ? "，模型 " + state.usage!.model : "") +
-            "）；程式化呼叫另計，不在這裡"
+            (state.usage!.model ? "（模型 " + state.usage!.model + "）" : "") +
+            "。App 背景的 claude -p（碰撞判定、ask_repo、助手）用訂閱登入時也吃這份額度，次數見活動分頁。"
           }
         >
           {usage}
+        </span>
+      ) : null}
+      {codex ? (
+        <span
+          id="codexusage"
+          className={usageClass(state.codex_usage!)}
+          title={
+            "Codex 額度" +
+            (state.codex_usage!.plan ? "（" + state.codex_usage!.plan + "）" : "") +
+            "：讀這台機器上 Codex 的會話紀錄，任何 Codex 會話跑一輪都會更新；最後更新 " +
+            state.codex_usage!.at +
+            "。"
+          }
+        >
+          {codex}
         </span>
       ) : null}
       <span id="sesscount">{alive + " 個執行中會話"}</span>

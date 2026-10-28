@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { usageText } from "../components/Chrome";
+import { spanText, usageText } from "../components/Chrome";
 import type { InboxCard, QuestionCard } from "../api/types";
 import {
   sessionFailed,
@@ -334,30 +334,38 @@ describe("單一 repo 的範圍不講「組」（#73）", () => {
   });
 });
 
-describe("額度餘光（F-83）", () => {
-  it("5h／7d 各一格，有重置時間就帶；沒收過就空字串", () => {
-    expect(usageText(null)).toBe("");
-    expect(usageText(undefined)).toBe("");
+describe("額度餘光（F-83；Codex 2026-10-28）", () => {
+  it("Claude／Codex 各一格：5h／週，有剩餘時間就寫「N 後重置」、舊資料寫時刻；很久沒更新標「N 前」；沒收過就空字串", () => {
+    expect(usageText("Claude", null)).toBe("");
+    expect(usageText("Codex", undefined)).toBe("");
     expect(
-      usageText({
+      usageText("Claude", {
         at: "2026-10-16 20:50",
-        five_hour: { used: 62, resets: "23:10" },
-        seven_day: { used: 31, resets: null },
+        five_hour: { used: 62, resets: "23:10", resets_in_min: 150 },
+        seven_day: { used: 31, resets: "10-20 09:00", resets_in_min: 4608 },
         context: 41,
         model: "Opus",
         warn: false,
+        age_min: 2,
       }),
-    ).toBe("5h 62%（23:10 重置） · 7d 31%");
+    ).toBe("Claude 5h 62%（2.5 hr 後重置） · 週 31%（3.2 天後重置）");
     expect(
-      usageText({
+      usageText("Codex", {
         at: "x",
         five_hour: null,
         seven_day: { used: 90, resets: "10-20 09:00" },
-        context: null,
-        model: null,
         warn: true,
+        age_min: 95,
       }),
-    ).toBe("7d 90%（10-20 09:00 重置）");
+    ).toBe("Codex 週 90%（10-20 09:00 重置） · 1.6 hr 前");
+    expect(usageText("Codex", { at: "x", five_hour: null, seven_day: null, warn: false })).toBe("");
+  });
+
+  it("時間長度：分、hr（10 以下一位小數）、天", () => {
+    expect(spanText(45)).toBe("45 分");
+    expect(spanText(150)).toBe("2.5 hr");
+    expect(spanText(12 * 60 + 20)).toBe("12 hr");
+    expect(spanText(3 * 24 * 60)).toBe("3 天");
   });
 });
 

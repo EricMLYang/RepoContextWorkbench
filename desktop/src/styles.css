@@ -1108,6 +1108,10 @@ td button {
 #status .usagewarn {
   color: var(--amber);
 }
+/* 很久沒更新：數字可能已經不是現在的 */
+#status .usagestale {
+  opacity: 0.6;
+}
 #status {
   grid-area: status;
   background: #1a1e25;
