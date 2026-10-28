@@ -731,6 +731,21 @@ export function FileViewer({
     setDraft(lf(content.text));
     setArmDiscard(false);
   };
+  /**
+   * md 的看法一鍵切換（按鈕與 ⌘⌥E／B／V 共用）：預覽＝沒在編輯就照常看（編輯中就只看右邊預覽，草稿留著）；
+   * 分割／編輯＝沒在編輯就直接進編輯、用那個版面，不必先按「編輯」再選版面。
+   */
+  const showLayout = (want: EditLayout) => {
+    if (want === "preview" && draft === null) {
+      setMode("view");
+      return;
+    }
+    if (draft === null) {
+      if (content?.kind !== "text" || !content.editable) return;
+      startEdit();
+    }
+    setLayout(want);
+  };
   const stopEdit = () => {
     if (dirty && !armDiscard) {
       setArmDiscard(true);
@@ -862,15 +877,7 @@ export function FileViewer({
     const want = ({ e: "edit", b: "split", v: "preview" } as Record<string, EditLayout>)[k];
     if (!want) return;
     e.preventDefault();
-    if (want === "preview" && draft === null) {
-      setMode("view");
-      return;
-    }
-    if (draft === null) {
-      if (!content.editable) return;
-      startEdit();
-    }
-    setLayout(want);
+    showLayout(want);
   };
 
   useEffect(() => {
@@ -922,6 +929,8 @@ export function FileViewer({
 
   const md = isMarkdown(path);
   const editing = draft !== null;
+  // 可編輯的 md：看法合成一排（預覽／分割／編輯／差異），不另外放「編輯」鈕
+  const mdEditable = md && content?.kind === "text" && content.editable;
   // 回報畫面（agent 被問「根據畫面」才讀）：看法、看得到的行、md 停在哪個標題、有沒有沒存的修改。
   // 量的函式每次重畫換成最新的；主區捲動停下來才量
   const measureRef = useRef<() => ScreenFileDetail>(() => ({ mode: "view" }));
@@ -987,7 +996,43 @@ export function FileViewer({
           {dirty ? <span className="dirtymark"> · 未儲存</span> : null}
         </div>
         <div className="vieweractions">
-          {!editing ? (
+          {mdEditable ? (
+            // md：預覽／分割／編輯／差異 一排，按一次就到（分割＝左寫右看）
+            <div className="segmented" role="group" aria-label="檢視模式">
+              {(
+                [
+                  ["preview", "預覽", "只看排好的文件（⌘⌥V）"],
+                  ["split", "分割", "左邊改、右邊即時預覽（⌘⌥B）"],
+                  ["edit", "編輯", "只看原文、整頁寫（⌘⌥E）"],
+                ] as [EditLayout, string, string][]
+              ).map(([k, l, t]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className="small ghost"
+                  title={t}
+                  aria-pressed={editing ? layout === k : k === "preview" && mode === "view"}
+                  onClick={() => showLayout(k)}
+                >
+                  {l}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="small ghost"
+                aria-pressed={!editing && mode === "diff"}
+                disabled={editing}
+                title={
+                  editing
+                    ? "編輯中看不了差異：按「完成」後再看"
+                    : "跟上一個 commit（HEAD）比，看 agent 改了什麼"
+                }
+                onClick={() => setMode(mode === "diff" ? "view" : "diff")}
+              >
+                差異
+              </button>
+            </div>
+          ) : !editing ? (
             // 刪掉的檔（讀不到）也要能看差異，所以沒有內容時一樣給
             <div className="segmented" role="group" aria-label="檢視模式">
               <button
@@ -1017,27 +1062,6 @@ export function FileViewer({
               >
                 差異
               </button>
-            </div>
-          ) : null}
-          {editing && md ? (
-            <div className="segmented" role="group" aria-label="編輯版面">
-              {(
-                [
-                  ["edit", "編輯"],
-                  ["split", "分割"],
-                  ["preview", "預覽"],
-                ] as [EditLayout, string][]
-              ).map(([k, l]) => (
-                <button
-                  key={k}
-                  type="button"
-                  className="small ghost"
-                  aria-pressed={layout === k}
-                  onClick={() => setLayout(k)}
-                >
-                  {l}
-                </button>
-              ))}
             </div>
           ) : null}
           {editing ? (
@@ -1071,7 +1095,7 @@ export function FileViewer({
                 {!dirty ? "完成" : armDiscard ? "再按一次放棄修改" : "放棄修改"}
               </button>
             </>
-          ) : content?.kind === "text" ? (
+          ) : content?.kind === "text" && !mdEditable ? (
             <button
               type="button"
               className="small"

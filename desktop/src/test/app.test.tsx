@@ -1668,6 +1668,39 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     expect(document.getElementById("picktray")).toBeNull();
   });
 
+  it("可編輯的 md：預覽／分割／編輯／差異一排，按「分割」一次就左寫右看，按「預覽」草稿留著", async () => {
+    const backend = viewerBackend();
+    const orig = backend.action;
+    backend.action = vi.fn(async (name: string, p: never) => {
+      const r = (await orig(name as never, p)) as Record<string, unknown>;
+      return name === "read_file" ? { ...r, editable: true, version: "v1" } : r;
+    }) as never;
+    await openTree(backend);
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" })),
+    );
+    const viewer = () => document.querySelector(".viewer:not([hidden])") as HTMLElement;
+    const btn = (n: string) => within(viewer()).getByRole("button", { name: n });
+    await waitFor(() => expect(btn("預覽").getAttribute("aria-pressed")).toBe("true"));
+    // 不再有另外的「編輯」鈕要先按：一排就是看法
+    expect(within(viewer()).queryByRole("button", { name: "原始碼" })).toBeNull();
+    await act(async () => fireEvent.click(btn("分割")));
+    const box = within(viewer()).getByRole("textbox", { name: "編輯 README.md" });
+    expect(btn("分割").getAttribute("aria-pressed")).toBe("true");
+    expect(viewer().querySelector(".editorpreview h1")!.textContent).toBe("說明");
+    expect(btn("差異").hasAttribute("disabled")).toBe(true);
+    await act(async () => fireEvent.change(box, { target: { value: "# 改過" } }));
+    await act(async () => fireEvent.click(btn("預覽")));
+    expect(btn("預覽").getAttribute("aria-pressed")).toBe("true");
+    expect(viewer().querySelector(".editorpreview h1")!.textContent).toBe("改過");
+    await act(async () => fireEvent.click(btn("編輯")));
+    expect(btn("編輯").getAttribute("aria-pressed")).toBe("true");
+    expect(
+      (within(viewer()).getByRole("textbox", { name: "編輯 README.md" }) as HTMLTextAreaElement)
+        .value,
+    ).toBe("# 改過");
+  });
+
   it("點檔案開分頁：md 預設預覽、可切原始碼；相對連結開新分頁；關掉回到工作區", async () => {
     const backend = viewerBackend();
     await openTree(backend);
