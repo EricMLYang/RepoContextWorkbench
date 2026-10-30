@@ -364,6 +364,8 @@ CLI／MCP（ctx-cli）：
   分成 `five_hour`／`seven_day`，`plan_type` → `plan`），形狀跟 Claude 一樣；檔案大小與修改時間沒變就用快取。`api_state` 多 `codex_usage`，
   `ctx health` 多一行 Codex。不另起 Codex 程序、不打網路（Orca 走 app-server RPC＋後端 API）。App 狀態列
   「Claude 5h 62%（2.5 hr 後重置）· 週 31%（3.2 天後重置）  Codex …」，超過 30 分鐘沒更新變淡、標「N 前」。
+  2026-10-30 改寫剩多少：「Claude 5h 剩 38%（2.5 hr 後重置）· 週 剩 69%（3.2 天後重置）」（`ctx health` 同一套）；
+  讀出時重置時間已過的視窗多 `expired: true`、寫「已重置」，`warn` 只算還沒重置的視窗。
 - **這組標為已讀 `ack_scope`**（2026-10-15，N-37；Python 沒有）：`.state/seen_scopes.json`（範圍鍵 → 時間），
   `build_state` 藏起該範圍在那之前的一般未讀卡；全域 `last_seen.txt`、`ack`、`unread` 清單都不變。
 - **CLI `ctx assist "<一句話>" [--yes]`**（2026-10-15，F-63；Python 沒有）：跟 ⌘K「?」、MCP `workbench_apply` 同一份白名單；

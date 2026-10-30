@@ -432,6 +432,8 @@ export interface UsageWindow {
   resets: string | null;
   /** 還有幾分鐘重置（引擎讀的時候算；舊資料沒有） */
   resets_in_min?: number;
+  /** 重置時間已過（記下的用量不算數了；引擎讀的時候算） */
+  expired?: boolean;
 }
 export interface Usage {
   at: string; // "YYYY-MM-DD HH:MM"
@@ -442,7 +444,7 @@ export interface Usage {
   model?: string | null;
   /** Codex 的方案（plus、pro…） */
   plan?: string | null;
-  /** 任一視窗 ≥ 80% */
+  /** 任一還沒重置的視窗 ≥ 80% */
   warn: boolean;
   /** 幾分鐘前更新的（引擎讀的時候算） */
   age_min?: number;

@@ -68,20 +68,23 @@ const then = (span: string, word: string) => (/[a-z]$/i.test(span) ? span + " " 
 export const USAGE_STALE_MIN = 30;
 
 /**
- * 額度餘光一格（F-83）：`Claude 5h 62%（2.5 hr 後重置）· 週 31%（3.2 天後重置）`；舊資料沒有剩餘時間就寫時刻。
- * 很久沒更新的尾巴加「· 45 分前」。沒收過就空字串。
+ * 額度餘光一格（F-83）：`Claude 5h 剩 38%（2.5 hr 後重置）· 週 剩 69%（3.2 天後重置）`——寫剩多少，
+ * 跟離重置多久擺一起，一眼判斷要多用還是省著用；舊資料沒有剩餘時間就寫時刻。
+ * 重置時間已過的視窗寫「已重置」（記下的用量不算數了）；很久沒更新的尾巴加「· 45 分前」。沒收過就空字串。
  */
 export function usageText(label: string, u: Usage | null | undefined): string {
   if (!u) return "";
-  const win = (name: string, w: UsageWindow | null) =>
-    w
-      ? `${name} ${w.used}%` +
-        (typeof w.resets_in_min === "number"
-          ? `（${then(spanText(w.resets_in_min), "後重置")}）`
-          : w.resets
-            ? `（${w.resets} 重置）`
-            : "")
-      : "";
+  const win = (name: string, w: UsageWindow | null) => {
+    if (!w) return "";
+    if (w.expired) return `${name} 已重置`;
+    const when =
+      typeof w.resets_in_min === "number"
+        ? `（${then(spanText(w.resets_in_min), "後重置")}）`
+        : w.resets
+          ? `（${w.resets} 重置）`
+          : "";
+    return `${name} 剩 ${Math.max(0, 100 - w.used)}%` + when;
+  };
   const parts = [win("5h", u.five_hour), win("週", u.seven_day)].filter(Boolean);
   if (!parts.length) return "";
   const stale =
@@ -114,7 +117,7 @@ export function StatusBar() {
           id="usage"
           className={usageClass(state.usage!)}
           title={
-            "Claude 訂閱額度：整個帳號的用量（claude.ai、其他終端用掉的也算），只在 App 開的 Claude Code 會話跑完一輪時更新；" +
+            "Claude 訂閱額度（數字是還剩多少，剩不到 20% 變琥珀）：整個帳號的用量（claude.ai、其他終端用掉的也算），只在 App 開的 Claude Code 會話跑完一輪時更新；" +
             "最後更新 " +
             state.usage!.at +
             (state.usage!.model ? "（模型 " + state.usage!.model + "）" : "") +
@@ -129,7 +132,7 @@ export function StatusBar() {
           id="codexusage"
           className={usageClass(state.codex_usage!)}
           title={
-            "Codex 額度" +
+            "Codex 額度（數字是還剩多少）" +
             (state.codex_usage!.plan ? "（" + state.codex_usage!.plan + "）" : "") +
             "：讀這台機器上 Codex 的會話紀錄，任何 Codex 會話跑一輪都會更新；最後更新 " +
             state.codex_usage!.at +

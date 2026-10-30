@@ -51,17 +51,32 @@ pub fn read(spine_dir: &Path) -> Option<Value> {
 }
 
 /// 補上隨時間變的欄位：視窗的 `resets_in_min`（有 `resets_at` 才有）、整份的 `age_min`（`at` 認得出才有）。
+/// 重置時間已過的視窗標 `expired`（記下的用量已經不算數），`warn` 也不再算它。
 fn enrich(v: &mut Value, now: DateTime<Local>) {
+    let mut warn = false;
     for k in ["five_hour", "seven_day"] {
         let Some(w) = v.get_mut(k).and_then(Value::as_object_mut) else {
             continue;
         };
-        if let Some(t) = w.get("resets_at").and_then(Value::as_i64) {
+        let t = w.get("resets_at").and_then(Value::as_i64);
+        if let Some(t) = t {
             w.insert(
                 "resets_in_min".into(),
                 json!(((t - now.timestamp()) / 60).max(0)),
             );
         }
+        if t.is_some_and(|t| t <= now.timestamp()) {
+            w.insert("expired".into(), json!(true));
+        } else if w
+            .get("used")
+            .and_then(Value::as_u64)
+            .is_some_and(|u| u >= WARN_AT)
+        {
+            warn = true;
+        }
+    }
+    if v.get("warn").is_some() {
+        v["warn"] = json!(warn);
     }
     let at = v.get("at").and_then(Value::as_str).and_then(|a| {
         NaiveDateTime::parse_from_str(a, "%Y-%m-%d %H:%M")
@@ -487,5 +502,14 @@ mod tests {
         assert_eq!(v["five_hour"]["resets_in_min"], 150);
         assert!(v["seven_day"].get("resets_in_min").is_none());
         assert_eq!(v["age_min"], 30);
+
+        // 重置時間已過：標 expired、warn 不算它
+        let mut v = json!({"at": "2026-10-16 20:20", "warn": true,
+                           "five_hour": {"used": 95, "resets_at": now.timestamp() - 60},
+                           "seven_day": {"used": 30, "resets_at": now.timestamp() + 600}});
+        enrich(&mut v, now);
+        assert_eq!(v["five_hour"]["expired"], true);
+        assert!(v["seven_day"].get("expired").is_none());
+        assert_eq!(v["warn"], false);
     }
 }

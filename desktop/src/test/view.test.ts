@@ -335,7 +335,7 @@ describe("單一 repo 的範圍不講「組」（#73）", () => {
 });
 
 describe("額度餘光（F-83；Codex 2026-10-28）", () => {
-  it("Claude／Codex 各一格：5h／週，有剩餘時間就寫「N 後重置」、舊資料寫時刻；很久沒更新標「N 前」；沒收過就空字串", () => {
+  it("Claude／Codex 各一格：5h／週寫剩多少（100−已用），有剩餘時間就寫「N 後重置」、舊資料寫時刻；很久沒更新標「N 前」；沒收過就空字串", () => {
     expect(usageText("Claude", null)).toBe("");
     expect(usageText("Codex", undefined)).toBe("");
     expect(
@@ -348,7 +348,7 @@ describe("額度餘光（F-83；Codex 2026-10-28）", () => {
         warn: false,
         age_min: 2,
       }),
-    ).toBe("Claude 5h 62%（2.5 hr 後重置） · 週 31%（3.2 天後重置）");
+    ).toBe("Claude 5h 剩 38%（2.5 hr 後重置） · 週 剩 69%（3.2 天後重置）");
     expect(
       usageText("Codex", {
         at: "x",
@@ -357,8 +357,16 @@ describe("額度餘光（F-83；Codex 2026-10-28）", () => {
         warn: true,
         age_min: 95,
       }),
-    ).toBe("Codex 週 90%（10-20 09:00 重置） · 1.6 hr 前");
+    ).toBe("Codex 週 剩 10%（10-20 09:00 重置） · 1.6 hr 前");
     expect(usageText("Codex", { at: "x", five_hour: null, seven_day: null, warn: false })).toBe("");
+    expect(
+      usageText("Codex", {
+        at: "x",
+        five_hour: { used: 9, resets: "08:00", resets_in_min: 0, expired: true },
+        seven_day: { used: 105, resets: "11-04 10:00", resets_in_min: 7500 },
+        warn: false,
+      }),
+    ).toBe("Codex 5h 已重置 · 週 剩 0%（5.2 天後重置）");
   });
 
   it("時間長度：分、hr（10 以下一位小數）、天", () => {

@@ -107,16 +107,22 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
             ));
         }
         // F-83：額度餘光（Claude＝App 會話的 statusLine 回報；Codex＝Codex 自己的會話紀錄）
+        // 寫剩多少＋離重置多久（跟狀態列同一套說法），一眼判斷要多用還是省著用
         let win = |u: &Value, k: &str, label: &str| {
             u[k].as_object().map(|w| {
-                format!(
-                    "{label} {}%{}",
-                    w["used"].as_u64().unwrap_or(0),
-                    w["resets"]
-                        .as_str()
-                        .map(|r| format!("（{r} 重置）"))
-                        .unwrap_or_default()
-                )
+                if w.get("expired").and_then(Value::as_bool) == Some(true) {
+                    return format!("{label} 已重置");
+                }
+                let left = 100u64.saturating_sub(w.get("used").and_then(Value::as_u64).unwrap_or(0));
+                let when = match (
+                    w.get("resets_in_min").and_then(Value::as_i64),
+                    w.get("resets").and_then(Value::as_str),
+                ) {
+                    (Some(m), _) => format!("（{}）", after_span(m, "後重置")),
+                    (None, Some(r)) => format!("（{r} 重置）"),
+                    (None, None) => String::new(),
+                };
+                format!("{label} 剩 {left}%{when}")
             })
         };
         let usages = [
@@ -125,7 +131,7 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
         ];
         for (name, u) in usages {
             let Some(u) = u else { continue };
-            let parts: Vec<String> = [win(&u, "five_hour", "5h"), win(&u, "seven_day", "7d")]
+            let parts: Vec<String> = [win(&u, "five_hour", "5h"), win(&u, "seven_day", "週")]
                 .into_iter()
                 .flatten()
                 .collect();
@@ -134,7 +140,7 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                     "- {name} 額度：{}（{} 更新{}）",
                     parts.join("、"),
                     s(&u, "at"),
-                    if u["warn"] == true { "；已過 80%" } else { "" }
+                    if u["warn"] == true { "；剩不到 20%" } else { "" }
                 ));
             }
         }
@@ -184,4 +190,38 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
         out.join("\n")
     });
     Ok(())
+}
+
+/// 幾分鐘＋後綴 → 「45 分後重置」「2.5 hr 後重置」「3.2 天後重置」（10 以上不帶小數；跟前端 `spanText` 同一套）。
+fn after_span(min: i64, word: &str) -> String {
+    let one = |n: f64| {
+        if n < 10.0 {
+            format!("{}", (n * 10.0).round() / 10.0)
+        } else {
+            format!("{}", n.round())
+        }
+    };
+    let m = min.max(0) as f64;
+    if m < 60.0 {
+        format!("{} 分{word}", m.round())
+    } else if m < 24.0 * 60.0 {
+        format!("{} hr {word}", one(m / 60.0))
+    } else {
+        format!("{} 天{word}", one(m / (24.0 * 60.0)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::after_span;
+
+    #[test]
+    fn span_like_status_bar() {
+        assert_eq!(after_span(45, "後重置"), "45 分後重置");
+        assert_eq!(after_span(150, "後重置"), "2.5 hr 後重置");
+        assert_eq!(after_span(12 * 60 + 20, "後重置"), "12 hr 後重置");
+        assert_eq!(after_span(3 * 24 * 60, "後重置"), "3 天後重置");
+        assert_eq!(after_span(4608, "後重置"), "3.2 天後重置");
+        assert_eq!(after_span(-5, "後重置"), "0 分後重置");
+    }
 }
