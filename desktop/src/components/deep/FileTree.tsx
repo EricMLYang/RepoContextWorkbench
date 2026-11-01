@@ -14,6 +14,7 @@ import { FILE_DRAG_TYPE } from "../../lib/view";
 import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
 import { MARK_LABEL, MARK_LETTER, gitMarks, type GitMark } from "../../lib/gitMarks";
 import { samePick, useSnapshot, useStore, useUi, useUiState, type Pick } from "../../store/context";
+import { AsyncButton } from "../AsyncButton";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 
 interface DirState {
@@ -166,6 +167,53 @@ function RenameInput(props: {
   );
 }
 
+/**
+ * 「移到垃圾桶？」的確認（取代那一列右半）：焦點先在「移到垃圾桶」，Enter 確定、Esc 取消；
+ * 執行中鎖住、失敗留著說原因（AsyncButton）。
+ */
+function TrashConfirm(props: {
+  dir: boolean;
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const { dir, onConfirm, onCancel } = props;
+  const [error, setError] = useState("");
+  // 取消後焦點回到那一列（鍵盤可以接著走）
+  const cancel = (el: Element) => {
+    el.closest<HTMLElement>('[role="treeitem"]')?.focus();
+    onCancel();
+  };
+  return (
+    <span
+      className="tconfirm"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        // 別讓樹的鍵盤（Enter＝開啟、↑↓）接走
+        e.stopPropagation();
+        if (e.key === "Escape") {
+          e.preventDefault();
+          cancel(e.currentTarget);
+        }
+      }}
+    >
+      <span className="tconfirmq">{dir ? "整個資料夾移到垃圾桶？" : "移到垃圾桶？"}</span>
+      <span ref={(el) => el?.querySelector("button")?.focus()}>
+        <AsyncButton className="small danger" onError={setError} run={onConfirm}>
+          移到垃圾桶
+        </AsyncButton>
+      </span>
+      <button type="button" className="ghost small" onClick={(e) => cancel(e.currentTarget)}>
+        取消
+      </button>
+      {error ? (
+        <span className="tnewerror" role="alert">
+          {error}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 /** 新增檔案／資料夾的輸入列：Enter 建立、Esc 取消；空白失焦也取消。失敗留在輸入框顯示原因。 */
 function NewEntryRow(props: {
   creating: Creating;
@@ -240,7 +288,8 @@ function NewEntryRow(props: {
  * 一個 repo 當根的檔案樹（VS Code 檔案總管風格）：展開資料夾才向引擎要下一層（action `repo_tree`）；
  * 磁碟上有變動（新增／刪除／改名）會自己更新（Tauri 殼監看展開中的資料夾）。
  * git 狀態上色（跟 VS Code 一樣）：檔案照狀態上色＋右邊字母（M／A／D／R／U／!／↑ 沒 push），資料夾含變更就上色＋點。
- * 右鍵：複製路徑／相對路徑；鍵盤：↑↓ 移動、→ 展開、← 收合或回上層、Enter 開啟、⌥⌘C／⇧⌥⌘C 複製。
+ * 右鍵：複製路徑／相對路徑、移到垃圾桶；鍵盤：↑↓ 移動、→ 展開、← 收合或回上層、Enter 開啟、⌥⌘C／⇧⌥⌘C 複製、
+ * ⌘⌫／Delete 移到垃圾桶（先問）。
  * 展開狀態記在這台電腦。讀失敗保留上次的清單並顯示錯誤。
  */
 export function RepoRoot(props: {
@@ -270,6 +319,7 @@ export function RepoRoot(props: {
   const [menu, setMenu] = useState<{ x: number; y: number; e: TreeEntry } | null>(null);
   const [creating, setCreating] = useState<Creating | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [trashing, setTrashing] = useState<string | null>(null);
   const treeRef = useRef<HTMLDivElement>(null);
   const [marks, setMarks] = useState<Map<string, GitMark>>(() => new Map());
   const [markNonce, setMarkNonce] = useState(0);
@@ -400,6 +450,19 @@ export function RepoRoot(props: {
     store.toast("已改名為 " + r.path);
   };
 
+  /** 移到垃圾桶：有開著沒存的分頁就先擋；成功後關掉底下的分頁、拿掉挑起來的脈絡，焦點移到上一層。 */
+  const trash = async (e: TreeEntry) => {
+    if (ui.dirtyUnder(id, e.path)) throw new Error("有分頁還沒存，先存檔或放棄修改");
+    const parent = parentDir(e.path);
+    await store.action("trash_entry", { id, path: e.path });
+    setTrashing(null);
+    setOpen(new Set([...open].filter((p) => p !== e.path && !p.startsWith(e.path + "/"))));
+    ui.forgetPath(id, e.path);
+    await load(parent);
+    setFocusPath(parent || null);
+    store.toast("已移到垃圾桶：" + e.path + "（垃圾桶裡可以放回原處）");
+  };
+
   const reload = () => {
     for (const dir of open) void load(dir);
   };
@@ -452,6 +515,12 @@ export function RepoRoot(props: {
       ev.preventDefault();
       if (ev.shiftKey) void copy(e.path, "相對路徑");
       else void copy(e.abs, "路徑");
+      return;
+    }
+    // ⌘⌫（macOS）／Delete（Windows）＝移到垃圾桶（先問）
+    if ((ev.key === "Backspace" && ev.metaKey) || ev.key === "Delete") {
+      ev.preventDefault();
+      setTrashing(e.path);
       return;
     }
     switch (ev.key) {
@@ -511,6 +580,7 @@ export function RepoRoot(props: {
     },
     { label: "複製路徑", hint: "⌥⌘C", run: () => copy(e.abs, "路徑") },
     { label: "複製相對路徑", hint: "⇧⌥⌘C", run: () => copy(e.path, "相對路徑") },
+    { label: "移到垃圾桶…", hint: "⌘⌫", danger: true, run: () => setTrashing(e.path) },
   ];
 
   const active = view.activeFile?.repo === id ? view.activeFile.path : null;
@@ -574,7 +644,8 @@ export function RepoRoot(props: {
               (!e.dir && e.path === active ? " selected" : "") +
               (picked ? " picked" : "") +
               (e.ignored ? " ignored" : "") +
-              (mark ? " git-" + mark : "")
+              (mark ? " git-" + mark : "") +
+              (trashing === e.path ? " tconfirming" : "")
             }
             style={pad}
             title={e.ignored ? e.path + "（被 .gitignore 忽略）" : e.path}
@@ -615,6 +686,13 @@ export function RepoRoot(props: {
             ) : (
               <span className="tlabel">{e.name}</span>
             )}
+            {trashing === e.path ? (
+              <TrashConfirm
+                dir={e.dir}
+                onConfirm={() => trash(e)}
+                onCancel={() => setTrashing(null)}
+              />
+            ) : null}
             {picked ? (
               <span className="tpicked" aria-hidden="true">
                 ✓

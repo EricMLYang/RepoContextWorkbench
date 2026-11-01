@@ -17,6 +17,7 @@
 //! [`create_entry`]（2026-10-15）：檢視器／檔案樹新增空檔或資料夾。只新增、不覆蓋（已存在就拒絕）；
 //! 上層資料夾沒有就一路建（但最近一個已存在的上層必須在 repo 裡）；不准建在 `.git` 裡。
 //! [`rename_entry`]（同日）：改名或搬移，新路徑同一套規則；不刪任何東西。
+//! [`trash_entry`]（2026-11-01，F-67）：移到系統垃圾桶（不是直接刪），找得回來；路徑規則同改名。
 //!
 //! [`changes`]／[`diff`]（2026-10-14）：還沒 commit 的變更與單檔差異（看 agent 改了什麼）。只讀，交給 git。
 //!
@@ -521,22 +522,42 @@ fn unbase64(s: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// 改名或搬移（2026-10-15，F-66）：`from` 是 repo 裡已存在的檔或資料夾（符號連結改的是連結本身），
-/// `to` 照 [`create_entry`] 的規則（不覆蓋、上層一路建、不碰 .git）。回 (`root/to`, 是不是資料夾)。
-pub fn rename_entry(root: &Path, from: &str, to: &str) -> Result<(PathBuf, bool)> {
-    let from_p = checked_rel(from, "路徑")?;
-    let name = from_p
+/// repo 裡已存在的檔或資料夾（[`rename_entry`]／[`trash_entry`] 共用）：不能是根目錄、不能碰 `.git`、
+/// 上層要在 repo 裡（符號連結跳出去也擋；最後一段是連結就是連結本身）。回 (`rel`, 實體路徑, metadata)。
+fn existing_entry(
+    root: &Path,
+    rel: &str,
+    verb: &str,
+) -> Result<(PathBuf, PathBuf, std::fs::Metadata)> {
+    let rel_p = checked_rel(rel, "路徑")?;
+    let name = rel_p
         .file_name()
-        .ok_or_else(|| Error::invalid("不能改 repo 根目錄的名字"))?;
-    if from_p.components().any(|c| c.as_os_str() == ".git") {
-        return Err(Error::invalid(format!("不能改 .git 裡的東西：{from}")));
+        .ok_or_else(|| Error::invalid(format!("不能{verb} repo 根目錄")))?;
+    if rel_p.components().any(|c| c.as_os_str() == ".git") {
+        return Err(Error::invalid(format!("不能{verb} .git 裡的東西：{rel}")));
     }
-    let parent = from_p.parent().unwrap_or(Path::new(""));
+    let parent = rel_p.parent().unwrap_or(Path::new(""));
     let (_, _, parent_real) = resolve_in(root, &parent.to_string_lossy(), "資料夾")?;
     let src = parent_real.join(name);
     let meta = src
         .symlink_metadata()
-        .map_err(|_| Error::invalid(format!("檔案不存在：{from}")))?;
+        .map_err(|_| Error::invalid(format!("檔案不存在：{rel}")))?;
+    Ok((rel_p, src, meta))
+}
+
+/// 移到系統垃圾桶（2026-11-01，F-67）：`rel` 是 repo 裡已存在的檔或資料夾（規則同 [`rename_entry`]；
+/// `.git` 本身也擋）。不直接刪——macOS 垃圾桶、Windows 資源回收筒，找得回來。回 (`root/rel`, 是不是資料夾)。
+pub fn trash_entry(root: &Path, rel: &str) -> Result<(PathBuf, bool)> {
+    let (rel_p, src, meta) = existing_entry(root, rel, "移到垃圾桶")?;
+    crate::fsutil::move_to_trash(&src)
+        .map_err(|e| Error::invalid(format!("移不到垃圾桶：{rel}（{e}）")))?;
+    Ok((root.join(rel_p), meta.is_dir()))
+}
+
+/// 改名或搬移（2026-10-15，F-66）：`from` 是 repo 裡已存在的檔或資料夾（符號連結改的是連結本身），
+/// `to` 照 [`create_entry`] 的規則（不覆蓋、上層一路建、不碰 .git）。回 (`root/to`, 是不是資料夾)。
+pub fn rename_entry(root: &Path, from: &str, to: &str) -> Result<(PathBuf, bool)> {
+    let (from_p, src, meta) = existing_entry(root, from, "改名")?;
     // 資料夾不能搬進自己底下（先擋，免得 new_target 已經建了空的上層資料夾才失敗）
     let to_p = checked_rel(to, "路徑")?;
     if meta.is_dir() && to_p.starts_with(&from_p) {
@@ -1297,6 +1318,43 @@ mod tests {
         assert!(!r.join("archive").join("sub").exists());
         assert!(rename_entry(&r, "../repo/b.md", "c.md").is_err());
         assert!(r.join("b.md").exists());
+    }
+
+    /// 只測擋下來的路徑（真的移會丟進開發機的垃圾桶；真移在 TESTING 8d 手測）。
+    #[test]
+    fn trash_entry_refuses_before_touching_anything() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path().join("repo");
+        std::fs::create_dir_all(r.join(".git")).unwrap();
+        std::fs::write(r.join("b.md"), "B").unwrap();
+        std::fs::write(t.path().join("outside.md"), "O").unwrap();
+        for bad in [
+            "",
+            ".",
+            ".git",
+            ".git/config",
+            "nope.md",
+            "../outside.md",
+            "/etc/hosts",
+        ] {
+            assert!(trash_entry(&r, bad).is_err(), "應該擋：{bad:?}");
+        }
+        assert!(r.join("b.md").exists() && r.join(".git").exists());
+        assert!(t.path().join("outside.md").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn trash_entry_blocks_symlink_escape() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path().join("repo");
+        let outside = t.path().join("outside");
+        std::fs::create_dir_all(&r).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("x.md"), "X").unwrap();
+        std::os::unix::fs::symlink(&outside, r.join("link")).unwrap();
+        assert!(trash_entry(&r, "link/x.md").is_err());
+        assert!(outside.join("x.md").exists());
     }
 
     #[cfg(unix)]

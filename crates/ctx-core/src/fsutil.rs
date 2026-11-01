@@ -84,6 +84,63 @@ pub fn mtime_secs(p: &Path) -> std::io::Result<f64> {
     })
 }
 
+/// 移到系統垃圾桶（2026-11-01，F-67；不加依賴，走系統內建的東西）：
+/// macOS＝`osascript` 的 JXA 叫 `NSFileManager.trashItemAtURL`（不經 Finder，不跳自動化權限、垃圾桶裡可「放回原處」）；
+/// Windows＝PowerShell 的 `Microsoft.VisualBasic.FileIO.FileSystem`（資源回收筒）；其他＝`gio trash`。
+/// `p` 是符號連結時移的是連結本身。路徑走 argv／環境變數，不拼進腳本。
+pub fn move_to_trash(p: &Path) -> std::io::Result<()> {
+    use std::process::{Command, Stdio};
+    #[cfg(target_os = "macos")]
+    let mut c = {
+        let mut c = Command::new("/usr/bin/osascript");
+        c.args([
+            "-l",
+            "JavaScript",
+            "-e",
+            "function run(argv){ObjC.import('Foundation');\
+             if(!$.NSFileManager.defaultManager.trashItemAtURLResultingItemURLError(\
+             $.NSURL.fileURLWithPath(argv[0]),null,null))throw new Error('trash failed')}",
+        ])
+        .arg(p);
+        c
+    };
+    #[cfg(windows)]
+    let mut c = {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut c = Command::new("powershell");
+        c.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$p=$env:CTX_TRASH_PATH; Add-Type -AssemblyName Microsoft.VisualBasic; \
+             $fs=[Microsoft.VisualBasic.FileIO.FileSystem]; \
+             if (Test-Path -LiteralPath $p -PathType Container) \
+             { $fs::DeleteDirectory($p,'OnlyErrorDialogs','SendToRecycleBin') } \
+             else { $fs::DeleteFile($p,'OnlyErrorDialogs','SendToRecycleBin') }",
+        ])
+        .env("CTX_TRASH_PATH", p)
+        .creation_flags(CREATE_NO_WINDOW);
+        c
+    };
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let mut c = {
+        let mut c = Command::new("gio");
+        c.arg("trash").arg("--").arg(p);
+        c
+    };
+    let out = c.stdin(Stdio::null()).output()?;
+    if out.status.success() && p.symlink_metadata().is_err() {
+        return Ok(());
+    }
+    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    Err(std::io::Error::other(if err.is_empty() {
+        "系統沒有移走它".to_string()
+    } else {
+        err
+    }))
+}
+
 /// 原子寫檔（DEVELOPMENT.md §8）：同資料夾的暫存檔（隱藏、名稱不可預測、`create_new` 不跟隨既有的檔或
 /// 符號連結）→ fsync → 原檔在就沿用它的權限 → rename。讀的人不會看到寫一半的檔；失敗不留暫存檔。
 /// `p` 是符號連結時改寫的是連結本身（要寫實體檔請先 canonicalize）。

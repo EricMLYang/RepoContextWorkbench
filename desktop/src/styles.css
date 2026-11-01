@@ -1650,6 +1650,24 @@ dialog::backdrop {
   color: var(--red, #f87171);
   font-size: 11px;
 }
+/* 「移到垃圾桶？」確認 */
+.trow.tconfirming {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 26px;
+}
+.tconfirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  cursor: default;
+}
+.tconfirmq {
+  color: var(--amber);
+  font-size: 11px;
+}
 .trow.tnote {
   cursor: default;
   color: var(--sub);

@@ -161,6 +161,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     setFileDirty,
     dirtyUnder,
     renamePath,
+    closeUnder,
   } = useFileTabs(toast);
 
   // ── 回報畫面（agent 被問「根據畫面」才讀；停下來才送）──
@@ -222,6 +223,14 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       openFile,
       dirtyUnder,
       renamePath,
+      forgetPath: (repo, path) => {
+        closeUnder(repo, path);
+        updatePicks((cur) =>
+          cur.filter(
+            (p) => !(p.repo === repo && (p.path === path || p.path.startsWith(path + "/"))),
+          ),
+        );
+      },
       showComposer: () => {
         setActiveFile(null);
         showComposer();
@@ -261,6 +270,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
       openFile,
       dirtyUnder,
       renamePath,
+      closeUnder,
       setActiveFile,
       updateOpen,
       updatePicks,

@@ -142,6 +142,20 @@ pub(super) fn a_rename_entry(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Res
               "abs": abs.to_string_lossy(), "dir": dir}))
 }
 
+/// Rust 才有（F-67）：檔案樹「移到垃圾桶」（見 [`crate::filetree::trash_entry`]）；不直接刪、不記 spine 事件。
+#[derive(serde::Deserialize)]
+struct TrashEntryArgs {
+    id: String,
+    path: String,
+}
+
+pub(super) fn a_trash_entry(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let TrashEntryArgs { id, path } = parse("trash_entry", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let (abs, dir) = crate::filetree::trash_entry(&root, &path)?;
+    Ok(json!({"ok": true, "id": id, "path": path, "abs": abs.to_string_lossy(), "dir": dir}))
+}
+
 /// Rust 才有（F-64）：md 編輯區貼上圖片存成新檔（見 [`crate::filetree::save_image`]）；不覆蓋、不記 spine 事件。
 #[derive(serde::Deserialize)]
 struct SaveImageArgs {

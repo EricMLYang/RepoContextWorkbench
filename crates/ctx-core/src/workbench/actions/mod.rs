@@ -30,7 +30,7 @@ mod sessions;
 use briefs::{a_pick_brief, a_profile_draft_brief, a_review_brief};
 use files::{
     a_backlinks, a_create_entry, a_read_file, a_rename_entry, a_repo_tree, a_save_image,
-    a_write_file,
+    a_trash_entry, a_write_file,
 };
 use finder::{a_file_diff, a_palette, a_repo_changes, a_scope_changes};
 use namecard::{a_describe_repo, a_repo_class, a_repo_profile};
@@ -122,6 +122,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("write_file", a_write_file),
     ("create_entry", a_create_entry),
     ("rename_entry", a_rename_entry),
+    ("trash_entry", a_trash_entry),
     ("save_image", a_save_image),
     ("session_image", files::a_session_image),
     ("backlinks", a_backlinks),

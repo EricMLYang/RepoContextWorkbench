@@ -61,6 +61,8 @@ export interface Ui {
   dirtyUnder(repo: string, path: string): boolean;
   /** 檔案或資料夾改名後，開著的分頁跟著換路徑。 */
   renamePath(repo: string, from: string, to: string): void;
+  /** 檔案或資料夾移到垃圾桶後：關掉底下開著的分頁、拿掉挑起來的脈絡。 */
+  forgetPath(repo: string, path: string): void;
   /** repo 的右鍵選單（x、y 是視窗座標）。 */
   repoMenu(id: string, x: number, y: number): void;
   showComposer(): void;

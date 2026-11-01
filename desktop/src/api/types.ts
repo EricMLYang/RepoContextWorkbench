@@ -948,6 +948,11 @@ export interface ActionMap {
     payload: { id: string; from: string; to: string };
     result: { ok: true; id: string; from: string; path: string; abs: string; dir: boolean };
   };
+  /** Rust 才有（F-67）：移到系統垃圾桶（不直接刪；不能是根目錄或 .git）。 */
+  trash_entry: {
+    payload: { id: string; path: string };
+    result: { ok: true; id: string; path: string; abs: string; dir: boolean };
+  };
   /** Rust 才有：新增空檔或資料夾（不覆蓋；上層沒有就一路建）。path 回相對 repo 根目錄。 */
   create_entry: {
     payload: { id: string; path: string; kind: "file" | "dir" };

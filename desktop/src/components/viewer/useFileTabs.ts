@@ -115,6 +115,20 @@ export function useFileTabs(toast: (msg: string) => void) {
     });
   }, []);
 
+  /** 移到垃圾桶之後關掉那個檔（或資料夾底下）的分頁；沒存的分頁事先擋掉了（見 dirtyUnder），這裡不再問。 */
+  const closeUnder = useCallback((repo: string, path: string) => {
+    setFiles((prev) => {
+      const next = prev.filter((f) => !under(f, repo, path));
+      if (next.length === prev.length) return prev;
+      setActiveFile((cur) => {
+        if (next.some((f) => fileKey(f) === cur)) return cur;
+        const i = prev.findIndex((f) => fileKey(f) === cur);
+        return next.length ? fileKey(next[Math.min(Math.max(i, 0), next.length - 1)]) : null;
+      });
+      return next;
+    });
+  }, []);
+
   const shownFile = files.some((f) => fileKey(f) === activeFile) ? activeFile : null;
   const shownFileObj = useMemo(
     () => files.find((f) => fileKey(f) === shownFile) ?? null,
@@ -131,5 +145,6 @@ export function useFileTabs(toast: (msg: string) => void) {
     setFileDirty,
     dirtyUnder,
     renamePath,
+    closeUnder,
   };
 }

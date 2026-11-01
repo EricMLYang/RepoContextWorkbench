@@ -1412,6 +1412,67 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     expect(screen.queryByRole("button", { name: "關閉 README.md" })).toBeNull();
   });
 
+  it("移到垃圾桶（F-67）：先問、Esc 取消不送；確定後分頁關掉、樹重讀", async () => {
+    const disk: Record<string, string> = { "README.md": "# 說明", "b.md": "B" };
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: { id?: string; path?: string }) => {
+        if (name === "repo_tree")
+          return {
+            ok: true,
+            id: p.id,
+            root: "/r/a",
+            dir: "",
+            more: 0,
+            entries: Object.keys(disk).map((k) => ({
+              name: k,
+              path: k,
+              abs: "/r/a/" + k,
+              dir: false,
+            })),
+          };
+        if (name === "trash_entry") {
+          delete disk[p.path!];
+          return { ok: true, id: "a", path: p.path, abs: "/r/a/" + p.path, dir: false };
+        }
+        if (name === "read_file") {
+          const text = disk[p.path!];
+          if (text == null) throw new Error("檔案不存在：" + p.path);
+          return {
+            ok: true,
+            id: p.id,
+            path: p.path,
+            abs: "/r/a/" + p.path,
+            size: text.length,
+            kind: "text",
+            text,
+            truncated: false,
+          };
+        }
+        return { ok: true };
+      }) as never,
+    });
+    await openTree(backend);
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" })),
+    );
+    expect(screen.getByRole("button", { name: "關閉 README.md" })).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "工作區" })));
+    const item = () => screen.getByRole("treeitem", { name: "README.md" });
+    // ⌘⌫ 先問；Esc 取消不送
+    await act(async () => fireEvent.keyDown(item(), { key: "Backspace", metaKey: true }));
+    const yes = screen.getByRole("button", { name: "移到垃圾桶" });
+    await act(async () => fireEvent.keyDown(yes, { key: "Escape" }));
+    expect(screen.queryByRole("button", { name: "移到垃圾桶" })).toBeNull();
+    expect(backend.action).not.toHaveBeenCalledWith("trash_entry", expect.anything());
+    // 再按一次、確定
+    await act(async () => fireEvent.keyDown(item(), { key: "Delete" }));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "移到垃圾桶" })));
+    expect(backend.action).toHaveBeenCalledWith("trash_entry", { id: "a", path: "README.md" });
+    await waitFor(() => expect(screen.queryByRole("treeitem", { name: "README.md" })).toBeNull());
+    expect(screen.queryByRole("button", { name: "關閉 README.md" })).toBeNull();
+    expect(screen.getByRole("treeitem", { name: "b.md" })).toBeTruthy();
+  });
+
   it("新增檔案失敗（同名）：錯誤留在輸入列，不開分頁", async () => {
     const backend = mockBackend({
       action: vi.fn(async (name: string, p: { id?: string }) => {
