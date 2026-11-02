@@ -96,7 +96,7 @@ async function violations(
         ] as never,
       }),
     ),
-    action: vi.fn(async (name: string) => {
+    action: vi.fn(async (name: string, p?: { path?: string }) => {
       if (name === "repo_tree")
         return {
           ok: true,
@@ -104,7 +104,48 @@ async function violations(
           root: "/r/a",
           dir: "",
           more: 0,
-          entries: [{ name: "README.md", path: "README.md", abs: "/r/a/README.md", dir: false }],
+          entries: [
+            { name: "README.md", path: "README.md", abs: "/r/a/README.md", dir: false },
+            { name: "spec.pdf", path: "spec.pdf", abs: "/r/a/spec.pdf", dir: false },
+          ],
+        };
+      // R38：App 裡看不了的檔（檢視器給「用預設 App 開啟」）
+      if (name === "read_file" && p?.path === "spec.pdf")
+        return {
+          ok: true,
+          id: "a",
+          path: "spec.pdf",
+          abs: "/r/a/spec.pdf",
+          kind: "binary",
+          size: 9,
+        };
+      // R38：⌘K「%」搜內容
+      if (name === "search_content")
+        return {
+          ok: true,
+          scope: "產品開發",
+          files: [
+            {
+              repo: "a",
+              file: "README.md",
+              path: "/r/a/README.md",
+              score: 1,
+              why: [],
+              snippets: [{ line: 3, text: "- [ ] 待辦" }],
+              ref: "a:README.md",
+            },
+          ],
+          code: [],
+          decisions: [
+            {
+              ref: "decision:x",
+              at: "2026-11-01 10:30",
+              text: "待辦先記在 README",
+              hit: "待辦",
+              group: "產品開發",
+              repo: "a",
+            },
+          ],
         };
       if (name === "repo_changes")
         return { ok: true, id: "a", changes: [{ path: "README.md", status: "modified" }], more: 0 };
@@ -366,6 +407,10 @@ describe("無障礙稽核（axe-core）", () => {
     );
     return screen.findByRole("treeitem", { name: /README\.md/ });
   };
+  const openTreeItem = async (name: RegExp) => {
+    await openTree();
+    return screen.findByRole("treeitem", { name });
+  };
   it("R38：檔案樹「移到垃圾桶？」確認列與改名輸入框開著時沒有違規", async () => {
     const found = await violations({ group: "產品開發", repos: null }, async () => {
       const readme = await openTree();
@@ -381,6 +426,24 @@ describe("無障礙稽核（axe-core）", () => {
       expect(screen.getByRole("textbox", { name: /新名稱/ })).toBeTruthy();
     });
     expect(renaming, renaming.join("\n")).toEqual([]);
+  });
+  it("R38：⌘K「%」搜內容的結果沒有違規", async () => {
+    const found = await violations({ group: "產品開發", repos: null }, async () => {
+      await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+      fireEvent.change(screen.getByRole("combobox", { name: "搜尋或執行指令" }), {
+        target: { value: "%待辦" },
+      });
+      await screen.findByText("待辦先記在 README");
+    });
+    expect(found, found.join("\n")).toEqual([]);
+  });
+  it("R38：二進位檔的檢視器（用預設 App 開啟／在 Finder 中顯示）沒有違規", async () => {
+    const binary = await violations({ group: "產品開發", repos: null }, async () => {
+      const pdf = await openTreeItem(/spec\.pdf/);
+      await act(async () => fireEvent.click(pdf));
+      await screen.findByRole("button", { name: "用預設 App 開啟" });
+    });
+    expect(binary, binary.join("\n")).toEqual([]);
   });
   it("R38：狀態列版本（已更新／沒裝）與「已更新」對話框開著時沒有違規", async () => {
     localStorage.setItem("workbench:build:seen", JSON.stringify("aaaaaaa"));
