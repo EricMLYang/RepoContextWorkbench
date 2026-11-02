@@ -314,8 +314,10 @@ export function Palette({ onClose, initial = "" }: { onClose: () => void; initia
         ? (recent || []).map((t) => ({ kind: "assist" as const, key: "r:" + t, text: t }))
         : [];
   const contentMode = contentQuery !== null;
+  // 打字中先留著上一次的結果（新的回來才換），清單不會每打一個字就閃空
+  const contentShort = [...(contentQuery || "")].length < 2;
   const items = contentMode
-    ? content && content.q === contentQuery
+    ? content && !contentShort
       ? contentItems(content.r)
       : []
     : assistMode
@@ -483,13 +485,15 @@ export function Palette({ onClose, initial = "" }: { onClose: () => void; initia
           </div>
         ) : null}
         {contentMode ? (
-          [...(contentQuery || "")].length < 2 ? (
+          contentShort ? (
             <p className="muted small paletteempty">
               搜這個範圍裡的 md、程式碼與過去的判斷（跟 agent 的 search_knowledge
               一樣）；打兩個字以上。
             </p>
           ) : !content || content.q !== contentQuery ? (
-            <p className="muted small paletteempty">搜尋中…</p>
+            <p className="muted small paletteempty" aria-live="polite">
+              {content ? "搜尋中…（先列上一次「" + content.q + "」的結果）" : "搜尋中…"}
+            </p>
           ) : !items.length ? (
             <p className="muted small paletteempty">這個範圍裡沒有內容含「{contentQuery}」。</p>
           ) : null
