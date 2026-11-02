@@ -10,6 +10,8 @@ export interface MenuItem {
   key?: string;
   /** 縮排層級（大綱用）。 */
   indent?: number;
+  /** 上面畫一條分隔線（新的一組；跟 VS Code 一樣分組）。 */
+  sep?: boolean;
 }
 
 /**
@@ -91,7 +93,7 @@ export function ContextMenu(props: {
           key={it.key ?? it.label}
           type="button"
           role="menuitem"
-          className={"ghost" + (it.danger ? " danger" : "")}
+          className={"ghost" + (it.danger ? " danger" : "") + (it.sep ? " ctxsep" : "")}
           style={it.indent ? { paddingLeft: 10 + it.indent * 14 } : undefined}
           onClick={() => {
             onClose();

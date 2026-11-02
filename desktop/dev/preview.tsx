@@ -740,7 +740,7 @@ if (scene === "binary") {
   put("openFiles", [{ repo: "repo-a", path: "spec.pdf" }]);
   put("activeFile", "repo-a\u0000spec.pdf");
 }
-if (scene === "tree-new" || scene === "rename" || scene === "trash") {
+if (scene === "tree-new" || scene === "rename" || scene === "trash" || scene === "tree-menu") {
   put("panelRepo", "repo-a");
   put("panelTab", "files");
 }
@@ -849,6 +849,20 @@ if (scene === "trash")
     row?.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
   });
 if (scene === "build-updated") later(900, () => click("#buildupdated"));
+if (scene === "tree-menu")
+  later(900, () => {
+    const row = document.querySelector<HTMLElement>(
+      '#repopanel [role="treeitem"][data-path="README.md"]',
+    );
+    const r = row?.getBoundingClientRect();
+    row?.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        clientX: (r?.left ?? 0) + 40,
+        clientY: (r?.top ?? 0) + 10,
+      }),
+    );
+  });
 if (scene === "tablist") later(900, () => click('button[aria-label="開啟的檔案清單"]'));
 if (scene === "past-sessions") later(700, () => click("#pastbtn"));
 if (scene === "diff-notes")

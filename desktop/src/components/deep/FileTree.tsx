@@ -584,18 +584,22 @@ export function RepoRoot(props: {
       hint: "⌘＋點",
       run: () => ui.togglePick(pickOf(e)),
     },
+    // 分組跟 VS Code 檔案總管一樣：新增｜交給系統｜複製｜改名與刪除
     {
       label: "新增檔案…",
+      sep: true,
       run: () => startCreate(e.dir ? e.path : parentDir(e.path), "file"),
     },
-    { label: "重新命名…", hint: "F2", run: () => setRenaming(e.path) },
     {
       label: "新增資料夾…",
       run: () => startCreate(e.dir ? e.path : parentDir(e.path), "dir"),
     },
-    { label: "複製路徑", hint: "⌥⌘C", run: () => copy(e.abs, "路徑") },
-    { label: "複製相對路徑", hint: "⇧⌥⌘C", run: () => copy(e.path, "相對路徑") },
-    { label: REVEAL_LABEL, hint: "⌥⌘R", run: () => openInSystem(store, id, e.path, "reveal") },
+    {
+      label: REVEAL_LABEL,
+      hint: "⌥⌘R",
+      sep: true,
+      run: () => openInSystem(store, id, e.path, "reveal"),
+    },
     {
       // 檔案＝開在它所在的資料夾
       label: e.dir ? "在這裡開 Shell" : "在所在資料夾開 Shell",
@@ -610,6 +614,9 @@ export function RepoRoot(props: {
     ...(e.dir
       ? []
       : [{ label: OPEN_EXTERNAL_LABEL, run: () => openInSystem(store, id, e.path, "open") }]),
+    { label: "複製路徑", hint: "⌥⌘C", sep: true, run: () => copy(e.abs, "路徑") },
+    { label: "複製相對路徑", hint: "⇧⌥⌘C", run: () => copy(e.path, "相對路徑") },
+    { label: "重新命名…", hint: "F2", sep: true, run: () => setRenaming(e.path) },
     { label: "移到垃圾桶…", hint: "⌘⌫", danger: true, run: () => setTrashing(e.path) },
   ];
 

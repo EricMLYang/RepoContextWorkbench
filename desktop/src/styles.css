@@ -1992,6 +1992,19 @@ dialog::backdrop {
 }
 
 /* 右鍵選單 */
+/* 新的一組：上面一條分隔線 */
+.ctxmenu button.ctxsep {
+  margin-top: 5px;
+  position: relative;
+}
+.ctxmenu button.ctxsep::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: -3px;
+  border-top: 1px solid var(--line);
+}
 .ctxmenu {
   position: fixed;
   z-index: 50;
