@@ -145,7 +145,7 @@ export function StatusBar() {
       ) : null}
       <BuildStatus />
       <span id="sesscount">{alive + " 個執行中會話"}</span>
-      <span>Ctrl + ` 終端</span>
+      <span id="termhint">Ctrl + ` 終端</span>
     </footer>
   );
 }

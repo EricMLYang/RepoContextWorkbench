@@ -1137,6 +1137,26 @@ td button {
 #status .usagestale {
   opacity: 0.6;
 }
+/* 窄的時候：額度兩段先縮成「…」（滑過看全文），提示類的先藏，版本與會話數留著 */
+#status #usage,
+#status #codexusage {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#status > :not(#usage):not(#codexusage):not(.spacer) {
+  flex-shrink: 0;
+}
+@media (max-width: 1400px) {
+  #status #termhint {
+    display: none;
+  }
+}
+@media (max-width: 1180px) {
+  #status #scanwhen {
+    display: none;
+  }
+}
 #status {
   grid-area: status;
   background: #1a1e25;

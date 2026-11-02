@@ -310,7 +310,49 @@ const backend: Backend = {
               { name: "docs", path: "docs", abs: "/x/docs", dir: true },
               { name: "src", path: "src", abs: "/x/src", dir: true },
               { name: "README.md", path: "README.md", abs: "/x/README.md", dir: false },
+              { name: "spec.pdf", path: "spec.pdf", abs: "/x/spec.pdf", dir: false },
             ],
+      };
+    // F-114：版本（裝了新版第一次打開＋原始碼還有沒裝的）
+    if (name === "build_info")
+      return {
+        ok: true,
+        commit: "eb4aa0f",
+        date: "2026-11-03 00:04",
+        source: "/Users/me/RepoContextWorkbench",
+        pending: {
+          count: 1,
+          commits: [{ sha: "0c4036e", date: "11-03 00:05", subject: "fix：自我審查三個修正" }],
+        },
+        since: p.since
+          ? {
+              from: p.since,
+              count: 3,
+              commits: [
+                {
+                  sha: "eb4aa0f",
+                  date: "11-03 00:04",
+                  subject: "feat：版本看得見（F-114）＋在 Finder 中顯示（F-115）",
+                },
+                {
+                  sha: "a37c4b5",
+                  date: "11-01 10:30",
+                  subject: "feat(files)：檔案樹「移到垃圾桶」（F-67）",
+                },
+                { sha: "1bb9546", date: "10-30 10:48", subject: "feat(usage)：額度改寫「剩多少」" },
+              ],
+            }
+          : null,
+      };
+    // F-115：App 裡看不了的檔
+    if (name === "read_file" && String(p.path).endsWith(".pdf"))
+      return {
+        ok: true,
+        id: p.id,
+        path: p.path,
+        abs: "/x/" + p.path,
+        size: 348160,
+        kind: "binary",
       };
     if (name === "read_file") {
       const text = files[String(p.path)] ?? "";
@@ -642,7 +684,12 @@ if (scene === "workspace" || scene === "panel-info") {
   put("panelRepo", "repo-a");
   put("panelTab", scene === "workspace" ? "changes" : "info");
 }
-if (scene === "tree-new" || scene === "rename") {
+if (scene === "build-updated") put("build:seen", "9a41433");
+if (scene === "binary") {
+  put("openFiles", [{ repo: "repo-a", path: "spec.pdf" }]);
+  put("activeFile", "repo-a\u0000spec.pdf");
+}
+if (scene === "tree-new" || scene === "rename" || scene === "trash") {
   put("panelRepo", "repo-a");
   put("panelTab", "files");
 }
@@ -736,6 +783,14 @@ if (scene === "rename")
     );
     row?.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true }));
   });
+if (scene === "trash")
+  later(900, () => {
+    const row = document.querySelector<HTMLElement>(
+      '#repopanel [role="treeitem"][data-path="README.md"]',
+    );
+    row?.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+  });
+if (scene === "build-updated") later(900, () => click("#buildupdated"));
 if (scene === "tablist") later(900, () => click('button[aria-label="開啟的檔案清單"]'));
 if (scene === "past-sessions") later(700, () => click("#pastbtn"));
 if (scene === "diff-notes")
