@@ -696,10 +696,16 @@ export function TerminalPanel(props: {
                 ? [{ label: "在終端裡找（⌘F）", run: () => openFindRef.current() }]
                 : []),
               // 只打開紀錄表單；不會結束程序、也不會 commit
-              { label: "記錄本次工作結果…", run: () => ui.openDetail(sessionResultSpec(info)) },
+              {
+                label: "記錄本次工作結果…",
+                sep: true,
+                run: () => ui.openDetail(sessionResultSpec(info)),
+              },
               {
                 label: "停止此會話程序…",
                 danger: true,
+                // 會收掉程序：跟其他動作隔開
+                sep: true,
                 run: () => ui.openDetail(confirmKillSpec(info)),
               },
             ]}
