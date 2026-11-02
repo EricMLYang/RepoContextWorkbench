@@ -217,7 +217,9 @@ function InstallDetail({ st }: { st: InstallStatus }) {
           (alive ? "現在有 " + alive + " 個執行中會話，結束 App 會一起結束它們。" : "")
         : st.phase === "installing"
           ? "正在換成新版，好了會自動重新打開。"
-          : "背景更新沒有完成：" + (st.detail || "（沒有說明）") + "。App 沒有被換掉。";
+          : "背景更新沒有完成：" +
+            (st.detail || "（沒有說明）") +
+            "。細節看下面的輸出紀錄；換之前的版本備份在 ~/.cache/repo-context/app-backups/。";
   return (
     <DetailLayout
       actions={
