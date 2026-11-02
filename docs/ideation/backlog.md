@@ -178,7 +178,7 @@
 | F-113 | 會話 | 圖片貼進 agent 會話（存檔後貼 @路徑） | 同介面 | BAT image attachment | P2 | 完成（R37，見 rounds/20261021_R37） | R37 | R37 |
 | F-114 | 留痕 | 版本看得見：`ctx --version` 帶 commit；App 狀態列寫這版、原始碼有沒裝的 commit 就提示「N 個改動沒裝」、裝了新版第一次打開說「已更新：多了什麼」 | 同介面 | 使用者兩週內問四次「是新版嗎」 | P1 | 完成（R38，見 rounds/20261102_R38_檢討近兩週的體驗小修.md） | R38 | R38 |
 | F-115 | 瀏覽 | 檔案樹／檢視器「在 Finder 中顯示」（⌥⌘R）「用預設 App 開啟」（會執行的檔擋掉） | 同介面 | VS Code Reveal in Finder | P2 | 完成（R38） | R38 | R38 |
-| F-116 | 執行層 | 移到垃圾桶後可「復原」（放回原處） | 同介面 | VS Code ⌘Z | P3 | 構想（等真用說需要） | R38 | R38 |
+| F-116 | 執行層 | 移到垃圾桶後可「復原」（放回原處） | 同介面 | VS Code ⌘Z | P3 | 擱置（R38 試過：JXA 拿 trashItemAtURL 的 resultingItemURL 要用 out 參數，`Ref()` 直接 crash（exit 139）；~/.Trash 沒有完整磁碟取用權限列不出來，也找不到丟到哪。要做就得加 objc2-foundation 或改成自己搬進 ~/.Trash——後者 Finder 的「放回原處」會失效。現在靠確認列＋Finder 放回原處） | R38 | R38 |
 | F-117 | 執行層 | 檔案樹拖曳搬移、多選 | 同介面 | VS Code 檔案總管 | P3 | 構想 | R38 | R38 |
 | F-118 | 留痕 | 背景更新：「N 個改動沒裝」→「背景 build 新版」，App 開著照用、build 好了等你 ⌘Q 才換、換好自動重開（install-app.sh --wait --reopen，狀態檔給 App 看進度） | 同介面 | 重裝要「結束 App→開別的終端→跑腳本→再打開」，使用者常不確定裝了沒（R38） | P1 | 完成（R38，只有 macOS） | R38 | R38 |
 | F-119 | 脈絡 | ⌘K「%」搜內容：md、程式碼、過去的判斷，跟 agent 的 search_knowledge 同一個函式；Enter 開檔捲到那一行 | 同介面、脈絡 | agent 有 search_knowledge、人在 App 裡只能用檔名找（R38 檢查「同介面」時看到）；VS Code 快速開啟的「%」 | P1 | 完成（R38） | R38 | R38 |
