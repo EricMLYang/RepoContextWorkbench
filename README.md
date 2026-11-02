@@ -93,9 +93,12 @@ ctx app                                  # 找 Repo Context.app（ctx 同目錄�
   會話列紅點、牌組卡「N 個等你」、工作區「回到會話」（等你的優先）、選單列「等你 N」（點了切過去）。
   不用另外設定（只掛在 App 開的會話，不動 `~/.claude/settings.json`）。會話列的標題是 Claude Code 自己取的對話標題，
   在等你或做完沒看時多一行最後回覆；小點紅＝要你允許／回答（那列有「去處理」切到終端，打字回答對它沒用）、亮綠＝做完沒看、暗綠＝看過了；Dock 圖示的數字＝這兩種的會話數。
-- **額度餘光**：狀態列右下「5h 62%（23:10 重置） · 7d 31%」＝Claude Code 訂閱額度（App 開的會話每輪回報，不花額度），
-  過 80% 變琥珀。活動分頁的健康段與 `ctx health` 另列「程式化呼叫」（碰撞判定、ask_repo、助手、backfill 用的 `claude -p`，
-  走另計額度）次數；不想花就在 spine `config.yaml` 設 `provider: {programmatic: "off"}`。
+- **額度餘光**：狀態列右下「Claude 5h 剩 38%（2.5 hr 後重置）· 週 剩 69%（3.2 天後重置）」「Codex …」＝還剩多少、多久後重置，
+  一眼判斷現在要多用還是省著用（Claude＝整個帳號的用量，App 開的會話每輪回報；Codex＝讀它自己的會話紀錄；都不花額度）。
+  剩不到 20% 變琥珀、超過 30 分鐘沒更新變淡、重置時間過了寫「已重置」。活動分頁的健康段與 `ctx health` 另列「程式化呼叫」
+  （碰撞判定、ask_repo、助手、backfill 用的 `claude -p`，用訂閱登入時吃同一份額度）次數；不想花就在 spine `config.yaml` 設 `provider: {programmatic: "off"}`。
+- **版本**：狀態列最右邊是現在跑的 commit（`ctx --version` 也有）；原始碼比它新就琥珀「N 個改動沒裝」，裝了新版第一次打開是
+  「已更新 · N 項改動」（點開列出多了什麼、可以驗收什麼）；重裝後 agent 的 skill 還是舊的就多一顆「更新 agent 的 skill」。
 - **有 agent 在跑就不讓機器睡**（macOS）：App 開的會話處理中時自動 `caffeinate -i`，都做完就收掉；
   不要的話在 `~/.config/repo-context/config.json` 加 `"keep_awake": false`。
 - **在等你的會話直接回**：會話列紅點那列有「回答…」，打一句 Enter 就切到該會話並貼進輸入框（不送出，看一眼再按 Enter）；
