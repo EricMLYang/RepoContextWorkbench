@@ -319,6 +319,7 @@ const backend: Backend = {
         ok: true,
         commit: "eb4aa0f",
         date: "2026-11-03 00:04",
+        skill: "stale",
         source: "/Users/me/RepoContextWorkbench",
         pending: {
           count: 1,
