@@ -22,7 +22,7 @@ use common::{finish, Ctx};
 #[command(
     name = "ctx",
     about = "repo-context 工作台：把一群 repo 分成組，每組組成一份 context",
-    version,
+    version = ctx_core::build::VERSION,
     infer_long_args = true
 )]
 pub struct Cli {

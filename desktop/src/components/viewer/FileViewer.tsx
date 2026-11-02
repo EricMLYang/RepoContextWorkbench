@@ -4,6 +4,7 @@ import { langOf, tokenizeLine, type HlState, type Lang } from "../../lib/highlig
 import type { FileContent, ScreenFileDetail } from "../../api/types";
 import { Markdown, type MdHooks } from "../../lib/markdown";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
+import { OPEN_EXTERNAL_LABEL, REVEAL_LABEL, openInSystem } from "../../lib/systemOpen";
 import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
 import { useStore, useUi } from "../../store/context";
 import { load as loadPref, save as savePref } from "../../lib/storage";
@@ -977,6 +978,12 @@ export function FileViewer({
   moreItems.push({ label: "複製相對路徑", run: () => copy(store, path, "相對路徑") });
   if (content)
     moreItems.push({ label: "複製絕對路徑", run: () => copy(store, content.abs, "絕對路徑") });
+  moreItems.push({ label: REVEAL_LABEL, run: () => openInSystem(store, repo, path, "reveal") });
+  if (content)
+    moreItems.push({
+      label: OPEN_EXTERNAL_LABEL,
+      run: () => openInSystem(store, repo, path, "open"),
+    });
   if (!dirty && !loading) moreItems.push({ label: "重新讀取", run: reload });
   return (
     <section className="viewer" hidden={hidden} aria-label={"檢視：" + repo + "/" + path}>
@@ -1357,11 +1364,26 @@ export function FileViewer({
             <img src={"data:" + content.mime + ";base64," + content.base64} alt={path} />
           </div>
         ) : (
-          <p className="viewernote">
-            {content.kind === "too_large"
-              ? "圖片太大（" + fmtSize(content.size) + "），不在 App 裡顯示。"
-              : "這是二進位檔（" + fmtSize(content.size) + "），沒有可以顯示的文字。"}
-          </p>
+          <div className="viewernote">
+            <p>
+              {content.kind === "too_large"
+                ? "圖片太大（" + fmtSize(content.size) + "），不在 App 裡顯示。"
+                : "這是二進位檔（" + fmtSize(content.size) + "），沒有可以顯示的文字。"}
+            </p>
+            {/* PDF、docx 這類 App 裡看不了的：交給系統的預設 App（F-115） */}
+            <p className="viewernoteacts">
+              <button type="button" onClick={() => openInSystem(store, repo, path, "open")}>
+                {OPEN_EXTERNAL_LABEL}
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => openInSystem(store, repo, path, "reveal")}
+              >
+                {REVEAL_LABEL}
+              </button>
+            </p>
+          </div>
         )}
       </div>
     </section>

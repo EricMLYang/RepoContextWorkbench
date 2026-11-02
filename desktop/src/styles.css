@@ -1108,6 +1108,31 @@ td button {
 #status .usagewarn {
   color: var(--amber);
 }
+/* 狀態列裡可以點的字（版本：已更新／沒裝的改動） */
+#status .statusbtn {
+  padding: 0 4px;
+  min-height: 0;
+  font: inherit;
+  color: var(--blue);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+#status .statusbtn.usagewarn {
+  color: var(--amber);
+}
+#status .statusbtn:hover {
+  text-decoration: underline;
+}
+.buildcommits {
+  margin: 8px 0;
+  padding-left: 18px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.buildcommits li {
+  margin-bottom: 6px;
+}
 /* 很久沒更新：數字可能已經不是現在的 */
 #status .usagestale {
   opacity: 0.6;
@@ -2128,6 +2153,10 @@ button.filetab.home {
 .viewernote {
   color: var(--sub);
   font-size: 13px;
+}
+.viewernoteacts {
+  display: flex;
+  gap: 8px;
 }
 .viewererror {
   margin: 10px 0 0;

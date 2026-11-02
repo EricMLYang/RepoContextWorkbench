@@ -1,6 +1,7 @@
 /** 頂列、頁尾、toast——外框元件。 */
 import { useEffect, useState } from "react";
 import type { Usage, UsageWindow } from "../api/types";
+import { BuildStatus } from "./BuildStatus";
 import { connectionText, scopeLabel } from "../lib/view";
 import { useSnapshot, useStore, useUi } from "../store/context";
 
@@ -142,6 +143,7 @@ export function StatusBar() {
           {codex}
         </span>
       ) : null}
+      <BuildStatus />
       <span id="sesscount">{alive + " 個執行中會話"}</span>
       <span>Ctrl + ` 終端</span>
     </footer>

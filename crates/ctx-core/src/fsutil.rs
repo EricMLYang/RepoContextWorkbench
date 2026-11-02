@@ -141,6 +141,58 @@ pub fn move_to_trash(p: &Path) -> std::io::Result<()> {
     }))
 }
 
+/// 交給系統（2026-11-02，F-115）：`reveal`＝在 Finder／檔案總管裡顯示並選起來；否則用預設 App 開。
+/// macOS `open [-R]`、Windows `explorer [/select,]`、其他 `xdg-open`（顯示＝開上層資料夾）。不等 App 開完。
+pub fn open_with_system(p: &Path, reveal: bool) -> std::io::Result<()> {
+    use std::process::{Command, Stdio};
+    #[cfg(target_os = "macos")]
+    let mut c = {
+        let mut c = Command::new("/usr/bin/open");
+        if reveal {
+            c.arg("-R");
+        }
+        c.arg("--").arg(p);
+        c
+    };
+    #[cfg(windows)]
+    let mut c = {
+        let mut c = Command::new("explorer");
+        if reveal {
+            let mut a = std::ffi::OsString::from("/select,");
+            a.push(p);
+            c.arg(a);
+        } else {
+            c.arg(p);
+        }
+        c
+    };
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let mut c = {
+        let mut c = Command::new("xdg-open");
+        c.arg(if reveal { p.parent().unwrap_or(p) } else { p });
+        c
+    };
+    c.stdin(Stdio::null()).stdout(Stdio::null());
+    // explorer 成功也回 1：Windows 只看起不起得來
+    #[cfg(windows)]
+    {
+        c.spawn().map(|_| ())
+    }
+    #[cfg(not(windows))]
+    {
+        let out = c.stderr(Stdio::piped()).output()?;
+        if out.status.success() {
+            return Ok(());
+        }
+        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        Err(std::io::Error::other(if err.is_empty() {
+            "系統沒有開它".to_string()
+        } else {
+            err
+        }))
+    }
+}
+
 /// 原子寫檔（DEVELOPMENT.md §8）：同資料夾的暫存檔（隱藏、名稱不可預測、`create_new` 不跟隨既有的檔或
 /// 符號連結）→ fsync → 原檔在就沿用它的權限 → rename。讀的人不會看到寫一半的檔；失敗不留暫存檔。
 /// `p` 是符號連結時改寫的是連結本身（要寫實體檔請先 canonicalize）。

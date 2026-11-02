@@ -103,6 +103,8 @@ Rust 端簽名建議：
 | `backlinks`（Rust 才有，唯讀） | `{id, path}` | `items: [{path, line, text}]`, `more`。repo 裡哪些 md 連到這個檔：照相對連結解析（`/` 開頭＝repo 根、去掉 #／?）、跳過程式碼區塊與自己、最多看 3000 份 md、列 50 則 |
 | `rename_entry`（Rust 才有） | `{id, from, to}` | `from`, `path`（新的相對路徑）, `abs`, `dir`。改名或搬移：`from` 要存在（符號連結改連結本身），`to` 同 `create_entry` 的規則（不覆蓋、上層一路建、不碰 .git、不跳出 repo）；不刪任何東西、不記 spine 事件 |
 | `trash_entry`（Rust 才有，F-67） | `{id, path}` | `path`, `abs`, `dir`。移到系統垃圾桶（macOS 垃圾桶、Windows 資源回收筒；不直接刪）：`path` 要存在、不能是根目錄、不碰 .git、不跳出 repo（符號連結移的是連結本身）；不記 spine 事件 |
+| `open_entry`（Rust 才有，F-115） | `{id, path, how: "reveal"\|"open"}` | `path`, `abs`（實體路徑）。`reveal`＝在 Finder／檔案總管中顯示（`path` 空＝repo 根目錄）；`open`＝用預設 App 開（只開檔：資料夾、可執行檔、`.app`／`.command`／`.exe`／`.bat`… 這類打開就執行的擋掉）；路徑要在 repo 裡；不改任何檔（唯讀 action） |
+| `build_info`（Rust 才有，F-114） | `{since?}` | `commit`, `date`（這版的 commit 與時間；不在 git 裡 build＝null）, `source`（build 時的原始碼目錄，不在這台＝null）, `pending: {count, commits}`（原始碼有、這版沒有的 commit）, `since: {from, count, commits}`（從 `since` 那版到這版多了什麼；同一版或認不得＝null）；commit＝`{sha, date, subject}`，每份最多 30 個。唯讀，只問本機 git |
 | `assist_plan`（Rust 才有，唯讀） | `{text, group?, repos?}`（目前範圍） | `text`, `summary`, `source: "rules"\|"agent"`, `steps: [{op, args, text, why, danger, error?}]`。一句話 → 白名單內的步驟（見 `docs/APP_ASSISTANT.md`）；常見說法本機規則直接翻，其他問 config `provider.assist`（沒設＝claude、model 預設 haiku）。**不執行**：App 照步驟呼叫原本的 action |
 | `assist_recent`（Rust 才有，唯讀） | `{}` | `texts`：最近用過、真的做了事的助手指令（新的在前、同一句只留一次、最多 5 句；復原不算） |
 | `assist_log`（Rust 才有） | `{text, group?, done: [人話], skipped: [人話], failed?}` | 落 presented [assist] 事件（指令、做了哪些、略過哪些、在哪步失敗） |

@@ -948,6 +948,16 @@ export interface ActionMap {
     payload: { id: string; from: string; to: string };
     result: { ok: true; id: string; from: string; path: string; abs: string; dir: boolean };
   };
+  /** Rust 才有（F-115）：在 Finder 中顯示（path 空＝根目錄）／用預設 App 開啟（只開檔；會執行的檔擋掉）。 */
+  open_entry: {
+    payload: { id: string; path: string; how: "reveal" | "open" };
+    result: { ok: true; id: string; path: string; abs: string };
+  };
+  /** Rust 才有（F-114）：現在跑的是哪一版；pending＝原始碼有、這版沒有的 commit；since＝從上次看過的那版到這版多了什麼。 */
+  build_info: {
+    payload: { since?: string };
+    result: BuildInfo;
+  };
   /** Rust 才有（F-67）：移到系統垃圾桶（不直接刪；不能是根目錄或 .git）。 */
   trash_entry: {
     payload: { id: string; path: string };
@@ -1064,3 +1074,20 @@ export const ACTION_NAMES: ActionName[] = [
   "session_seen",
   "session_result",
 ];
+
+/** 一個 commit（F-114 版本資訊用）。 */
+export interface BuildCommit {
+  sha: string;
+  /** "MM-DD HH:MM" */
+  date: string;
+  subject: string;
+}
+/** 現在跑的是哪一版（F-114）。不在 git 裡 build 的：commit／date 是 null；原始碼不在這台：source／pending 是 null。 */
+export interface BuildInfo {
+  ok: true;
+  commit: string | null;
+  date: string | null;
+  source: string | null;
+  pending: { count: number; commits: BuildCommit[] } | null;
+  since: { from: string; count: number; commits: BuildCommit[] } | null;
+}

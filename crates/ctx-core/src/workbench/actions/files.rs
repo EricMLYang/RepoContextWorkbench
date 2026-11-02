@@ -156,6 +156,22 @@ pub(super) fn a_trash_entry(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Resu
     Ok(json!({"ok": true, "id": id, "path": path, "abs": abs.to_string_lossy(), "dir": dir}))
 }
 
+/// Rust 才有（F-115）：在 Finder 中顯示／用預設 App 開啟（見 [`crate::filetree::open_in_system`]）；不改任何檔。
+#[derive(serde::Deserialize)]
+struct OpenEntryArgs {
+    id: String,
+    #[serde(default)]
+    path: String,
+    how: crate::filetree::SystemOpen,
+}
+
+pub(super) fn a_open_entry(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let OpenEntryArgs { id, path, how } = parse("open_entry", p)?;
+    let root = registry::get_repo(d, &id)?.path();
+    let real = crate::filetree::open_in_system(&root, &path, how)?;
+    Ok(json!({"ok": true, "id": id, "path": path, "abs": real.to_string_lossy()}))
+}
+
 /// Rust 才有（F-64）：md 編輯區貼上圖片存成新檔（見 [`crate::filetree::save_image`]）；不覆蓋、不記 spine 事件。
 #[derive(serde::Deserialize)]
 struct SaveImageArgs {

@@ -18,6 +18,7 @@
 //! 上層資料夾沒有就一路建（但最近一個已存在的上層必須在 repo 裡）；不准建在 `.git` 裡。
 //! [`rename_entry`]（同日）：改名或搬移，新路徑同一套規則；不刪任何東西。
 //! [`trash_entry`]（2026-11-01，F-67）：移到系統垃圾桶（不是直接刪），找得回來；路徑規則同改名。
+//! [`open_in_system`]（2026-11-02，F-115）：在 Finder 中顯示／用預設 App 開啟；會執行程式的檔不開。
 //!
 //! [`changes`]／[`diff`]（2026-10-14）：還沒 commit 的變更與單檔差異（看 agent 改了什麼）。只讀，交給 git。
 //!
@@ -552,6 +553,80 @@ pub fn trash_entry(root: &Path, rel: &str) -> Result<(PathBuf, bool)> {
     crate::fsutil::move_to_trash(&src)
         .map_err(|e| Error::invalid(format!("移不到垃圾桶：{rel}（{e}）")))?;
     Ok((root.join(rel_p), meta.is_dir()))
+}
+
+/// [`open_in_system`] 要做什麼。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SystemOpen {
+    /// 在 Finder／檔案總管裡顯示（選起來）。
+    Reveal,
+    /// 用預設 App 開。
+    Open,
+}
+
+/// 用預設 App 開會直接執行的檔（macOS 雙擊就跑、Windows 會執行）：不開，請使用者在 Finder 裡自己決定。
+const RUNS_ON_OPEN: &[&str] = &[
+    "app",
+    "command",
+    "tool",
+    "terminal",
+    "workflow",
+    "pkg",
+    "mpkg",
+    "scpt",
+    "applescript",
+    "action",
+    "exe",
+    "bat",
+    "cmd",
+    "com",
+    "ps1",
+    "vbs",
+    "vbe",
+    "js",
+    "jse",
+    "wsf",
+    "wsh",
+    "msi",
+    "lnk",
+    "scr",
+    "hta",
+    "cpl",
+    "reg",
+];
+
+/// 在 Finder 中顯示（`rel` 可以是根目錄）或用預設 App 開啟（2026-11-02，F-115）。
+/// 路徑要在 repo 裡（符號連結跳出去也擋）；開啟只開檔案，資料夾、可執行檔、[`RUNS_ON_OPEN`] 的副檔名都擋。回實體路徑。
+pub fn open_in_system(root: &Path, rel: &str, how: SystemOpen) -> Result<PathBuf> {
+    let (_, _, real) = resolve_in(root, rel, "路徑")?;
+    if how == SystemOpen::Open {
+        if real.is_dir() {
+            return Err(Error::invalid(format!(
+                "資料夾請用「在 Finder 中顯示」：{rel}"
+            )));
+        }
+        let ext = real
+            .extension()
+            .map(|e| e.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        #[cfg(unix)]
+        let exec = {
+            use std::os::unix::fs::PermissionsExt;
+            real.metadata()
+                .is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
+        };
+        #[cfg(not(unix))]
+        let exec = false;
+        if exec || RUNS_ON_OPEN.contains(&ext.as_str()) {
+            return Err(Error::invalid(format!(
+                "這種檔打開會直接執行，不從這裡開；請用「在 Finder 中顯示」：{rel}"
+            )));
+        }
+    }
+    crate::fsutil::open_with_system(&real, how == SystemOpen::Reveal)
+        .map_err(|e| Error::invalid(format!("系統開不了：{rel}（{e}）")))?;
+    Ok(real)
 }
 
 /// 改名或搬移（2026-10-15，F-66）：`from` 是 repo 裡已存在的檔或資料夾（符號連結改的是連結本身），
@@ -1341,6 +1416,41 @@ mod tests {
         }
         assert!(r.join("b.md").exists() && r.join(".git").exists());
         assert!(t.path().join("outside.md").exists());
+    }
+
+    /// 只測擋下來的（真的開會叫出 Finder；真開在 TESTING 8d 手測）。
+    #[test]
+    fn open_in_system_refuses_dirs_runnables_and_escapes() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path().join("repo");
+        std::fs::create_dir_all(r.join("d")).unwrap();
+        for f in ["run.command", "Setup.EXE", "x.app"] {
+            std::fs::write(r.join(f), "").unwrap();
+        }
+        std::fs::write(t.path().join("outside.md"), "").unwrap();
+        for bad in [
+            "d",
+            "",
+            "run.command",
+            "Setup.EXE",
+            "x.app",
+            "../outside.md",
+            "nope.md",
+        ] {
+            assert!(
+                open_in_system(&r, bad, SystemOpen::Open).is_err(),
+                "應該擋：{bad:?}"
+            );
+        }
+        assert!(open_in_system(&r, "../outside.md", SystemOpen::Reveal).is_err());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::write(r.join("tool"), "").unwrap();
+            std::fs::set_permissions(r.join("tool"), std::fs::Permissions::from_mode(0o755))
+                .unwrap();
+            assert!(open_in_system(&r, "tool", SystemOpen::Open).is_err());
+        }
     }
 
     #[cfg(unix)]

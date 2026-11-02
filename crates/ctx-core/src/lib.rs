@@ -12,6 +12,7 @@ pub mod assist;
 pub mod auto_continue;
 pub mod backfill;
 pub mod brief;
+pub mod build;
 pub mod collect;
 pub mod collide;
 pub mod config;

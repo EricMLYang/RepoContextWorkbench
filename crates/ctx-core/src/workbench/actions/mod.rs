@@ -29,8 +29,8 @@ mod sessions;
 
 use briefs::{a_pick_brief, a_profile_draft_brief, a_review_brief};
 use files::{
-    a_backlinks, a_create_entry, a_read_file, a_rename_entry, a_repo_tree, a_save_image,
-    a_trash_entry, a_write_file,
+    a_backlinks, a_create_entry, a_open_entry, a_read_file, a_rename_entry, a_repo_tree,
+    a_save_image, a_trash_entry, a_write_file,
 };
 use finder::{a_file_diff, a_palette, a_repo_changes, a_scope_changes};
 use namecard::{a_describe_repo, a_repo_class, a_repo_profile};
@@ -123,6 +123,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("create_entry", a_create_entry),
     ("rename_entry", a_rename_entry),
     ("trash_entry", a_trash_entry),
+    ("open_entry", a_open_entry),
     ("save_image", a_save_image),
     ("session_image", files::a_session_image),
     ("backlinks", a_backlinks),
@@ -154,6 +155,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("session_result", a_session_result),
     ("auto_continue", a_auto_continue),
     ("screen", a_screen),
+    ("build_info", a_build_info),
 ];
 
 /// 不寫入任何東西的 action：殼不發 `workbench://changed`（否則展開資料夾、開檔都會讓前端重抓整份 state）。
@@ -187,6 +189,9 @@ const READ_ONLY: &[&str] = &[
     "diff_notes_brief",
     // 只寫 `.state/screen.json`（給 agent 問「使用者在看什麼」），畫面不必重抓
     "screen",
+    // 交給 Finder／預設 App，不改任何檔
+    "open_entry",
+    "build_info",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -239,6 +244,20 @@ const RESCAN_AFTER: &[&str] = &[
 fn a_screen(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     let changed = crate::screen::record(d, parse("screen", p)?)?;
     Ok(json!({"ok": true, "changed": changed}))
+}
+
+/// 現在跑的是哪一版、原始碼有沒有還沒裝的改動、從 `since` 那版到這版多了什麼（F-114；見 [`crate::build::info`]）。
+#[derive(serde::Deserialize)]
+struct BuildInfoArgs {
+    #[serde(default)]
+    since: Option<String>,
+}
+
+fn a_build_info(_d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let BuildInfoArgs { since } = parse("build_info", p)?;
+    let mut v = crate::build::info(since.as_deref());
+    v["ok"] = json!(true);
+    Ok(v)
 }
 
 /// 把 payload 解析成型別化參數。**新 action 一律用這個**（缺欄位、型別不對都在這裡擋下）；

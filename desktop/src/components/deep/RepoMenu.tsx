@@ -1,11 +1,12 @@
 import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
+import { REVEAL_LABEL, openInSystem } from "../../lib/systemOpen";
 import { useStore, useUi } from "../../store/context";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 import { repoDetailSpec } from "./RepoDetail";
 import { canRemoveFromScope, removeFromScope } from "./repoActions";
 
 /**
- * repo 的右鍵選單：在側邊欄開啟、更多細節…、開會話、複製路徑、從這組移除、移出工作台…。
+ * repo 的右鍵選單：在側邊欄開啟、更多細節…、開會話、複製路徑、在 Finder 中顯示、從這組移除、移出工作台…。
  * 帶「…」的才跳視窗。方向鍵移動、Enter 執行、Esc／點外面關閉。
  */
 export function RepoMenu(props: { id: string; x: number; y: number; onClose: () => void }) {
@@ -34,6 +35,7 @@ export function RepoMenu(props: { id: string; x: number; y: number; onClose: () 
         }
       },
     });
+  if (path) items.push({ label: REVEAL_LABEL, run: () => openInSystem(store, id, "", "reveal") });
   if (canRemoveFromScope(store, id))
     items.push({
       label: "從這組移除",

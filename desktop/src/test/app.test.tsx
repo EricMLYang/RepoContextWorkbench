@@ -20,6 +20,79 @@ async function mount(backend = mockBackend()) {
 beforeEach(() => localStorage.clear());
 afterEach(() => cleanup());
 
+describe("狀態列的版本（F-114）", () => {
+  const info = (over: object) => ({
+    ok: true,
+    commit: "bbbbbbb",
+    date: "2026-11-02 23:00",
+    source: "/src/rcw",
+    pending: { count: 0, commits: [] },
+    since: null,
+    ...over,
+  });
+
+  it("第一次打開只寫 commit 並記下；沒有「已更新」", async () => {
+    const backend = mockBackend({
+      action: vi.fn(async (name: string) =>
+        name === "build_info" ? info({}) : { ok: true },
+      ) as never,
+    });
+    await mount(backend);
+    await waitFor(() => expect(document.getElementById("buildver")!.textContent).toBe("bbbbbbb"));
+    expect(document.getElementById("buildupdated")).toBeNull();
+    expect(document.getElementById("buildpending")).toBeNull();
+    expect(JSON.parse(localStorage.getItem("workbench:build:seen")!)).toBe("bbbbbbb");
+  });
+
+  it("裝了新版：帶上次那版問 since，「已更新 · N 項改動」點開列 commit，知道了就記下這版", async () => {
+    localStorage.setItem("workbench:build:seen", JSON.stringify("aaaaaaa"));
+    const action = vi.fn(async (name: string, p: { since?: string }) =>
+      name !== "build_info"
+        ? { ok: true }
+        : p.since === "aaaaaaa"
+          ? info({
+              since: {
+                from: "aaaaaaa",
+                count: 2,
+                commits: [
+                  { sha: "bbbbbbb", date: "11-02 23:00", subject: "feat：版本看得見" },
+                  { sha: "ccccccc", date: "11-02 22:00", subject: "feat：在 Finder 中顯示" },
+                ],
+              },
+            })
+          : info({}),
+    );
+    await mount(mockBackend({ action: action as never }));
+    expect(action).toHaveBeenCalledWith("build_info", { since: "aaaaaaa" });
+    const chip = await screen.findByRole("button", { name: "已更新 · 2 項改動" });
+    await act(async () => fireEvent.click(chip));
+    expect(screen.getByText("feat：版本看得見")).toBeTruthy();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "知道了" })));
+    expect(JSON.parse(localStorage.getItem("workbench:build:seen")!)).toBe("bbbbbbb");
+    await waitFor(() => expect(document.getElementById("buildupdated")).toBeNull());
+  });
+
+  it("原始碼有沒裝的 commit：琥珀「N 個改動沒裝」，點開說怎麼裝", async () => {
+    const backend = mockBackend({
+      action: vi.fn(async (name: string) =>
+        name === "build_info"
+          ? info({
+              pending: {
+                count: 1,
+                commits: [{ sha: "ddddddd", date: "11-03 01:00", subject: "fix：某個修正" }],
+              },
+            })
+          : { ok: true },
+      ) as never,
+    });
+    await mount(backend);
+    const chip = await screen.findByRole("button", { name: "1 個改動沒裝" });
+    await act(async () => fireEvent.click(chip));
+    expect(screen.getByText("fix：某個修正")).toBeTruthy();
+    expect(screen.getByText(/bash scripts\/install-app\.sh/)).toBeTruthy();
+  });
+});
+
 describe("收件匣卡片按鈕", () => {
   it("主要動作呼叫卡片指定的 action 與 payload", async () => {
     const { backend } = await mount();
@@ -90,7 +163,8 @@ describe("碰撞台草稿", () => {
     const { backend } = await mount();
     act(() => void fireEvent.click(screen.getByRole("button", { name: "請 Agent 分析想法…" })));
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "開始分析" })));
-    expect(backend.action).not.toHaveBeenCalled();
+    // 狀態列打開時會問一次版本（build_info），其他什麼都不送
+    expect(vi.mocked(backend.action).mock.calls.filter((c) => c[0] !== "build_info")).toEqual([]);
     expect(document.getElementById("ideaerror")!.textContent).toBe("先寫下一個想法，再開始分析。");
   });
 });
@@ -950,6 +1024,7 @@ describe("repo 右側欄與右鍵選單", () => {
       "更多細節…",
       "開啟 Agent 會話…",
       "複製絕對路徑",
+      "在 Finder 中顯示",
       "從這組移除",
       "移出工作台…",
     ]);
@@ -1471,6 +1546,72 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     await waitFor(() => expect(screen.queryByRole("treeitem", { name: "README.md" })).toBeNull());
     expect(screen.queryByRole("button", { name: "關閉 README.md" })).toBeNull();
     expect(screen.getByRole("treeitem", { name: "b.md" })).toBeTruthy();
+  });
+
+  it("在 Finder 中顯示／用預設 App 開啟（F-115）：右鍵、⌥⌘R；二進位檔的檢視器也給按鈕；失敗用 toast", async () => {
+    const backend = mockBackend({
+      action: vi.fn(async (name: string, p: { id?: string; path?: string; how?: string }) => {
+        if (name === "repo_tree")
+          return {
+            ok: true,
+            id: p.id,
+            root: "/r/a",
+            dir: "",
+            more: 0,
+            entries: [
+              { name: "docs", path: "docs", abs: "/r/a/docs", dir: true },
+              { name: "spec.pdf", path: "spec.pdf", abs: "/r/a/spec.pdf", dir: false },
+            ],
+          };
+        if (name === "read_file")
+          return {
+            ok: true,
+            id: p.id,
+            path: p.path,
+            abs: "/r/a/" + p.path,
+            size: 2048,
+            kind: "binary",
+          };
+        if (name === "open_entry" && p.how === "open" && p.path === "docs")
+          throw new Error("資料夾請用「在 Finder 中顯示」：docs");
+        return { ok: true };
+      }) as never,
+    });
+    await openTree(backend);
+    const docs = await screen.findByRole("treeitem", { name: "docs" });
+    // 資料夾的右鍵：有「在 Finder 中顯示」、沒有「用預設 App 開啟」
+    await act(async () => fireEvent.contextMenu(docs));
+    const menu = screen.getByRole("menu");
+    expect(within(menu).queryByRole("menuitem", { name: /用預設 App 開啟/ })).toBeNull();
+    await act(async () =>
+      fireEvent.click(within(menu).getByRole("menuitem", { name: /在 Finder 中顯示/ })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("open_entry", {
+      id: "a",
+      path: "docs",
+      how: "reveal",
+    });
+    // ⌥⌘R
+    const pdf = screen.getByRole("treeitem", { name: "spec.pdf" });
+    await act(async () =>
+      fireEvent.keyDown(pdf, { code: "KeyR", key: "®", altKey: true, metaKey: true }),
+    );
+    expect(backend.action).toHaveBeenCalledWith("open_entry", {
+      id: "a",
+      path: "spec.pdf",
+      how: "reveal",
+    });
+    // 二進位檔：檢視器說看不了，給「用預設 App 開啟」
+    await act(async () => fireEvent.click(pdf));
+    const viewer = screen.getByRole("region", { name: "檢視：a/spec.pdf" });
+    await act(async () =>
+      fireEvent.click(within(viewer).getByRole("button", { name: "用預設 App 開啟" })),
+    );
+    expect(backend.action).toHaveBeenCalledWith("open_entry", {
+      id: "a",
+      path: "spec.pdf",
+      how: "open",
+    });
   });
 
   it("新增檔案失敗（同名）：錯誤留在輸入列，不開分頁", async () => {
@@ -2509,7 +2650,7 @@ describe("會話放進所屬牌組", () => {
     );
     // 再切過去：沿用已開的 Terminal，不再開新的
     await act(async () => fireEvent.click(within(bar).getByRole("button", { name: "Terminal" })));
-    expect(action).toHaveBeenCalledTimes(1);
+    expect(action.mock.calls.filter((c) => c[0] !== "build_info")).toHaveLength(1);
   });
 
   it("挑好的檔案貼到目前會話：@路徑以空白分隔、不按 Enter；沒有選會話時不出現按鈕", async () => {

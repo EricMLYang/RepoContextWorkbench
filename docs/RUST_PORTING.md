@@ -366,6 +366,9 @@ CLI／MCP（ctx-cli）：
   「Claude 5h 62%（2.5 hr 後重置）· 週 31%（3.2 天後重置）  Codex …」，超過 30 分鐘沒更新變淡、標「N 前」。
   2026-10-30 改寫剩多少：「Claude 5h 剩 38%（2.5 hr 後重置）· 週 剩 69%（3.2 天後重置）」（`ctx health` 同一套）；
   讀出時重置時間已過的視窗多 `expired: true`、寫「已重置」，`warn` 只算還沒重置的視窗。
+- **版本看得見**（2026-11-02，F-114；Python 沒有）：`ctx-core/build.rs` 把 build 時的 commit、commit 時間、原始碼目錄寫進執行檔
+  （HEAD 動了才重跑）；`ctx --version`＝`ctx 0.2.0 (a37c4b5 2026-11-01 10:30)`（Python 只印版本號，對拍不比這行）；
+  action `build_info` 到原始碼目錄問 git（沒裝的 commit、從上次看過的那版到這版多了什麼），App 狀態列畫出來。
 - **這組標為已讀 `ack_scope`**（2026-10-15，N-37；Python 沒有）：`.state/seen_scopes.json`（範圍鍵 → 時間），
   `build_state` 藏起該範圍在那之前的一般未讀卡；全域 `last_seen.txt`、`ack`、`unread` 清單都不變。
 - **CLI `ctx assist "<一句話>" [--yes]`**（2026-10-15，F-63；Python 沒有）：跟 ⌘K「?」、MCP `workbench_apply` 同一份白名單；

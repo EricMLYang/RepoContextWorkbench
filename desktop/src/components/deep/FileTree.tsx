@@ -12,6 +12,7 @@ import { load as loadPref, save as savePref } from "../../lib/storage";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
 import { FILE_DRAG_TYPE } from "../../lib/view";
 import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
+import { OPEN_EXTERNAL_LABEL, REVEAL_LABEL, openInSystem } from "../../lib/systemOpen";
 import { MARK_LABEL, MARK_LETTER, gitMarks, type GitMark } from "../../lib/gitMarks";
 import { samePick, useSnapshot, useStore, useUi, useUiState, type Pick } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
@@ -289,7 +290,7 @@ function NewEntryRow(props: {
  * 磁碟上有變動（新增／刪除／改名）會自己更新（Tauri 殼監看展開中的資料夾）。
  * git 狀態上色（跟 VS Code 一樣）：檔案照狀態上色＋右邊字母（M／A／D／R／U／!／↑ 沒 push），資料夾含變更就上色＋點。
  * 右鍵：複製路徑／相對路徑、移到垃圾桶；鍵盤：↑↓ 移動、→ 展開、← 收合或回上層、Enter 開啟、⌥⌘C／⇧⌥⌘C 複製、
- * ⌘⌫／Delete 移到垃圾桶（先問）。
+ * ⌥⌘R 在 Finder 中顯示、⌘⌫／Delete 移到垃圾桶（先問）。
  * 展開狀態記在這台電腦。讀失敗保留上次的清單並顯示錯誤。
  */
 export function RepoRoot(props: {
@@ -511,6 +512,12 @@ export function RepoRoot(props: {
       const t = entries[Math.max(0, Math.min(entries.length - 1, j))];
       if (t) focusRow(t.path);
     };
+    // ⌥⌘R＝在 Finder 中顯示（跟 VS Code 一樣）
+    if (ev.code === "KeyR" && ev.altKey && (ev.metaKey || ev.ctrlKey) && !ev.shiftKey) {
+      ev.preventDefault();
+      void openInSystem(store, id, e.path, "reveal");
+      return;
+    }
     if (ev.code === "KeyC" && ev.altKey && (ev.metaKey || ev.ctrlKey)) {
       ev.preventDefault();
       if (ev.shiftKey) void copy(e.path, "相對路徑");
@@ -580,6 +587,10 @@ export function RepoRoot(props: {
     },
     { label: "複製路徑", hint: "⌥⌘C", run: () => copy(e.abs, "路徑") },
     { label: "複製相對路徑", hint: "⇧⌥⌘C", run: () => copy(e.path, "相對路徑") },
+    { label: REVEAL_LABEL, hint: "⌥⌘R", run: () => openInSystem(store, id, e.path, "reveal") },
+    ...(e.dir
+      ? []
+      : [{ label: OPEN_EXTERNAL_LABEL, run: () => openInSystem(store, id, e.path, "open") }]),
     { label: "移到垃圾桶…", hint: "⌘⌫", danger: true, run: () => setTrashing(e.path) },
   ];
 
