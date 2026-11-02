@@ -1121,6 +1121,9 @@ td button {
 #status .statusbtn.usagewarn {
   color: var(--amber);
 }
+#status .statusbtn.statusbad {
+  color: var(--red, #f87171);
+}
 #status .statusbtn:hover {
   text-decoration: underline;
 }

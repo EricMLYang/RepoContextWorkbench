@@ -6,6 +6,10 @@
 //!   以及這段期間 `docs/TESTING.md` 新增或改過的驗收列（「可以測什麼」——使用者重開 App 後最常問的）。
 //!
 //! 只讀、不打網路；git 不在或原始碼不在就只回這版本身。
+//!
+//! 背景更新（2026-11-03，F-118；只有 macOS）：[`start_install`] 在背景跑原始碼裡的 `scripts/install-app.sh --wait --reopen`
+//! ——App 開著也先 build，build 好了等使用者結束 App（⌘Q）才換、換好自動重開。腳本把階段寫進 [`install_status_path`]，
+//! [`info`] 帶出來（`install`），App 狀態列顯示進度。App 不會自己結束（會結束正在跑的會話，要使用者自己按）。
 
 use std::path::Path;
 use std::time::Duration;
@@ -96,6 +100,110 @@ fn tests_between(src: &Path, from: &str, to: &str) -> Vec<Value> {
     list
 }
 
+/// 背景更新的狀態檔（腳本寫、這裡讀）。
+pub fn install_status_path() -> std::path::PathBuf {
+    crate::fsutil::expanduser("~/.cache/repo-context/install-status.json")
+}
+
+/// 背景更新的輸出紀錄。
+pub fn install_log_path() -> std::path::PathBuf {
+    crate::fsutil::expanduser("~/.cache/repo-context/install.log")
+}
+
+/// 這個 pid 還活著嗎（Unix：kill 0；其他平台當作活著）。
+fn alive(pid: i64) -> bool {
+    #[cfg(unix)]
+    {
+        // SAFETY：kill(pid, 0) 只檢查存在與權限，不送訊號
+        pid > 0 && unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        true
+    }
+}
+
+/// 進行中的階段（腳本還在跑）。
+const IN_PROGRESS: &[&str] = &["building", "waiting", "installing"];
+
+/// 背景更新的狀態：`{phase, at, pid, commit, detail, log, current, age_min}`；沒有就 None。
+/// 狀態檔說進行中但那個程序已經不在了（被砍、機器重開）＝`failed`、detail「中途停了」。
+/// `current`＝那次更新的 commit 就是現在跑的這版（App 不必再提）。
+pub fn install_status() -> Option<Value> {
+    read_status(&install_status_path(), chrono::Local::now())
+}
+
+fn read_status(path: &Path, now: chrono::DateTime<chrono::Local>) -> Option<Value> {
+    let s = std::fs::read_to_string(path).ok()?;
+    let mut v: Value = serde_json::from_str(s.trim()).ok()?;
+    let phase = v.get("phase")?.as_str()?.to_string();
+    if IN_PROGRESS.contains(&phase.as_str()) && !alive(v["pid"].as_i64().unwrap_or(0)) {
+        v["phase"] = json!("failed");
+        v["detail"] = json!("中途停了（程序不在了）");
+    }
+    let commit = v["commit"].as_str().unwrap_or("");
+    v["current"] = json!(!COMMIT.is_empty() && commit == COMMIT);
+    let at = v["at"].as_str().and_then(|a| {
+        chrono::NaiveDateTime::parse_from_str(a, "%Y-%m-%d %H:%M")
+            .ok()
+            .and_then(|t| chrono::TimeZone::from_local_datetime(&chrono::Local, &t).single())
+    });
+    if let Some(at) = at {
+        v["age_min"] = json!((now - at).num_minutes().max(0));
+    }
+    v["log"] = json!(install_log_path().to_string_lossy());
+    Some(v)
+}
+
+/// 開始背景更新（F-118）：已經在跑就拒絕；只有 macOS、原始碼目錄還在才行。回剛寫的狀態。
+pub fn start_install() -> crate::Result<Value> {
+    use crate::Error;
+    if !cfg!(target_os = "macos") {
+        return Err(Error::invalid(
+            "背景更新只有 macOS 有（Windows 請照 README 手動裝）",
+        ));
+    }
+    if let Some(st) = install_status() {
+        if IN_PROGRESS.contains(&st["phase"].as_str().unwrap_or("")) {
+            return Err(Error::invalid(format!(
+                "已經在更新了（{}，{} 開始）",
+                st["phase"].as_str().unwrap_or(""),
+                st["at"].as_str().unwrap_or("")
+            )));
+        }
+    }
+    let src = Path::new(SOURCE_DIR);
+    let script = src.join("scripts").join("install-app.sh");
+    if SOURCE_DIR.is_empty() || !script.is_file() {
+        return Err(Error::invalid(format!(
+            "找不到原始碼裡的安裝腳本：{}",
+            script.display()
+        )));
+    }
+    let status = install_status_path();
+    let log = install_log_path();
+    if let Some(dir) = log.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let out = std::fs::File::create(&log)?;
+    let mut cmd = std::process::Command::new("/bin/bash");
+    cmd.arg(&script)
+        .args(["--wait", "--reopen"])
+        .current_dir(src)
+        .env("CTX_INSTALL_STATUS", &status)
+        .stdin(std::process::Stdio::null())
+        .stdout(out.try_clone()?)
+        .stderr(out);
+    crate::exe::detach(&mut cmd);
+    let child = cmd.spawn()?;
+    // 腳本自己會寫 building；先寫一份，App 馬上問也看得到（不會看到上一次的 done）
+    let at = chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
+    let v = json!({"phase": "building", "at": at, "pid": child.id(), "commit": "", "detail": ""});
+    crate::fsutil::write_atomic(&status, format!("{v}\n").as_bytes())?;
+    Ok(install_status().unwrap_or(v))
+}
+
 /// 這版的資訊；`since`＝上次看過的那版 commit（跟這版一樣或認不得就不列 `since`）。
 /// 回 `{commit, date, source, pending: {count, commits}|null, since: {from, count, commits, tests}|null}`。
 pub fn info(since: Option<&str>) -> Value {
@@ -120,6 +228,7 @@ pub fn info(since: Option<&str>) -> Value {
         "source": known.then_some(SOURCE_DIR),
         "pending": pending,
         "since": since,
+        "install": install_status(),
     })
 }
 
@@ -140,6 +249,44 @@ mod tests {
         // 跟這版一樣、不是 commit 的字串：不列 since
         assert!(info(Some(COMMIT))["since"].is_null());
         assert!(info(Some("HEAD; rm -rf /"))["since"].is_null());
+    }
+
+    #[test]
+    fn install_status_marks_dead_runs_failed() {
+        let t = tempfile::tempdir().unwrap();
+        let p = t.path().join("st.json");
+        let now = chrono::Local::now();
+        let at = now.format("%Y-%m-%d %H:%M").to_string();
+        assert!(read_status(&p, now).is_none());
+        // 自己這個程序還活著：照寫
+        let me = std::process::id();
+        std::fs::write(
+            &p,
+            format!(r#"{{"phase":"waiting","at":"{at}","pid":{me},"commit":"x"}}"#),
+        )
+        .unwrap();
+        let v = read_status(&p, now).unwrap();
+        assert_eq!(v["phase"], "waiting");
+        assert_eq!(v["current"], false);
+        assert_eq!(v["age_min"], 0);
+        // 不在的 pid：進行中改成 failed
+        std::fs::write(
+            &p,
+            format!(r#"{{"phase":"building","at":"{at}","pid":999999,"commit":"x"}}"#),
+        )
+        .unwrap();
+        assert_eq!(read_status(&p, now).unwrap()["phase"], "failed");
+        // done 不看 pid；commit 就是這版＝current
+        std::fs::write(
+            &p,
+            format!(r#"{{"phase":"done","at":"{at}","pid":1,"commit":"{COMMIT}"}}"#),
+        )
+        .unwrap();
+        let v = read_status(&p, now).unwrap();
+        assert_eq!(v["phase"], "done");
+        assert_eq!(v["current"], !COMMIT.is_empty());
+        std::fs::write(&p, "壞掉").unwrap();
+        assert!(read_status(&p, now).is_none());
     }
 
     #[test]

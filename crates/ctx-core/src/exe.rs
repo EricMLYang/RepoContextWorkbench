@@ -100,7 +100,7 @@ where
 }
 
 #[cfg(unix)]
-fn detach(cmd: &mut Command) {
+pub(crate) fn detach(cmd: &mut Command) {
     use std::os::unix::process::CommandExt;
     // SAFETY: setsid 是 async-signal-safe，fork 後、exec 前只呼叫它（同 Python start_new_session=True）。
     unsafe {
@@ -114,7 +114,7 @@ fn detach(cmd: &mut Command) {
 }
 
 #[cfg(windows)]
-fn detach(cmd: &mut Command) {
+pub(crate) fn detach(cmd: &mut Command) {
     use std::os::windows::process::CommandExt;
     const DETACHED_PROCESS: u32 = 0x0000_0008;
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
@@ -122,7 +122,7 @@ fn detach(cmd: &mut Command) {
 }
 
 #[cfg(not(any(unix, windows)))]
-fn detach(_cmd: &mut Command) {}
+pub(crate) fn detach(_cmd: &mut Command) {}
 
 #[cfg(test)]
 mod tests {

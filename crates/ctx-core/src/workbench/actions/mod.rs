@@ -156,6 +156,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("auto_continue", a_auto_continue),
     ("screen", a_screen),
     ("build_info", a_build_info),
+    ("install_update", a_install_update),
 ];
 
 /// 不寫入任何東西的 action：殼不發 `workbench://changed`（否則展開資料夾、開檔都會讓前端重抓整份 state）。
@@ -192,6 +193,8 @@ const READ_ONLY: &[&str] = &[
     // 交給 Finder／預設 App，不改任何檔
     "open_entry",
     "build_info",
+    // 只寫 ~/.cache 的更新狀態檔
+    "install_update",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -258,6 +261,12 @@ fn a_build_info(_d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     let mut v = crate::build::info(since.as_deref());
     v["ok"] = json!(true);
     Ok(v)
+}
+
+/// 背景更新（F-118）：在背景跑原始碼的 install-app.sh --wait --reopen（見 [`crate::build::start_install`]）。
+fn a_install_update(_d: &Path, _p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let st = crate::build::start_install()?;
+    Ok(json!({"ok": true, "install": st}))
 }
 
 /// 把 payload 解析成型別化參數。**新 action 一律用這個**（缺欄位、型別不對都在這裡擋下）；

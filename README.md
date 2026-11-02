@@ -60,7 +60,8 @@ cd desktop && npm run build && npm test && npm run lint && npm run format:check
 
 ## 安裝
 
-重裝桌面 App（含 ctx）最省事：先從選單列結束 App，再 `bash scripts/install-app.sh`（`--dry-run` 先看步驟；
+重裝桌面 App（含 ctx）最省事：App 狀態列出現「N 個改動沒裝」時點它→「背景 build 新版」，build 好了 ⌘Q 結束 App，會自動換好重開（`scripts/install-app.sh --wait --reopen`）；
+或自己先從選單列結束 App，再 `bash scripts/install-app.sh`（`--dry-run` 先看步驟；
 會備份舊版到 `~/.cache/repo-context/app-backups/`、用 ditto 整包替換、刪掉 build 目錄那份）。
 
 ```bash

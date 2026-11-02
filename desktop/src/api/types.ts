@@ -958,6 +958,11 @@ export interface ActionMap {
     payload: { since?: string };
     result: BuildInfo;
   };
+  /** Rust 才有（F-118，只有 macOS）：背景跑 install-app.sh --wait --reopen；已經在跑就錯。 */
+  install_update: {
+    payload: Record<string, never>;
+    result: { ok: true; install: InstallStatus };
+  };
   /** Rust 才有（F-67）：移到系統垃圾桶（不直接刪；不能是根目錄或 .git）。 */
   trash_entry: {
     payload: { id: string; path: string };
@@ -1088,6 +1093,21 @@ export interface BuildTest {
   step: string;
   expect: string;
 }
+/** 背景更新（F-118）：install-app.sh --wait --reopen 寫的狀態。 */
+export interface InstallStatus {
+  phase: "building" | "waiting" | "installing" | "done" | "failed" | "expired";
+  /** "YYYY-MM-DD HH:MM" */
+  at: string;
+  pid: number;
+  /** 那次更新要裝的 commit（還沒開始 build 時是空字串） */
+  commit: string;
+  detail: string;
+  /** 輸出紀錄的路徑 */
+  log: string;
+  /** 那次更新的 commit 就是現在跑的這版 */
+  current: boolean;
+  age_min?: number;
+}
 /** 現在跑的是哪一版（F-114）。不在 git 裡 build 的：commit／date 是 null；原始碼不在這台：source／pending 是 null。 */
 export interface BuildInfo {
   ok: true;
@@ -1096,4 +1116,6 @@ export interface BuildInfo {
   source: string | null;
   pending: { count: number; commits: BuildCommit[] } | null;
   since: { from: string; count: number; commits: BuildCommit[]; tests?: BuildTest[] } | null;
+  /** 背景更新的狀態（F-118）；沒跑過＝null */
+  install?: InstallStatus | null;
 }

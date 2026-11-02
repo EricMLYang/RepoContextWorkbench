@@ -112,6 +112,79 @@ describe("狀態列的版本（F-114）", () => {
   });
 });
 
+describe("背景更新（F-118）", () => {
+  const base = {
+    ok: true,
+    commit: "bbbbbbb",
+    date: "2026-11-02 23:00",
+    source: "/src/rcw",
+    pending: {
+      count: 1,
+      commits: [{ sha: "ddddddd", date: "11-03 01:00", subject: "fix：某個修正" }],
+    },
+    since: null,
+  };
+  const st = (phase: string, over: object = {}) => ({
+    phase,
+    at: "2026-11-03 01:00",
+    pid: 1,
+    commit: "ddddddd",
+    detail: "",
+    log: "/home/.cache/repo-context/install.log",
+    current: false,
+    age_min: 3,
+    ...over,
+  });
+
+  it("「N 個改動沒裝」→「背景 build 新版」：叫 install_update，狀態列改成「新版 build 中…」", async () => {
+    let install: object | null = null;
+    const action = vi.fn(async (name: string) => {
+      if (name === "build_info") return { ...base, install };
+      if (name === "install_update") {
+        install = st("building");
+        return { ok: true, install };
+      }
+      return { ok: true };
+    });
+    await mount(mockBackend({ action: action as never }));
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("button", { name: "1 個改動沒裝" })),
+    );
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "背景 build 新版" })));
+    expect(action).toHaveBeenCalledWith("install_update", {});
+    expect(await screen.findByRole("button", { name: "新版 build 中…" })).toBeTruthy();
+    // 進行中時「沒裝」那格讓位
+    expect(document.getElementById("buildpending")).toBeNull();
+  });
+
+  it("等你 ⌘Q：點開說會結束幾個會話；失敗的留一天、已經是這版就不提", async () => {
+    let install: object = st("waiting");
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({
+          terms: [{ sid: "t1", title: "x", alive: true, kind: "agent" }] as never,
+        }),
+      ),
+      action: vi.fn(async (name: string) =>
+        name === "build_info" ? { ...base, install } : { ok: true },
+      ) as never,
+    });
+    await mount(backend);
+    const chip = await screen.findByRole("button", { name: "新版好了：⌘Q 後自動換好重開" });
+    await act(async () => fireEvent.click(chip));
+    expect(screen.getByText(/現在有 1 個執行中會話/)).toBeTruthy();
+    cleanup();
+    install = st("failed", { detail: "第 1 步失敗（exit 1）" });
+    await mount(backend);
+    expect(await screen.findByRole("button", { name: "更新失敗" })).toBeTruthy();
+    cleanup();
+    install = st("failed", { current: true });
+    await mount(backend);
+    await screen.findByRole("button", { name: "1 個改動沒裝" });
+    expect(document.getElementById("buildinstall")).toBeNull();
+  });
+});
+
 describe("收件匣卡片按鈕", () => {
   it("主要動作呼叫卡片指定的 action 與 payload", async () => {
     const { backend } = await mount();
