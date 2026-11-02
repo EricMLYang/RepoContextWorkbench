@@ -175,6 +175,8 @@
 > 全部只在 macOS 開發；Windows（VDI）**都沒測過**（右欄先填「未測」）。先裝新版（§0），會話要**新開**才會帶到新的 hook（StopFailure、Subagent）。
 > 2026-10-22 06:52 已裝到 /Applications（`install-app.sh --prebuilt`，bundle 是 `3783500`）＋`ctx setup --claude`；重啟 App 後從這張表開始點。
 > 2026-10-23 15:35 重啟 App（0.2.0，`3783500`，之後的 commit 只動 docs／scripts）後，在 draftagent 新開的會話點了 8d-4、8d-9（部分）、8d-11、8d-16。
+> **8d-17 起是之後零星加的（10-24～11-03，R38 檢討那一夜最多）**：/Applications 那份是 10-28 22:49 裝的，8d-19（剩多少）以後都不在裡面。
+> 裝了 F-114 之後就不必猜：狀態列寫現在跑的 commit，「已更新」點開會列出這段期間新增或改過的驗收列；之後要更新按「N 個改動沒裝」→「背景 build 新版」（8d-23）。
 
 | # | 怎麼做 | 預期 | macOS | Windows |
 |---|---|---|---|---|
