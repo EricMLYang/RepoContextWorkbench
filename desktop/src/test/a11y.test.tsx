@@ -209,6 +209,21 @@ async function violations(
             },
           ],
         };
+      // F-114：狀態列的版本（已更新＋沒裝）
+      if (name === "build_info")
+        return {
+          ok: true,
+          commit: "bbbbbbb",
+          date: "2026-11-03 00:00",
+          source: "/src",
+          pending: { count: 1, commits: [{ sha: "ccccccc", date: "11-03 01:00", subject: "fix" }] },
+          since: {
+            from: "aaaaaaa",
+            count: 1,
+            commits: [{ sha: "bbbbbbb", date: "11-03 00:00", subject: "feat" }],
+            tests: [{ id: "8d-21", step: "重裝後打開", expect: "已更新" }],
+          },
+        };
       return { ok: true };
     }) as never,
   });
@@ -335,6 +350,45 @@ describe("無障礙稽核（axe-core）", () => {
       expect(document.querySelector(".wtrow")).not.toBeNull();
       expect(document.querySelector(".ghrow")).not.toBeNull();
       expect(document.querySelector(".commitrow")).not.toBeNull();
+    });
+    expect(found, found.join("\n")).toEqual([]);
+  });
+  const openTree = async () => {
+    await act(async () =>
+      fireEvent.click(
+        within(document.getElementById("tabs")!).getByRole("button", { name: "檔案" }),
+      ),
+    );
+    await act(async () =>
+      fireEvent.click(
+        within(document.getElementById("tab-files")!).getByRole("button", { name: "a" }),
+      ),
+    );
+    return screen.findByRole("treeitem", { name: /README\.md/ });
+  };
+  it("R38：檔案樹「移到垃圾桶？」確認列與改名輸入框開著時沒有違規", async () => {
+    const found = await violations({ group: "產品開發", repos: null }, async () => {
+      const readme = await openTree();
+      await act(async () => fireEvent.keyDown(readme, { key: "Delete" }));
+      expect(screen.getByRole("button", { name: "移到垃圾桶" })).toBeTruthy();
+    });
+    expect(found, found.join("\n")).toEqual([]);
+    cleanup();
+    localStorage.clear();
+    const renaming = await violations({ group: "產品開發", repos: null }, async () => {
+      const readme = await openTree();
+      await act(async () => fireEvent.keyDown(readme, { key: "F2" }));
+      expect(screen.getByRole("textbox", { name: /新名稱/ })).toBeTruthy();
+    });
+    expect(renaming, renaming.join("\n")).toEqual([]);
+  });
+  it("R38：狀態列版本（已更新／沒裝）與「已更新」對話框開著時沒有違規", async () => {
+    localStorage.setItem("workbench:build:seen", JSON.stringify("aaaaaaa"));
+    const found = await violations({ group: "產品開發", repos: null }, async () => {
+      const chip = await screen.findByRole("button", { name: "已更新 · 1 項改動" });
+      expect(screen.getByRole("button", { name: "1 個改動沒裝" })).toBeTruthy();
+      await act(async () => fireEvent.click(chip));
+      expect(screen.getByText("可以驗收的（docs/TESTING.md，1 項）")).toBeTruthy();
     });
     expect(found, found.join("\n")).toEqual([]);
   });
