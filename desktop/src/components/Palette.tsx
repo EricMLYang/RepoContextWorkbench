@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { imeKey } from "../lib/ime";
 import type { ContentHit, DecisionHit, PaletteResult, TermInfo } from "../api/types";
 import { DetailLayout, useAutoFocus, useDetail } from "../dialogs/Modal";
@@ -449,7 +449,7 @@ export function Palette({ onClose, initial = "" }: { onClose: () => void; initia
               ) : it.kind === "group" ? (
                 <GroupRow group={it.group} />
               ) : it.kind === "hit" ? (
-                <HitRow hit={it.hit} code={it.code} />
+                <HitRow hit={it.hit} code={it.code} q={content?.q ?? ""} />
               ) : it.kind === "decision" ? (
                 <div className="paletterow">
                   <span className="palettekind small muted">判斷</span>
@@ -530,7 +530,23 @@ function RepoRow({ hit }: { hit: PaletteResult["repos"][number] }) {
   );
 }
 
-function HitRow({ hit, code }: { hit: ContentHit; code: boolean }) {
+/** 把查詢詞在那一行裡標出來（不分大小寫；跟 VS Code 搜尋結果一樣）。 */
+function Marked({ text, q }: { text: string; q: string }) {
+  const needle = q.trim().toLocaleLowerCase();
+  if (!needle) return <>{text}</>;
+  const lower = text.toLocaleLowerCase();
+  const out: ReactNode[] = [];
+  let at = 0;
+  for (let i = lower.indexOf(needle); i >= 0; i = lower.indexOf(needle, at)) {
+    if (i > at) out.push(text.slice(at, i));
+    out.push(<mark key={i}>{text.slice(i, i + needle.length)}</mark>);
+    at = i + needle.length;
+  }
+  out.push(text.slice(at));
+  return <>{out}</>;
+}
+
+function HitRow({ hit, code, q }: { hit: ContentHit; code: boolean; q: string }) {
   const s = hit.snippets[0];
   return (
     <>
@@ -542,7 +558,8 @@ function HitRow({ hit, code }: { hit: ContentHit; code: boolean }) {
       </div>
       {s ? (
         <div className="palettedesc small muted" title={hit.path}>
-          {"L" + s.line + "　" + s.text}
+          {"L" + s.line + "　"}
+          <Marked text={s.text} q={q} />
         </div>
       ) : null}
     </>

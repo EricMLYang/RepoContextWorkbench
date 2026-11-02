@@ -65,7 +65,7 @@ fn range(src: &Path, from: &str, to: &str) -> Option<(usize, Vec<Value>)> {
 /// 驗收清單（相對原始碼根目錄）。
 const TESTING_MD: &str = "docs/TESTING.md";
 
-/// `from..to` 之間 `docs/TESTING.md` 新增或改過的表格列：`{id, step, expect}`（同一個 id 只留一次，最多 [`LIST_MAX`]）。
+/// `from..to` 之間 `docs/TESTING.md` 新增或改過、macOS 還沒打勾的表格列：`{id, step, expect}`（同一個 id 只留一次，最多 [`LIST_MAX`]）。
 fn tests_between(src: &Path, from: &str, to: &str) -> Vec<Value> {
     let spec = format!("{from}..{to}");
     let (code, out) = crate::crossref::git(
@@ -84,9 +84,13 @@ fn tests_between(src: &Path, from: &str, to: &str) -> Vec<Value> {
         };
         let cols: Vec<&str> = row.trim_end_matches(" |").split(" | ").collect();
         // 驗收列的 id 長得像 8d-21、8c-14（表頭、分隔線不算）
-        let [id, step, expect, ..] = cols[..] else {
+        let [id, step, expect, rest @ ..] = &cols[..] else {
             continue;
         };
+        // macOS 那欄已經打勾（[x]）＝驗過了；打勾本身也會讓那一列出現在差異裡，不能當成新的要驗
+        if rest.first().is_some_and(|m| m.contains("[x]")) {
+            continue;
+        }
         let id = id.trim();
         let looks_like_id =
             id.contains('-') && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
@@ -339,7 +343,7 @@ mod tests {
             crate::testkit::git(r, &["commit", "-qm", "testing"], &[]);
         };
         md("| 8d-1 | 舊的 | 舊 | [ ] | [ ] |\n");
-        md("| 8d-1 | 舊的（改過） | 舊 | [ ] | [ ] |\n| 8d-2 | 按「分割」 | 左寫右看 | [ ] | 未測 |\n");
+        md("| 8d-1 | 舊的（改過） | 舊 | [ ] | [ ] |\n| 8d-2 | 按「分割」 | 左寫右看 | [ ] | 未測 |\n| 8d-0 | 驗過的 | 好 | [x] | [ ] |\n");
         let t = tests_between(r, "HEAD~1", "HEAD");
         assert_eq!(t.len(), 2);
         assert_eq!(t[0]["id"], "8d-1");

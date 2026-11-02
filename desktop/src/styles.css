@@ -1992,6 +1992,12 @@ dialog::backdrop {
 }
 
 /* 右鍵選單 */
+/* ⌘K「%」搜內容：那一行裡的查詢詞 */
+.palettedesc mark {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--amber) 35%, transparent);
+  border-radius: 2px;
+}
 /* 新的一組：上面一條分隔線 */
 .ctxmenu button.ctxsep {
   margin-top: 5px;
