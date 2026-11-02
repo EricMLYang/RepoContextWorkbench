@@ -12,7 +12,7 @@ import { load as loadPref, save as savePref } from "../../lib/storage";
 import { parentDir, useRepoChanged, useWatchDirs } from "../../lib/treeWatch";
 import { FILE_DRAG_TYPE } from "../../lib/view";
 import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
-import { OPEN_EXTERNAL_LABEL, REVEAL_LABEL, openInSystem } from "../../lib/systemOpen";
+import { OPEN_EXTERNAL_LABEL, REVEAL_LABEL, openInSystem, openShellAt } from "../../lib/systemOpen";
 import { MARK_LABEL, MARK_LETTER, gitMarks, type GitMark } from "../../lib/gitMarks";
 import { samePick, useSnapshot, useStore, useUi, useUiState, type Pick } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
@@ -596,6 +596,17 @@ export function RepoRoot(props: {
     { label: "複製路徑", hint: "⌥⌘C", run: () => copy(e.abs, "路徑") },
     { label: "複製相對路徑", hint: "⇧⌥⌘C", run: () => copy(e.path, "相對路徑") },
     { label: REVEAL_LABEL, hint: "⌥⌘R", run: () => openInSystem(store, id, e.path, "reveal") },
+    {
+      // 檔案＝開在它所在的資料夾
+      label: e.dir ? "在這裡開 Shell" : "在所在資料夾開 Shell",
+      run: () =>
+        openShellAt(
+          store,
+          ui.selectTerm,
+          e.dir ? e.abs : e.abs.slice(0, e.abs.length - e.name.length - 1),
+          "tree:" + id,
+        ),
+    },
     ...(e.dir
       ? []
       : [{ label: OPEN_EXTERNAL_LABEL, run: () => openInSystem(store, id, e.path, "open") }]),

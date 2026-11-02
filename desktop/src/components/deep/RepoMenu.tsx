@@ -1,5 +1,5 @@
 import { MSG_COPY_FAILED, copyText } from "../../lib/clipboard";
-import { REVEAL_LABEL, openInSystem } from "../../lib/systemOpen";
+import { REVEAL_LABEL, openInSystem, openShellAt } from "../../lib/systemOpen";
 import { useStore, useUi } from "../../store/context";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 import { repoDetailSpec } from "./RepoDetail";
@@ -35,7 +35,13 @@ export function RepoMenu(props: { id: string; x: number; y: number; onClose: () 
         }
       },
     });
-  if (path) items.push({ label: REVEAL_LABEL, run: () => openInSystem(store, id, "", "reveal") });
+  if (path) {
+    items.push({ label: REVEAL_LABEL, run: () => openInSystem(store, id, "", "reveal") });
+    items.push({
+      label: "在這裡開 Shell",
+      run: () => openShellAt(store, ui.selectTerm, path, "repo:" + id),
+    });
+  }
   if (canRemoveFromScope(store, id))
     items.push({
       label: "從這組移除",

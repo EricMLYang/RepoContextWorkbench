@@ -1132,6 +1132,7 @@ describe("repo 右側欄與右鍵選單", () => {
       "開啟 Agent 會話…",
       "複製絕對路徑",
       "在 Finder 中顯示",
+      "在這裡開 Shell",
       "從這組移除",
       "移出工作台…",
     ]);
@@ -1655,7 +1656,7 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
     expect(screen.getByRole("treeitem", { name: "b.md" })).toBeTruthy();
   });
 
-  it("在 Finder 中顯示／用預設 App 開啟（F-115）：右鍵、⌥⌘R；二進位檔的檢視器也給按鈕；失敗用 toast", async () => {
+  it("在 Finder 中顯示／用預設 App 開啟（F-115）、在這裡開 Shell：右鍵、⌥⌘R；二進位檔的檢視器也給按鈕", async () => {
     const backend = mockBackend({
       action: vi.fn(async (name: string, p: { id?: string; path?: string; how?: string }) => {
         if (name === "repo_tree")
@@ -1697,6 +1698,18 @@ describe("唯讀檢視器（主區檔案分頁）", () => {
       id: "a",
       path: "docs",
       how: "reveal",
+    });
+    // 資料夾右鍵「在這裡開 Shell」：開在那個資料夾（VS Code 的 Open in Integrated Terminal）
+    await act(async () => fireEvent.contextMenu(docs));
+    await act(async () =>
+      fireEvent.click(
+        within(screen.getByRole("menu")).getByRole("menuitem", { name: /在這裡開 Shell/ }),
+      ),
+    );
+    expect(backend.action).toHaveBeenCalledWith("term_create", {
+      kind: "shell",
+      cwd: "/r/a/docs",
+      origin: "tree:a",
     });
     // ⌥⌘R
     const pdf = screen.getByRole("treeitem", { name: "spec.pdf" });
