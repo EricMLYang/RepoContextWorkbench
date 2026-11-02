@@ -256,6 +256,7 @@ async function violations(
           ok: true,
           commit: "bbbbbbb",
           date: "2026-11-03 00:00",
+          skill: "stale",
           source: "/src",
           pending: { count: 1, commits: [{ sha: "ccccccc", date: "11-03 01:00", subject: "fix" }] },
           since: {
@@ -450,6 +451,7 @@ describe("無障礙稽核（axe-core）", () => {
     const found = await violations({ group: "產品開發", repos: null }, async () => {
       const chip = await screen.findByRole("button", { name: "已更新 · 1 項改動" });
       expect(screen.getByRole("button", { name: "1 個改動沒裝" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "更新 agent 的 skill" })).toBeTruthy();
       await act(async () => fireEvent.click(chip));
       expect(screen.getByText("可以驗收的（docs/TESTING.md，1 項）")).toBeTruthy();
     });
