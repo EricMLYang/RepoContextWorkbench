@@ -246,9 +246,31 @@ pub fn start_install() -> crate::Result<Value> {
     Ok(install_status().unwrap_or(v))
 }
 
+/// install-app.sh 裝完寫的紀錄：`{commit, previous, at}`。
+pub fn installed_record_path() -> std::path::PathBuf {
+    crate::fsutil::expanduser("~/.cache/repo-context/installed.json")
+}
+
+/// 紀錄裡裝的就是這版時，換掉的那版 commit；不是這版、沒有紀錄、沒記到＝None。
+fn previous_install(path: &Path) -> Option<String> {
+    let v: Value = serde_json::from_str(std::fs::read_to_string(path).ok()?.trim()).ok()?;
+    let commit = v["commit"].as_str()?;
+    let prev = v["previous"].as_str()?.trim();
+    (!COMMIT.is_empty() && commit == COMMIT && !prev.is_empty() && prev != COMMIT)
+        .then(|| prev.to_string())
+}
+
 /// 這版的資訊；`since`＝上次看過的那版 commit（跟這版一樣或認不得就不列 `since`）。
 /// 回 `{commit, date, source, pending: {count, commits}|null, since: {from, count, commits, tests}|null}`。
 pub fn info(since: Option<&str>) -> Value {
+    info_with(since, &installed_record_path())
+}
+
+fn info_with(since: Option<&str>, record: &Path) -> Value {
+    // 沒有「上次看過」（這台第一次用有 F-114 的版本）：用 install-app.sh 記的「換掉的是哪版」，
+    // 第一次打開新版也看得到「已更新：多了什麼、可以驗收什麼」
+    let fallback = since.is_none().then(|| previous_install(record)).flatten();
+    let since = since.or(fallback.as_deref());
     let src = Path::new(SOURCE_DIR);
     let known = !COMMIT.is_empty() && !SOURCE_DIR.is_empty() && src.join(".git").exists();
     let pending = known
@@ -285,7 +307,8 @@ mod tests {
     #[test]
     fn this_build_knows_itself() {
         // 測試就是在 repo 裡 build 的：commit、原始碼都在；HEAD 就是這版或更新
-        let v = info(None);
+        let none = std::path::Path::new("/nonexistent/installed.json");
+        let v = info_with(None, none);
         assert_eq!(v["commit"], COMMIT);
         assert!(VERSION.starts_with(env!("CARGO_PKG_VERSION")));
         if v["source"].is_string() {
@@ -293,8 +316,33 @@ mod tests {
         }
         assert!(v["since"].is_null());
         // 跟這版一樣、不是 commit 的字串：不列 since
-        assert!(info(Some(COMMIT))["since"].is_null());
-        assert!(info(Some("HEAD; rm -rf /"))["since"].is_null());
+        assert!(info_with(Some(COMMIT), none)["since"].is_null());
+        assert!(info_with(Some("HEAD; rm -rf /"), none)["since"].is_null());
+    }
+
+    #[test]
+    fn previous_install_only_for_this_build() {
+        let t = tempfile::tempdir().unwrap();
+        let p = t.path().join("installed.json");
+        assert_eq!(previous_install(&p), None);
+        std::fs::write(
+            &p,
+            format!(r#"{{"commit":"{COMMIT}","previous":"9a41433","at":"x"}}"#),
+        )
+        .unwrap();
+        assert_eq!(
+            previous_install(&p),
+            (!COMMIT.is_empty()).then(|| "9a41433".to_string())
+        );
+        // 裝的不是這版（之後又 build 了別版在跑）、沒記到舊版：不用
+        std::fs::write(&p, r#"{"commit":"zzzzzzz","previous":"9a41433","at":"x"}"#).unwrap();
+        assert_eq!(previous_install(&p), None);
+        std::fs::write(
+            &p,
+            format!(r#"{{"commit":"{COMMIT}","previous":"","at":"x"}}"#),
+        )
+        .unwrap();
+        assert_eq!(previous_install(&p), None);
     }
 
     #[test]

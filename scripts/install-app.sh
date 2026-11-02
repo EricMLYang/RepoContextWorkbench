@@ -122,6 +122,16 @@ fi
 status installing
 
 STEP=3
+# 換掉之前記下舊版是哪個 commit（App 第一次打開新版時用它列「已更新：多了什麼」）：
+# 新的 ctx --version 帶 commit；更舊的沒有，就用它的 build 時間找當時的 commit
+PREV=""
+if [ -x "$DEST/Contents/MacOS/ctx" ]; then
+  PREV="$("$DEST/Contents/MacOS/ctx" --version 2>/dev/null | sed -n 's/.*(\([0-9a-f]\{7,\}\) .*/\1/p')"
+  if [ -z "$PREV" ]; then
+    built="$(stat -f %m "$DEST/Contents/MacOS/ctx" 2>/dev/null || true)"
+    [ -n "$built" ] && PREV="$(git rev-list -1 --before="@$built" HEAD 2>/dev/null | cut -c1-7 || true)"
+  fi
+fi
 TS="$(date +%Y%m%d-%H%M%S)"
 say "3. 備份舊版 → $BACKUPS/$TS/"
 if [ -d "$DEST" ]; then
@@ -164,6 +174,12 @@ fi
 say "完成。接著跑 ctx setup --claude（skill 與 hook 指令換成這版；ctx health 沒更新會一直提醒）。"
 say "開新的 Claude 會話才會用新版 MCP；用幾天後跑 ctx health 跟 docs/VISION.md §6 的使用前基準比。"
 status done
+# 裝了哪版、換掉的是哪版（App 的「已更新」在沒有「上次看過」時用 previous）
+RECORD=${CTX_INSTALL_RECORD:-"$HOME/.cache/repo-context/installed.json"}
+if [ "$DRY" = 0 ]; then
+  mkdir -p "$(dirname "$RECORD")"
+  printf '{"commit":"%s","previous":"%s","at":"%s"}\n' "$COMMIT" "$PREV" "$(date '+%Y-%m-%d %H:%M')" > "$RECORD"
+fi
 DONE=1
 if [ "$REOPEN" = 1 ] && [ "$DRY" = 0 ]; then
   say "重新打開 App"
