@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { SpineSetup } from "../components/SpineSetup";
+import { imeGuard } from "../lib/ime";
 import { WorkbenchStore } from "../store/store";
 import type { Backend } from "../api";
 import type { StateCard } from "../api/types";
@@ -2343,6 +2344,41 @@ describe("會話放進所屬牌組", () => {
     const stuck = screen.getByRole("button", { name: /真卡住的/ }).closest(".session")!;
     expect(stuck.textContent).toContain("卡住了");
     expect(within(stuck as HTMLElement).getByRole("button", { name: "回答…" })).toBeTruthy();
+  });
+
+  it("回答框遇到輸入法：WebKit 選字的 Enter 不送出（擋掉表單送出）、組字中的 Esc 不收起", async () => {
+    imeGuard.webkit = true;
+    const backend = mockBackend({
+      getState: vi.fn(async () =>
+        makeState({
+          terms: [
+            term({
+              sid: "t6",
+              title: "真卡住的",
+              home_group: "產品開發",
+              agent_status: { status: "blocked", text: "找不到測試資料", at: "2026-10-14 01:06" },
+            }),
+          ] as never,
+        }),
+      ),
+    });
+    await mount(backend);
+    const row = screen.getByRole("button", { name: /真卡住的/ }).closest(".session")!;
+    await act(async () =>
+      fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "回答…" })),
+    );
+    const box = within(row as HTMLElement).getByRole("textbox");
+    fireEvent.change(box, { target: { value: "測試資料在" } });
+    // 選字：compositionend 之後緊接的 Enter 要被擋（preventDefault＝表單不送出）
+    window.dispatchEvent(new CompositionEvent("compositionend"));
+    expect(fireEvent.keyDown(box, { key: "Enter" })).toBe(false);
+    // 組字中按 Esc 是收起候選字：回答框還在
+    await act(async () => fireEvent.keyDown(box, { key: "Escape", isComposing: true }));
+    expect(within(row as HTMLElement).getByRole("textbox")).toBe(box);
+    // 不在組字：Esc 收起
+    await act(async () => fireEvent.keyDown(box, { key: "Escape" }));
+    expect(within(row as HTMLElement).queryByRole("textbox")).toBeNull();
+    imeGuard.webkit = false;
   });
 
   it("做完一輪、還沒看的會話列有「看變更」：開那個 repo 的右側欄變更頁，不切會話", async () => {

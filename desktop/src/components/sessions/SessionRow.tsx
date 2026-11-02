@@ -17,6 +17,7 @@ import {
 } from "../../lib/view";
 import { useSnapshot, useStore, useUi, useUiState, type Ui } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
+import { imeKey } from "../../lib/ime";
 
 /** 切到會話後終端要一拍才接上：最多等這麼多次、每次這麼久，貼得進去就回會話標題。 */
 const PASTE_TRIES = 12;
@@ -73,6 +74,11 @@ function ReplyBox({ s, onDone }: { s: TermInfo; onDone: () => void }) {
         aria-label={"回答「" + sessionHeadline(s) + "」"}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
+          // 輸入法：WebKit 選字的 Enter 會連帶送出表單（把打一半的話貼進會話）；Esc 是收起候選字
+          if (imeKey(e)) {
+            if (e.key === "Enter") e.preventDefault();
+            return;
+          }
           if (e.key === "Escape") onDone();
         }}
       />

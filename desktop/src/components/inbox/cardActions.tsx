@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import type { ActionName, CardAction, InboxCard } from "../../api/types";
 import { DetailLayout, useAutoFocus, useDetail } from "../../dialogs/Modal";
 import { copyText } from "../../lib/clipboard";
+import { imeKey } from "../../lib/ime";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { KINDNAME, actionLabel, actionToast, cardDetailText, primaryAction } from "../../lib/view";
 
@@ -326,6 +327,7 @@ function DecisionForm({
           placeholder={placeholder}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
+            if (imeKey(e)) return;
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
               submit();

@@ -146,7 +146,9 @@ function RenameInput(props: {
         }}
         onKeyDown={(e) => {
           e.stopPropagation();
-          if (e.key === "Enter" && !imeKey(e)) {
+          // 輸入法組字中：Enter 是選字、Esc 是收起候選字，都不是給這裡的
+          if (imeKey(e)) return;
+          if (e.key === "Enter") {
             e.preventDefault();
             void submit();
           } else if (e.key === "Escape") {
@@ -269,7 +271,8 @@ function NewEntryRow(props: {
           setError("");
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !imeKey(e)) {
+          if (imeKey(e)) return;
+          if (e.key === "Enter") {
             e.preventDefault();
             void submit();
           } else if (e.key === "Escape") {

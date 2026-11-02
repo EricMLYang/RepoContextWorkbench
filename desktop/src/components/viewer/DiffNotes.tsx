@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { imeKey } from "../../lib/ime";
 import { anchorNotes, diffLineRefs, type DiffNote } from "../../lib/view";
 import { useStore, useUi } from "../../store/context";
 
@@ -119,6 +120,7 @@ export function DiffView({
                     placeholder={refs[i] + "：想請 agent 怎麼改？（⌘Enter 存、Esc 取消）"}
                     onChange={(e) => setEditing({ idx: i, text: e.target.value })}
                     onKeyDown={(e) => {
+                      if (imeKey(e)) return;
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save();
                       if (e.key === "Escape") setEditing(null);
                     }}

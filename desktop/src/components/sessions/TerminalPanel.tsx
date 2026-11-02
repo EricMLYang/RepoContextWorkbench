@@ -13,6 +13,7 @@ import {
 import type { TermStream } from "../../api/backend";
 import type { TermInfo } from "../../api/types";
 import { AsyncButton } from "../AsyncButton";
+import { imeKey } from "../../lib/ime";
 import { ContextMenu } from "../ContextMenu";
 import {
   draggedFileAbs,
@@ -579,6 +580,11 @@ export function TerminalPanel(props: {
               aria-label="在終端裡找"
               onChange={(e) => runFind(e.target.value)}
               onKeyDown={(e) => {
+                // 輸入法選字的 Enter 不送出表單（不跳到下一個）、Esc 不關搜尋列
+                if (imeKey(e)) {
+                  if (e.key === "Enter") e.preventDefault();
+                  return;
+                }
                 if (e.key === "Escape") {
                   e.preventDefault();
                   closeFind();
