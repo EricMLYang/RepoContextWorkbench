@@ -79,7 +79,7 @@ ctx app                                  # 找 Repo Context.app（ctx 同目錄�
 
 - **⌘K**：找會話（切過去）、repo（名稱片段、詞首縮寫如 `rcw`、名片的角色／介紹／關鍵字）、牌組、檔案（目前範圍，用檔名）；
   Enter 開，⌘Enter 對 repo 開 Agent 會話或把檔案加入脈絡。打「>」只列指令（寫組筆記、請 Agent 分析想法、開 Shell、重新採集、切分頁）。
-- **⌘K 打「%」搜內容**：目前範圍裡的 md、程式碼與過去的判斷（跟 agent 的 `search_knowledge` 同一個函式）；Enter 開檔並捲到那一行，⌘Enter 加入脈絡。
+- **⌘K 打「%」搜內容（或直接 ⌘⇧F）**：目前範圍裡的 md、程式碼與過去的判斷（跟 agent 的 `search_knowledge` 同一個函式）；Enter 開檔並捲到那一行，⌘Enter 加入脈絡。
 - **App 助手（⌘K 打「?」）**：一句話改工作台設定——「切到 PM Group」「VMS_PM 加標籤 規格」「把 a 加進 MI3.0」「暫停 X，等年底再看」
   「關掉自動儲存」…；先給計畫、勾選確認才做、做完可以復原。常見說法本機直接翻，其他問 Claude（幾秒）。
   終端裡用 `ctx assist "<一句話>"`，agent 用 MCP `workbench_apply`（同一份白名單）。

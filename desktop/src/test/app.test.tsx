@@ -3182,7 +3182,9 @@ describe("⌘K 找 repo／牌組", () => {
       },
     );
     await mount(mockBackend({ action: action as never }));
-    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    // ⌘⇧F：直接進「%」
+    await act(async () => fireEvent.keyDown(window, { key: "F", metaKey: true, shiftKey: true }));
+    expect((box() as HTMLInputElement).value).toBe("%");
     // 一個字：只給說明，不問
     fireEvent.change(box(), { target: { value: "%垃" } });
     expect(screen.getByText(/打兩個字以上/)).toBeTruthy();

@@ -115,6 +115,8 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
   // ── 貼到目前會話（TerminalPanel 填入）、⌘K ──
   const pasteRef = useRef<((text: string) => string | null) | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // ⌘⇧F 打開時直接是「%」搜內容（跟 VS Code 一樣）
+  const [paletteInit, setPaletteInit] = useState("");
   const closePalette = useCallback(() => setPaletteOpen(false), []);
 
   // ── 右側欄（點 repo）＋右鍵選單 ──
@@ -209,7 +211,10 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
         if (tab) choosePanelTab(tab);
         setPanel(() => id);
       },
-      openPalette: () => setPaletteOpen(true),
+      openPalette: () => {
+        setPaletteInit("");
+        setPaletteOpen(true);
+      },
       togglePick: (pick) =>
         updatePicks((cur) =>
           cur.some((x) => samePick(x, pick))
@@ -357,7 +362,19 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
         !(e.ctrlKey && !e.metaKey && (e.target as Element | null)?.closest?.(".xterm"))
       ) {
         e.preventDefault();
+        setPaletteInit("");
         setPaletteOpen((o) => !o);
+      } else if (
+        // ⌘⇧F（Windows：Ctrl+Shift+F，終端裡留給終端搜尋）＝搜檔案內容
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === "f" &&
+        !(e.ctrlKey && !e.metaKey && (e.target as Element | null)?.closest?.(".xterm"))
+      ) {
+        e.preventDefault();
+        setPaletteInit("%");
+        setPaletteOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -420,7 +437,9 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
             seq={picker.seq}
             onClose={closePicker}
           />
-          {paletteOpen ? <Palette onClose={closePalette} /> : null}
+          {paletteOpen ? (
+            <Palette key={paletteInit} initial={paletteInit} onClose={closePalette} />
+          ) : null}
           {picks.length ? <PickTray /> : null}
           {menu ? <RepoMenu id={menu.id} x={menu.x} y={menu.y} onClose={closeMenu} /> : null}
           <DetailDialog
