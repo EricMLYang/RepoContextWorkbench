@@ -178,7 +178,9 @@ status done
 RECORD=${CTX_INSTALL_RECORD:-"$HOME/.cache/repo-context/installed.json"}
 if [ "$DRY" = 0 ]; then
   mkdir -p "$(dirname "$RECORD")"
-  printf '{"commit":"%s","previous":"%s","at":"%s"}\n' "$COMMIT" "$PREV" "$(date '+%Y-%m-%d %H:%M')" > "$RECORD"
+  # 裝進去的是哪個 commit 以裝好的 ctx 自己說的為準（--prebuilt 時可能比現在的 HEAD 舊）
+  NEW="$("$DEST/Contents/MacOS/ctx" --version 2>/dev/null | sed -n 's/.*(\([0-9a-f]\{7,\}\) .*/\1/p')"
+  printf '{"commit":"%s","previous":"%s","at":"%s"}\n' "${NEW:-$COMMIT}" "$PREV" "$(date '+%Y-%m-%d %H:%M')" > "$RECORD"
 fi
 DONE=1
 if [ "$REOPEN" = 1 ] && [ "$DRY" = 0 ]; then
