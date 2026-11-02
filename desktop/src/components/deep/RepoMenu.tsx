@@ -26,6 +26,7 @@ export function RepoMenu(props: { id: string; x: number; y: number; onClose: () 
   if (path)
     items.push({
       label: "複製絕對路徑",
+      sep: true,
       run: async () => {
         try {
           await copyText(store.backend, path);
@@ -45,11 +46,14 @@ export function RepoMenu(props: { id: string; x: number; y: number; onClose: () 
   if (canRemoveFromScope(store, id))
     items.push({
       label: "從這組移除",
+      sep: true,
       run: () => removeFromScope(store, id).catch((e: Error) => store.toast(e.message)),
     });
   items.push({
     label: "移出工作台…",
     danger: true,
+    // 不能「從這組移除」時，它自己是最後一組的開頭
+    sep: !canRemoveFromScope(store, id),
     run: () => ui.openDetail(repoDetailSpec(id, { confirmRemove: true })),
   });
 
