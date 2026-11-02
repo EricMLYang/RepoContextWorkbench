@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { imeKey } from "../lib/ime";
-import type { PaletteResult, TermInfo } from "../api/types";
+import type { ContentHit, DecisionHit, PaletteResult, TermInfo } from "../api/types";
+import { DetailLayout, useAutoFocus, useDetail } from "../dialogs/Modal";
 import {
   statusLabel,
   sessionHeadline,
@@ -36,10 +37,37 @@ type Item =
   | { kind: "repo"; key: string; hit: PaletteResult["repos"][number] }
   | { kind: "group"; key: string; group: PaletteResult["groups"][number] }
   | { kind: "file"; key: string; file: FileHit }
-  | { kind: "assist"; key: string; text: string };
+  | { kind: "assist"; key: string; text: string }
+  | { kind: "hit"; key: string; hit: ContentHit; code: boolean }
+  | { kind: "decision"; key: string; d: DecisionHit };
 
 /** 「?」或「？」開頭＝只問助手。 */
 const ASSIST_PREFIX = /^[?？]\s*/;
+/** 「%」開頭＝搜檔案內容（跟 VS Code 快速開啟的「%」一樣；「/」留給 Claude Code 的 /指令）。 */
+const CONTENT_PREFIX = /^[%％]\s*/;
+/** 搜內容比找檔名慢（git grep＋知識索引），打字停久一點再問。 */
+const CONTENT_DEBOUNCE_MS = 250;
+type ContentResult = { files?: ContentHit[]; code?: ContentHit[]; decisions?: DecisionHit[] };
+
+/** 搜內容的結果：md 知識、程式碼、過去的判斷（引擎排好，這裡只攤平）。 */
+function contentItems(r: ContentResult | null): Item[] {
+  if (!r) return [];
+  return [
+    ...(r.files || []).map((hit) => ({
+      kind: "hit" as const,
+      key: "h:" + hit.ref,
+      hit,
+      code: false,
+    })),
+    ...(r.code || []).map((hit) => ({
+      kind: "hit" as const,
+      key: "k:" + hit.ref,
+      hit,
+      code: true,
+    })),
+    ...(r.decisions || []).map((d) => ({ kind: "decision" as const, key: "d:" + d.ref, d })),
+  ];
+}
 
 /**
  * 執行中的 agent 會話（畫面已經有的資料，只做文字過濾）：空查詢＝全部、在等你的在前；
@@ -119,8 +147,34 @@ export function Palette({ onClose }: { onClose: () => void }) {
     (prevFocus.current as HTMLElement | null)?.focus?.();
   }
 
+  // 「%」搜內容：跟 agent 的 search_knowledge 同一個函式；打兩個字以上才問
+  const contentQuery = CONTENT_PREFIX.test(query.trim())
+    ? query.trim().replace(CONTENT_PREFIX, "")
+    : null;
+  const [content, setContent] = useState<{ q: string; r: ContentResult } | null>(null);
+  useEffect(() => {
+    if (contentQuery === null || [...contentQuery].length < 2) return;
+    let live = true;
+    const t = setTimeout(() => {
+      store
+        .action("search_content", { query: contentQuery, ...store.scopePayload })
+        .then((r) => {
+          if (!live) return;
+          setContent({ q: contentQuery, r });
+          setError("");
+          setActive(0);
+        })
+        .catch((e: Error) => live && setError(e.message));
+    }, CONTENT_DEBOUNCE_MS);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [store, contentQuery]);
+
   // 問引擎；晚回來的舊查詢不蓋掉新的。失敗保留上次的清單並顯示原因。
   useEffect(() => {
+    if (CONTENT_PREFIX.test(query.trim())) return;
     let live = true;
     const t = setTimeout(
       () => {
@@ -190,6 +244,15 @@ export function Palette({ onClose }: { onClose: () => void }) {
         ]
       : []),
     {
+      id: "content",
+      label: "搜檔案內容（md、程式碼、過去的判斷）…",
+      keys: "search grep find 內容 搜尋 全文",
+      run: () => {
+        setQuery("%");
+        input.current?.focus();
+      },
+    },
+    {
       id: "note",
       label: "寫組筆記（目前牌組）",
       keys: "note 筆記 capture",
@@ -250,18 +313,28 @@ export function Palette({ onClose }: { onClose: () => void }) {
       : assistMode
         ? (recent || []).map((t) => ({ kind: "assist" as const, key: "r:" + t, text: t }))
         : [];
-  const items = assistMode
-    ? assist
-    : commandMode
-      ? commandsOf(commands, query)
-      : [
-          ...itemsOf(result, sessionsOf(state.terms || [], query), commandsOf(commands, query)),
-          ...assist,
-        ];
+  const contentMode = contentQuery !== null;
+  const items = contentMode
+    ? content && content.q === contentQuery
+      ? contentItems(content.r)
+      : []
+    : assistMode
+      ? assist
+      : commandMode
+        ? commandsOf(commands, query)
+        : [
+            ...itemsOf(result, sessionsOf(state.terms || [], query), commandsOf(commands, query)),
+            ...assist,
+          ];
   const cur = items[Math.min(active, items.length - 1)];
 
   function choose(item: Item | undefined, session: boolean) {
     if (!item) return;
+    // 「搜檔案內容…」只換查詢，面板留著
+    if (item.kind === "command" && item.cmd.id === "content") {
+      void item.cmd.run();
+      return;
+    }
     onClose();
     if (item.kind === "assist") {
       ui.openDetail({
@@ -273,6 +346,18 @@ export function Palette({ onClose }: { onClose: () => void }) {
       void Promise.resolve(item.cmd.run()).catch((e: unknown) =>
         store.toast(e instanceof Error ? e.message : String(e)),
       );
+    } else if (item.kind === "hit") {
+      const h = item.hit;
+      if (session) {
+        ui.togglePick({ repo: h.repo, path: h.file, name: h.file.split("/").pop() || h.file });
+        store.toast("已加入脈絡：" + h.repo + " / " + h.file);
+      } else ui.openFile(h.repo, h.file, { line: h.snippets[0]?.line });
+    } else if (item.kind === "decision") {
+      ui.openDetail({
+        title: "過去的判斷",
+        eyebrow: item.d.at + (item.d.repo ? " · " + item.d.repo : ""),
+        content: <DecisionView d={item.d} />,
+      });
     } else if (item.kind === "session") {
       ui.selectTerm(item.term.sid);
     } else if (item.kind === "group") {
@@ -315,7 +400,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
           spellCheck={false}
           // macOS WebView 的行內輸入建議（灰字＋×）會蓋住結果
           {...{ writingsuggestions: "false" }}
-          placeholder="找會話、repo、牌組或檔案；打「>」看指令、「?」請助手改設定"
+          placeholder="找會話、repo、牌組或檔案；「%」搜內容、「>」看指令、「?」請助手改設定"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -361,6 +446,15 @@ export function Palette({ onClose }: { onClose: () => void }) {
                 <RepoRow hit={it.hit} />
               ) : it.kind === "group" ? (
                 <GroupRow group={it.group} />
+              ) : it.kind === "hit" ? (
+                <HitRow hit={it.hit} code={it.code} />
+              ) : it.kind === "decision" ? (
+                <div className="paletterow">
+                  <span className="palettekind small muted">判斷</span>
+                  <span className="palettename">{it.d.text}</span>
+                  <span className="spacer" />
+                  <span className="small muted">{it.d.at}</span>
+                </div>
               ) : it.kind === "assist" ? (
                 <div className="paletterow">
                   <span className="palettekind small muted">助手</span>
@@ -388,13 +482,26 @@ export function Palette({ onClose }: { onClose: () => void }) {
             </ul>
           </div>
         ) : null}
-        {result && !assistMode && !items.some((i) => i.kind !== "assist") ? (
+        {contentMode ? (
+          [...(contentQuery || "")].length < 2 ? (
+            <p className="muted small paletteempty">
+              搜這個範圍裡的 md、程式碼與過去的判斷（跟 agent 的 search_knowledge
+              一樣）；打兩個字以上。
+            </p>
+          ) : !content || content.q !== contentQuery ? (
+            <p className="muted small paletteempty">搜尋中…</p>
+          ) : !items.length ? (
+            <p className="muted small paletteempty">這個範圍裡沒有內容含「{contentQuery}」。</p>
+          ) : null
+        ) : null}
+        {result && !contentMode && !assistMode && !items.some((i) => i.kind !== "assist") ? (
           <p className="muted small paletteempty">沒有符合「{query}」的會話、repo、牌組或檔案。</p>
         ) : null}
         <p className="palettehint small muted">
           <span>↑↓ 選擇</span>
           <span>Enter 切到會話／開 repo 側欄／切牌組／開檔</span>
           <span>⌘/Ctrl + Enter 開 Agent 會話／檔案加入脈絡</span>
+          <span>「%」搜內容</span>
           <span>「&gt;」只看指令</span>
           <span>「?」請助手（例：切到 PM Group、VMS 加標籤 規格）</span>
           <span>Esc 關閉</span>
@@ -416,6 +523,47 @@ function RepoRow({ hit }: { hit: PaletteResult["repos"][number] }) {
       {hit.description ? <div className="palettedesc small muted">{hit.description}</div> : null}
       {hit.why.length ? <div className="palettewhy small muted">{hit.why.join("・")}</div> : null}
     </>
+  );
+}
+
+function HitRow({ hit, code }: { hit: ContentHit; code: boolean }) {
+  const s = hit.snippets[0];
+  return (
+    <>
+      <div className="paletterow">
+        <span className="palettekind small muted">{code ? "程式碼" : "文件"}</span>
+        <span className="palettename">{hit.file}</span>
+        <span className="spacer" />
+        <span className="small muted">{hit.repo}</span>
+      </div>
+      {s ? (
+        <div className="palettedesc small muted" title={hit.path}>
+          {"L" + s.line + "　" + s.text}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/** 搜到的過去判斷：全文（搜尋結果只給一行）。 */
+function DecisionView({ d }: { d: DecisionHit }) {
+  const { close } = useDetail();
+  const ref = useAutoFocus<HTMLButtonElement>();
+  return (
+    <DetailLayout
+      actions={
+        <button ref={ref} type="button" className="primary" onClick={close}>
+          知道了
+        </button>
+      }
+    >
+      <p className="dialogmessage">{d.text}</p>
+      {d.hit && d.hit !== d.text ? <p className="muted small">{"命中：" + d.hit}</p> : null}
+      <p className="muted small">
+        <code>{d.ref}</code>
+        {d.group ? " · " + d.group : ""}
+      </p>
+    </DetailLayout>
   );
 }
 

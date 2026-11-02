@@ -157,6 +157,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("screen", a_screen),
     ("build_info", a_build_info),
     ("install_update", a_install_update),
+    ("search_content", a_search_content),
 ];
 
 /// 不寫入任何東西的 action：殼不發 `workbench://changed`（否則展開資料夾、開檔都會讓前端重抓整份 state）。
@@ -195,6 +196,7 @@ const READ_ONLY: &[&str] = &[
     "build_info",
     // 只寫 ~/.cache 的更新狀態檔
     "install_update",
+    "search_content",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -267,6 +269,38 @@ fn a_build_info(_d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
 fn a_install_update(_d: &Path, _p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     let st = crate::build::start_install()?;
     Ok(json!({"ok": true, "install": st}))
+}
+
+/// ⌘K「%」搜內容（2026-11-03，R38）：跟 agent 的 MCP `search_knowledge` 同一個函式（md 知識、程式碼、過去的判斷）——
+/// 人和 agent 找得到的東西一樣。範圍是畫面目前的範圍；「所有 repo」＝全部。
+#[derive(serde::Deserialize)]
+struct SearchContentArgs {
+    query: String,
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default)]
+    repos: Option<Vec<String>>,
+}
+
+fn a_search_content(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let SearchContentArgs {
+        query,
+        group,
+        repos,
+    } = parse("search_content", p)?;
+    let group = group.filter(|g| !g.is_empty());
+    let repos = repos.filter(|r| !r.is_empty());
+    let opts = crate::agentapi::SearchOpts {
+        everywhere: group.is_none() && repos.is_none(),
+        limit: 10,
+        ..Default::default()
+    };
+    let t = crate::agentapi::Target {
+        cwd: None,
+        group,
+        repos,
+    };
+    crate::agentapi::search_knowledge(d, &query, &t, &opts)
 }
 
 /// 把 payload 解析成型別化參數。**新 action 一律用這個**（缺欄位、型別不對都在這裡擋下）；

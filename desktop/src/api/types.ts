@@ -958,6 +958,17 @@ export interface ActionMap {
     payload: { since?: string };
     result: BuildInfo;
   };
+  /** Rust 才有（R38）：⌘K「%」搜內容——跟 MCP search_knowledge 同一個函式；範圍＝畫面目前的範圍。 */
+  search_content: {
+    payload: { query: string; group?: string | null; repos?: string[] | null };
+    result: {
+      ok: true;
+      scope: string;
+      files?: ContentHit[];
+      code?: ContentHit[];
+      decisions?: DecisionHit[];
+    };
+  };
   /** Rust 才有（F-118，只有 macOS）：背景跑 install-app.sh --wait --reopen；已經在跑就錯。 */
   install_update: {
     payload: Record<string, never>;
@@ -1080,6 +1091,27 @@ export const ACTION_NAMES: ActionName[] = [
   "session_result",
 ];
 
+/** ⌘K「%」搜內容的一筆（md 知識或程式碼；跟 MCP search_knowledge 同形狀）。 */
+export interface ContentHit {
+  repo: string;
+  /** 相對 repo 根目錄 */
+  file: string;
+  /** 絕對路徑 */
+  path: string;
+  score: number;
+  why: string[];
+  snippets: { line: number; text: string }[];
+  ref: string;
+}
+/** ⌘K「%」搜到的過去判斷。 */
+export interface DecisionHit {
+  ref: string;
+  at: string;
+  text: string;
+  hit: string;
+  group?: string | null;
+  repo?: string | null;
+}
 /** 一個 commit（F-114 版本資訊用）。 */
 export interface BuildCommit {
   sha: string;

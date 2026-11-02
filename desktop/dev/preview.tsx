@@ -356,6 +356,44 @@ const backend: Backend = {
             }
           : null,
       };
+    // R38：⌘K「%」搜內容
+    if (name === "search_content")
+      return {
+        ok: true,
+        scope: "產品開發",
+        files: [
+          {
+            repo: "repo-a",
+            file: "docs/notes.md",
+            path: "/x/docs/notes.md",
+            score: 24,
+            why: ["30 天內改過"],
+            snippets: [{ line: 12, text: "登入頁的錯誤訊息改紅字，按鈕對齊；之後補登入測試" }],
+            ref: "repo-a:docs/notes.md",
+          },
+        ],
+        code: [
+          {
+            repo: "repo-b",
+            file: "src/login.ts",
+            path: "/x/src/login.ts",
+            score: 1.1,
+            why: ["程式碼含 登入"],
+            snippets: [{ line: 40, text: "// 登入失敗：顯示紅字錯誤訊息" }],
+            ref: "repo-b:src/login.ts",
+          },
+        ],
+        decisions: [
+          {
+            ref: "decision:2026-10-15-d2",
+            at: "2026-10-15 01:00",
+            text: "登入頁先不做第三方登入，等使用者數量起來再說",
+            hit: "登入頁先不做第三方登入",
+            group: "產品開發",
+            repo: "repo-a",
+          },
+        ],
+      };
     // F-115：App 裡看不了的檔
     if (name === "read_file" && String(p.path).endsWith(".pdf"))
       return {
@@ -788,6 +826,13 @@ if (scene === "palette")
     later(200, () => typeInto(document.querySelector<HTMLInputElement>("#palette input")!, "repo"));
   });
 if (scene === "composer") later(700, () => click("#ideatoggle"));
+if (scene === "palette-content")
+  later(600, () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+    later(200, () =>
+      typeInto(document.querySelector<HTMLInputElement>("#palette input")!, "%登入"),
+    );
+  });
 if (scene === "rename")
   later(900, () => {
     const row = document.querySelector<HTMLElement>(

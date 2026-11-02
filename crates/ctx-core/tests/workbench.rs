@@ -2067,6 +2067,46 @@ fn repo_profile_falls_back_to_readme_and_describe_writes_only_changes() {
 }
 
 #[test]
+fn search_content_finds_md_and_code_in_scope() {
+    let (_t, d) = spine_with_repos();
+    let path = |id: &str| registry::get_repo(&d, id).unwrap().path();
+    std::fs::write(
+        path("repo-a").join("notes").join("trash.md"),
+        "# 垃圾桶\n移到垃圾桶要先確認\n",
+    )
+    .unwrap();
+    std::fs::write(
+        path("repo-b").join("trash.rs"),
+        "// 移到垃圾桶的程式\nfn trash() {}\n",
+    )
+    .unwrap();
+    // 程式碼搜尋走 git grep：要被 git 認得
+    ctx_core::testkit::git(&path("repo-b"), &["add", "trash.rs"], &[]);
+    let r = act(&d, "search_content", json!({"query": "垃圾桶"})).unwrap();
+    let files: Vec<&str> = r["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["file"].as_str().unwrap())
+        .collect();
+    assert!(files.contains(&"notes/trash.md"), "{r}");
+    assert_eq!(r["code"][0]["file"], "trash.rs", "{r}");
+    assert!(r["files"][0]["snippets"][0]["line"].is_u64());
+    // 只搜 repo-a：repo-b 的程式碼不在
+    let a = act(
+        &d,
+        "search_content",
+        json!({"query": "垃圾桶", "repos": ["repo-a"]}),
+    )
+    .unwrap();
+    assert!(a["code"].as_array().is_none_or(|c| c.is_empty()), "{a}");
+    // 空查詢＝錯（跟 MCP 一樣）
+    assert!(act(&d, "search_content", json!({"query": " "})).is_err());
+    // 唯讀（畫面不必重抓）：只會寫知識索引的快取（.state/knowledge_index.json），不動 spine 本體
+    assert!(is_read_only("search_content"));
+}
+
+#[test]
 fn palette_finds_repos_by_partial_name_and_profile_and_groups() {
     let (_t, d) = spine_with_repos();
     act(

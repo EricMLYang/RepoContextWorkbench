@@ -3138,6 +3138,82 @@ describe("⌘K 找 repo／牌組", () => {
   const opts = () => within(screen.getByRole("listbox", { name: "結果" })).getAllByRole("option");
   const noBox = () => screen.queryByRole("combobox", { name: "搜尋或執行指令" });
 
+  it("「%」搜內容（R38）：跟 search_knowledge 同一個函式、帶目前範圍；Enter 開檔並捲到那一行；判斷開全文", async () => {
+    const hit = (file: string, line: number) => ({
+      repo: "a",
+      file,
+      path: "/r/a/" + file,
+      score: 1,
+      why: [],
+      snippets: [{ line, text: "移到垃圾桶要先確認" }],
+      ref: "a:" + file,
+    });
+    const action = vi.fn(
+      async (name: string, p: { query?: string; id?: string; path?: string }) => {
+        if (name === "search_content")
+          return {
+            ok: true,
+            scope: "全部",
+            files: [hit("docs/trash.md", 12)],
+            code: [hit("src/trash.rs", 3)],
+            decisions: [
+              {
+                ref: "decision:2026-11-01-d1",
+                at: "2026-11-01 10:30",
+                text: "檔案樹移到垃圾桶不直接刪",
+                hit: "檔案樹移到垃圾桶不直接刪",
+                group: "產品開發",
+                repo: "a",
+              },
+            ],
+          };
+        if (name === "read_file")
+          return {
+            ok: true,
+            id: p.id,
+            path: p.path,
+            abs: "/r/a/" + p.path,
+            size: 4,
+            kind: "text",
+            text: "x\n".repeat(20),
+            truncated: false,
+          };
+        return { ok: true };
+      },
+    );
+    await mount(mockBackend({ action: action as never }));
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    // 一個字：只給說明，不問
+    fireEvent.change(box(), { target: { value: "%垃" } });
+    expect(screen.getByText(/打兩個字以上/)).toBeTruthy();
+    fireEvent.change(box(), { target: { value: "%垃圾桶" } });
+    await waitFor(() => expect(opts().length).toBe(3));
+    // 「所有 repo」範圍：只送查詢（引擎＝全部）
+    expect(action).toHaveBeenCalledWith("search_content", { query: "垃圾桶" });
+    expect(action).not.toHaveBeenCalledWith(
+      "palette",
+      expect.objectContaining({ query: "%垃圾桶" }),
+    );
+    expect(opts()[0].textContent).toContain("docs/trash.md");
+    expect(opts()[0].textContent).toContain("L12");
+    expect(opts()[1].textContent).toContain("程式碼");
+    // 判斷：開全文
+    await act(async () => fireEvent.click(opts()[2]));
+    expect(document.getElementById("detaildialog")!.textContent).toContain(
+      "檔案樹移到垃圾桶不直接刪",
+    );
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "知道了" })));
+    // 再開一次，Enter＝開檔
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    fireEvent.change(box(), { target: { value: "%垃圾桶" } });
+    await waitFor(() => expect(opts().length).toBe(3));
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter" }));
+    expect(noBox()).toBeNull();
+    await waitFor(() =>
+      expect(action).toHaveBeenCalledWith("read_file", { id: "a", path: "docs/trash.md" }),
+    );
+  });
+
   it("「>」指令有「常用 prompt…」（R37 F-106），選了開常用 prompt 對話框", async () => {
     const backend = backendWithPalette();
     (backend.action as ReturnType<typeof vi.fn>).mockImplementation(async (name: string) =>
