@@ -2,7 +2,8 @@
 //!
 //! commit、commit 時間、原始碼目錄是 build 時寫死的（`build.rs`）；[`info`] 執行時再到原始碼目錄問 git：
 //! - `pending`：原始碼已經有、這版還沒有的 commit（「N 個改動沒裝」）——只有原始碼目錄還在這台機器上才有；
-//! - `since`：給了上次看過的那版，列出從那版到這版多了哪些 commit（「已更新：多了什麼」）。
+//! - `since`：給了上次看過的那版，列出從那版到這版多了哪些 commit（「已更新：多了什麼」），
+//!   以及這段期間 `docs/TESTING.md` 新增或改過的驗收列（「可以測什麼」——使用者重開 App 後最常問的）。
 //!
 //! 只讀、不打網路；git 不在或原始碼不在就只回這版本身。
 
@@ -57,8 +58,46 @@ fn range(src: &Path, from: &str, to: &str) -> Option<(usize, Vec<Value>)> {
     Some((n, list))
 }
 
+/// 驗收清單（相對原始碼根目錄）。
+const TESTING_MD: &str = "docs/TESTING.md";
+
+/// `from..to` 之間 `docs/TESTING.md` 新增或改過的表格列：`{id, step, expect}`（同一個 id 只留一次，最多 [`LIST_MAX`]）。
+fn tests_between(src: &Path, from: &str, to: &str) -> Vec<Value> {
+    let spec = format!("{from}..{to}");
+    let (code, out) = crate::crossref::git(
+        src,
+        &["diff", "-U0", "--no-color", &spec, "--", TESTING_MD],
+        GIT_TIMEOUT,
+    );
+    if code != 0 {
+        return vec![];
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut list = Vec::new();
+    for line in out.lines() {
+        let Some(row) = line.strip_prefix("+| ") else {
+            continue;
+        };
+        let cols: Vec<&str> = row.trim_end_matches(" |").split(" | ").collect();
+        // 驗收列的 id 長得像 8d-21、8c-14（表頭、分隔線不算）
+        let [id, step, expect, ..] = cols[..] else {
+            continue;
+        };
+        let id = id.trim();
+        let looks_like_id =
+            id.contains('-') && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+        if looks_like_id && seen.insert(id.to_string()) {
+            list.push(json!({"id": id, "step": step.trim(), "expect": expect.trim()}));
+        }
+        if list.len() >= LIST_MAX {
+            break;
+        }
+    }
+    list
+}
+
 /// 這版的資訊；`since`＝上次看過的那版 commit（跟這版一樣或認不得就不列 `since`）。
-/// 回 `{commit, date, source, pending: {count, commits}|null, since: {from, count, commits}|null}`。
+/// 回 `{commit, date, source, pending: {count, commits}|null, since: {from, count, commits, tests}|null}`。
 pub fn info(since: Option<&str>) -> Value {
     let src = Path::new(SOURCE_DIR);
     let known = !COMMIT.is_empty() && !SOURCE_DIR.is_empty() && src.join(".git").exists();
@@ -71,7 +110,9 @@ pub fn info(since: Option<&str>) -> Value {
         .filter(|s| known && !s.is_empty() && *s != COMMIT)
         .filter(|s| s.chars().all(|c| c.is_ascii_hexdigit()))
         .and_then(|s| {
-            range(src, s, COMMIT).map(|(n, c)| json!({"from": s, "count": n, "commits": c}))
+            range(src, s, COMMIT).map(|(n, c)| {
+                json!({"from": s, "count": n, "commits": c, "tests": tests_between(src, s, COMMIT)})
+            })
         });
     json!({
         "commit": (!COMMIT.is_empty()).then_some(COMMIT),
@@ -117,5 +158,27 @@ mod tests {
         assert_eq!(list[1]["subject"], "第 1 個");
         assert_eq!(range(r, "HEAD", "HEAD").unwrap().0, 0);
         assert!(range(r, "nope", "HEAD").is_none());
+
+        // 驗收列：新增與改過的都算，表頭與分隔線不算，同 id 只一次
+        std::fs::create_dir_all(r.join("docs")).unwrap();
+        let md = |rows: &str| {
+            std::fs::write(
+                r.join("docs/TESTING.md"),
+                format!("| # | 步驟 | 預期 | macOS | Windows |\n|---|---|---|---|---|\n{rows}"),
+            )
+            .unwrap();
+            crate::testkit::git(r, &["add", "docs"], &[]);
+            crate::testkit::git(r, &["commit", "-qm", "testing"], &[]);
+        };
+        md("| 8d-1 | 舊的 | 舊 | [ ] | [ ] |\n");
+        md("| 8d-1 | 舊的（改過） | 舊 | [ ] | [ ] |\n| 8d-2 | 按「分割」 | 左寫右看 | [ ] | 未測 |\n");
+        let t = tests_between(r, "HEAD~1", "HEAD");
+        assert_eq!(t.len(), 2);
+        assert_eq!(t[0]["id"], "8d-1");
+        assert_eq!(
+            t[1],
+            json!({"id": "8d-2", "step": "按「分割」", "expect": "左寫右看"})
+        );
+        assert!(tests_between(r, "HEAD", "HEAD").is_empty());
     }
 }

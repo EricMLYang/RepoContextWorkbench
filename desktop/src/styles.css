@@ -1133,6 +1133,10 @@ td button {
 .buildcommits li {
   margin-bottom: 6px;
 }
+.buildtestshead {
+  margin: 14px 0 0;
+  font-size: 13px;
+}
 /* 很久沒更新：數字可能已經不是現在的 */
 #status .usagestale {
   opacity: 0.6;

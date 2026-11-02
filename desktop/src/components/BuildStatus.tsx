@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { BuildCommit, BuildInfo } from "../api/types";
+import type { BuildCommit, BuildInfo, BuildTest } from "../api/types";
 import { DetailLayout, useAutoFocus, useDetail } from "../dialogs/Modal";
 import { load, save } from "../lib/storage";
 import { useStore, useUi } from "../store/context";
@@ -77,6 +77,7 @@ export function BuildStatus() {
                   }
                   commits={updated.commits}
                   more={updated.count - updated.commits.length}
+                  tests={updated.tests}
                   onDone={markSeen}
                   done="知道了"
                 />
@@ -138,10 +139,12 @@ function CommitList(props: {
   lead: string;
   commits: BuildCommit[];
   more: number;
+  /** 這段期間新增或改過的驗收列（docs/TESTING.md）。 */
+  tests?: BuildTest[];
   done: string;
   onDone?: () => void;
 }) {
-  const { lead, commits, more, done, onDone } = props;
+  const { lead, commits, more, tests, done, onDone } = props;
   const { close } = useDetail();
   const ref = useAutoFocus<HTMLButtonElement>();
   return (
@@ -170,6 +173,21 @@ function CommitList(props: {
         ))}
       </ul>
       {more > 0 ? <p className="muted small">{"另 " + more + " 個沒列出"}</p> : null}
+      {tests?.length ? (
+        <>
+          <h3 className="buildtestshead">
+            {"可以驗收的（docs/TESTING.md，" + tests.length + " 項）"}
+          </h3>
+          <ul className="buildcommits">
+            {tests.map((t) => (
+              <li key={t.id}>
+                <code>{t.id}</code> {t.step}
+                <div className="muted small">{"預期：" + t.expect}</div>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
     </DetailLayout>
   );
 }

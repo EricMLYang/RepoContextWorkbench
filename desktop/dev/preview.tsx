@@ -341,6 +341,18 @@ const backend: Backend = {
                 },
                 { sha: "1bb9546", date: "10-30 10:48", subject: "feat(usage)：額度改寫「剩多少」" },
               ],
+              tests: [
+                {
+                  id: "8d-20",
+                  step: "檔案樹某個檔按右鍵「移到垃圾桶…」",
+                  expect: "那一列出現「移到垃圾桶？」；確定後那列消失、toast 說已移到垃圾桶",
+                },
+                {
+                  id: "8d-21",
+                  step: "重裝後打開 App",
+                  expect: "藍字「已更新 · N 項改動」，點開列出這版多了什麼",
+                },
+              ],
             }
           : null,
       };

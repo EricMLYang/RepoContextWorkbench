@@ -58,6 +58,7 @@ describe("狀態列的版本（F-114）", () => {
                   { sha: "bbbbbbb", date: "11-02 23:00", subject: "feat：版本看得見" },
                   { sha: "ccccccc", date: "11-02 22:00", subject: "feat：在 Finder 中顯示" },
                 ],
+                tests: [{ id: "8d-21", step: "重裝後打開 App", expect: "「已更新 · N 項改動」" }],
               },
             })
           : info({}),
@@ -67,6 +68,9 @@ describe("狀態列的版本（F-114）", () => {
     const chip = await screen.findByRole("button", { name: "已更新 · 2 項改動" });
     await act(async () => fireEvent.click(chip));
     expect(screen.getByText("feat：版本看得見")).toBeTruthy();
+    // 重開 App 後最常問的「可以測什麼」：這段期間新增或改過的驗收列
+    expect(screen.getByText("可以驗收的（docs/TESTING.md，1 項）")).toBeTruthy();
+    expect(screen.getByText("8d-21")).toBeTruthy();
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "知道了" })));
     expect(JSON.parse(localStorage.getItem("workbench:build:seen")!)).toBe("bbbbbbb");
     await waitFor(() => expect(document.getElementById("buildupdated")).toBeNull());

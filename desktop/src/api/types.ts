@@ -1082,6 +1082,12 @@ export interface BuildCommit {
   date: string;
   subject: string;
 }
+/** 一條驗收（docs/TESTING.md 的表格列；F-114「已更新」時列出這段期間新增或改過的）。 */
+export interface BuildTest {
+  id: string;
+  step: string;
+  expect: string;
+}
 /** 現在跑的是哪一版（F-114）。不在 git 裡 build 的：commit／date 是 null；原始碼不在這台：source／pending 是 null。 */
 export interface BuildInfo {
   ok: true;
@@ -1089,5 +1095,5 @@ export interface BuildInfo {
   date: string | null;
   source: string | null;
   pending: { count: number; commits: BuildCommit[] } | null;
-  since: { from: string; count: number; commits: BuildCommit[] } | null;
+  since: { from: string; count: number; commits: BuildCommit[]; tests?: BuildTest[] } | null;
 }
