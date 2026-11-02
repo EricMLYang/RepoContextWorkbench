@@ -52,8 +52,13 @@ status() {
   printf '{"phase":"%s","at":"%s","pid":%s,"commit":"%s","detail":"%s"}\n' \
     "$1" "$(date '+%Y-%m-%d %H:%M')" "$$" "$COMMIT" "${2:-}" > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
 }
+# 背景更新（--wait）時的系統通知：build 好了、失敗了——build 要幾分鐘，那時人多半在別的 App
+notify() {
+  [ "$WAIT" = 1 ] && [ "$DRY" = 0 ] || return 0
+  osascript -e "display notification \"$1\" with title \"Repo Context\"" >/dev/null 2>&1 || true
+}
 DONE=0
-trap 'rc=$?; [ "$DONE" = 1 ] || status failed "第 ${STEP:-?} 步失敗（exit ${rc}）"' EXIT
+trap 'rc=$?; [ "$DONE" = 1 ] || { status failed "第 ${STEP:-?} 步失敗（exit ${rc}）"; notify "背景更新失敗（第 ${STEP:-?} 步）：細節在 ~/.cache/repo-context/install.log"; }' EXIT
 STEP=0
 app_running() { pgrep -af "$APP_PATTERN" >/dev/null 2>&1; }
 run() {
@@ -75,6 +80,7 @@ fi
 if [ "$WAIT" = 1 ] && [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]; then
   say "原始碼有還沒 commit 的改動，背景更新不 build（先 commit，或自己在終端跑 bash scripts/install-app.sh）。"
   status failed "原始碼有還沒 commit 的改動（先 commit 再更新）"
+  notify "背景更新沒開始：原始碼有還沒 commit 的改動"
   DONE=1
   exit 1
 fi
@@ -101,6 +107,7 @@ if [ "$WAIT" = 1 ] && [ "$DRY" = 0 ]; then
     if [ "$waited" = 0 ]; then
       say "build 好了，等你結束 App（⌘Q）再換……"
       status waiting
+      notify "新版 build 好了：⌘Q 結束 App 後會自動換好並重新打開"
     fi
     if [ "$waited" -ge "$WAIT_MAX" ]; then
       say "等了 $((WAIT_MAX / 3600)) 小時 App 都還開著，不換了（build 好的留在 ${BUILT}，之後可以 --prebuilt）。"
