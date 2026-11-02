@@ -34,6 +34,7 @@ export function installText(st: InstallStatus | null | undefined): string | null
 /**
  * 狀態列的版本（F-114）：平常只寫「a37c4b5」；裝了新版第一次打開寫「已更新 · N 項改動」，
  * 原始碼有還沒裝的 commit 寫「N 個改動沒裝」（琥珀）——點了列出 commit，可以直接「背景 build 新版」（F-118）。
+ * 重裝後 agent 的 skill 還是舊版就多一顆「更新 agent 的 skill」（ctx setup --claude 最常忘的那一步）。
  * 只在打開、視窗回到前景、背景更新 build／安裝中時問引擎；問不到就留著上次的。
  */
 export function BuildStatus() {
@@ -172,6 +173,21 @@ export function BuildStatus() {
         >
           {pending.count + " 個改動沒裝"}
         </button>
+      ) : null}
+      {info.skill === "stale" ? (
+        <AsyncButton
+          id="skillstale"
+          className="statusbtn usagewarn"
+          title="重裝 App 之後，agent 讀的 repo-context skill 還是舊版（等於 ctx setup --claude 沒重跑）：按了換成這版內建的。只寫 ~/.claude/skills/repo-context/SKILL.md；開新的會話才會讀到"
+          onError={(m) => store.toast(m)}
+          run={async () => {
+            const r = await store.action("update_skill", {});
+            setInfo((cur) => (cur ? { ...cur, skill: r.skill } : cur));
+            store.toast("已更新 agent 的 skill：" + r.message + "（開新的會話才會讀到）");
+          }}
+        >
+          更新 agent 的 skill
+        </AsyncButton>
       ) : null}
       <span
         id="buildver"

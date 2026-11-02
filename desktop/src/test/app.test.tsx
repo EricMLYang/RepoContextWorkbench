@@ -91,6 +91,21 @@ describe("狀態列的版本（F-114）", () => {
     expect(document.getElementById("buildupdated")).toBeNull();
   });
 
+  it("skill 還是舊版：狀態列「更新 agent 的 skill」，按了叫 update_skill、按鈕消失", async () => {
+    const action = vi.fn(async (name: string) =>
+      name === "build_info"
+        ? info({ skill: "stale" })
+        : name === "update_skill"
+          ? { ok: true, message: "已寫入 ~/.claude/skills/repo-context/SKILL.md", skill: "current" }
+          : { ok: true },
+    );
+    await mount(mockBackend({ action: action as never }));
+    const btn = await screen.findByRole("button", { name: "更新 agent 的 skill" });
+    await act(async () => fireEvent.click(btn));
+    expect(action).toHaveBeenCalledWith("update_skill", {});
+    expect(screen.queryByRole("button", { name: "更新 agent 的 skill" })).toBeNull();
+  });
+
   it("原始碼有沒裝的 commit：琥珀「N 個改動沒裝」，點開說怎麼裝", async () => {
     const backend = mockBackend({
       action: vi.fn(async (name: string) =>

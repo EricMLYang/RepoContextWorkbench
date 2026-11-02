@@ -158,6 +158,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("build_info", a_build_info),
     ("install_update", a_install_update),
     ("search_content", a_search_content),
+    ("update_skill", a_update_skill),
 ];
 
 /// 不寫入任何東西的 action：殼不發 `workbench://changed`（否則展開資料夾、開檔都會讓前端重抓整份 state）。
@@ -197,6 +198,8 @@ const READ_ONLY: &[&str] = &[
     // 只寫 ~/.cache 的更新狀態檔
     "install_update",
     "search_content",
+    // 只寫 ~/.claude/skills 裡的說明檔
+    "update_skill",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。
@@ -301,6 +304,13 @@ fn a_search_content(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value
         repos,
     };
     crate::agentapi::search_knowledge(d, &query, &t, &opts)
+}
+
+/// 把 agent 讀的 skill 換成這版內建的（`ctx setup --claude` 的那一步；hook 與 MCP 指的是固定路徑，重裝不必動）。
+fn a_update_skill(_d: &Path, _p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let home = crate::agentsetup::claude_home();
+    let r = crate::agentsetup::install_skill(&home)?;
+    Ok(json!({"ok": true, "message": r.message, "skill": crate::agentsetup::skill_status(&home)}))
 }
 
 /// 把 payload 解析成型別化參數。**新 action 一律用這個**（缺欄位、型別不對都在這裡擋下）；

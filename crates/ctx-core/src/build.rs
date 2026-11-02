@@ -229,6 +229,8 @@ pub fn info(since: Option<&str>) -> Value {
         "pending": pending,
         "since": since,
         "install": install_status(),
+        // 重裝之後 agent 讀的 skill 常常還是舊版（setup 沒重跑）：current／stale／missing
+        "skill": crate::agentsetup::skill_status(&crate::agentsetup::claude_home()),
     })
 }
 

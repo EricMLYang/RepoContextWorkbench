@@ -958,6 +958,11 @@ export interface ActionMap {
     payload: { since?: string };
     result: BuildInfo;
   };
+  /** Rust 才有（R38）：把 agent 讀的 skill 換成這版內建的（ctx setup --claude 的那一步）。 */
+  update_skill: {
+    payload: Record<string, never>;
+    result: { ok: true; message: string; skill: "current" | "stale" | "missing" };
+  };
   /** Rust 才有（R38）：⌘K「%」搜內容——跟 MCP search_knowledge 同一個函式；範圍＝畫面目前的範圍。 */
   search_content: {
     payload: { query: string; group?: string | null; repos?: string[] | null };
@@ -1150,4 +1155,6 @@ export interface BuildInfo {
   since: { from: string; count: number; commits: BuildCommit[]; tests?: BuildTest[] } | null;
   /** 背景更新的狀態（F-118）；沒跑過＝null */
   install?: InstallStatus | null;
+  /** agent 讀的 skill 跟這版內建的比：stale＝重裝後還沒更新 */
+  skill?: "current" | "stale" | "missing";
 }
