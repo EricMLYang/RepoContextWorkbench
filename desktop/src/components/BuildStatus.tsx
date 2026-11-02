@@ -26,8 +26,8 @@ export function BuildStatus() {
         .then((r) => {
           if (!live) return;
           setInfo(r);
-          // 第一次用：記下這版就好，沒有「更新」可說
-          if (!seen && r.commit) {
+          // 沒有「更新」可說就直接記下這版：第一次用、退回舊版、上次那版的 commit 已經找不到、原始碼不在這台
+          if (r.commit && seen !== r.commit && !(r.since && r.since.count > 0)) {
             save(SEEN_KEY, r.commit);
             setSeen(r.commit);
           }

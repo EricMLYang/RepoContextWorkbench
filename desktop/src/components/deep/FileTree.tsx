@@ -179,6 +179,11 @@ function TrashConfirm(props: {
 }) {
   const { dir, onConfirm, onCancel } = props;
   const [error, setError] = useState("");
+  // 出現時焦點放在「移到垃圾桶」一次（之後 Tab 到「取消」不會被搶回來）
+  const first = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    first.current?.querySelector("button")?.focus();
+  }, []);
   // 取消後焦點回到那一列（鍵盤可以接著走）
   const cancel = (el: Element) => {
     el.closest<HTMLElement>('[role="treeitem"]')?.focus();
@@ -198,7 +203,7 @@ function TrashConfirm(props: {
       }}
     >
       <span className="tconfirmq">{dir ? "整個資料夾移到垃圾桶？" : "移到垃圾桶？"}</span>
-      <span ref={(el) => el?.querySelector("button")?.focus()}>
+      <span ref={first}>
         <AsyncButton className="small danger" onError={setError} run={onConfirm}>
           移到垃圾桶
         </AsyncButton>

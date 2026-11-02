@@ -72,6 +72,20 @@ describe("狀態列的版本（F-114）", () => {
     await waitFor(() => expect(document.getElementById("buildupdated")).toBeNull());
   });
 
+  it("上次那版找不到（或原始碼不在這台）：since 是 null → 直接記下這版，不會一直帶舊的去問", async () => {
+    localStorage.setItem("workbench:build:seen", JSON.stringify("0000000"));
+    const backend = mockBackend({
+      action: vi.fn(async (name: string) =>
+        name === "build_info" ? info({ since: null }) : { ok: true },
+      ) as never,
+    });
+    await mount(backend);
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("workbench:build:seen")!)).toBe("bbbbbbb"),
+    );
+    expect(document.getElementById("buildupdated")).toBeNull();
+  });
+
   it("原始碼有沒裝的 commit：琥珀「N 個改動沒裝」，點開說怎麼裝", async () => {
     const backend = mockBackend({
       action: vi.fn(async (name: string) =>

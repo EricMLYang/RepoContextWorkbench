@@ -594,6 +594,17 @@ const RUNS_ON_OPEN: &[&str] = &[
     "hta",
     "cpl",
     "reg",
+    // 預設 App 可能是 Terminal／Python Launcher（打開就跑）
+    "sh",
+    "bash",
+    "zsh",
+    "csh",
+    "ksh",
+    "fish",
+    "py",
+    "pyw",
+    "rb",
+    "pl",
 ];
 
 /// 在 Finder 中顯示（`rel` 可以是根目錄）或用預設 App 開啟（2026-11-02，F-115）。
@@ -1424,7 +1435,7 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         let r = t.path().join("repo");
         std::fs::create_dir_all(r.join("d")).unwrap();
-        for f in ["run.command", "Setup.EXE", "x.app"] {
+        for f in ["run.command", "Setup.EXE", "x.app", "go.sh"] {
             std::fs::write(r.join(f), "").unwrap();
         }
         std::fs::write(t.path().join("outside.md"), "").unwrap();
