@@ -59,7 +59,9 @@ describe("狀態列的版本（F-114）", () => {
                   { sha: "bbbbbbb", date: "11-02 23:00", subject: "feat：版本看得見" },
                   { sha: "ccccccc", date: "11-02 22:00", subject: "feat：在 Finder 中顯示" },
                 ],
-                tests: [{ id: "8d-21", step: "重裝後打開 App", expect: "「已更新 · N 項改動」" }],
+                tests: [
+                  { id: "8d-21", step: "重裝後打開 App", expect: "「已更新 · N 項改動」", line: 3 },
+                ],
               },
             })
           : info({}),
@@ -72,9 +74,49 @@ describe("狀態列的版本（F-114）", () => {
     // 重開 App 後最常問的「可以測什麼」：這段期間新增或改過的驗收列
     expect(screen.getByText("可以驗收的（docs/TESTING.md，1 項）")).toBeTruthy();
     expect(screen.getByText("8d-21")).toBeTruthy();
+    // 原始碼沒登記成 repo：id 只是字，不能點
+    expect(screen.queryByRole("button", { name: "8d-21" })).toBeNull();
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "知道了" })));
     expect(JSON.parse(localStorage.getItem("workbench:build:seen")!)).toBe("bbbbbbb");
     await waitFor(() => expect(document.getElementById("buildupdated")).toBeNull());
+  });
+
+  it("原始碼有登記成 repo：「可以驗收的」id 點了在檢視器開 TESTING.md 那一行", async () => {
+    localStorage.setItem("workbench:build:seen", JSON.stringify("aaaaaaa"));
+    const action = vi.fn(async (name: string, p: { id?: string; path?: string }) =>
+      name === "build_info"
+        ? info({
+            source_repo: "a",
+            testing: "docs/TESTING.md",
+            since: {
+              from: "aaaaaaa",
+              count: 1,
+              commits: [{ sha: "bbbbbbb", date: "11-02 23:00", subject: "feat" }],
+              tests: [{ id: "8d-21", step: "重裝後打開 App", expect: "已更新", line: 3 }],
+            },
+          })
+        : name === "read_file"
+          ? {
+              ok: true,
+              id: p.id,
+              path: p.path,
+              abs: "/r/a/" + p.path,
+              size: 4,
+              kind: "text",
+              text: "| # |\n|---|\n| 8d-21 |\n",
+              truncated: false,
+            }
+          : { ok: true },
+    );
+    await mount(mockBackend({ action: action as never }));
+    await act(async () =>
+      fireEvent.click(await screen.findByRole("button", { name: "已更新 · 1 項改動" })),
+    );
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "8d-21" })));
+    await waitFor(() =>
+      expect(action).toHaveBeenCalledWith("read_file", { id: "a", path: "docs/TESTING.md" }),
+    );
+    expect(screen.getByRole("region", { name: "檢視：a/docs/TESTING.md" })).toBeTruthy();
   });
 
   it("上次那版找不到（或原始碼不在這台）：since 是 null → 直接記下這版，不會一直帶舊的去問", async () => {

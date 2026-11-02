@@ -113,6 +113,11 @@ export function BuildStatus() {
                   commits={updated.commits}
                   more={updated.count - updated.commits.length}
                   tests={updated.tests}
+                  openTest={
+                    info.source_repo && info.testing
+                      ? (line) => ui.openFile(info.source_repo!, info.testing!, { line })
+                      : undefined
+                  }
                   onDone={markSeen}
                   done="知道了"
                 />
@@ -240,12 +245,14 @@ function CommitList(props: {
   more: number;
   /** 這段期間新增或改過的驗收列（docs/TESTING.md）。 */
   tests?: BuildTest[];
+  /** 點驗收列的 id：在檢視器開 TESTING.md 捲到那一行（原始碼有登記才有）。 */
+  openTest?: (line: number | undefined) => void;
   done: string;
   onDone?: () => void;
   /** 「背景 build 新版」（F-118）；沒給就不出現。 */
   extra?: () => Promise<void>;
 }) {
-  const { lead, commits, more, tests, done, onDone, extra } = props;
+  const { lead, commits, more, tests, openTest, done, onDone, extra } = props;
   const { close } = useDetail();
   const ref = useAutoFocus<HTMLButtonElement>();
   return (
@@ -295,7 +302,22 @@ function CommitList(props: {
           <ul className="buildcommits">
             {tests.map((t) => (
               <li key={t.id}>
-                <code>{t.id}</code> {t.step}
+                {openTest ? (
+                  <button
+                    type="button"
+                    className="linklike"
+                    title="在檢視器開 docs/TESTING.md 的這一行（驗完可以直接在那裡打勾）"
+                    onClick={() => {
+                      close();
+                      openTest(t.line);
+                    }}
+                  >
+                    <code>{t.id}</code>
+                  </button>
+                ) : (
+                  <code>{t.id}</code>
+                )}{" "}
+                {t.step}
                 <div className="muted small">{"預期：" + t.expect}</div>
               </li>
             ))}

@@ -1129,6 +1129,8 @@ export interface BuildTest {
   id: string;
   step: string;
   expect: string;
+  /** TESTING.md 裡第幾行 */
+  line?: number;
 }
 /** 背景更新（F-118）：install-app.sh --wait --reopen 寫的狀態。 */
 export interface InstallStatus {
@@ -1155,6 +1157,10 @@ export interface BuildInfo {
   since: { from: string; count: number; commits: BuildCommit[]; tests?: BuildTest[] } | null;
   /** 背景更新的狀態（F-118）；沒跑過＝null */
   install?: InstallStatus | null;
+  /** 原始碼目錄登記成的 repo id（「可以驗收的」點了開 TESTING.md）；沒登記＝null */
+  source_repo?: string | null;
+  /** 驗收清單的相對路徑（docs/TESTING.md） */
+  testing?: string;
   /** agent 讀的 skill 跟這版內建的比：stale＝重裝後還沒更新 */
   skill?: "current" | "stale" | "missing";
 }

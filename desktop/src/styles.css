@@ -1136,6 +1136,17 @@ td button {
 .buildcommits li {
   margin-bottom: 6px;
 }
+/* 看起來像連結的按鈕（「可以驗收的」點了開 TESTING.md） */
+.buildcommits .linklike {
+  padding: 0;
+  min-height: 0;
+  font: inherit;
+  color: var(--blue);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
 .buildtestshead {
   margin: 14px 0 0;
   font-size: 13px;

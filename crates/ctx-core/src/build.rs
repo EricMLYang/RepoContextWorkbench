@@ -65,7 +65,7 @@ fn range(src: &Path, from: &str, to: &str) -> Option<(usize, Vec<Value>)> {
 /// 驗收清單（相對原始碼根目錄）。
 const TESTING_MD: &str = "docs/TESTING.md";
 
-/// `from..to` 之間 `docs/TESTING.md` 新增或改過、macOS 還沒打勾的表格列：`{id, step, expect}`（同一個 id 只留一次，最多 [`LIST_MAX`]）。
+/// `from..to` 之間 `docs/TESTING.md` 新增或改過、macOS 還沒打勾的表格列：`{id, step, expect, line}`（line＝新版裡第幾行）（同一個 id 只留一次，最多 [`LIST_MAX`]）。
 fn tests_between(src: &Path, from: &str, to: &str) -> Vec<Value> {
     let spec = format!("{from}..{to}");
     let (code, out) = crate::crossref::git(
@@ -78,7 +78,24 @@ fn tests_between(src: &Path, from: &str, to: &str) -> Vec<Value> {
     }
     let mut seen = std::collections::HashSet::new();
     let mut list = Vec::new();
+    // 新檔裡的行號（-U0：只有 @@ 標頭與 +／- 行；+ 行一行一號）
+    let mut at = 0usize;
     for line in out.lines() {
+        if let Some(h) = line.strip_prefix("@@ ") {
+            // @@ -a[,b] +c[,d] @@
+            at = h
+                .split(' ')
+                .find_map(|t| t.strip_prefix('+'))
+                .and_then(|t| t.split(',').next())
+                .and_then(|n| n.parse().ok())
+                .unwrap_or(0);
+            continue;
+        }
+        if line.starts_with("+++") || !line.starts_with('+') {
+            continue;
+        }
+        let here = at;
+        at += 1;
         let Some(row) = line.strip_prefix("+| ") else {
             continue;
         };
@@ -95,7 +112,9 @@ fn tests_between(src: &Path, from: &str, to: &str) -> Vec<Value> {
         let looks_like_id =
             id.contains('-') && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
         if looks_like_id && seen.insert(id.to_string()) {
-            list.push(json!({"id": id, "step": step.trim(), "expect": expect.trim()}));
+            list.push(
+                json!({"id": id, "step": step.trim(), "expect": expect.trim(), "line": here}),
+            );
         }
         if list.len() >= LIST_MAX {
             break;
@@ -254,6 +273,8 @@ pub fn info(since: Option<&str>) -> Value {
         "install": install_status(),
         // 重裝之後 agent 讀的 skill 常常還是舊版（setup 沒重跑）：current／stale／missing
         "skill": crate::agentsetup::skill_status(&crate::agentsetup::claude_home()),
+        // 「可以驗收的」點了開哪份（相對原始碼根目錄）
+        "testing": TESTING_MD,
     })
 }
 
@@ -347,9 +368,11 @@ mod tests {
         let t = tests_between(r, "HEAD~1", "HEAD");
         assert_eq!(t.len(), 2);
         assert_eq!(t[0]["id"], "8d-1");
+        // 第 1、2 行是表頭與分隔線
+        assert_eq!(t[0]["line"], 3);
         assert_eq!(
             t[1],
-            json!({"id": "8d-2", "step": "按「分割」", "expect": "左寫右看"})
+            json!({"id": "8d-2", "step": "按「分割」", "expect": "左寫右看", "line": 4})
         );
         assert!(tests_between(r, "HEAD", "HEAD").is_empty());
     }

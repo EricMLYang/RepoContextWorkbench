@@ -261,9 +261,19 @@ struct BuildInfoArgs {
     since: Option<String>,
 }
 
-fn a_build_info(_d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+fn a_build_info(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     let BuildInfoArgs { since } = parse("build_info", p)?;
     let mut v = crate::build::info(since.as_deref());
+    // 原始碼目錄登記成哪個 repo（「可以驗收的」點了在檢視器開 TESTING.md）；沒登記＝null
+    let src = crate::fsutil::resolve(Path::new(crate::build::SOURCE_DIR));
+    v["source_repo"] = json!(registry::load(d).ok().and_then(|r| {
+        r.repos
+            .iter()
+            .find(|e| {
+                !crate::build::SOURCE_DIR.is_empty() && crate::fsutil::resolve(&e.path()) == src
+            })
+            .map(|e| e.id().to_string())
+    }));
     v["ok"] = json!(true);
     Ok(v)
 }
