@@ -196,11 +196,30 @@ pub fn start_install() -> crate::Result<Value> {
         .stdout(out.try_clone()?)
         .stderr(out);
     crate::exe::detach(&mut cmd);
-    let child = cmd.spawn()?;
-    // 腳本自己會寫 building；先寫一份，App 馬上問也看得到（不會看到上一次的 done）
+    // 起腳本之前先寫一份 building（pid 先用 App 自己的）：App 馬上問也看得到、不會看到上一次的 done；
+    // 腳本一開始就會用自己的 pid 蓋掉——先寫才不會反過來把腳本很早寫的 failed（例：有沒 commit 的改動）蓋掉
     let at = chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
-    let v = json!({"phase": "building", "at": at, "pid": child.id(), "commit": "", "detail": ""});
-    crate::fsutil::write_atomic(&status, format!("{v}\n").as_bytes())?;
+    let write = |v: &Value| crate::fsutil::write_atomic(&status, format!("{v}\n").as_bytes());
+    let v = json!({"phase": "building", "at": at, "pid": std::process::id(), "commit": "", "detail": ""});
+    write(&v)?;
+    let child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            let failed = json!({"phase": "failed", "at": at, "pid": 0, "commit": "", "detail": format!("起不了安裝腳本：{e}")});
+            write(&failed)?;
+            return Err(e.into());
+        }
+    };
+    // 腳本還沒寫自己的（狀態檔還是 App 的 pid）：換成腳本的 pid——腳本萬一一開始就死掉，才看得出「中途停了」
+    let still_ours = std::fs::read_to_string(&status)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(t.trim()).ok())
+        .is_some_and(|cur| cur["pid"].as_u64() == Some(u64::from(std::process::id())));
+    if still_ours {
+        let mut v2 = v.clone();
+        v2["pid"] = json!(child.id());
+        write(&v2)?;
+    }
     Ok(install_status().unwrap_or(v))
 }
 
