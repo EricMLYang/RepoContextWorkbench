@@ -185,5 +185,11 @@ fi
 DONE=1
 if [ "$REOPEN" = 1 ] && [ "$DRY" = 0 ]; then
   say "重新打開 App"
-  open "$DEST"
+  # 這支腳本常是在 Claude 會話裡跑的；open 會把呼叫端的環境整包交給 App，
+  # 之後 App 開的每場 claude 就會以為自己是那場的子會話（不存 transcript、/resume 找不到）。
+  # 清單同 crates/ctx-core/src/term.rs 的 CLAUDE_SESSION_ENV；PTY 那邊也會再清一次。
+  env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_SESSION_ID \
+      -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID \
+      -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u CLAUDE_CODE_SESSION_ATTENDED \
+      open "$DEST"
 fi

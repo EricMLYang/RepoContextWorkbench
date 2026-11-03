@@ -299,6 +299,10 @@ impl ClaudeProvider {
         }
         let cmd = self.build_cmd(prompt, model, read_only);
         let mut c = Command::new(&cmd[0]);
+        // 上一層 Claude 會話的身分變數不往下傳（同 term.rs；否則 -p 會去連已死的 messaging socket）
+        for k in crate::term::CLAUDE_SESSION_ENV {
+            c.env_remove(k);
+        }
         c.args(&cmd[1..])
             .env("PYTHONUTF8", "1")
             .stdin(Stdio::null())

@@ -206,6 +206,7 @@
 | 8d-24 | ⌘K 打「%」（或直接 ⌘⇧F）再打兩個字（例「%垃圾桶」）；選一個文件、一個程式碼結果；選一筆判斷；切到別的牌組再搜一次（2026-11-03，R38） | 列出這個範圍裡的文件／程式碼（帶「L 行號＋那一行」，查詢詞標出來）與過去的判斷；打字中留著上一次的結果；Enter 開檔並捲到那一行、⌘Enter 加入脈絡；判斷開全文；換範圍結果跟著換；「>」指令裡也有「搜檔案內容…」 | [ ] | [ ] |
 | 8d-25 | 檔案樹資料夾右鍵「在這裡開 Shell」、檔案右鍵「在所在資料夾開 Shell」、repo 右鍵「在這裡開 Shell」（2026-11-03，R38） | 下方終端切到一個新 Shell，`pwd` 是那個資料夾；Shell 列在「其他會話／獨立終端」 | [ ] | [ ] |
 | 8d-26 | 用注音／倉頡打中文：會話列「回答…」框選字按 Enter；改名、新增檔名、終端 ⌘F 搜尋時，候選字還開著按 Esc（2026-11-03，R38） | 選字的 Enter 只確認字，不會把半句貼進會話；組字中按 Esc 只收起候選字，輸入框還在、打的字沒丟；不在組字時 Esc 照常取消 | [ ] | [ ] |
+| 8d-27 | 在 Claude 會話裡跑 `bash scripts/install-app.sh --wait --reopen` 讓 App 重開；再在 App 開一個 agent 會話與一個 Shell，Shell 裡 `env \| grep CLAUDE_CODE`（2026-11-04） | Shell 裡沒有 `CLAUDE_CODE_CHILD_SESSION`／`CLAUDE_CODE_SESSION_ID`／`CLAUDE_CODE_MESSAGING_*`；agent 會話結束後在終端 `claude --resume` 列得到那一場（之前會因為被當成子會話不存 transcript） | [ ] | [ ] |
 
 ## 9. 要你決定
 

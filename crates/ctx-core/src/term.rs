@@ -179,6 +179,30 @@ fn joined(buf: &VecDeque<Vec<u8>>) -> Vec<u8> {
     out
 }
 
+/// 上一層 Claude Code 會話留在本程序環境裡的身分變數。
+///
+/// App 若是從某場 Claude 會話裡 `open` 出來的（例如 `install-app.sh --reopen`），macOS 會把呼叫端的環境
+/// 整包交給 App；`CommandBuilder::new` 又預設複製本程序環境，於是 App 開的每一場 claude 都以為自己是
+/// 那場的子會話（`CLAUDE_CODE_CHILD_SESSION`）——不存 transcript，之後 `/resume` 找不到。
+/// PTY 裡跑的會話是獨立的一場，這組變數一律不往下傳。
+pub const CLAUDE_SESSION_ENV: &[&str] = &[
+    "CLAUDECODE",
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_MESSAGING_SOCKET",
+    "CLAUDE_CODE_MESSAGING_TOKEN",
+    "CLAUDE_PID",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_EXECPATH",
+    "CLAUDE_CODE_SESSION_ATTENDED",
+];
+
+fn scrub_claude_session_env(cmd: &mut CommandBuilder) {
+    for k in CLAUDE_SESSION_ENV {
+        cmd.env_remove(k);
+    }
+}
+
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     // 訂閱者 panic 不該讓整個會話卡死：毒化的鎖照樣拿來用
     m.lock().unwrap_or_else(|e| e.into_inner())
@@ -210,6 +234,7 @@ impl TermSession {
         if let Some(cwd) = &spec.cwd {
             cmd.cwd(cwd);
         }
+        scrub_claude_session_env(&mut cmd);
         cmd.env("PYTHONUTF8", "1");
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
@@ -715,6 +740,30 @@ mod tests {
         assert_eq!(shlex_quote("a b"), "'a b'");
         assert_eq!(shlex_quote("it's"), "'it'\"'\"'s'");
         assert_eq!(shlex_quote("中文"), "'中文'");
+    }
+
+    #[test]
+    fn spawn_scrubs_parent_claude_session_env() {
+        // 模擬「App 是從 Claude 會話裡 open 出來的」：本程序環境帶著上一場的身分
+        let mut cmd = CommandBuilder::new("sh");
+        for k in CLAUDE_SESSION_ENV {
+            cmd.env(k, "1");
+        }
+        cmd.env("HOME", "/tmp/keep");
+        scrub_claude_session_env(&mut cmd);
+        for k in CLAUDE_SESSION_ENV {
+            assert!(cmd.get_env(k).is_none(), "{k} 不該傳進 PTY 會話");
+        }
+        assert_eq!(
+            cmd.get_env("HOME").map(|v| v.to_str()),
+            Some(Some("/tmp/keep"))
+        );
+        // 呼叫端明確要求的環境仍照設（順序：先清、後加）
+        cmd.env("CLAUDE_CODE_SESSION_ID", "mine");
+        assert_eq!(
+            cmd.get_env("CLAUDE_CODE_SESSION_ID").map(|v| v.to_str()),
+            Some(Some("mine"))
+        );
     }
 
     #[test]
