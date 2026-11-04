@@ -163,6 +163,12 @@ const state = {
       tool: { label: "Bash：cargo build", minutes: 12, stalled: true },
       context_pct: 37,
       subagents: 0,
+      // F-121 對講：這場在等別的 repo 的 agent 回覆
+      talk: {
+        label: "等 draftagent 回覆",
+        waiting: true,
+        lines: ["→ draftagent（01:18，已送到）：MCP 多一個 limit 參數，介面見 docs/IPC.md"],
+      },
       auto_continue: null,
     },
     {
@@ -185,6 +191,27 @@ const state = {
   ],
   cards: [
     card("loop:#1", "loop", "驗證 Windows 版"),
+    {
+      // F-121 對講：別的 repo 的 agent 請這個 repo 做事、還沒送到
+      ...card(
+        "event:talk",
+        "event",
+        "〔對講〕draftagent → repo-a：export 加一個 --limit，做完回我",
+      ),
+      actions: [
+        {
+          label: "交給 repo-a 在跑的會話",
+          action: "msg_deliver",
+          payload: { id: "2026-11-05-m1" },
+        },
+        {
+          label: "開會話處理",
+          action: "term_create",
+          payload: { kind: "agent", repos: ["repo-a"] },
+        },
+        { label: "忽略並記錄", action: "ignore", payload: {} },
+      ],
+    },
     {
       ...card(
         "retro:decision:2026-09-26-d4",
