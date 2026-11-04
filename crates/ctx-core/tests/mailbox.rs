@@ -188,6 +188,15 @@ fn reply_to_idle_asker_is_typed_in_by_app_but_new_requests_are_not() {
     // 新請求：沒人在 repo-b 跑 → 不打字（交給收件匣卡片）
     assert!(mailbox::idle_replies(&d, &["t1".into()]).is_empty());
     assert_eq!(mailbox::undelivered(&d).len(), 1);
+    let talk_unread = |d: &Path| {
+        ctx_core::notify::pending(d)
+            .unwrap()
+            .normal
+            .iter()
+            .filter(|e| e.body.starts_with(mailbox::TAG))
+            .count()
+    };
+    assert_eq!(talk_unread(&d), 1, "還沒送到：收件匣有卡");
     // repo-b 那邊後來開場（沒有 App 會話也行）：開場注入收到
     let start = hooks::session_start(
         &d,
@@ -219,6 +228,7 @@ fn reply_to_idle_asker_is_typed_in_by_app_but_new_requests_are_not() {
         "只打一次"
     );
     assert!(mailbox::undelivered(&d).is_empty());
+    assert_eq!(talk_unread(&d), 0, "送到了、回覆也送回去了：收件匣不再佔位");
     let _ = Via::App;
 }
 

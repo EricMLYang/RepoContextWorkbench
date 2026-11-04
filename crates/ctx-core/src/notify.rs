@@ -32,7 +32,11 @@ pub struct Pending {
 
 /// 對應 `notify.pending`：殼 poll 的單一來源 {interrupt, normal, count}。
 pub fn pending(spine_dir: impl AsRef<Path>) -> Result<Pending> {
-    let (interrupt, normal) = classify(spine::get_unread(spine_dir)?);
+    let spine_dir = spine_dir.as_ref();
+    let mut unread = spine::get_unread(spine_dir)?;
+    // Rust 才有（F-121 對講）：已送到對方 agent 的請求與回覆不算未讀（徽章、收件匣一致）
+    crate::agentapi::mailbox::settle_unread(spine_dir, &mut unread);
+    let (interrupt, normal) = classify(unread);
     let count = interrupt.len() + normal.len();
     Ok(Pending {
         interrupt,

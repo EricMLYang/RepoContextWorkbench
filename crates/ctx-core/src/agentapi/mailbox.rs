@@ -695,6 +695,27 @@ pub fn session_talk(spine_dir: &Path, sid: &str, started: &str) -> Option<Value>
     Some(json!({"label": label, "waiting": !waiting.is_empty(), "lines": lines}))
 }
 
+/// 收件匣只留**還沒送到**的請求（無事不報）：回覆是給發問的 agent 的、已送到的請求對方 agent 已經在處理——
+/// 人要看往來去會話列（`session_talk`）或 `ctx msg list`。信箱裡找不到的（太舊被收掉）照常留著。
+pub fn settle_unread(spine_dir: &Path, events: &mut Vec<spine::Event>) {
+    if !book_path(spine_dir).exists() {
+        return;
+    }
+    let book = read_book(spine_dir);
+    events.retain(|ev| {
+        if ev.source != "agent" || !ev.body.starts_with(TAG) {
+            return true;
+        }
+        let Some(id) = ev.kv("id") else {
+            return true;
+        };
+        match book.messages.iter().find(|m| m.id == id) {
+            Some(m) => m.re.is_none() && m.delivered.is_none(),
+            None => true,
+        }
+    });
+}
+
 /// 收件匣卡片用：沒送達的請求（不含回覆）——卡片給「交給 X 的會話／開會話處理」。
 pub fn undelivered(spine_dir: &Path) -> Vec<Msg> {
     read_book(spine_dir)
