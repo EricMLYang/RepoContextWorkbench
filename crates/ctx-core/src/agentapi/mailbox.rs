@@ -716,6 +716,44 @@ pub fn settle_unread(spine_dir: &Path, events: &mut Vec<spine::Event>) {
     });
 }
 
+/// `ctx health` 用：期間內（`at >= since`）的對講數字——請求幾則、有回覆的幾則、還沒送到幾則、各條送達路各幾則。
+/// 看的是「agent 會不會主動用」與「送不送得到」（R39 留的問題）。信箱只留 14 天的已送達，期間更長時會少算。
+pub fn stats(spine_dir: &Path, since: &str) -> Value {
+    let book = read_book(spine_dir);
+    let ms: Vec<&Msg> = book
+        .messages
+        .iter()
+        .filter(|m| m.at.as_str() >= since)
+        .collect();
+    let requests: Vec<&&Msg> = ms.iter().filter(|m| m.re.is_none()).collect();
+    let answered = requests
+        .iter()
+        .filter(|r| {
+            book.messages
+                .iter()
+                .any(|m| m.re.as_deref() == Some(r.id.as_str()))
+        })
+        .count();
+    let mut via = serde_json::Map::new();
+    for m in &ms {
+        if let Some(d) = &m.delivered {
+            let k = serde_json::to_value(d.via)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default();
+            let n = via.get(&k).and_then(Value::as_u64).unwrap_or(0);
+            via.insert(k, json!(n + 1));
+        }
+    }
+    json!({
+        "requests": requests.len(),
+        "replies": ms.len() - requests.len(),
+        "answered": answered,
+        "undelivered": ms.iter().filter(|m| m.delivered.is_none()).count(),
+        "via": via,
+    })
+}
+
 /// 收件匣卡片用：沒送達的請求（不含回覆）——卡片給「交給 X 的會話／開會話處理」。
 pub fn undelivered(spine_dir: &Path) -> Vec<Msg> {
     read_book(spine_dir)

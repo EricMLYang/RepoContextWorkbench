@@ -336,5 +336,7 @@ pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result
         "tools": tool_rows,
         "agent_calls": agent_calls,
         "assist": assist,
+        // F-121 對講（Rust 才有）
+        "mailbox": crate::agentapi::mailbox::stats(spine_dir, &since),
     }))
 }

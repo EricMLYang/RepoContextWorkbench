@@ -146,6 +146,19 @@ fn request_reaches_running_session_and_reply_goes_back_to_asker() {
         "{back}"
     );
 
+    // ctx health 的數字
+    let st = mailbox::stats(&d, "2000-01-01 00:00");
+    assert_eq!(
+        (
+            st["requests"].as_u64(),
+            st["replies"].as_u64(),
+            st["answered"].as_u64(),
+            st["undelivered"].as_u64()
+        ),
+        (Some(1), Some(1), Some(1), Some(0)),
+        "{st}"
+    );
+    assert_eq!(st["via"]["hook"], 2);
     // messages：看得到往來與同組在跑的人（不含自己）
     let m = mailbox::messages(&d, &Target::at(&a), Some("t1"), 10).unwrap();
     let dirs: Vec<&str> = m["messages"]

@@ -94,6 +94,22 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                 s(a, "undone")
             ));
         }
+        // F-121 對講：agent 之間傳了幾則、有沒有人回、送不送得到（有用過才講）
+        let m = &r["mailbox"];
+        let reqs = m["requests"].as_u64().unwrap_or(0);
+        if reqs + m["replies"].as_u64().unwrap_or(0) > 0 {
+            let via: Vec<String> = m["via"]
+                .as_object()
+                .map(|o| o.iter().map(|(k, v)| format!("{k} {v}")).collect())
+                .unwrap_or_default();
+            out.push(format!(
+                "- 對講（agent 互傳）：請求 {reqs}、有回覆 {}、回覆 {}、還沒送到 {}；送達路：{}",
+                s(m, "answered"),
+                s(m, "replies"),
+                s(m, "undelivered"),
+                if via.is_empty() { "—".to_string() } else { via.join("、") }
+            ));
+        }
         // F-84：程式化呼叫另計額度——先看得見
         let c = &r["agent_calls"];
         if c["calls"].as_u64().unwrap_or(0) > 0 || s(c, "policy") == "off" {
