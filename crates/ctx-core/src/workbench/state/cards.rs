@@ -150,7 +150,7 @@ impl CardBuilder<'_> {
                 let is_reply = title.contains("（回 ");
                 if !is_reply {
                     let one_line = ev.body.split_whitespace().collect::<Vec<_>>().join(" ");
-                    let task = format!("{one_line} ——處理完用 send_message 帶 re={id} 回覆它。");
+                    let task = format!("{one_line} ——處理完用 repo-context 的 send_message（MCP）帶 re={id} 回覆它。");
                     actions.insert(0, act("開會話處理", "term_create",
                         json!({"kind": "agent", "repos": [to], "task": task, "origin": format!("msg:{id}")})));
                     actions.insert(

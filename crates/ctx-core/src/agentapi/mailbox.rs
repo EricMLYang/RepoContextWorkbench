@@ -267,7 +267,9 @@ pub fn send_message(
         .into_iter()
         .filter(|p| p["repo"] == json!(to))
         .collect();
-    let delivery = if live.is_empty() {
+    let delivery = if live.is_empty() && msg.re.is_some() {
+        format!("回覆已留給 {to}：發問的會話不在了，那邊下次開場或呼叫 messages 時會看到。")
+    } else if live.is_empty() {
         format!(
             "{to} 現在沒有 agent 會話在跑：使用者收件匣有一張卡（可一鍵開會話處理），那邊下次開場也會看到。不用等，繼續你的工作。"
         )
@@ -375,7 +377,7 @@ pub fn render(msgs: &[Msg]) -> String {
     }
     t.push_str(
         "處理方式：是回覆就接著用；是請求就判斷合不合理、在不在你這個 repo 的範圍——要改檔或做大事先跟使用者確認，\
-         做完（或做不了）用 send_message 帶 re=<編號> 回覆對方，一句話講結果與 commit／檔案路徑。不要為了回覆中斷使用者正交代的事。",
+         做完（或做不了）用 repo-context 的 MCP 工具 send_message（不是內建的 SendMessage；沒掛 MCP 就 `ctx msg send --re <編號> \"…\"`）帶 re=<編號> 回覆對方，一句話講結果與 commit／檔案路徑。不要為了回覆中斷使用者正交代的事。",
     );
     t
 }
@@ -570,7 +572,7 @@ pub fn as_prompt(m: &Msg) -> String {
     let kind = if m.re.is_some() { "回覆" } else { "傳話" };
     let one_line = m.text.split_whitespace().collect::<Vec<_>>().join(" ");
     format!(
-        "〔對講〕{} 的 agent {kind}（{}）：{} ——處理完用 send_message 帶 re={} 回覆它。",
+        "〔對講〕{} 的 agent {kind}（{}）：{} ——處理完用 repo-context 的 send_message（MCP；或 `ctx msg send --re {} \"…\"`）帶 re 回覆它。",
         m.from,
         m.id,
         clip(&one_line, DELIVER_CHARS),

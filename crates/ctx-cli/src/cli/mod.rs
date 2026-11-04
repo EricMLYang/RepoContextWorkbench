@@ -155,6 +155,11 @@ pub enum Cmd {
     Status(agent::StatusArgs),
     /// 收尾交接：--done 完成了什麼 --next 下次從哪接 [--remaining 新事項 ...]
     Handoff(agent::HandoffArgs),
+    /// 對講：send <repo> <文字> 傳話給同組另一個 repo 的 agent（--re <編號> 回覆）／list 看往來與誰在跑（Rust 才有）
+    Msg {
+        #[command(subcommand)]
+        cmd: agent::MsgCmd,
+    },
     /// 知識 ↔ repo 相關度：這段文字跟哪些 repo 的哪些檔最相關
     Search(agent::SearchArgs),
     /// 反芻推薦：別組新進的知識／判斷中，跟主場手上工作強相關的
@@ -242,6 +247,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Todo(a) => agent::cmd_todo(ctx, a),
         Status(a) => agent::cmd_status(ctx, a),
         Handoff(a) => agent::cmd_handoff(ctx, a),
+        Msg { cmd } => agent::cmd_msg(ctx, cmd),
         Search(a) => agent::cmd_search(ctx, a),
         Fresh(a) => agent::cmd_fresh(ctx, a),
         Health { days } => health::cmd_health(ctx, *days),

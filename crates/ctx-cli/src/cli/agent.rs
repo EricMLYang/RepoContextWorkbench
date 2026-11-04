@@ -1571,3 +1571,118 @@ pub fn cmd_assist(ctx: &Ctx, a: &AssistArgs) -> CmdResult {
     });
     Ok(())
 }
+
+/// 對講（F-120，Rust 才有）：跟同組另一個 repo 的 agent 互傳訊息。
+#[derive(clap::Subcommand, Debug)]
+pub enum MsgCmd {
+    /// 傳話給另一個 repo 的 agent：send <repo id> <文字>；回覆：send --re <編號> <文字>
+    Send {
+        /// 收件 repo id（回覆時可省略，直接寫文字）
+        to: Option<String>,
+        /// 要說的話
+        text: Option<String>,
+        /// 回覆哪一則（訊息編號）
+        #[arg(long)]
+        re: Option<String>,
+        /// 跨組（使用者同意後才用）
+        #[arg(long = "cross-scope-ok")]
+        cross_scope_ok: bool,
+        /// 用哪個目錄推所在 repo（預設目前目錄）
+        #[arg(long)]
+        cwd: Option<String>,
+    },
+    /// 最近的往來（新的這次算收到）＋同組現在在跑的 agent
+    List {
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+        #[arg(long)]
+        cwd: Option<String>,
+    },
+}
+
+pub fn cmd_msg(ctx: &Ctx, cmd: &MsgCmd) -> CmdResult {
+    use ctx_core::agentapi::mailbox;
+    let sid = mailbox::sid_from_env();
+    match cmd {
+        MsgCmd::Send {
+            to,
+            text,
+            re,
+            cross_scope_ok,
+            cwd,
+        } => {
+            // 只給一個位置參數又帶 --re：那個是文字，不是收件 repo
+            let (to, text) = match (to, text, re) {
+                (Some(t), None, Some(_)) => (None, t.clone()),
+                (to, Some(x), _) => (to.clone(), x.clone()),
+                (Some(t), None, None) => (None, t.clone()),
+                (None, None, _) => (None, String::new()),
+            };
+            let t = Target {
+                cwd: cwd.as_ref().map(PathBuf::from),
+                ..Default::default()
+            };
+            let out = mailbox::Outgoing {
+                to: to.as_deref(),
+                text: &text,
+                re: re.as_deref(),
+                from_sid: sid.as_deref(),
+            };
+            agent_call(
+                ctx,
+                |d| mailbox::send_message(d, &out, &t, *cross_scope_ok, None),
+                |r| {
+                    format!(
+                        "已送出 {} → {}：{}",
+                        s(r, "id"),
+                        s(r, "to"),
+                        s(r, "delivery")
+                    )
+                },
+            )
+        }
+        MsgCmd::List { limit, cwd } => {
+            let t = Target {
+                cwd: cwd.as_ref().map(PathBuf::from),
+                ..Default::default()
+            };
+            agent_call(
+                ctx,
+                |d| mailbox::messages(d, &t, sid.as_deref(), *limit),
+                |r| {
+                    let mut lines = Vec::new();
+                    for m in r["messages"].as_array().into_iter().flatten() {
+                        let arrow = if m["direction"] == "in" { "收" } else { "送" };
+                        let new = if m["new"] == true { "（新）" } else { "" };
+                        lines.push(format!(
+                            "{arrow} [{}] {} → {}{new}：{}",
+                            s(m, "id"),
+                            s(m, "from"),
+                            s(m, "to"),
+                            s(m, "text")
+                        ));
+                    }
+                    if lines.is_empty() {
+                        lines.push("沒有往來的訊息。".into());
+                    }
+                    let peers = r["peers"].as_array().cloned().unwrap_or_default();
+                    if !peers.is_empty() {
+                        lines.push("同組在跑的 agent：".into());
+                        for p in peers {
+                            lines.push(format!(
+                                "- {}：{}{}",
+                                s(&p, "repo"),
+                                s(&p, "state"),
+                                p["title"]
+                                    .as_str()
+                                    .map(|t| format!("｜{t}"))
+                                    .unwrap_or_default()
+                            ));
+                        }
+                    }
+                    lines.join("\n")
+                },
+            )
+        }
+    }
+}
