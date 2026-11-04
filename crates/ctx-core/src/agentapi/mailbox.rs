@@ -648,6 +648,53 @@ pub fn pick_session(spine_dir: &Path, m: &Msg, live: &[String]) -> Option<String
         .and_then(|p| p["sid"].as_str().map(str::to_string))
 }
 
+/// 會話列用（F-120）：這場 App 會話（`sid`，`started` 之後）送出與收到的對講——`label` 給一個標籤
+/// （「等 rb 回覆」優先，否則「對講 N 則」），`lines` 給滑過去看的往來（新的在前，最多 5 行）。沒有就 None。
+pub fn session_talk(spine_dir: &Path, sid: &str, started: &str) -> Option<Value> {
+    let book = read_book(spine_dir);
+    let mine = |m: &Msg| {
+        m.at.as_str() >= started
+            && (m.from_sid.as_deref() == Some(sid)
+                || m.to_sid.as_deref() == Some(sid)
+                || m.delivered.as_ref().and_then(|d| d.sid.as_deref()) == Some(sid))
+    };
+    let msgs: Vec<&Msg> = book.messages.iter().filter(|m| mine(m)).collect();
+    if msgs.is_empty() {
+        return None;
+    }
+    let answered = |id: &str| book.messages.iter().any(|m| m.re.as_deref() == Some(id));
+    let waiting: Vec<&str> = msgs
+        .iter()
+        .filter(|m| m.from_sid.as_deref() == Some(sid) && m.re.is_none() && !answered(&m.id))
+        .map(|m| m.to.as_str())
+        .collect();
+    let label = match waiting.as_slice() {
+        [] => format!("對講 {} 則", msgs.len()),
+        [one] => format!("等 {one} 回覆"),
+        many => format!("等 {} 個 repo 回覆", many.len()),
+    };
+    let lines: Vec<String> = msgs
+        .iter()
+        .rev()
+        .take(5)
+        .map(|m| {
+            let short: String = m.text.chars().take(60).collect();
+            let hm = m.at.get(11..).unwrap_or(&m.at);
+            if m.from_sid.as_deref() == Some(sid) {
+                let st = if m.delivered.is_some() {
+                    "已送到"
+                } else {
+                    "還沒送到"
+                };
+                format!("→ {}（{hm}，{st}）：{short}", m.to)
+            } else {
+                format!("← {}（{hm}）：{short}", m.from)
+            }
+        })
+        .collect();
+    Some(json!({"label": label, "waiting": !waiting.is_empty(), "lines": lines}))
+}
+
 /// 收件匣卡片用：沒送達的請求（不含回覆）——卡片給「交給 X 的會話／開會話處理」。
 pub fn undelivered(spine_dir: &Path) -> Vec<Msg> {
     read_book(spine_dir)
@@ -723,6 +770,6 @@ mod tests {
         m.text = "第一行\n第二行".into();
         let p = as_prompt(&m);
         assert!(!p.contains('\n'));
-        assert!(p.contains("re=2026-11-04-m1"));
+        assert!(p.contains("--re 2026-11-04-m1"));
     }
 }

@@ -94,6 +94,18 @@ fn request_reaches_running_session_and_reply_goes_back_to_asker() {
     assert!(ctxt.contains("limit 參數"));
     assert_eq!(hook(&d, "t2", "PostToolUse", &b), "", "同一則不送第二次");
 
+    // 會話列：t1 在等 repo-b 回覆；t2 收到一則
+    let talk = mailbox::session_talk(&d, "t1", "2000-01-01 00:00").unwrap();
+    assert_eq!(talk["label"], "等 repo-b 回覆");
+    assert!(talk["lines"][0].as_str().unwrap().starts_with("→ repo-b"));
+    assert_eq!(
+        mailbox::session_talk(&d, "t2", "2000-01-01 00:00").unwrap()["label"],
+        "對講 1 則"
+    );
+    assert!(
+        mailbox::session_talk(&d, "t1", "2999-01-01 00:00").is_none(),
+        "會話開始前的不算"
+    );
     // repo-b 回覆（只帶 re）→ 回到 repo-a，指定給 t1
     let r2 = send(
         &d,
@@ -112,6 +124,10 @@ fn request_reaches_running_session_and_reply_goes_back_to_asker() {
     app_session(&d, "t3", &a, StatusHook::ToolEnd);
     assert_eq!(hook(&d, "t3", "PostToolUse", &a), "");
     let back = hook(&d, "t1", "UserPromptSubmit", &a);
+    assert_eq!(
+        mailbox::session_talk(&d, "t1", "2000-01-01 00:00").unwrap()["label"],
+        "對講 2 則"
+    );
     assert!(
         back.contains("加好了") && back.contains(&format!("回你的 {id}")),
         "{back}"

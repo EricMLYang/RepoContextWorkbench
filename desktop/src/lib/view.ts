@@ -541,6 +541,11 @@ export function sessionGauges(s: TermInfo): { text: string; title: string; warn?
         " 次（你自己說話就歸零）",
       warn: s.auto_continue.count >= s.auto_continue.max,
     });
+  if (s.talk)
+    out.push({
+      text: s.talk.label,
+      title: "對講（跟別的 repo 的 agent 互傳的話）：\n" + s.talk.lines.join("\n"),
+    });
   if (s.subagents)
     out.push({ text: "子 agent " + s.subagents, title: "這場會話開的子 agent 還在跑" });
   if (s.cache_cold)

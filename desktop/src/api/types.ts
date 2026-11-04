@@ -198,6 +198,8 @@ export interface TermInfo {
   cache_cold?: boolean;
   /** Rust 才有（F-98）：自動繼續（開著才有）。 */
   auto_continue?: AutoContinue | null;
+  /** Rust 才有（F-120）：這場會話的對講——標籤（「等 rb 回覆」／「對講 N 則」）與往來（新的在前）。 */
+  talk?: { label: string; waiting: boolean; lines: string[] } | null;
 }
 
 /** 自動繼續的設定與計數（F-98，引擎 `auto_continue::AutoContinue`）。 */
