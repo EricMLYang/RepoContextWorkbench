@@ -71,7 +71,7 @@ MCP_EXTRA_PARAMS = [
 ]
 
 
-MAILBOX_REASON = "對講 send_message／messages（F-120，2026-11-04，Rust 才有：不同 repo 的 agent 互傳訊息；開場與 MCP 說明各多一句）"
+MAILBOX_REASON = "對講 send_message／messages（F-121，2026-11-04，Rust 才有：不同 repo 的 agent 互傳訊息；開場與 MCP 說明各多一句）"
 
 MCP_EXTRA_TOOLS = {
     "describe_repo": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
@@ -88,7 +88,7 @@ def drop_mcp_extras(resp, allowed):
     """tools/list 回應：拿掉 Rust 才有的工具與選填參數（就地改），用到的理由加進 allowed。"""
     res = resp.get("result") or {}
     ins = res.get("instructions")
-    if isinstance(ins, str) and "send_message" in ins:  # initialize 說明的對講那一句（F-120）
+    if isinstance(ins, str) and "send_message" in ins:  # initialize 說明的對講那一句（F-121）
         res["instructions"] = re.sub(r"要同組別的 repo 的 agent 做事就 send_message[^。]*。", "", ins)
         allowed.add(MAILBOX_REASON)
     tools = (resp.get("result") or {}).get("tools")
@@ -374,7 +374,7 @@ def strip_rust_only(v):
         if isinstance(ac, str):  # 開場注入：提醒段與新能力那一行（N-22）
             new = re.sub(r"\n## 提醒（[^\n]*\n(?:- [^\n]*\n)*\n?", "\n", ac)
             new = re.sub(r"\n- 改掉舊判斷→[^\n]*", "", new)
-            new = re.sub(r"\n- 要同組另一個 repo 的 agent 做事[^\n]*", "", new)  # 對講（F-120）
+            new = re.sub(r"\n- 要同組另一個 repo 的 agent 做事[^\n]*", "", new)  # 對講（F-121）
             # 組員名冊段（2026-10-13）
             new = re.sub(r"\n## 同組成員（[^\n]*\n(?:- [^\n]*\n)*(?:你所在的 repo 還沒寫介紹[^\n]*\n)?\n?", "\n", new)
             if new != ac:

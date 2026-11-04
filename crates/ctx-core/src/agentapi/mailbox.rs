@@ -1,4 +1,4 @@
-//! 對講（2026-11-04，ideation F-120；Rust 才有）：不同 repo 的 agent 互傳訊息——真正的多 repo 協作。
+//! 對講（2026-11-04，ideation F-121；Rust 才有）：不同 repo 的 agent 互傳訊息——真正的多 repo 協作。
 //!
 //! 以前跨 repo 只有「讀」（`read_from`）跟「問一次」（`ask_repo`，另起 `claude -p`、慢又花錢）；
 //! 兩個 repo 各有一個 agent 在跑時，要靠人在兩個終端之間複製貼上。這裡讓 agent 直接留話給另一個 repo：
@@ -648,7 +648,7 @@ pub fn pick_session(spine_dir: &Path, m: &Msg, live: &[String]) -> Option<String
         .and_then(|p| p["sid"].as_str().map(str::to_string))
 }
 
-/// 會話列用（F-120）：這場 App 會話（`sid`，`started` 之後）送出與收到的對講——`label` 給一個標籤
+/// 會話列用（F-121）：這場 App 會話（`sid`，`started` 之後）送出與收到的對講——`label` 給一個標籤
 /// （「等 rb 回覆」優先，否則「對講 N 則」），`lines` 給滑過去看的往來（新的在前，最多 5 行）。沒有就 None。
 pub fn session_talk(spine_dir: &Path, sid: &str, started: &str) -> Option<Value> {
     let book = read_book(spine_dir);

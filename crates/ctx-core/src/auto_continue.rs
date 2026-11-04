@@ -185,7 +185,7 @@ pub fn tick(spine_dir: &Path, terms: &crate::term::TermManager) -> usize {
 }
 
 /// 替你在這個會話打一句話並送出（先寫字、隔一下再按 Enter——TUI 才不會把 Enter 當成貼上的一部分）。
-/// 自動繼續與對講（F-120 回覆送回閒著的發問會話）共用。未知 sid＝false。
+/// 自動繼續與對講（F-121 回覆送回閒著的發問會話）共用。未知 sid＝false。
 pub fn send_line(terms: &crate::term::TermManager, sid: &str, text: &str) -> bool {
     let Some(sess) = terms.get(sid) else {
         return false;

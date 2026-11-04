@@ -183,3 +183,4 @@
 | F-118 | 留痕 | 背景更新：「N 個改動沒裝」→「背景 build 新版」，App 開著照用、build 好了等你 ⌘Q 才換、換好自動重開（install-app.sh --wait --reopen，狀態檔給 App 看進度） | 同介面 | 重裝要「結束 App→開別的終端→跑腳本→再打開」，使用者常不確定裝了沒（R38） | P1 | 完成（R38，只有 macOS） | R38 | R38 |
 | F-119 | 脈絡 | ⌘K「%」搜內容：md、程式碼、過去的判斷，跟 agent 的 search_knowledge 同一個函式；Enter 開檔捲到那一行 | 同介面、脈絡 | agent 有 search_knowledge、人在 App 裡只能用檔名找（R38 檢查「同介面」時看到）；VS Code 快速開啟的「%」 | P1 | 完成（R38） | R38 | R38 |
 | F-120 | 瀏覽 | 檔案樹／repo 右鍵「在這裡開 Shell」（VS Code 的 Open in Integrated Terminal；檔案＝所在資料夾） | 同介面 | VS Code 檔案總管 | P2 | 完成（R38） | R38 | R38 |
+| F-121 | 跨 repo | **對講**：不同 repo 的 agent 互傳訊息——MCP `send_message`（to／re）／`messages`、CLI `ctx msg`；留痕是 `suggestion [agent] id:<日>-mN repo:<收件>`（第一行〔對講〕，不加事件型別）；App 會話用完工具／你送出訊息時 hook 塞進 additionalContext、開場注入；回覆送回原發問會話（閒著由 App 打字），新請求不自動打斷（收件匣「交給 X 在跑的會話」／「開會話處理」）；會話列「等 B 回覆」；名冊帶「agent 在做什麼」 | 脈絡、留痕、同介面 | MCP Agent Mail（agent 收件匣＋檔案預留）；跨 repo 只有讀（read_from）與一次性 ask_repo，兩個 agent 同時在跑要人來回貼 | P1 | 完成（R39，真 App 未測） | R39 | R39 |

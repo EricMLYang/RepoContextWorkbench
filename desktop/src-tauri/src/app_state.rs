@@ -90,7 +90,7 @@ impl AppState {
             // 不看 reason：合併窗口裡只報第一個變動的檔，狀態檔可能排在後面；tick 只讀幾個小檔，每次都看
             if let Some(t) = weak.upgrade() {
                 ctx_core::auto_continue::tick(&sp, &t);
-                // F-120 對講：回覆打進閒著的發問會話
+                // F-121 對講：回覆打進閒著的發問會話
                 ctx_core::agentapi::mailbox::tick(&sp, &t);
             }
             n.changed(reason)

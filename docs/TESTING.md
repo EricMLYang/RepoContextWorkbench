@@ -208,6 +208,21 @@
 | 8d-26 | 用注音／倉頡打中文：會話列「回答…」框選字按 Enter；改名、新增檔名、終端 ⌘F 搜尋時，候選字還開著按 Esc（2026-11-03，R38） | 選字的 Enter 只確認字，不會把半句貼進會話；組字中按 Esc 只收起候選字，輸入框還在、打的字沒丟；不在組字時 Esc 照常取消 | [ ] | [ ] |
 | 8d-27 | 在 Claude 會話裡跑 `bash scripts/install-app.sh --wait --reopen` 讓 App 重開；再在 App 開一個 agent 會話與一個 Shell，Shell 裡 `env \| grep CLAUDE_CODE`（2026-11-04） | Shell 裡沒有 `CLAUDE_CODE_CHILD_SESSION`／`CLAUDE_CODE_SESSION_ID`／`CLAUDE_CODE_MESSAGING_*`；agent 會話結束後在終端 `claude --resume` 列得到那一場（之前會因為被當成子會話不存 transcript） | [ ] | [ ] |
 
+## 8e. 對講：不同 repo 的 agent 互傳訊息（F-121，2026-11-04 夜間）——**只有單元測試＋真 Claude Code `-p` 一次**
+
+> 已驗：引擎三組整合測試（送、hook 收、回覆送回原會話、跨組要同意、開場注入、閒著時 App 打字）；真 Claude Code 2.1.318（haiku，spine 副本）
+> 在 PostToolUse 收到訊息、逐字讀出編號與內容。App 畫面與兩個真會話互傳**都還沒點**。先重裝（§0），會話要**新開**才會帶到新的 skill 說明（`ctx setup --claude` 更新 skill）。
+
+| # | 怎麼做 | 預期 | macOS | Windows |
+|---|---|---|---|---|
+| 8e-1 | App 在 repo A、repo B（同組）各開一個 agent 會話；在 A 說「請 B 的 agent 在 README 加一行 hello，做完回我」 | A 呼叫 `send_message to=B`；A 的會話列出現「等 B 回覆」（滑過看到「→ B（時間，已送到／還沒送到）」）；收件匣多一張「〔對講〕A → B：…」卡 | [ ] | [ ] |
+| 8e-2 | B 那場正在做事時（處理中） | B 用完下一個工具就在回覆裡提到收到 A 的話（逐字稿看得到 hook 的附加脈絡）；它先問你要不要改（或照範圍直接做），做完 `send_message re=<編號>` | [ ] | [ ] |
+| 8e-3 | B 回覆時 A 閒著（這一輪做完） | App 把「〔對講〕B 的 agent 回覆（編號）：…」打進 A 並送出；A 接著處理；A 的會話列變「對講 2 則」 | [ ] | [ ] |
+| 8e-4 | B 閒著時 A 送新請求 | B **不會**被自動打字；收件匣卡片有「交給 B 在跑的會話」——按了切到 B、那句打進去；再按一次說已經交過了 | [ ] | [ ] |
+| 8e-5 | B 沒有會話時 A 送請求；按卡片「開會話處理」 | 開會話表單帶好範圍 B 與任務（那則訊息＋怎麼回覆）；開出來的會話開場也有「其他 repo 的 agent 傳話給你」 | [ ] | [ ] |
+| 8e-6 | 在 A 對別組的 repo 送 | 被拒「不在你的主場」，agent 回頭問你；你同意後帶 `cross_scope_ok` 才送出 | [ ] | [ ] |
+| 8e-7 | 開場注入的「同組成員」；終端跑 `ctx msg list` | B 那列寫「agent 在做：<標題>（處理中：Bash：…）」；`ctx msg list` 列出往來與同組在跑的 agent | [ ] | [ ] |
+
 ## 9. 要你決定
 
 - [ ] **#76**：App 助手、碰撞判定、`ask_repo`、backfill 都用 `claude -p`（程式化呼叫；BAT 引 2026-06-15 政策說它走另計的額度，

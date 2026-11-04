@@ -359,7 +359,7 @@ pub struct RosterEntry {
     /// 別的會話正在跑的組員：還沒 commit 的檔數（別的 agent 可能正在改這裡；不是 git 或讀不到＝不給）。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uncommitted: Option<usize>,
-    /// F-120：App 開的會話在這個 repo 做什麼（標題＋狀態；呼叫者自己那場不算）——同組的 agent 開場就看得到彼此。
+    /// F-121：App 開的會話在這個 repo 做什麼（標題＋狀態；呼叫者自己那場不算）——同組的 agent 開場就看得到彼此。
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub working_on: Vec<String>,
 }

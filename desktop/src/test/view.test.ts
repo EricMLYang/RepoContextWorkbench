@@ -405,7 +405,7 @@ describe("會話列小量表與出錯中斷（F-99～F-102）", () => {
     expect(sessionGauges({ ...base, context_pct: 30 })[0].warn).toBe(false);
     expect(sessionGauges({ ...base, alive: false, context_pct: 30 })).toEqual([]);
     expect(sessionGauges({ ...base, kind: "shell", context_pct: 30 })).toEqual([]);
-    // F-120 對講：等誰回覆＝一個標籤，滑過去看往來
+    // F-121 對講：等誰回覆＝一個標籤，滑過去看往來
     const t = sessionGauges({
       ...base,
       talk: { label: "等 rb 回覆", waiting: true, lines: ["→ rb（23:50，已送到）：幫忙"] },

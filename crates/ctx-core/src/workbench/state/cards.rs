@@ -144,7 +144,7 @@ impl CardBuilder<'_> {
                 );
             }
         }
-        // F-120 對講：別的 repo 的 agent 請這個 repo 做事（回覆不給按鈕——會自動送回發問的會話）
+        // F-121 對講：別的 repo 的 agent 請這個 repo 做事（回覆不給按鈕——會自動送回發問的會話）
         if ev.source == "agent" && ev.body.starts_with(crate::agentapi::mailbox::TAG) {
             if let (Some(id), Some(to)) = (ev.kv("id"), ev.kv("repo")) {
                 let is_reply = title.contains("（回 ");

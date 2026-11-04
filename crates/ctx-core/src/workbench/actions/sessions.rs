@@ -238,7 +238,7 @@ pub(super) fn a_auto_continue(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Res
     Ok(json!({"ok": true, "auto_continue": a}))
 }
 
-/// F-120 對講：收件匣「交給在跑的會話」——把訊息打進收件 repo 一場活著的 agent 會話（閒著的優先），標成已送達。
+/// F-121 對講：收件匣「交給在跑的會話」——把訊息打進收件 repo 一場活著的 agent 會話（閒著的優先），標成已送達。
 /// 沒有會話在跑就回錯（卡片另有「開會話處理」）。
 pub(super) fn a_msg_deliver(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
     use crate::agentapi::mailbox;

@@ -1572,7 +1572,7 @@ pub fn cmd_assist(ctx: &Ctx, a: &AssistArgs) -> CmdResult {
     Ok(())
 }
 
-/// 對講（F-120，Rust 才有）：跟同組另一個 repo 的 agent 互傳訊息。
+/// 對講（F-121，Rust 才有）：跟同組另一個 repo 的 agent 互傳訊息。
 #[derive(clap::Subcommand, Debug)]
 pub enum MsgCmd {
     /// 傳話給另一個 repo 的 agent：send <repo id> <文字>；回覆：send --re <編號> <文字>

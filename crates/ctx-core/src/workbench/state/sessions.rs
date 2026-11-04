@@ -145,7 +145,7 @@ pub(super) fn annotate_terms_with(
                         .and_then(|a| serde_json::to_value(a).ok())
                         .unwrap_or(Value::Null),
                 );
-                // F-120 對講：這場會話送出／收到的訊息（等誰回覆）
+                // F-121 對講：這場會話送出／收到的訊息（等誰回覆）
                 rec.insert(
                     "talk".into(),
                     crate::agentapi::mailbox::session_talk(

@@ -198,7 +198,7 @@ export interface TermInfo {
   cache_cold?: boolean;
   /** Rust 才有（F-98）：自動繼續（開著才有）。 */
   auto_continue?: AutoContinue | null;
-  /** Rust 才有（F-120）：這場會話的對講——標籤（「等 rb 回覆」／「對講 N 則」）與往來（新的在前）。 */
+  /** Rust 才有（F-121）：這場會話的對講——標籤（「等 rb 回覆」／「對講 N 則」）與往來（新的在前）。 */
   talk?: { label: string; waiting: boolean; lines: string[] } | null;
 }
 
@@ -1061,7 +1061,7 @@ export interface ActionMap {
     payload: { sid: string; max?: number; prompt?: string; off?: boolean };
     result: { ok: true; auto_continue: AutoContinue | null };
   };
-  /** F-120 對講：收件匣「交給 X 在跑的會話」——把別的 repo 的 agent 傳來的話打進那個 repo 一場活著的會話。 */
+  /** F-121 對講：收件匣「交給 X 在跑的會話」——把別的 repo 的 agent 傳來的話打進那個 repo 一場活著的會話。 */
   msg_deliver: {
     payload: { id: string };
     result: { ok: true; sid: string };

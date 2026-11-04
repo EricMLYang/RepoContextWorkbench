@@ -82,7 +82,7 @@ pub fn cmd_hook(ctx: &Ctx, event: HookEvent) -> CmdResult {
             // 會話狀態（做完／等你／處理中／要你允許）
             h => {
                 ctx_core::session_status::record_hook(h, &stdin, target.as_deref(), None);
-                // F-120 對講：用完工具／你送出訊息時，把別的 repo 的 agent 傳來的話塞進這場會話的脈絡
+                // F-121 對講：用完工具／你送出訊息時，把別的 repo 的 agent 傳來的話塞進這場會話的脈絡
                 let name = match h {
                     StatusHook::ToolEnd => Some("PostToolUse"),
                     StatusHook::Prompt => Some("UserPromptSubmit"),
