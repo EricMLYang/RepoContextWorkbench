@@ -208,10 +208,11 @@
 | 8d-26 | 用注音／倉頡打中文：會話列「回答…」框選字按 Enter；改名、新增檔名、終端 ⌘F 搜尋時，候選字還開著按 Esc（2026-11-03，R38） | 選字的 Enter 只確認字，不會把半句貼進會話；組字中按 Esc 只收起候選字，輸入框還在、打的字沒丟；不在組字時 Esc 照常取消 | [ ] | [ ] |
 | 8d-27 | 在 Claude 會話裡跑 `bash scripts/install-app.sh --wait --reopen` 讓 App 重開；再在 App 開一個 agent 會話與一個 Shell，Shell 裡 `env \| grep CLAUDE_CODE`（2026-11-04） | Shell 裡沒有 `CLAUDE_CODE_CHILD_SESSION`／`CLAUDE_CODE_SESSION_ID`／`CLAUDE_CODE_MESSAGING_*`；agent 會話結束後在終端 `claude --resume` 列得到那一場（之前會因為被當成子會話不存 transcript） | [ ] | [ ] |
 
-## 8e. 對講：不同 repo 的 agent 互傳訊息（F-121，2026-11-04 夜間）——**只有單元測試＋真 Claude Code `-p` 一次**
+## 8e. 對講：不同 repo 的 agent 互傳訊息（F-121，2026-11-04 夜間）——**引擎＋真 Claude Code `-p` 來回已過，App 畫面還沒點**
 
-> 已驗：引擎三組整合測試（送、hook 收、回覆送回原會話、跨組要同意、開場注入、閒著時 App 打字）；真 Claude Code 2.1.318（haiku，spine 副本）
-> 在 PostToolUse 收到訊息、逐字讀出編號與內容。App 畫面與兩個真會話互傳**都還沒點**。先重裝（§0），會話要**新開**才會帶到新的 skill 說明（`ctx setup --claude` 更新 skill）。
+> 已驗：引擎三組整合測試（送、hook 收、回覆送回原會話、跨組要同意、開場注入、閒著時 App 打字、已送到不算未讀）；
+> `bash scripts/e2e_mailbox.sh`（真 Claude Code 2.1.318、haiku、暫存 spine，四次小呼叫）：A 用 MCP 請 B 建檔 → B 用完工具時收到、**先問人** →
+> 同意後 B 建檔並帶 re 回覆 → 回覆指定回 A 那場、A 用完工具時收到。App 畫面（會話列、收件匣卡片、閒著時代打）**都還沒點**。先重裝（§0），會話要**新開**才會帶到新的 skill 說明（`ctx setup --claude` 更新 skill）。
 
 | # | 怎麼做 | 預期 | macOS | Windows |
 |---|---|---|---|---|
