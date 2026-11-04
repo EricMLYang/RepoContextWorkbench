@@ -256,6 +256,23 @@ fn cross_group_needs_consent_and_unknown_targets_are_rejected() {
     let e = send(&d, Some("repo-c"), "嗨", None, &t, false, None, None).unwrap_err();
     assert!(e.to_string().contains("不在你的主場"), "{e}");
     assert!(send(&d, Some("repo-c"), "嗨", None, &t, true, None, None).is_ok());
+    // 秘密不落地：spine 與信箱檔都遮掉
+    send(
+        &d,
+        Some("repo-b"),
+        "token 是 sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789",
+        None,
+        &t,
+        false,
+        None,
+        None,
+    )
+    .unwrap();
+    let book = std::fs::read_to_string(d.join(".state/mailbox.json")).unwrap();
+    assert!(
+        !book.contains("abcdefghijklmnop") && book.contains("REDACTED"),
+        "{book}"
+    );
     let e = send(&d, Some("nope"), "嗨", None, &t, false, None, None).unwrap_err();
     assert!(e.to_string().contains("沒有登記"), "{e}");
     let e = send(&d, None, "嗨", None, &t, false, None, None).unwrap_err();
