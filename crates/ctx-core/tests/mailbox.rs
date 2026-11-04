@@ -94,6 +94,19 @@ fn request_reaches_running_session_and_reply_goes_back_to_asker() {
     assert!(ctxt.contains("limit 參數"));
     assert_eq!(hook(&d, "t2", "PostToolUse", &b), "", "同一則不送第二次");
 
+    // 開場名冊：repo-b 那場在做什麼看得到
+    let c = ctx_core::agentapi::context_for(&d, &Target::at(&a), false).unwrap();
+    let rb = c["roster"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == "repo-b")
+        .unwrap()
+        .clone();
+    assert!(
+        rb["working_on"][0].as_str().unwrap().contains("處理中"),
+        "{rb}"
+    );
     // 會話列：t1 在等 repo-b 回覆；t2 收到一則
     let talk = mailbox::session_talk(&d, "t1", "2000-01-01 00:00").unwrap();
     assert_eq!(talk["label"], "等 repo-b 回覆");

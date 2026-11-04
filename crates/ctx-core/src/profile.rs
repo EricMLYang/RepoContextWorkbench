@@ -359,6 +359,9 @@ pub struct RosterEntry {
     /// 別的會話正在跑的組員：還沒 commit 的檔數（別的 agent 可能正在改這裡；不是 git 或讀不到＝不給）。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uncommitted: Option<usize>,
+    /// F-120：App 開的會話在這個 repo 做什麼（標題＋狀態；呼叫者自己那場不算）——同組的 agent 開場就看得到彼此。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub working_on: Vec<String>,
 }
 
 /// 範圍內每個 repo 一列（照 registry 順序）。`here`＝呼叫者所在 repo id。
@@ -366,6 +369,27 @@ pub struct RosterEntry {
 /// 開場就知道哪個鄰居正在被改，先別動或先問；只查這幾個（git status，不拿 index.lock），開場不變慢。
 pub fn roster(spine_dir: &Path, entries: &[Repo], here: Option<&str>) -> Vec<RosterEntry> {
     let open = crate::hooks::open_sessions_by_repo(spine_dir);
+    let me = crate::agentapi::mailbox::sid_from_env();
+    let peers = crate::agentapi::mailbox::peers(spine_dir);
+    let doing = |id: &str| -> Vec<String> {
+        peers
+            .iter()
+            .filter(|p| p["repo"] == id && p["sid"].as_str() != me.as_deref())
+            .take(3)
+            .map(|p| {
+                let what = p["title"].as_str().unwrap_or("agent");
+                let state = p["state"].as_str().unwrap_or("");
+                match p["tool"].as_str() {
+                    Some(t) => format!(
+                        "{}（{state}：{}）",
+                        crate::pystr::clip(what, 40),
+                        crate::pystr::clip(t, 30)
+                    ),
+                    None => format!("{}（{state}）", crate::pystr::clip(what, 40)),
+                }
+            })
+            .collect()
+    };
     entries
         .iter()
         .map(|r| {
@@ -380,6 +404,7 @@ pub fn roster(spine_dir: &Path, entries: &[Repo], here: Option<&str>) -> Vec<Ros
                 sessions,
                 you,
                 uncommitted,
+                working_on: doing(&profile.id),
                 profile,
             }
         })

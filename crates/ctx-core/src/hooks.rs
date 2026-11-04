@@ -95,6 +95,16 @@ fn roster_line(r: &Value, desc_chars: Option<usize>) -> String {
             line.push_str("（推測自 README）");
         }
     }
+    // F-120：同組的 agent 在做什麼（App 開的會話；要動同一處先 send_message 打聲招呼）
+    if let Some(w) = r["working_on"].as_array().filter(|w| !w.is_empty()) {
+        let list: Vec<&str> = w.iter().filter_map(Value::as_str).collect();
+        let who = if r["you"] == true {
+            "同 repo 另有 agent 在做"
+        } else {
+            "agent 在做"
+        };
+        line.push_str(&format!("｜{who}：{}", list.join("；")));
+    }
     let n = r["sessions"].as_u64().unwrap_or(0);
     if n > 0 && r["you"] != true {
         line.push_str(&format!("｜{n} 個會話在跑"));
