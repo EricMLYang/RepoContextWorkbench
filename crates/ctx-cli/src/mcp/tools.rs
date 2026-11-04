@@ -181,6 +181,38 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
             w_handoff,
         ),
         work(
+            "send_message",
+            "對講：傳話給同組另一個 repo 的 agent（請它做事、問它介面、告訴它你改了共用的東西），或帶 re 回覆收到的訊息。\
+             那個 repo 有會話在跑就送進它的脈絡（它用完下一個工具時），沒有就進使用者收件匣、那邊下次開場看到；\
+             對方的回覆會送回你這場會話。不用等回覆，繼續手上的事。跨組要先問使用者再帶 cross_scope_ok。",
+            s_(
+                cat(vec![
+                    vec![
+                        ("to", d_(str_t(), "收件 repo id（同組成員見 context_for 的 roster）；回覆時可省略")),
+                        ("text", d_(str_t(), "要說的話：要什麼、為什麼、做完怎樣算好；長內容寫成檔、這裡放路徑")),
+                        ("re", d_(str_t(), "回覆哪一則（訊息編號，例 2026-11-04-m1）")),
+                    ],
+                    cwd_props(),
+                    cross_props(),
+                ]),
+                &["text"],
+            ),
+            w_send_message,
+        ),
+        work(
+            "messages",
+            "對講收件匣：別的 repo 的 agent 傳給你這個 repo 的話（新的這次算收到）與你送出的，\
+             加上同組現在在跑的 agent（repo、標題、在做什麼）——要改共用的東西前先看誰在動。",
+            s_(
+                cat(vec![
+                    vec![("limit", d_(int_t(), "最多幾則，預設 10"))],
+                    cwd_props(),
+                ]),
+                &[],
+            ),
+            w_messages,
+        ),
+        work(
             "describe_repo",
             "寫 repo 的名片：一句話介紹、協作角色、搜尋關鍵字。組員名冊與 search_knowledge 的 repo 排名都靠它；\
              存在 spine（registry），不會寫進 repo。開場名冊標「推測自 README」或沒有介紹時，做完手上的事順手補。\

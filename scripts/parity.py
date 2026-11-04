@@ -71,17 +71,26 @@ MCP_EXTRA_PARAMS = [
 ]
 
 
+MAILBOX_REASON = "對講 send_message／messages（F-120，2026-11-04，Rust 才有：不同 repo 的 agent 互傳訊息；開場與 MCP 說明各多一句）"
+
 MCP_EXTRA_TOOLS = {
     "describe_repo": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
     "registry_describe": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
     "workbench_apply": "改工作台設定 workbench_apply（F-63 App 助手同一份白名單，2026-10-15，Rust 才有）",
     "registry_class": "repo 類別 registry_class（2026-10-18，Rust 才有，docs/REPO_CLASSES.md）",
     "what_user_sees": "使用者畫面 what_user_sees（2026-10-24，Rust 才有：App 回報主區在看什麼，agent 被問才讀）",
+    "send_message": MAILBOX_REASON,
+    "messages": MAILBOX_REASON,
 }
 
 
 def drop_mcp_extras(resp, allowed):
     """tools/list 回應：拿掉 Rust 才有的工具與選填參數（就地改），用到的理由加進 allowed。"""
+    res = resp.get("result") or {}
+    ins = res.get("instructions")
+    if isinstance(ins, str) and "send_message" in ins:  # initialize 說明的對講那一句（F-120）
+        res["instructions"] = re.sub(r"要同組別的 repo 的 agent 做事就 send_message[^。]*。", "", ins)
+        allowed.add(MAILBOX_REASON)
     tools = (resp.get("result") or {}).get("tools")
     if isinstance(tools, list):
         for t in [t for t in tools if t.get("name") in MCP_EXTRA_TOOLS]:
@@ -365,6 +374,7 @@ def strip_rust_only(v):
         if isinstance(ac, str):  # 開場注入：提醒段與新能力那一行（N-22）
             new = re.sub(r"\n## 提醒（[^\n]*\n(?:- [^\n]*\n)*\n?", "\n", ac)
             new = re.sub(r"\n- 改掉舊判斷→[^\n]*", "", new)
+            new = re.sub(r"\n- 要同組另一個 repo 的 agent 做事[^\n]*", "", new)  # 對講（F-120）
             # 組員名冊段（2026-10-13）
             new = re.sub(r"\n## 同組成員（[^\n]*\n(?:- [^\n]*\n)*(?:你所在的 repo 還沒寫介紹[^\n]*\n)?\n?", "\n", new)
             if new != ac:
@@ -539,7 +549,7 @@ def main():
 
     # ── 讀（初始狀態）──
     C("instructions", ["instructions"], spine=False,
-      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片)（Rust 版）\n.*?(?=\n## )", "", s, flags=re.S))
+      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作)（Rust 版）\n.*?(?=\n## )", "", s, flags=re.S))
     C("registry list", ["registry", "list"])
     C("registry list --json", ["registry", "list", "--json"])
     C("registry relations", ["registry", "relations"])

@@ -136,6 +136,8 @@ export function useRunAction(): RunAction {
         store.toast(actionToast(a, r));
         await store.refreshState();
         if (r.rescan) await store.rescan();
+        // F-120 對講：交給了哪場會話就切過去，看它接手
+        if (a.action === "msg_deliver" && typeof r.sid === "string") ui.selectTerm(r.sid);
       } catch (e) {
         const msg = (e as Error).message;
         if (from === "card") store.setCardError(c.key, msg);

@@ -35,7 +35,8 @@ use files::{
 use finder::{a_file_diff, a_palette, a_repo_changes, a_scope_changes};
 use namecard::{a_describe_repo, a_repo_class, a_repo_profile};
 use sessions::{
-    a_auto_continue, a_session_draft, a_session_result, a_session_seen, a_term_create, a_term_kill,
+    a_auto_continue, a_msg_deliver, a_session_draft, a_session_result, a_session_seen,
+    a_term_create, a_term_kill,
 };
 
 /// 會話清冊（`TermManager` 的那幾個操作）。殼給真的，測試給假的。
@@ -51,6 +52,14 @@ pub trait Terms {
     /// 會話開在哪個目錄（Rust 才有；給「這個會話的 Terminal」沿用）。未知 sid 回 None。
     fn cwd(&self, _sid: &str) -> Option<PathBuf> {
         None
+    }
+    /// 現在活著的 agent 會話 sid（Rust 才有；對講「交給在跑的會話」用）。
+    fn live_agents(&self) -> Vec<String> {
+        Vec::new()
+    }
+    /// 替你在這個會話打一句話並送出（Rust 才有）。未知 sid＝false。
+    fn send_line(&self, _sid: &str, _text: &str) -> bool {
+        false
     }
 }
 
@@ -71,6 +80,16 @@ impl Terms for TermManager {
     }
     fn cwd(&self, sid: &str) -> Option<PathBuf> {
         self.get(sid).and_then(|s| s.cwd().map(Path::to_path_buf))
+    }
+    fn live_agents(&self) -> Vec<String> {
+        self.list()
+            .into_iter()
+            .filter(|i| i.alive && i.kind == crate::term::TermKind::Agent)
+            .map(|i| i.sid)
+            .collect()
+    }
+    fn send_line(&self, sid: &str, text: &str) -> bool {
+        crate::auto_continue::send_line(self, sid, text)
     }
 }
 
@@ -154,6 +173,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("session_seen", a_session_seen),
     ("session_result", a_session_result),
     ("auto_continue", a_auto_continue),
+    ("msg_deliver", a_msg_deliver),
     ("screen", a_screen),
     ("build_info", a_build_info),
     ("install_update", a_install_update),

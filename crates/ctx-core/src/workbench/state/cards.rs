@@ -144,6 +144,26 @@ impl CardBuilder<'_> {
                 );
             }
         }
+        // F-120 對講：別的 repo 的 agent 請這個 repo 做事（回覆不給按鈕——會自動送回發問的會話）
+        if ev.source == "agent" && ev.body.starts_with(crate::agentapi::mailbox::TAG) {
+            if let (Some(id), Some(to)) = (ev.kv("id"), ev.kv("repo")) {
+                let is_reply = title.contains("（回 ");
+                if !is_reply {
+                    let one_line = ev.body.split_whitespace().collect::<Vec<_>>().join(" ");
+                    let task = format!("{one_line} ——處理完用 send_message 帶 re={id} 回覆它。");
+                    actions.insert(0, act("開會話處理", "term_create",
+                        json!({"kind": "agent", "repos": [to], "task": task, "origin": format!("msg:{id}")})));
+                    actions.insert(
+                        0,
+                        act(
+                            &format!("交給 {to} 在跑的會話"),
+                            "msg_deliver",
+                            json!({"id": id}),
+                        ),
+                    );
+                }
+            }
+        }
         let mut m = Map::new();
         m.insert("key".into(), json!(key));
         m.insert(

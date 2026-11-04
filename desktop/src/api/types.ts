@@ -1059,6 +1059,11 @@ export interface ActionMap {
     payload: { sid: string; max?: number; prompt?: string; off?: boolean };
     result: { ok: true; auto_continue: AutoContinue | null };
   };
+  /** F-120 對講：收件匣「交給 X 在跑的會話」——把別的 repo 的 agent 傳來的話打進那個 repo 一場活著的會話。 */
+  msg_deliver: {
+    payload: { id: string };
+    result: { ok: true; sid: string };
+  };
   /** Rust 才有（2026-10-24）：主區在看什麼（agent 被問「根據畫面」才讀）。跟上次一樣＝`changed: false`。 */
   screen: { payload: ScreenReport; result: { ok: true; changed: boolean } };
 }

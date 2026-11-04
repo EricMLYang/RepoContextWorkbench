@@ -131,6 +131,37 @@ pub(super) fn w_handoff(d: &Path, a: &Args, here: &Path) -> Result<Value> {
         "agent",
     ))
 }
+pub(super) fn w_send_message(d: &Path, a: &Args, here: &Path) -> Result<Value> {
+    need("send_message", a, &["text"])?;
+    let (to, text, re) = (
+        nz(a, "to"),
+        arg_s(a, "text").unwrap_or_default(),
+        nz(a, "re"),
+    );
+    let sid = agentapi::mailbox::sid_from_env();
+    let out = agentapi::mailbox::Outgoing {
+        to: to.as_deref(),
+        text: &text,
+        re: re.as_deref(),
+        from_sid: sid.as_deref(),
+    };
+    agentapi::mailbox::send_message(
+        d,
+        &out,
+        &target(a, here),
+        arg_flag(a, "cross_scope_ok"),
+        None,
+    )
+}
+pub(super) fn w_messages(d: &Path, a: &Args, here: &Path) -> Result<Value> {
+    let limit = arg_int(a, "limit").filter(|n| *n > 0).unwrap_or(10) as usize;
+    agentapi::mailbox::messages(
+        d,
+        &target(a, here),
+        agentapi::mailbox::sid_from_env().as_deref(),
+        limit,
+    )
+}
 pub(super) fn w_search(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("search_knowledge", a, &["query"])?;
     let mut opts = SearchOpts::default();

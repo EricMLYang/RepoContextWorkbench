@@ -237,3 +237,27 @@ pub(super) fn a_auto_continue(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Res
     let a = crate::auto_continue::set(d, &sid, max, s(p, "prompt").as_deref())?;
     Ok(json!({"ok": true, "auto_continue": a}))
 }
+
+/// F-120 對講：收件匣「交給在跑的會話」——把訊息打進收件 repo 一場活著的 agent 會話（閒著的優先），標成已送達。
+/// 沒有會話在跑就回錯（卡片另有「開會話處理」）。
+pub(super) fn a_msg_deliver(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
+    use crate::agentapi::mailbox;
+    let id = raw(p, "id").unwrap_or_default();
+    let m = mailbox::get(d, &id)
+        .ok_or_else(|| Error::invalid(format!("找不到訊息 {}", shown(p, "id"))))?;
+    if m.delivered.is_some() {
+        return Err(Error::invalid("這則已經交給對方了"));
+    }
+    let t = t.ok_or_else(|| Error::invalid("這裡沒有會話可交"))?;
+    let sid = mailbox::pick_session(d, &m, &t.live_agents()).ok_or_else(|| {
+        Error::invalid(format!(
+            "{} 現在沒有 agent 會話在跑——用「開會話處理」",
+            m.to
+        ))
+    })?;
+    if !t.send_line(&sid, &mailbox::as_prompt(&m)) {
+        return Err(Error::invalid("會話已經結束"));
+    }
+    mailbox::mark_delivered(d, &id, Some(&sid), mailbox::Via::App)?;
+    Ok(json!({"ok": true, "sid": sid}))
+}

@@ -372,6 +372,8 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
         "- 改掉舊判斷→log_decision 帶 supersedes；判斷後來怎樣→log_decision 帶 outcome_of；把一項待辦交給新會話→`ctx todo brief #N`；使用者要改工作台設定（建組、組員、標籤、暫停）→workbench_apply（先預覽給他看）。".into(),
         "- 要別的 repo 的資料：search_knowledge 找 → read_from 讀（會記引用）；要對方整理歸納才用 ask_repo（慢、花錢）。"
             .into(),
+        // F-120 對講（Rust 才有）
+        "- 要同組另一個 repo 的 agent 做事、或告訴它你改了它會用到的東西→send_message（它在跑就直接送到，回覆會送回你）；收到〔對講〕就處理並帶 re 回覆；messages 看往來與誰在跑。".into(),
         "- 收尾一定呼叫 handoff（完成了什麼、剩什麼、下次從哪接）；沒交接的會話會被記成未交接。".into(),
     ]);
     out.join("\n")
@@ -419,9 +421,22 @@ fn session_start_inner(
         let _ = ruminate::spawn_detached(spine_dir);
     }
     let now = now.unwrap_or_else(|| Local::now().naive_local());
+    let mut text = render_start(&ctx);
+    // F-120 對講：別的 repo 的 agent 留給這個 repo 的話（不算進開場預算——是點名給你的）
+    let mail = agentapi::mailbox::take_for(
+        spine_dir,
+        &cwd_p,
+        agentapi::mailbox::sid_from_env().as_deref(),
+        agentapi::mailbox::Via::Start,
+        Some(now),
+    );
+    if !mail.is_empty() {
+        text.push_str("\n\n");
+        text.push_str(&agentapi::mailbox::render(&mail));
+    }
     let output = py_dumps(&json!({"hookSpecificOutput": {
         "hookEventName": "SessionStart",
-        "additionalContext": render_start(&ctx),
+        "additionalContext": text,
     }}));
     if !has_session_id(payload) {
         // 刻意差異（N-14）：沒有 session_id 的不是 Claude Code 開的會話（手動試跑、量測、誤觸）——

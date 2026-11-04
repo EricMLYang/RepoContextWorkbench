@@ -120,7 +120,8 @@ pub fn handle_message(
             "serverInfo": {"name": "repo_context", "version": env!("CARGO_PKG_VERSION")},
             "instructions": "repo-context：跨 repo 的工作脈絡與留痕。開工先 context_for，\
                 做了判斷 log_decision、發現待辦 add_todo、等人或卡住 report_status，\
-                收尾一定 handoff。範圍依 cwd 推出，寫到別組會被拒，要先問使用者。",
+                收尾一定 handoff。要同組別的 repo 的 agent 做事就 send_message（收到〔對講〕要帶 re 回覆）。\
+                範圍依 cwd 推出，寫到別組會被拒，要先問使用者。",
         })));
     }
     if method == "ping" {
