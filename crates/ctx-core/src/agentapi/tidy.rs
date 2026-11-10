@@ -14,6 +14,11 @@ static ASKS_USER: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     .expect("寫死的 regex")
 });
 
+/// 這項未結是不是在等使用者決定（不是 agent 能動手的事）。
+pub fn asks_user(text: &str) -> bool {
+    ASKS_USER.is_match(text)
+}
+
 /// 一項未結歸到哪一類（順序＝畫面與 CLI 列出的順序）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]

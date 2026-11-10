@@ -61,7 +61,24 @@ def _drop_next(obj):
     return obj
 
 
+LEAN_OPENING_WHY = ("開場注入瘦身（2026-11-10，Rust 才改）：agent 的作業是主軸——沒登記目標不印「請寫目標」、"
+                    "下一步跟交接的接續點相同不重複印、未結只列最近 7 天有動靜且 agent 能動手的（其餘只給數字）、"
+                    "要人判斷的提醒段拿掉。比對時拿掉這幾行，其餘照比")
+
+
+def _lean_opening(obj):
+    hso = obj.get("hookSpecificOutput") if isinstance(obj, dict) else None
+    ac = hso.get("additionalContext") if isinstance(hso, dict) else None
+    if isinstance(ac, str):
+        ac = re.sub(r"\n目標：（[^\n]*）", "", ac)
+        ac = re.sub(r"\n建議下一步：[^\n]*", "", ac)
+        ac = re.sub(r"\n（另有未結不列：[^\n]*", "", ac)
+        hso["additionalContext"] = ac
+    return obj
+
+
 ALLOW = {
+    "hook session-start": (LEAN_OPENING_WHY, _lean_opening),
     "next --json": (NEXT_ORDER_WHY, _next_items_unordered),
     "next 寫完後": (NEXT_ORDER_WHY, _next_items_unordered),
     "context --json": (NEXT_ORDER_WHY, _drop_next),

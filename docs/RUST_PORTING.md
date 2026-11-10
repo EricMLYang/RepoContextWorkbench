@@ -183,6 +183,14 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   還沒到期 → **擱置**（逾期超過 `STALE_OVERDUE_DAYS`＝14 天，最近到期的先，理由寫「還做不做」）。Python 是逾期一律最前。
   開場注入的未結照同一順序列前 6 項，擱置的不逐項列、只給一行數字＋`ctx todo review`；`context_for` 超過 30 項時的截斷也用
   同一順序（`agentapi::sort_loops_for_reading`）。對拍：`next --json`／`context --json` 不比順序與 `next`。
+- **agent 的脈絡瘦身**（2026-11-10，使用者定：agent 的作業是主軸，不為人的判斷付 token；準則見 `DEVELOPMENT.md` §6）：
+  - 未結超過 7 天沒動靜（`spine::LOOP_ACTIVE_DAYS`：這段期間沒開、也沒有事件提到 `#N`）不進 `context_for.open_loops`、`next_work`、
+    summary 的下一步、情境卡、開場注入，只給數量（`open_loops_dormant`／`dormant`）。`ctx todo list`／`tidy`／`review` 照舊是全部。
+  - 開場注入：再拿掉「等使用者決定」的未結（`agentapi::asks_user`）、每項截 90 字、列 5 項；沒登記目標不印；下一步跟交接的接續點相同不重印；
+    「注意」只留所在 repo 且 agent 能處理的（別的 repo、「還算進行中嗎」不印）。
+  - 「## 提醒」段與 `context_for.hints` 拿掉（未結體檢、該重看、判斷回顧、關係建議）；改在 `ctx health` 的「要你判斷的」（`agentapi::human_hints`）。
+  - 實測（真 spine 副本，RepoContextWorkbench）：開場 3,325 → 2,674 字（其中未結與提醒 2,076 → 約 900）；`context_for` 約 27,000 → 20,000 字。
+  - 對拍：`hook session-start` 拿掉目標提示、建議下一步、不列的數字三種行再比。
 - **屬於多個組的 repo 用哪個組當主場**（2026-11-10）：`where_am_i` 依序看——App 開這場會話時的牌組（環境變數
   `CTX_HOME_GROUP`，`term::create_agent` 放的）→ 使用者在 App 正看著的牌組（`.state/screen.json` 的 `group`）→ 第一個。
   只在 repo 屬於兩個以上的組時才看；`note` 會說用了哪個、為什麼。Python 一律第一個。

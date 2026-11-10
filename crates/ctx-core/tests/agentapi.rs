@@ -43,6 +43,19 @@ fn two_groups() -> World {
     }
 }
 
+/// 2026-11-10：要人判斷的提醒只給人看（`ctx health`），不進 agent 的開場。回 (給人的提醒文字, 開場注入)。
+fn human_hints_and_opening(w: &World, sid: &str) -> (String, String) {
+    let hints = api::human_hints(&w.sp, &at(&w.impl_)).unwrap();
+    let text: Vec<&str> = hints.iter().filter_map(|h| h["text"].as_str()).collect();
+    let out = hooks::session_start(
+        &w.sp,
+        &json!({"session_id": sid, "cwd": w.impl_.to_string_lossy()}),
+        None,
+    );
+    assert!(!out.contains("## 提醒"), "{out}");
+    (text.join("\n"), out)
+}
+
 fn at(p: &Path) -> Target {
     Target::at(p)
 }
@@ -383,6 +396,109 @@ fn test_multi_group_repo_follows_the_deck_on_screen() {
             .group
             .as_deref(),
         Some("產品")
+    );
+}
+
+/// 2026-11-10：7 天沒動靜的未結不進 agent 的脈絡（context_for／next_work／開場／情境卡）；
+/// 有事件提到它就算有動靜；完整清單（todo list／tidy）照舊看得到。
+#[test]
+fn test_dormant_loops_stay_out_of_agent_context() {
+    let w = two_groups();
+    let old = "2026-01-05";
+    let open_old = |num: &str, text: &str| {
+        spine_mod::append_event(
+            &w.sp,
+            "open-loop",
+            "agent",
+            &[
+                num.to_string(),
+                "repo:impl".to_string(),
+                "due:2026-01-19".to_string(),
+            ],
+            text,
+            Some(
+                chrono::NaiveDate::parse_from_str(old, "%Y-%m-%d")
+                    .unwrap()
+                    .and_hms_opt(9, 0, 0)
+                    .unwrap(),
+            ),
+        )
+        .unwrap();
+    };
+    open_old("#1", "很久以前的事");
+    open_old("#2", "很久以前但最近有人提");
+    api::add_todo(
+        &w.sp,
+        "今天開的事",
+        Some("2999-01-01"),
+        &at(&w.impl_),
+        false,
+        "agent",
+    )
+    .unwrap();
+    api::add_todo(
+        &w.sp,
+        "使用者決定：要不要換快取",
+        Some("2999-01-01"),
+        &at(&w.impl_),
+        false,
+        "agent",
+    )
+    .unwrap();
+    api::log_decision(&w.sp, "#2 先做一半", &at(&w.impl_), None, false, "agent").unwrap();
+
+    let ctx = api::context_for(&w.sp, &at(&w.impl_), true).unwrap();
+    let texts: Vec<&str> = ctx["open_loops"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|lp| lp["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        texts,
+        vec![
+            "很久以前但最近有人提",
+            "今天開的事",
+            "使用者決定：要不要換快取"
+        ]
+    );
+    assert_eq!(ctx["open_loops_dormant"]["count"], 1);
+    // 只看卡的「未結」段（「最近事件」段另外列事件，不在這條規則內）
+    let card = ctx["card"].as_str().unwrap();
+    let card = card.split("## 最近事件").next().unwrap();
+    assert!(
+        !card.contains("很久以前的事") && card.contains("另有 1 項超過 7 天沒動靜"),
+        "{card}"
+    );
+
+    let nxt = api::next_work(&w.sp, &at(&w.impl_), 10).unwrap();
+    assert!(!nxt.to_string().contains("很久以前的事"));
+    assert_eq!(nxt["dormant"]["count"], 1);
+
+    // 開場：沒動靜的、等使用者決定的都不列，只給數字
+    let out = hooks::session_start(
+        &w.sp,
+        &json!({"session_id": "dm", "cwd": w.impl_.to_string_lossy()}),
+        None,
+    );
+    assert!(
+        out.contains("今天開的事") && out.contains("很久以前但最近有人提"),
+        "{out}"
+    );
+    assert!(
+        !out.contains("很久以前的事") && !out.contains("要不要換快取"),
+        "{out}"
+    );
+    assert!(
+        out.contains("1 項等使用者決定、1 項超過 7 天沒動靜"),
+        "{out}"
+    );
+
+    // 人要看的完整清單不受影響
+    assert_eq!(api::list_todos(&w.sp, &at(&w.impl_)).unwrap()["count"], 4);
+    assert_eq!(
+        api::tidy_todos(&w.sp, &at(&w.impl_)).unwrap()["counts"]["total"],
+        4
     );
 }
 
@@ -825,15 +941,12 @@ fn session_start_shows_review_hint_for_overdue_untouched_todo() {
     .unwrap();
     let r = v(r);
     let id = r["id"].as_str().unwrap();
-    let out = hooks::session_start(
-        &w.sp,
-        &json!({"session_id": "rv", "cwd": w.impl_.to_string_lossy()}),
-        None,
-    );
+    let (hints, out) = human_hints_and_opening(&w, "rv");
     assert!(
-        out.contains("體檢：") && out.contains(&format!("逾期或擱置沒動靜 {id}")),
-        "{out}"
+        hints.contains("體檢：") && hints.contains(&format!("逾期或擱置沒動靜 {id}")),
+        "{hints}"
     );
+    assert!(!out.contains("體檢："), "{out}");
 }
 
 // ---- Rust 才有（F-07）：判斷取代＋何時重看 ----
@@ -914,15 +1027,12 @@ fn reopen_condition_with_past_date_is_flagged_at_session_start() {
     let ctx = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
     let reopen = ctx["reopen"].as_array().unwrap();
     assert_eq!(reopen.len(), 2);
-    let out = hooks::session_start(
-        &w.sp,
-        &json!({"session_id": "ro", "cwd": w.impl_.to_string_lossy()}),
-        None,
-    );
+    let (hints, out) = human_hints_and_opening(&w, "ro");
     assert!(
-        out.contains("該重看：先不做 Windows") && out.contains("有條件的判斷：索引用 JSON"),
-        "{out}"
+        hints.contains("該重看：先不做 Windows") && hints.contains("有條件的判斷：索引用 JSON"),
+        "{hints}"
     );
+    assert!(!out.contains("該重看"), "{out}");
 }
 
 // ---- Rust 才有（F-22）：判斷可搜尋 ----
@@ -1100,15 +1210,12 @@ fn retro_candidates_and_outcome_closes_the_loop() {
     let refs: Vec<&str> = c.iter().filter_map(|x| x["ref"].as_str()).collect();
     assert_eq!(refs, vec!["decision:2026-01-01-d1"]); // 工具紀錄、太新的都不算
                                                       // 開場提一行
-    let out = hooks::session_start(
-        &w.sp,
-        &json!({"session_id": "rt", "cwd": w.impl_.to_string_lossy()}),
-        None,
-    );
+    let (hints, out) = human_hints_and_opening(&w, "rt");
     assert!(
-        out.contains("判斷回顧（共 1 筆待回顧）：decision:2026-01-01-d1"),
-        "{out}"
+        hints.contains("判斷回顧（共 1 筆待回顧）：decision:2026-01-01-d1"),
+        "{hints}"
     );
+    assert!(!out.contains("判斷回顧"), "{out}");
     // 記結果：寫成 outcome、ref 指回它；之後不再待回顧，判斷搜尋帶出結果
     let r = api::log_decision_ext(
         &w.sp,
@@ -1151,7 +1258,7 @@ fn retro_candidates_and_outcome_closes_the_loop() {
 
 // Rust 才有（N-22）：提醒集中一段，MCP context_for 的 hints 是同一份
 #[test]
-fn hints_shared_between_hook_and_context_for() {
+fn hints_go_to_the_human_not_the_agent_opening() {
     let w = two_groups();
     let yesterday = (Local::now() - chrono::Duration::days(1))
         .format("%Y-%m-%d")
@@ -1167,12 +1274,9 @@ fn hints_shared_between_hook_and_context_for() {
     )
     .unwrap();
     let ctx = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
-    let kinds: Vec<&str> = ctx["hints"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|h| h["kind"].as_str())
-        .collect();
+    assert!(ctx.get("hints").is_none()); // context_for 也不帶
+    let hints = api::human_hints(&w.sp, &at(&w.impl_)).unwrap();
+    let kinds: Vec<&str> = hints.iter().filter_map(|h| h["kind"].as_str()).collect();
     assert_eq!(kinds, vec!["review", "reopen"]);
     let out = hooks::session_start(
         &w.sp,
@@ -1183,10 +1287,11 @@ fn hints_shared_between_hook_and_context_for() {
     let text = v["hookSpecificOutput"]["additionalContext"]
         .as_str()
         .unwrap();
-    let block = text.split("## 提醒").nth(1).expect("要有提醒段");
-    for h in ctx["hints"].as_array().unwrap() {
-        assert!(block.contains(h["text"].as_str().unwrap()));
+    assert!(!text.contains("## 提醒"));
+    for h in &hints {
+        assert!(!text.contains(h["text"].as_str().unwrap()));
     }
+    assert!(text.contains("補 VDI 測試")); // 昨天才開的未結照列
     assert!(!text.contains("回填自")); // 回填尾巴開場不印
     assert!(text.contains("log_decision 帶 supersedes"));
 }
@@ -1273,7 +1378,7 @@ fn context_for_caps_open_loops() {
         None,
     );
     assert!(
-        out.contains("未結（35）") && out.contains("…另 29 項"),
+        out.contains("未結（35）") && out.contains("…另 30 項"),
         "{out}"
     );
 }

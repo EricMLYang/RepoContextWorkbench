@@ -15,6 +15,12 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
     // 2026-10-21：App 開會話用的 .mcp.json 指到的 ctx 還在不在（10-18 重裝後指到被刪的 bundle，兩天沒人發現）
     let mcp_json = ctx_core::session::mcp_json_status(&d);
     v["setup"] = serde_json::json!({"skill": skill, "mcp_json": mcp_json});
+    // 2026-11-10：要人判斷的提醒（未結體檢、判斷回顧、關係建議、何時重看）搬來這裡——以前塞在每場 agent 會話的開場
+    let here = ctx_core::agentapi::Target {
+        cwd: std::env::current_dir().ok(),
+        ..Default::default()
+    };
+    v["for_you"] = Value::Array(ctx_core::agentapi::human_hints(&d, &here).unwrap_or_default());
     ctx.emit(&v, |r| {
         let pct = |x: &Value| {
             x.as_f64()
@@ -202,6 +208,13 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                 "- App 開會話用的 .mcp.json 指到的 ctx 不在（{}）：那些會話的 MCP 會連不上、agent 退回 CLI；下一次 App 開會話會自動重寫，現在要修就跑 `ctx session --print`",
                 s(&r["setup"]["mcp_json"], "command")
             ));
+        }
+        let for_you = arr(r, "for_you");
+        if !for_you.is_empty() {
+            out.push("- 要你判斷的（不再進 agent 的開場）：".into());
+            for h in for_you {
+                out.push(format!("    {}", s(h, "text")));
+            }
         }
         out.join("\n")
     });

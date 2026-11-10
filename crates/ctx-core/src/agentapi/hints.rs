@@ -4,8 +4,15 @@
 use super::*;
 
 /// 要處理的提醒（依序）：未結體檢、該重看、判斷回顧、關係建議、有條件的判斷。每筆 `{kind, text}`。
-/// hook 開場渲染成「## 提醒」一段；MCP `context_for` 回 `hints`——同一份。
-pub(super) fn collect_hints(spine_dir: &Path, t: &Target, ctx: &Value) -> Vec<Value> {
+/// 只給人看（見 [`human_hints`]）。
+/// 給**人**看的提醒（`ctx health`）：未結體檢、該重看、判斷回顧、關係建議、有條件的判斷。
+/// 2026-11-10 起不再進 agent 的開場與 `context_for`——這些都是要人判斷的事，不該由每場會話的 agent 付 token。
+pub fn human_hints(spine_dir: &Path, t: &Target) -> Result<Vec<Value>> {
+    let ctx = context_for(spine_dir, t, false)?;
+    Ok(collect_hints(spine_dir, t, &ctx))
+}
+
+fn collect_hints(spine_dir: &Path, t: &Target, ctx: &Value) -> Vec<Value> {
     let mut out: Vec<Value> = Vec::new();
     let mut push = |kind: &str, text: String| out.push(json!({"kind": kind, "text": text}));
     if let Some(h) = review_hint(spine_dir, t) {

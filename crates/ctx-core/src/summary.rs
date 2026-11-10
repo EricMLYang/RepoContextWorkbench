@@ -377,7 +377,9 @@ pub fn build_summary(
     let (progress, progress_gap) = progress(&events, &gkey, &ids, scoped);
     let since = progress.as_ref().and_then(|p| p.at.clone());
     let changes = changes(&states, &loops, &gkey, &ids, scoped, since.as_deref(), 4);
-    let (nxt, next_gap) = next_step(&events, &loops, &gkey, &ids, scoped, &cards, &today);
+    // 可接續的一步只看最近有動靜的未結（spine::LOOP_ACTIVE_DAYS）；「自上次以來的變化」照舊看全部
+    let (live, _) = spine::split_active_loops(&events, loops.clone(), &today);
+    let (nxt, next_gap) = next_step(&events, &live, &gkey, &ids, scoped, &cards, &today);
     let gaps: Vec<String> = [&goal_gap, &progress_gap, &next_gap]
         .into_iter()
         .flatten()

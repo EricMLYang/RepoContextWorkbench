@@ -241,12 +241,18 @@ fn build_card(
         collect::pulse_line(&collect::group_pulse(&states)),
     ]);
     let events = spine::iter_events(spine_dir)?;
-    let loops: Vec<Event> = spine::open_loops_of(&events)
+    let all_loops: Vec<Event> = spine::open_loops_of(&events)
         .into_iter()
         .filter(|ev| in_scope_of(ev, scoped, &gkey, &ids))
         .collect();
+    // 只列最近有動靜的（2026-11-10，spine::LOOP_ACTIVE_DAYS）：情境卡是 agent 開場要讀的，舊項不佔它的脈絡
+    let today = when
+        .unwrap_or_else(|| chrono::Local::now().naive_local())
+        .format("%Y-%m-%d")
+        .to_string();
+    let (loops, dormant) = spine::split_active_loops(&events, all_loops, &today);
     out.extend([String::new(), format!("## 未結（open loops，{unit}）")]);
-    if loops.is_empty() {
+    if loops.is_empty() && dormant == 0 {
         out.push("（無）".into());
     }
     for ev in &loops {
@@ -257,6 +263,12 @@ fn build_card(
             .map(|d| format!("（due {d}）"))
             .unwrap_or_default();
         out.push(format!("- {num} {}{due}", ev.first_line()));
+    }
+    if dormant > 0 {
+        out.push(format!(
+            "（另有 {dormant} 項超過 {} 天沒動靜，不列——使用者提到才用 `ctx todo list` 查）",
+            spine::LOOP_ACTIVE_DAYS
+        ));
     }
     out.extend([String::new(), format!("## 最近事件（{unit}，最多 8 則）")]);
     let evs: Vec<&Event> = events

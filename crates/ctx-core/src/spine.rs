@@ -487,6 +487,44 @@ pub fn open_loops(spine_dir: impl AsRef<Path>) -> Result<Vec<Event>> {
     Ok(open_loops_of(&iter_events(spine_dir)?))
 }
 
+/// 未結超過這麼多天沒動靜（沒人開、沒事件提到它）就不再進 agent 的脈絡（2026-11-10）。
+/// agent 的作業是主軸：要人判斷「還做不做」的舊項留給人的畫面（App「清理未結…」、`ctx todo tidy`），不花 agent 的 token。
+pub const LOOP_ACTIVE_DAYS: i64 = 7;
+
+static LOOP_NUM: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"#\d+").expect("寫死的 regex"));
+
+/// 最近 [`LOOP_ACTIVE_DAYS`] 天有動靜的未結編號：這段期間開的，或這段期間有任何事件（判斷、交接、建議…）提到 `#N`。
+/// `today`＝`YYYY-MM-DD`；看不懂就當全部都有動靜（回 None）。
+pub fn active_loop_nums(events: &[Event], today: &str) -> Option<HashSet<String>> {
+    let cutoff = chrono::NaiveDate::parse_from_str(today, "%Y-%m-%d")
+        .ok()?
+        .checked_sub_signed(Duration::days(LOOP_ACTIVE_DAYS))?
+        .format("%Y-%m-%d")
+        .to_string();
+    let mut out = HashSet::new();
+    for ev in events.iter().filter(|e| e.date.as_str() >= cutoff.as_str()) {
+        if let Some(n) = ev.num() {
+            out.insert(n.to_string());
+        }
+        out.extend(LOOP_NUM.find_iter(&ev.body).map(|m| m.as_str().to_string()));
+    }
+    Some(out)
+}
+
+/// 把未結分成「有動靜的」與「沒動靜的數量」（見 [`active_loop_nums`]）。順序不變。
+pub fn split_active_loops(events: &[Event], loops: Vec<Event>, today: &str) -> (Vec<Event>, usize) {
+    let Some(active) = active_loop_nums(events, today) else {
+        return (loops, 0);
+    };
+    let total = loops.len();
+    let live: Vec<Event> = loops
+        .into_iter()
+        .filter(|ev| ev.num().is_some_and(|n| active.contains(n)))
+        .collect();
+    let dormant = total - live.len();
+    (live, dormant)
+}
+
 /// 同 [`open_loops`]，但吃已讀出的事件。
 pub fn open_loops_of(events: &[Event]) -> Vec<Event> {
     let mut opened: Vec<(String, Event)> = Vec::new();

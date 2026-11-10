@@ -27,6 +27,10 @@ use crate::pystr::py_str;
 use crate::spine::{self, EventType};
 use crate::{crossref, ruminate, Result};
 
+/// 開場最多列幾項未結、每項最多幾個字（其餘與全文用 next_work 看）。
+const OPENING_LOOPS: usize = 5;
+const OPENING_LOOP_CHARS: usize = 90;
+
 /// 對應 `hooks.TOOLS_LINE`。
 pub const TOOLS_LINE: &str = "context_for／next_work／log_decision／add_todo／close_todo／\
 report_status／handoff／search_knowledge／read_from／ask_repo／repo_status";
@@ -206,10 +210,10 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
     {
         out.push(format!("註：{n}"));
     }
-    out.push(match ctx["goal"].get("text").and_then(Value::as_str) {
-        Some(g) => format!("目標：{g}"),
-        None => format!("目標：（{}）", py_str(&ctx["goal_gap"])),
-    });
+    // 2026-11-10：沒登記目標就不印——「請寫一句話目標」是對人說的，不該每場會話唸給 agent 聽
+    if let Some(g) = ctx["goal"].get("text").and_then(Value::as_str) {
+        out.push(format!("目標：{g}"));
+    }
     // Rust 才有（2026-10-18）：所在 repo 的類別與規則（未分類不印）
     if let (Some(label), Some(rule)) = (
         ctx["repo_class"]["label"].as_str(),
@@ -244,30 +248,37 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
             s(lp, "text")
         ));
     }
-    if ctx["next"].is_object() {
+    // 下一步就是交接留下的那一步時不重複印（2026-11-10）
+    let next_is_handoff = ho["next_step"]
+        .as_str()
+        .is_some_and(|ns| !ns.is_empty() && ctx["next"]["text"].as_str() == Some(ns));
+    if ctx["next"].is_object() && !next_is_handoff {
         out.push(format!(
             "建議下一步：{}（依據：{}）",
             BACKFILL_TAIL.replace_all(s(&ctx["next"], "text"), ""),
             s(&ctx["next"], "source")
         ));
     }
+    // 未結（2026-11-10 重寫）：agent 的作業是主軸，開場只列它現在能動手的——
+    // ctx 的 open_loops 已經只剩最近 7 天有動靜的（agentapi::live_loops）；這裡再拿掉「等使用者決定」的，
+    // 照該先處理的排、列前 OPENING_LOOPS 項、每項截到 OPENING_LOOP_CHARS 字（全文 next_work 看）。
     let loops = ctx["open_loops"].as_array().cloned().unwrap_or_default();
-    if !loops.is_empty() {
-        // 未結被設上限時（N-26）總數用 open_loops_more.total
-        let total = ctx["open_loops_more"]["total"]
-            .as_u64()
-            .map(|n| n as usize)
-            .unwrap_or(loops.len());
+    let listed_total = ctx["open_loops_more"]["total"]
+        .as_u64()
+        .map(|n| n as usize)
+        .unwrap_or(loops.len());
+    let td = crate::agentapi::today();
+    let mut actionable: Vec<Value> = loops
+        .iter()
+        .filter(|lp| !crate::agentapi::asks_user(s(lp, "text")))
+        .cloned()
+        .collect();
+    let asks = loops.len() - actionable.len();
+    crate::agentapi::sort_loops_for_reading(&mut actionable, &td);
+    let total = listed_total - asks;
+    if !actionable.is_empty() {
         out.push(format!("未結（{total}）："));
-        // 2026-11-10：照「該先處理的」排（不是開立順序）；逾期太久的（擱置）不逐項列，只給一行數字——
-        // 切進一組時先看到的是活的事，不是兩個月前回填的舊項
-        let td = crate::agentapi::today();
-        let mut sorted = loops.clone();
-        crate::agentapi::sort_loops_for_reading(&mut sorted, &td);
-        let is_stale = |lp: &Value| crate::agentapi::loop_stale(lp["due"].as_str(), &td);
-        let live: Vec<&Value> = sorted.iter().filter(|lp| !is_stale(lp)).collect();
-        let listed_stale = sorted.len() - live.len();
-        for lp in live.iter().take(6) {
+        for lp in actionable.iter().take(OPENING_LOOPS) {
             let flag = if lp["overdue"] == true {
                 "，已逾期"
             } else {
@@ -279,32 +290,50 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
             };
             // Rust 才有（N-22）：回填來源的尾巴（「（回填自 … 會話 …）」）對 agent 沒用，開場不印（資料不動）
             let text = BACKFILL_TAIL.replace_all(s(lp, "text"), "");
-            out.push(format!("- {} {}{due}", py_str(&lp["id"]), text.trim_end()));
+            out.push(format!(
+                "- {} {}{due}",
+                py_str(&lp["id"]),
+                crate::pystr::clip(text.trim_end(), OPENING_LOOP_CHARS)
+            ));
         }
-        let shown = live.len().min(6);
-        // context_for 超過上限被截掉的也算進「另 N 項」；擱置的另外講
-        let more = total.saturating_sub(shown + listed_stale);
+        let more = total.saturating_sub(actionable.len().min(OPENING_LOOPS));
         if more > 0 {
-            out.push(format!(
-                "- …另 {more} 項（next_work 或 ctx todo list 看完整清單）"
-            ));
-        }
-        if listed_stale > 0 {
-            out.push(format!(
-                "- 擱置 {listed_stale} 項（逾期超過 {} 天沒結，這裡不列）：`ctx todo review` 看哪些可以 close",
-                crate::agentapi::STALE_OVERDUE_DAYS
-            ));
+            out.push(format!("- …另 {more} 項（next_work 看）"));
         }
     }
-    // Rust 才有（N-22）：要處理的提醒集中一段（跟 MCP context_for 的 hints 同一份）
-    let hints: Vec<&Value> = ctx["hints"].as_array().into_iter().flatten().collect();
-    if !hints.is_empty() {
-        out.push(String::new());
-        out.push("## 提醒（要處理的；先問使用者再動手）".into());
-        out.extend(hints.iter().map(|h| format!("- {}", s(h, "text"))));
-        out.push(String::new());
+    // 不列的只給數字：agent 知道有、使用者點名時查得到，但不佔脈絡
+    let dormant = ctx["open_loops_dormant"]["count"].as_u64().unwrap_or(0) as usize;
+    if asks + dormant > 0 {
+        let mut parts = Vec::new();
+        if asks > 0 {
+            parts.push(format!("{asks} 項等使用者決定"));
+        }
+        if dormant > 0 {
+            parts.push(format!(
+                "{dormant} 項超過 {} 天沒動靜",
+                crate::spine::LOOP_ACTIVE_DAYS
+            ));
+        }
+        out.push(format!(
+            "（另有未結不列：{}；使用者提到才查 `ctx todo list`）",
+            parts.join("、")
+        ));
     }
-    for a in ctx["attention"].as_array().into_iter().flatten().take(3) {
+    // 2026-11-10：原本這裡有「## 提醒」一段（未結體檢、判斷回顧、關係建議…）——都是要人判斷的事，改由人在
+    // `ctx health`／App 看，不再每場會話塞給 agent
+    // 注意（2026-11-10）：只講 agent 所在這個 repo、而且它能處理的（沒提交的檔、採集失敗）。
+    // 別的 repo 的狀況、「還算進行中嗎」這種分層問題是問人的，留在 App 收件匣，不進 agent 的開場。
+    let here_repo = w["repo"]["id"].as_str().unwrap_or("");
+    for a in ctx["attention"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|a| {
+            a["repo"].as_str() == Some(here_repo)
+                && a["kind"].as_str() != Some(crate::brief::QKind::Inactive.name())
+        })
+        .take(3)
+    {
         out.push(format!("注意：{}", s(a, "text")));
     }
     let st = &ctx["agent_status"];

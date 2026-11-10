@@ -473,6 +473,27 @@ fn open_loops(spine_dir: &Path, s: &Scope) -> Result<Vec<Event>> {
         .collect())
 }
 
+/// agent 脈絡用的未結：範圍內、最近 [`spine::LOOP_ACTIVE_DAYS`] 天有動靜的；另回沒動靜的數量。
+/// 完整清單走 `list_todos`／`tidy_todos`（人要看、或使用者點名時才查）。
+fn live_loops(events: &[Event], s: &Scope, today: &str) -> (Vec<Event>, usize) {
+    let scoped: Vec<Event> = spine::open_loops_of(events)
+        .into_iter()
+        .filter(|ev| s.contains(ev))
+        .collect();
+    spine::split_active_loops(events, scoped, today)
+}
+
+/// 沒動靜的未結怎麼跟 agent 交代（只給數量與查法）。
+fn dormant_note(count: usize) -> Value {
+    json!({
+        "count": count,
+        "hint": format!(
+            "超過 {} 天沒動靜的未結不列（不佔你的脈絡）；使用者提到才用 ctx todo list 查，要清理用 tidy_todos",
+            spine::LOOP_ACTIVE_DAYS
+        ),
+    })
+}
+
 fn is_handoff(ev: &Event) -> bool {
     ev.etype == EventType::Decision && ev.body.starts_with("交接")
 }
@@ -597,6 +618,8 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         .iter()
         .map(|c| json!({"repo": c.repo, "kind": c.qkind.name(), "text": c.title}))
         .collect();
+    // 2026-11-10：只帶最近有動靜的未結——舊項要人判斷還做不做，不該每場會話都花 agent 的 token
+    let (live, dormant) = live_loops(&all, &s, &today());
     let mut out = json!({
         "ok": true,
         "where": w,
@@ -606,7 +629,7 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         "last_handoff": last_handoff(&all, &s),
         "next": summ.next, "next_gap": summ.next_gap,
         "changes": summ.changes,
-        "open_loops": open_loops(spine_dir, &s)?.iter().map(|e| loop_dict(e, None)).collect::<Vec<_>>(),
+        "open_loops": live.iter().map(|e| loop_dict(e, None)).collect::<Vec<_>>(),
         "recent_events": recent,
         "relations": registry::relation_lines(spine_dir, &ids)?,
         "pulse": collect::pulse_line(&collect::group_pulse(&states)),
@@ -650,11 +673,11 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
     // Rust 才有（N-26）：未結太多時只給最該處理的 CONTEXT_LOOP_CAP 項（逾期 → 到期近 → 沒期限），
     // 其餘只給數量——規模大時 context_for 曾到 51KB（約 1.5 萬 token），agent 每次開工都要吞
     cap_open_loops(&mut out);
-    // Rust 才有（N-22）：要處理的提醒集中成一份——hook 開場與 MCP context_for 共用（同介面）；沒有就不給這個鍵
-    let hints = collect_hints(spine_dir, t, &out);
-    if !hints.is_empty() {
-        out["hints"] = Value::Array(hints);
+    if dormant > 0 {
+        out["open_loops_dormant"] = dormant_note(dormant);
     }
+    // 2026-11-10：「提醒」（未結體檢、判斷回顧、關係建議、何時重看）都是要人判斷的事，不再塞進 agent 的脈絡
+    // （原本 hook 開場與 context_for 各帶一份）；人從 `ctx health`／App 看，見 [`human_hints`]。
     if card {
         let text = context::build_context(
             spine_dir,
@@ -716,15 +739,14 @@ pub fn next_work(spine_dir: &Path, t: &Target, limit: usize) -> Result<Value> {
     let w = where_am_i(spine_dir, t.cwd.as_deref())?;
     let s = scope_of(spine_dir, &w, t)?;
     let td = today();
-    let loops: Vec<Value> = open_loops(spine_dir, &s)?
-        .iter()
-        .map(|e| loop_dict(e, Some(&td)))
-        .collect();
+    let all = spine::iter_events(spine_dir)?;
+    // 只排最近有動靜的未結（同 context_for）
+    let (live, dormant) = live_loops(&all, &s, &td);
+    let loops: Vec<Value> = live.iter().map(|e| loop_dict(e, Some(&td))).collect();
     let due_of = |lp: &Value| lp["due"].as_str().map(str::to_string);
     let todo_item = |lp: &Value, why: String| json!({"kind": "todo", "id": lp["id"], "text": lp["text"], "due": lp["due"], "why": why});
     // 順序（2026-11-10，刻意跟 Python 不同）：切回來最先要看到的是「上次留下的接續點」，不是最舊的逾期項——
     // 交接之後才到期的逾期項（寫交接時還不知道會拖過）→ 交接的下一步 → 其他逾期 → 還沒到期 → 擱置（逾期太久）
-    let all = spine::iter_events(spine_dir)?;
     let ho = last_handoff(&all, &s);
     let ho_date = ho
         .as_ref()
@@ -810,6 +832,9 @@ pub fn next_work(spine_dir: &Path, t: &Target, limit: usize) -> Result<Value> {
     let mut out = json!({"ok": true, "scope": scope_json(&s), "goal": goal, "items": items});
     if empty {
         out["note"] = "沒有逾期或未結事項，也沒有觸發提醒的 repo；下一步由使用者決定。".into();
+    }
+    if dormant > 0 {
+        out["dormant"] = dormant_note(dormant);
     }
     Ok(out)
 }
@@ -1733,7 +1758,7 @@ pub use task_brief::*;
 mod retro;
 pub use retro::*;
 mod hints;
-use hints::*;
+pub use hints::human_hints;
 mod agdr;
 pub use agdr::*;
 mod profile;

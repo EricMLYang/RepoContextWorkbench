@@ -84,6 +84,11 @@ desktop/src（React，只管畫面）── IPC ┘
 - stdio 模式的 stdout 只能輸出協定訊息；log 寫到 stderr 或檔案。
 - 錯誤要回「發生什麼事＋可以怎麼補救」（例：跨組寫入被拒時附上 hint），設定錯誤時不能讓 server 崩潰。
 - CLI 每個查詢指令都要支援 `--json`，欄位一旦發佈就不改意思。
+- **agent 的脈絡只放它現在能動手的**（2026-11-10，使用者定）：agent 的作業是主軸。開場注入、`context_for`、`next_work`、情境卡
+  都會在每場會話花 agent 的 token，所以——超過 `spine::LOOP_ACTIVE_DAYS`（7 天）沒動靜的未結不列，只給數字；
+  要**人**判斷的事（還做不做、判斷後來怎樣、要不要設關係、這個 repo 還算進行中嗎、請寫一句目標）不放進去，
+  改放人的畫面（App 收件匣／「清理未結…」、`ctx health`、`ctx todo tidy`）。新增任何會進 agent 脈絡的內容前先問：
+  「agent 拿到這段，現在能做什麼？」答不出來就不放。量法：對 spine 副本跑 `ctx hook session-start`、`ctx context --json` 看字數。
 - **hook 回應紀律**（N-42）：觀測類 hook（Stop／Notification／PreToolUse／PostToolUse／UserPromptSubmit／statusLine）
   必須 < 100ms 回、不等網路、不印會擋住 Claude Code 的東西；讀逐字稿只讀尾巴固定位元組。PreToolUse 每次工具呼叫都會
   spawn 一次 `ctx`，任何會讓它變慢的改動（讀事件、讀 registry、git）都不准放進這條路徑。核准類 hook 若將來要回決定，
