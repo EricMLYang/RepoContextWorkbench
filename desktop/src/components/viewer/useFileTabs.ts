@@ -129,6 +129,28 @@ export function useFileTabs(toast: (msg: string) => void) {
     });
   }, []);
 
+  const activeRef = useRef(activeFile);
+  useEffect(() => {
+    activeRef.current = activeFile;
+  }, [activeFile]);
+  /** 現在開著哪些分頁、正在看哪個（換牌組時存起來）。 */
+  const getTabs = useCallback(
+    () => ({
+      files: filesRef.current.map((f) => ({ repo: f.repo, path: f.path })),
+      active: activeRef.current,
+    }),
+    [],
+  );
+  /** 換成另一組分頁（換牌組時還原）。有未儲存修改的分頁不丟，留在新的這組裡。 */
+  const swapTabs = useCallback((next: OpenFile[], active: string | null) => {
+    setFiles((prev) => {
+      const keys = new Set(next.map(fileKey));
+      const dirty = prev.filter((f) => dirtyRef.current.has(fileKey(f)) && !keys.has(fileKey(f)));
+      return [...next, ...dirty];
+    });
+    setActiveFile(active);
+  }, []);
+
   const shownFile = files.some((f) => fileKey(f) === activeFile) ? activeFile : null;
   const shownFileObj = useMemo(
     () => files.find((f) => fileKey(f) === shownFile) ?? null,
@@ -146,5 +168,7 @@ export function useFileTabs(toast: (msg: string) => void) {
     dirtyUnder,
     renamePath,
     closeUnder,
+    getTabs,
+    swapTabs,
   };
 }

@@ -183,6 +183,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   還沒到期 → **擱置**（逾期超過 `STALE_OVERDUE_DAYS`＝14 天，最近到期的先，理由寫「還做不做」）。Python 是逾期一律最前。
   開場注入的未結照同一順序列前 6 項，擱置的不逐項列、只給一行數字＋`ctx todo review`；`context_for` 超過 30 項時的截斷也用
   同一順序（`agentapi::sort_loops_for_reading`）。對拍：`next --json`／`context --json` 不比順序與 `next`。
+- **App 切牌組**（2026-11-10，只有前端）：每個牌組記住自己的檔案分頁、正在看的檔、右側欄、工作區分頁、目前會話
+  （`localStorage` 的 `view:<鍵>`，鍵＝`scopeMemoryKey`：牌組各一份、所有 repo 一份、臨時範圍共用一份；沒存的分頁不丟）；
+  切回採集過的範圍先顯示上次的結果再背景更新（store 的 `scanCache`，只放記憶體）；⌘1～⌘9 切第 n 個牌組、⌘0 回所有 repo。
 - **App 開會話不重複掛 MCP**（2026-11-10）：`ctx setup --claude` 已在使用者層掛 `repo-context`、而且指向同一份 spine
   （參數的 `--spine`，沒有就看 `ctx setup` 記住的）時，`session::build` 不再加 `--mcp-config`（`session::global_mcp_covers`）。
   之前每場 App 會話同時連上 `repo-context` 與 `repo_context`：工具定義兩份、多一個 `ctx mcp` 行程。指令不見或 spine 不同照舊掛。

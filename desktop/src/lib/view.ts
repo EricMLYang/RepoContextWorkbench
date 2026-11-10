@@ -749,3 +749,12 @@ export function anchorNotes(notes: DiffNote[], lines: string[], refs: (string | 
     return lines.findIndex((l, i) => l === n.code && refs[i] !== null);
   });
 }
+
+/**
+ * 記「這個範圍上次看到哪」用的鍵：牌組各一份、所有 repo 一份、臨時範圍共用一份
+ * （臨時範圍加減一個 repo 不算換地方）。
+ */
+export function scopeMemoryKey(scope: Scope): string {
+  if (Array.isArray(scope.repos)) return "adhoc";
+  return scope.group ? "g:" + scope.group : "*";
+}

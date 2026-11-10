@@ -80,6 +80,9 @@ export class WorkbenchStore {
   private scanVersion = 0;
   private stateFlight: Promise<boolean> | null = null;
   private timers: ReturnType<typeof setInterval>[] = [];
+  private scopeListeners = new Set<(prev: Scope, next: Scope) => void>();
+  /** 各範圍上次成功的採集結果（只放記憶體）：切回去先顯示這份，背景再重抓——不用每次從空白等起。 */
+  private scanCache = new Map<string, { scan: ScanResult; at: string }>();
   private unsubscribeChanged: (() => void) | null = null;
   readonly backend: Backend;
 
@@ -215,11 +218,13 @@ export class WorkbenchStore {
       if (version !== this.scanVersion || key !== this.scopeKey()) return;
       const lastStates = { ...this.snap.lastStates };
       for (const s of result.states) lastStates[s.id] = s;
+      const at = hhmm();
+      this.scanCache.set(key, { scan: result, at });
       this.set({
         scan: result,
         scanReady: true,
         scanError: "",
-        scanAt: hhmm(),
+        scanAt: at,
         lastStates,
         audit: result.audit,
       });
@@ -230,11 +235,28 @@ export class WorkbenchStore {
     }
   };
 
-  /** 換範圍：記住、清掉舊範圍的掃描結果、重新採集。 */
+  /** 換範圍之前通知（畫面用來存／還原各範圍自己的分頁、側欄）。回傳取消訂閱。 */
+  onScopeChange = (fn: (prev: Scope, next: Scope) => void) => {
+    this.scopeListeners.add(fn);
+    return () => void this.scopeListeners.delete(fn);
+  };
+
+  /**
+   * 換範圍：記住、重新採集。這個範圍之前採集過就先顯示上次的結果（scanAt 是那次的時間、scanLoading 表示正在更新），
+   * 沒採集過才是空的。
+   */
   setScope = (next: Scope) => {
+    const prev = this.snap.scope;
+    this.scopeListeners.forEach((fn) => fn(prev, next));
     save("scope", next);
     this.scanVersion++;
-    this.set({ scope: next, scanReady: false, scanError: "", scan: EMPTY_SCAN });
+    this.set({ scope: next, scanError: "" });
+    const cached = this.scanCache.get(this.scopeKey());
+    this.set(
+      cached
+        ? { scan: cached.scan, scanReady: true, scanAt: cached.at }
+        : { scan: EMPTY_SCAN, scanReady: false, scanAt: "" },
+    );
     void this.refreshState();
     void this.rescan();
   };

@@ -33,6 +33,8 @@ const GroupCard = memo(function GroupCard(props: {
   sessions?: TermInfo[];
   /** 組員拖曳排序存檔（沒給＝不能排）。 */
   onReorder?: (order: string[]) => Promise<void>;
+  /** 切到這張牌的快捷鍵提示（例「⌘2」）；沒有＝不提示。 */
+  hotkey?: string;
   /** 整張牌可拖（牌組排序）：ref 量位置、手把事件掛在標題列。 */
   drag?: { ref: Ref<HTMLDivElement>; handle: HTMLAttributes<HTMLDivElement>; dragging: boolean };
 }) {
@@ -77,7 +79,12 @@ const GroupCard = memo(function GroupCard(props: {
           className="gselect"
           aria-label={"選擇牌組：" + title}
           aria-pressed={on}
-          title={title + " · " + groupActivity(g.members, lastStates)}
+          title={
+            title +
+            " · " +
+            groupActivity(g.members, lastStates) +
+            (props.hotkey ? "（" + props.hotkey + "）" : "")
+          }
           onClick={() => onSelect(g)}
         >
           <Icon name="stack" />
@@ -162,6 +169,9 @@ const GroupCard = memo(function GroupCard(props: {
   );
 });
 
+/** 快捷鍵的修飾鍵怎麼寫給人看。 */
+const MOD = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform) ? "⌘" : "Ctrl+";
+
 /** 牌組列：列身只切組（aria-pressed），✎ 編輯，箭頭只展開（aria-expanded）；牌組與組員都能拖曳排序（Alt+↑↓）。 */
 export function Deck() {
   const store = useStore();
@@ -209,8 +219,13 @@ export function Deck() {
   );
   return (
     <div id="deck" className="deck">
-      {card({ name: null, members: state.repos }, { onReorder: reorder("repos") })}
+      {card(
+        { name: null, members: state.repos },
+        { onReorder: reorder("repos"), hotkey: MOD + "0" },
+      )}
       {groupSort.order.map((name) => {
+        // 快捷鍵照引擎的順序（state.groups），拖曳排序存檔後兩邊一致
+        const nth = names.indexOf(name) + 1;
         const grp = byName.get(name);
         if (!grp) return null;
         const { ref, onPointerDown, onKeyDown, onClickCapture } = groupSort.rowProps(name);
@@ -218,6 +233,7 @@ export function Deck() {
           { name, members: grp.members, group: grp },
           {
             sessions: terms.filter((s) => sessionInGroup(s, name)),
+            hotkey: nth >= 1 && nth <= 9 ? MOD + nth : undefined,
             onReorder: reorder("members", name),
             drag: {
               ref,

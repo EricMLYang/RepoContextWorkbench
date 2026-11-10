@@ -18,7 +18,7 @@ import { Onboarding } from "./dialogs/misc";
 import { DetailDialog } from "./dialogs/Modal";
 import { PickerDialog } from "./dialogs/PickerDialog";
 import { load, save } from "./lib/storage";
-import { firstNeedingYou, sessionFresh, sessionPayload } from "./lib/view";
+import { firstNeedingYou, scopeMemoryKey, sessionFresh, sessionPayload } from "./lib/view";
 import {
   StoreContext,
   UiContext,
@@ -32,6 +32,16 @@ import {
   type UiState,
 } from "./store/context";
 import type { WorkbenchStore } from "./store/store";
+
+/** 一個範圍上次的畫面（存本機，鍵見 `scopeMemoryKey`）。 */
+interface ScopeView {
+  files: { repo: string; path: string }[];
+  active: string | null;
+  panelRepo: string | null;
+  tab: Tab;
+  activeSid: string | null;
+}
+const TABS: Tab[] = ["inbox", "notes", "repos", "files", "activity", "relations"];
 
 /**
  * 工作台。一級物件：牌（側欄）／收件匣（工作區）／會話（側欄下段＋終端面板）／深看（分頁）。
@@ -164,6 +174,8 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     dirtyUnder,
     renamePath,
     closeUnder,
+    getTabs,
+    swapTabs,
   } = useFileTabs(toast);
 
   // ── 回報畫面（agent 被問「根據畫面」才讀；停下來才送）──
@@ -183,6 +195,35 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
   const [activeSid, setActiveSid] = useState<string | null>(null);
   const [termCollapsed, setTermCollapsed] = useState(true);
   const [selectSeq, setSelectSeq] = useState(0);
+
+  // ── 每個牌組記住自己看到哪（2026-11-10，照 VS Code 的 workspace）：開著的檔案分頁、正在看的檔、右側欄的 repo、
+  // 工作區分頁、目前的會話。換牌組時存舊的、還原新的；沒去過的牌組檔案分頁從空的開始（右側欄、工作區分頁、會話照舊）。
+  const viewRef = useRef({ panelRepo, tab, activeSid });
+  useEffect(() => {
+    viewRef.current = { panelRepo, tab, activeSid };
+  }, [panelRepo, tab, activeSid]);
+  useEffect(
+    () =>
+      store.onScopeChange((prev, next) => {
+        const from = scopeMemoryKey(prev);
+        const to = scopeMemoryKey(next);
+        if (from === to) return;
+        save("view:" + from, { ...getTabs(), ...viewRef.current });
+        const v = load<Partial<ScopeView> | null>("view:" + to, null);
+        const saved = Array.isArray(v?.files)
+          ? v.files.filter((f) => !!f && typeof f.repo === "string" && typeof f.path === "string")
+          : [];
+        swapTabs(saved, typeof v?.active === "string" ? v.active : null);
+        // 右側欄：去過的牌組還原當時的（含「關著」）；沒去過的不動
+        if (v) setPanel(() => (typeof v.panelRepo === "string" ? v.panelRepo : null));
+        if (v?.tab && TABS.includes(v.tab)) setTab(v.tab);
+        // 會話只在它還活著時切過去（收合狀態不動，不搶畫面）
+        const sid = v?.activeSid;
+        if (sid && (store.getSnapshot().state.terms || []).some((t) => t.sid === sid && t.alive))
+          setActiveSid(sid);
+      }),
+    [store, getTabs, swapTabs, setPanel],
+  );
 
   // 操作只依賴穩定的 setter，整個生命週期同一個物件；會變的狀態另外放 UiStateContext
   const ui: Ui = useMemo(
@@ -365,6 +406,19 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
         setPaletteInit("");
         setPaletteOpen((o) => !o);
       } else if (
+        // ⌘1～⌘9 切到第 n 個牌組（側欄的順序）、⌘0 回所有 repo；Windows 是 Ctrl，焦點在終端時留給終端
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        /^[0-9]$/.test(e.key) &&
+        !(e.ctrlKey && !e.metaKey && (e.target as Element | null)?.closest?.(".xterm"))
+      ) {
+        const groups = store.getSnapshot().state.groups;
+        const g = e.key === "0" ? null : groups[Number(e.key) - 1];
+        if (g === undefined) return;
+        e.preventDefault();
+        store.setScope({ group: g ? g.name : null, repos: null });
+      } else if (
         // ⌘⇧F（Windows：Ctrl+Shift+F，終端裡留給終端搜尋）＝搜檔案內容
         (e.metaKey || e.ctrlKey) &&
         e.shiftKey &&
@@ -379,7 +433,7 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [store]);
 
   return (
     <StoreContext.Provider value={store}>
