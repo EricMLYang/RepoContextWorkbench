@@ -67,7 +67,7 @@ TODO_SOURCE_WHY = ("未結的源頭（2026-11-10，Rust 才改）：handoff 的 
 
 LEAN_OPENING_WHY = ("開場注入瘦身（2026-11-10，Rust 才改）：agent 的作業是主軸——沒登記目標不印「請寫目標」、"
                     "下一步跟交接的接續點相同不重複印、未結只列最近 7 天有動靜且 agent 能動手的（其餘只給數字）、"
-                    "要人判斷的提醒段拿掉。比對時拿掉這幾行，其餘照比")
+                    "要人判斷的提醒段拿掉；工作約定的工具名單那行只留沒掛 MCP 的退路、有同組成員段時標題不重列名單（R6）。比對時拿掉這幾行，其餘照比")
 
 
 def _lean_opening(obj):
@@ -79,6 +79,9 @@ def _lean_opening(obj):
         ac = re.sub(r"\n（另有未結不列：[^\n]*", "", ac)
         ac = re.sub(r"\n- 收尾一定呼叫 handoff[^\n]*", "", ac)  # TODO_SOURCE_WHY：「剩什麼」拿掉
         ac = re.sub(r"\n## 自上次以來跟你手上工作相關的新料[^\n]*\n(?:[^\n#][^\n]*\n)*", "\n", ac)  # FRESH_WHY
+        # OPENING_TOOLS_WHY：工具名單那行換成只講沒掛 MCP 的退路（兩邊都換成同一個樣子）
+        ac = re.sub(r"\n- 工具（MCP repo-context）：[^\n]*", "\n- <沒掛 MCP 的退路>", ac)
+        ac = re.sub(r"\n- 沒掛 MCP repo-context 時[^\n]*", "\n- <沒掛 MCP 的退路>", ac)
         hso["additionalContext"] = ac
     return obj
 

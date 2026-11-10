@@ -209,6 +209,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   - 會話料的文件地圖（R5）：`pack::session_map` 取代 `pack_index`（後者照舊給 Python 對拍）——入口文件（README／AGENTS／CLAUDE／docs/README）在前、
     其餘照最近修改排並標日期；每個 repo 列 `session_map_cap`（1 個 repo 40、2～3 個 15、更多 10），超過的只給數量並指向 `search_knowledge`；
     只有一行字的轉址檔與 `_template*` 不列。實測：MyProjects 組卡 22.7K → 7.9K 字、Knowledge 組卡 58K → 11.9K 字。
+  - 開場注入的工作約定（R6）：工具名單那行（agent 自己的工具清單就有）改成只講沒掛 MCP 時的 `ctx … --json` 退路；
+    「改掉舊判斷→supersedes／outcome_of／todo brief／workbench_apply」那行拿掉（用法在各工具說明）；有同組成員段時標題只寫「N 個 repo」不重列名單。
+    `hooks::TOOLS_LINE` 刪除。實測 RepoContextWorkbench 開場 2,592 → 約 1,550 字（含 R2 拿掉新料）。
 - **屬於多個組的 repo 用哪個組當主場**（2026-11-10）：`where_am_i` 依序看——App 開這場會話時的牌組（環境變數
   `CTX_HOME_GROUP`，`term::create_agent` 放的）→ 使用者在 App 正看著的牌組（`.state/screen.json` 的 `group`）→ 第一個。
   只在 repo 屬於兩個以上的組時才看；`note` 會說用了哪個、為什麼。Python 一律第一個。

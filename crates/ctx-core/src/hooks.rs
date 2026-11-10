@@ -31,10 +31,6 @@ use crate::{crossref, ruminate, Result};
 const OPENING_LOOPS: usize = 5;
 const OPENING_LOOP_CHARS: usize = 90;
 
-/// 對應 `hooks.TOOLS_LINE`。
-pub const TOOLS_LINE: &str = "context_for／next_work／log_decision／add_todo／close_todo／\
-report_status／handoff／search_knowledge／read_from／ask_repo／repo_status";
-
 /// 開場注入的組筆記那一行，最新那則最多印幾個字元。
 const NOTE_LINE_CHARS: usize = 60;
 /// 開場名冊最多列幾個成員。
@@ -185,7 +181,11 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
         .map(|a| a.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
     let mut head = format!("# repo-context：你在 {where_}，工作範圍「{label}」");
-    if !repos.is_empty() {
+    let has_roster = ctx["roster"].as_array().is_some_and(|a| !a.is_empty());
+    if has_roster {
+        // 下面的「同組成員」段會一個一個列，標題不再重複名單（2026-11-10 R6）
+        head.push_str(&format!("（{} 個 repo）", repos.len()));
+    } else if !repos.is_empty() {
         head.push_str(&format!(
             "（{} 個 repo：{}）",
             repos.len(),
@@ -396,11 +396,10 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
         String::new(),
         "## 工作約定（repo-context）".into(),
         format!("- 範圍＝「{label}」。寫入其他組會被工具拒絕；要跨組先問使用者。"),
-        format!(
-            "- 工具（MCP repo-context）：{TOOLS_LINE}。沒掛 MCP 就用 `ctx <where|context|next|log|todo|status|handoff|search> --json`。"
-        ),
+        // 2026-11-10 R6：工具名單 agent 自己的工具清單就看得到，只留沒掛 MCP 時的退路；
+        // supersedes／outcome_of／workbench_apply 這些用法寫在各工具的說明裡，不在每場開場重講
+        "- 沒掛 MCP repo-context 時，同名功能用 `ctx <where|context|next|log|todo|status|handoff|search> --json`。".into(),
         "- 做了判斷→log_decision；發現待辦→add_todo；等使用者或卡住→report_status。".into(),
-        "- 改掉舊判斷→log_decision 帶 supersedes；判斷後來怎樣→log_decision 帶 outcome_of；把一項待辦交給新會話→`ctx todo brief #N`；使用者要改工作台設定（建組、組員、標籤、暫停）→workbench_apply（先預覽給他看）。".into(),
         "- 要別的 repo 的資料：search_knowledge 找 → read_from 讀（會記引用）；要對方整理歸納才用 ask_repo（慢、花錢）。"
             .into(),
         // F-121 對講（Rust 才有）

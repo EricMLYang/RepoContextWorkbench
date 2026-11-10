@@ -1300,7 +1300,9 @@ fn hints_go_to_the_human_not_the_agent_opening() {
     }
     assert!(text.contains("補 VDI 測試")); // 昨天才開的未結照列
     assert!(!text.contains("回填自")); // 回填尾巴開場不印
-    assert!(text.contains("log_decision 帶 supersedes"));
+                                       // 2026-11-10 R6：supersedes 等用法寫在工具說明裡，開場不重講
+    assert!(!text.contains("log_decision 帶 supersedes"));
+    assert!(text.contains("沒掛 MCP repo-context 時"));
 }
 
 // Rust 才有（F-40）：判斷匯出成 AgDR md
