@@ -204,9 +204,10 @@ fn todo_list_shows_all_open_loops_shelved_last() {
         .iter()
         .map(|lp| lp["text"].as_str().unwrap())
         .collect();
-    // 沒給 due 的會補預設期限（config openloop_default_due_days，幾天後），所以排在 2099 之前；
+    // 沒給 due 就沒有期限（不再補預設天數），排在有期限的後面；
     // 逾期超過 14 天的算擱置，排最後（2026-11-10）
-    assert_eq!(texts, vec!["沒期限", "很久以後", "早過期"]);
+    assert_eq!(texts, vec!["很久以後", "沒期限", "早過期"]);
+    assert!(v["loops"][1]["due"].is_null(), "{}", v["loops"][1]);
     let r = c.run(&["todo", "list"]);
     assert_eq!(r.code, 0);
     assert!(r.stdout.contains("逾期 1"), "{}", r.stdout);

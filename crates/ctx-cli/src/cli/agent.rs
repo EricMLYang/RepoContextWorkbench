@@ -948,7 +948,7 @@ pub struct HandoffArgs {
     pub done: String,
     #[arg(long = "next", required = true)]
     pub next_step: String,
-    /// 還沒做完的新事項（可重複；各開一個未結）
+    /// 沒做完的事（可重複；只寫進交接文字，不開未結）
     #[arg(long)]
     pub remaining: Vec<String>,
     #[command(flatten)]

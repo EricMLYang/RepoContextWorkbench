@@ -109,7 +109,7 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
         ),
         work(
             "add_todo",
-            "開一個未結事項（之後要有人處理的事）。編號自動配，沒給 due 用預設天數。",
+            "開一個未結事項（之後要有人處理的事）。編號自動配；有真實期限才給 due，沒給就沒有期限。",
             s_(
                 cat(vec![
                     vec![
@@ -182,14 +182,15 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
         ),
         work(
             "handoff",
-            "收尾交接（每次會話結束前必呼叫）：完成了什麼、下次從哪接；remaining 每項各開一個未結事項\
-             （只放新的，已經有 id 的別重複）。下一個 agent 的 context_for／next_work 會讀到它。",
+            "收尾交接（每次會話結束前必呼叫）：完成了什麼、下次從哪接。\
+             下一個 agent 的開場與 context_for／next_work 會讀到它。remaining 只是交接裡的一行備註，\
+             不會開未結；要追蹤的事另外呼叫 add_todo。",
             s_(
                 cat(vec![
                     vec![
                         ("done", d_(str_t(), "這次完成了什麼（成果、改了哪些檔）")),
                         ("next_step", d_(str_t(), "下次從哪裡接，一句話")),
-                        ("remaining", d_(arr_t(), "還沒做完、需要追蹤的新事項")),
+                        ("remaining", d_(arr_t(), "可省略：沒做完的事，只寫進交接文字，不開未結")),
                     ],
                     cwd_props(),
                     scope_props(),

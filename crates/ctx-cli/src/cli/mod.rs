@@ -153,7 +153,7 @@ pub enum Cmd {
     Todo(agent::TodoArgs),
     /// 回報 agent 階段：working／waiting／blocked／done
     Status(agent::StatusArgs),
-    /// 收尾交接：--done 完成了什麼 --next 下次從哪接 [--remaining 新事項 ...]
+    /// 收尾交接：--done 完成了什麼 --next 下次從哪接 [--remaining 沒做完的事 ...]
     Handoff(agent::HandoffArgs),
     /// 對講：send <repo> <文字> 傳話給同組另一個 repo 的 agent（--re <編號> 回覆）／list 看往來與誰在跑（Rust 才有）
     Msg {

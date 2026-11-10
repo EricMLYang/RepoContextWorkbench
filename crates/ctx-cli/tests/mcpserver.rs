@@ -116,7 +116,7 @@ fn test_validator_error_passthrough_no_dead_letter() {
 }
 
 #[test]
-fn test_append_query_roundtrip_and_default_due() {
+fn test_append_query_roundtrip_no_default_due() {
     let (_t, d) = spine();
     let r = tool(
         &d,
@@ -129,7 +129,8 @@ fn test_append_query_roundtrip_and_default_due() {
         "spine_append",
         json!({"type": "open-loop", "source": "agent", "kv": ["#1"], "body": "opened → 驗證 Y"}),
     );
-    assert!(text(&r).contains("due:")); // §3.4 預設到期自動補
+    // 沒帶 due 就沒有期限（刻意差異：不再補預設天數，2026-11-10）
+    assert!(!text(&r).contains("due:"), "{}", text(&r));
     let q = text(&tool(&d, "spine_query", json!({"today": true})));
     assert!(q.contains("decision") && q.contains("open-loop"));
     let loops = text(&tool(&d, "open_loops", json!({})));

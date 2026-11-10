@@ -1209,7 +1209,7 @@ pub struct StatusReported {
     pub event: Option<Value>,
 }
 
-/// `handoff` 的回傳；`todos` 是 remaining 各自開出的未結編號。
+/// `handoff` 的回傳；`todos` 留著是為了介面不變，現在一律是空的（remaining 不再開未結）。
 #[derive(Debug, Clone, Serialize)]
 pub struct HandedOff {
     pub ok: bool,
@@ -1459,7 +1459,8 @@ fn write_event_body(
     })
 }
 
-/// 對應 `agentapi.add_todo`：開一個未結事項（open-loop）。編號自動配；沒給 due 用 config 的預設天數。
+/// 對應 `agentapi.add_todo`：開一個未結事項（open-loop）。編號自動配。
+/// 沒給 due 就沒有期限（刻意差異：Python 會補 config 的預設天數，結果兩週後整批「逾期」，逾期失去意義）。
 pub fn add_todo(
     spine_dir: &Path,
     text: &str,
@@ -1467,6 +1468,29 @@ pub fn add_todo(
     t: &Target,
     cross_scope_ok: bool,
     source: &str,
+) -> Result<TodoAdded> {
+    add_todo_with(spine_dir, text, due, t, cross_scope_ok, source, false)
+}
+
+/// 回補舊會話專用：沒給 due 照 Python 補 config 的預設天數。這條路只在匯入時跑、量很少，
+/// 不值得為它讓對拍分岔。
+pub(crate) fn add_todo_default_due(
+    spine_dir: &Path,
+    text: &str,
+    t: &Target,
+    source: &str,
+) -> Result<TodoAdded> {
+    add_todo_with(spine_dir, text, None, t, false, source, true)
+}
+
+fn add_todo_with(
+    spine_dir: &Path,
+    text: &str,
+    due: Option<&str>,
+    t: &Target,
+    cross_scope_ok: bool,
+    source: &str,
+    default_due: bool,
 ) -> Result<TodoAdded> {
     let w = where_am_i(spine_dir, t.cwd.as_deref())?;
     let s = scope_of(spine_dir, &w, t)?;
@@ -1488,10 +1512,14 @@ pub fn add_todo(
     }
     toks.extend(tokens_for(&s, w.repo_id()));
     let body = clean(text, "text")?;
-    let days = config::load(spine_dir)?
-        .thresholds()
-        .openloop_default_due_days;
-    let toks = spine::default_due_tokens(&toks, &body, days, None);
+    let toks = if default_due {
+        let days = config::load(spine_dir)?
+            .thresholds()
+            .openloop_default_due_days;
+        spine::default_due_tokens(&toks, &body, days, None)
+    } else {
+        toks
+    };
     let ev = append(spine_dir, "open-loop", source, &toks, &body)?;
     Ok(TodoAdded {
         ok: true,
@@ -1606,8 +1634,10 @@ pub fn report_status(
     Ok(out)
 }
 
-/// 對應 `agentapi.handoff`：收尾交接——完成了什麼、下次從哪接；remaining 每一項各開一個未結事項。
+/// 對應 `agentapi.handoff`：收尾交接——完成了什麼、下次從哪接。
 /// 落一筆 decision（第一行「交接：…」），並把現況設成 done。
+/// remaining 只寫進交接的「剩下」那一行給下一場看，**不開未結**（刻意差異：Python 每項各開一個，
+/// 實測九成的未結是這樣來的，沒人回來關）。要追蹤的事另外明確呼叫 `add_todo`。
 pub fn handoff<S: AsRef<str>>(
     spine_dir: &Path,
     done: &str,
@@ -1627,10 +1657,6 @@ pub fn handoff<S: AsRef<str>>(
         .map(AsRef::as_ref)
         .filter(|r| !r.trim().is_empty())
         .collect();
-    let mut todos: Vec<String> = Vec::new();
-    for r in &remaining {
-        todos.push(add_todo(spine_dir, r, None, t, true, source)?.id);
-    }
     let eid = next_id(&spine::iter_events(spine_dir)?, &today(), "d");
     let done_lines = splitlines(&done);
     let head: String = done_lines
@@ -1643,10 +1669,9 @@ pub fn handoff<S: AsRef<str>>(
     let rem = if remaining.is_empty() {
         "無".to_string()
     } else {
-        todos
+        remaining
             .iter()
-            .zip(&remaining)
-            .map(|(n, r)| format!("{n} {}", r.trim()))
+            .map(|r| r.trim())
             .collect::<Vec<_>>()
             .join("；")
     };
@@ -1664,7 +1689,7 @@ pub fn handoff<S: AsRef<str>>(
     Ok(HandedOff {
         ok: true,
         reference: event_ref(&ev),
-        todos,
+        todos: Vec::new(),
         event: event_dict(&ev),
     })
 }

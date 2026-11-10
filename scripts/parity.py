@@ -61,6 +61,10 @@ def _drop_next(obj):
     return obj
 
 
+TODO_SOURCE_WHY = ("未結的源頭（2026-11-10，Rust 才改）：handoff 的 remaining 不再各開一個未結（只寫進交接的「剩下」）、"
+                   "沒給 due 就沒有期限（不補 14 天）、開場約定的「剩什麼」拿掉。對拍劇本改成一律明給 due、交接不帶 remaining，"
+                   "兩邊狀態才不會分岔；這三點由 Rust 測試把關。說明文字（add_todo／handoff 的 description、skill 的收尾那句）兩邊都不比")
+
 LEAN_OPENING_WHY = ("開場注入瘦身（2026-11-10，Rust 才改）：agent 的作業是主軸——沒登記目標不印「請寫目標」、"
                     "下一步跟交接的接續點相同不重複印、未結只列最近 7 天有動靜且 agent 能動手的（其餘只給數字）、"
                     "要人判斷的提醒段拿掉。比對時拿掉這幾行，其餘照比")
@@ -73,6 +77,7 @@ def _lean_opening(obj):
         ac = re.sub(r"\n目標：（[^\n]*）", "", ac)
         ac = re.sub(r"\n建議下一步：[^\n]*", "", ac)
         ac = re.sub(r"\n（另有未結不列：[^\n]*", "", ac)
+        ac = re.sub(r"\n- 收尾一定呼叫 handoff[^\n]*", "", ac)  # TODO_SOURCE_WHY：「剩什麼」拿掉
         hso["additionalContext"] = ac
     return obj
 
@@ -140,6 +145,12 @@ def drop_mcp_extras(resp, allowed):
             tools.remove(t)
             allowed.add(MCP_EXTRA_TOOLS[t["name"]])
     for t in ((resp.get("result") or {}).get("tools") or []):
+        if t.get("name") in ("add_todo", "handoff") and "description" in t:  # TODO_SOURCE_WHY
+            t["description"] = ""
+            allowed.add(TODO_SOURCE_WHY)
+            rem = ((t.get("inputSchema") or {}).get("properties") or {}).get("remaining")
+            if isinstance(rem, dict):
+                rem["description"] = ""
         if t.get("name") == "next_work" and "description" in t:  # 排序改了，說明跟著改（NEXT_ORDER_WHY）
             if "擱置" in t["description"]:
                 allowed.add(NEXT_ORDER_WHY)
@@ -549,8 +560,11 @@ def mcp_compare(name, sides, msgs, admin, results, cwd="repos/impl"):
     allowed = set()
     for x in la:  # next_work 的說明：Rust 改了排序（NEXT_ORDER_WHY），兩邊都不比這段文字
         for t in ((x.get("result") or {}).get("tools") or []):
-            if t.get("name") == "next_work":
+            if t.get("name") in ("next_work", "add_todo", "handoff"):
                 t["description"] = ""
+                rem = ((t.get("inputSchema") or {}).get("properties") or {}).get("remaining")
+                if isinstance(rem, dict):
+                    rem["description"] = ""
     for y in lb:
         drop_mcp_extras(y, allowed)
         for c in (y.get("result") or {}).get("content") or []:
@@ -600,7 +614,7 @@ def main():
 
     # ── 讀（初始狀態）──
     C("instructions", ["instructions"], spine=False,
-      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作)（Rust 版）\n.*?(?=\n## )", "", s, flags=re.S))
+      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作)（Rust 版）\n.*?(?=\n## )", "", re.sub(r"`remaining` [^。]*。", "", s), flags=re.S))  # 收尾那句見 TODO_SOURCE_WHY
     C("registry list", ["registry", "list"])
     C("registry list --json", ["registry", "list", "--json"])
     C("registry relations", ["registry", "relations"])
@@ -702,16 +716,16 @@ def main():
     C("group remove", ["group", "remove", "臨", "--json"])
     C("append", ["append", "--type", "decision", "--source", "manual", "--kv", "group:研究",
                  "--body", "決定 X"])
-    C("append open-loop 預設 due", ["append", "--type", "open-loop", "--source", "manual",
-                                    "--kv", "#7", "--body", "opened → 驗證 Y"])
+    # 未結一律明給 due、交接不帶 --remaining（TODO_SOURCE_WHY：這兩處 Rust 刻意跟 Python 不同，改由 Rust 測試把關）
+    C("append open-loop", ["append", "--type", "open-loop", "--source", "manual",
+                           "--kv", "#7", "--kv", "due:2030-01-01", "--body", "opened → 驗證 Y"])
     C("log", ["log", "選 LRU", "--ref", "decision:2026-01-01-d1"], cwd=impl)
     C("log --json", ["log", "第二個判斷", "--json", "--source", "manual"], cwd=impl)
-    C("todo add --json", ["todo", "add", "寫文件", "--json"], cwd=impl)
+    C("todo add --json", ["todo", "add", "寫文件", "--due", "2030-01-02", "--json"], cwd=impl)
     C("todo close", ["todo", "close", "1", "--note", "做完了"], cwd=impl)
     C("status waiting", ["status", "waiting", "等使用者確認"], cwd=impl)
     C("status --json", ["status", "working", "--json"], cwd=notes)
-    C("handoff", ["handoff", "--done", "寫了 X", "--next", "寫 Y", "--remaining", "補測試",
-                  "--remaining", "改文件"], cwd=notes)
+    C("handoff", ["handoff", "--done", "寫了 X", "--next", "寫 Y"], cwd=notes)
     C("next 寫完後", ["next", "--json"], cwd=impl)
     C("context 寫完後", ["context", "--json"], cwd=notes)
     C("route", ["route", "--text", "撞出來的結論", "--dest", "repo:impl", "--title", "結論"])
@@ -793,11 +807,11 @@ def main():
         tool(12, "next_work", limit=3),
         tool(13, "log_decision", text="MCP 判斷"),
         tool(14, "add_todo", text="MCP 待辦", due="2030-01-01"),
-        tool(15, "add_todo", text="跨組", group="研究"),
+        tool(15, "add_todo", text="跨組", group="研究", due="2030-01-03"),
         tool(16, "close_todo", id="#99"),
         tool(17, "report_status", status="blocked", text="卡住"),
         tool(18, "report_status", status="nope"),
-        tool(19, "handoff", done="MCP 收尾", next_step="下一步", remaining=["新事項"]),
+        tool(19, "handoff", done="MCP 收尾", next_step="下一步"),
         tool(20, "search_knowledge", query="快取 LRU", limit=3),
         tool(21, "read_from", ref="notes:書摘/ch01.md"),
         tool(22, "repo_status", repo="notes"),
@@ -819,7 +833,7 @@ def main():
         tool(38, "pack_estimate"),
         tool(39, "spine_append", type="decision", source="agent", body="MCP 往返"),
         tool(40, "spine_append", type="bogus", source="agent"),
-        tool(41, "spine_append", type="open-loop", source="agent", kv=["#9"], body="opened → 驗證"),
+        tool(41, "spine_append", type="open-loop", source="agent", kv=["#9", "due:2030-01-04"], body="opened → 驗證"),
         tool(42, "spine_query", today=True, verbose=True),
         tool(43, "spine_stats"),
         tool(44, "open_loops", group="產品"),

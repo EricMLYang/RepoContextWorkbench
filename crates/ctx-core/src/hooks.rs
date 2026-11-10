@@ -429,7 +429,7 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
             .into(),
         // F-121 對講（Rust 才有）
         "- 要同組另一個 repo 的 agent 做事、或告訴它你改了它會用到的東西→send_message（它在跑就直接送到，回覆會送回你）；收到〔對講〕就處理並帶 re 回覆；messages 看往來與誰在跑。".into(),
-        "- 收尾一定呼叫 handoff（完成了什麼、剩什麼、下次從哪接）；沒交接的會話會被記成未交接。".into(),
+        "- 收尾一定呼叫 handoff（完成了什麼、下次從哪接）；沒交接的會話會被記成未交接。".into(),
     ]);
     out.join("\n")
 }

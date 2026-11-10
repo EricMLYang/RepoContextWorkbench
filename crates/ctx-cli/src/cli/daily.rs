@@ -213,11 +213,8 @@ pub struct AppendArgs {
 pub fn cmd_append(ctx: &Ctx, a: &AppendArgs) -> CmdResult {
     let d = ctx.spine_dir()?;
     let body = a.body.clone().unwrap_or_default();
-    let mut tokens = a.kv.clone();
-    if a.etype == "open-loop" {
-        let due_days = config::load(&d)?.thresholds().openloop_default_due_days;
-        tokens = spine::default_due_tokens(&tokens, &body, due_days, None);
-    }
+    // open-loop 沒帶 due 就沒有期限（刻意差異：不再補預設天數，見 RUST_PORTING）
+    let tokens = a.kv.clone();
     let ev = if a.dead_letter {
         spine::append_event_or_dead_letter(&d, &a.etype, &a.source, &tokens, &body, None)?
     } else {

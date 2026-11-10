@@ -18,7 +18,7 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
      （這兩種會進使用者的收件匣）
    - 需要其他 repo 的資料 → 見下方「跨 repo 參考」
 3. **收尾（一定要做）**：`handoff` —— `done` 完成了什麼、`next_step` 下次從哪接、
-   `remaining` 新的待辦（各自開成未結事項）。沒交接就結束的會話會被 hook 記成「未交接」。
+   `remaining` 沒做完的事（只是交接裡的備註）。沒交接就結束的會話會被 hook 記成「未交接」。
 
 ## 跨 repo 參考（由便宜到貴，前一步夠用就停）
 
@@ -91,8 +91,9 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 - **判斷後來怎樣**：`log_decision` 帶 `outcome_of=<判斷的 ref>` 記一筆結果。
 - **找過去的判斷**：`search_knowledge` 的 `decisions` 段（被取代的標出取代者、帶結果）。做新判斷前先查有沒有前例。
 - **看全部未結**：`ctx todo list --json`（逾期在前；`ctx next` 只給前 5 項）。
-- **未結的紀律——未結清單是使用者的，不是你的筆記**：`add_todo` 與 `handoff` 的 `remaining` 只開「有人真的要回來做、說得出完成條件」的事
-  （`remaining` 通常 0～2 項；接續點寫 `next_step` 就好，不用再開一項），給真實的 `due`。要使用者決定的問題當場問
+- **未結的紀律——未結清單是使用者的，不是你的筆記**：`add_todo` 只開「有人真的要回來做、說得出完成條件」的事；
+  有真實期限才給 `due`，沒給就沒有期限（不會自動補）。`handoff` 的 `remaining` 不會開未結，只是交接裡的一行備註；
+  接續點寫 `next_step` 就好。要使用者決定的問題當場問
   （或 `report_status status=waiting`），不要開成待辦；順手的觀察寫進判斷或交接的 `done`。你自己開的、這場就做掉的，收尾前關掉。
 - **看全部未結**的順序：該先處理的在前，逾期超過 14 天的（擱置）排最後。
 - **未結體檢**：`ctx todo review --json`——哪些可能已處理（附證據）、哪些逾期沒動靜。確認後才 `close_todo`。

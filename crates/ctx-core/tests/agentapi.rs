@@ -121,7 +121,7 @@ fn test_add_todo_numbers_and_tokens_follow_cwd() {
     ); // 編號自動配
     assert_eq!(a["todo"]["group"], "產品");
     assert_eq!(a["todo"]["repo"], "impl");
-    assert!(a["todo"]["due"].as_str().is_some_and(|d| !d.is_empty())); // 預設到期自動補
+    assert!(a["todo"]["due"].is_null(), "{a}"); // 沒給 due 就沒有期限（2026-11-10：不再補預設天數）
     assert_eq!(b["todo"]["due"], "2026-12-01");
 }
 
@@ -228,7 +228,7 @@ fn test_close_todo_respects_scope() {
 // ---- ④ 交接是下一次的起點 ----
 
 #[test]
-fn test_handoff_becomes_next_step_and_opens_remaining() {
+fn test_handoff_becomes_next_step_and_remaining_stays_a_note() {
     let w = two_groups();
     let h = api::handoff(
         &w.sp,
@@ -241,8 +241,14 @@ fn test_handoff_becomes_next_step_and_opens_remaining() {
     )
     .unwrap();
     let h = v(h);
-    assert_eq!(h["todos"], json!(["#1"])); // 空字串不開
+    // 2026-11-10：remaining 不再各開一個未結（九成的未結是這樣來的），只寫進交接的「剩下」
+    assert_eq!(h["todos"], json!([]));
+    assert!(spine_mod::open_loops(&w.sp).unwrap().is_empty());
     let ctx = api::context_for(&w.sp, &at(&w.plan), true).unwrap();
+    assert_eq!(ctx["last_handoff"]["remaining"], "壓測");
+    // 沒給 due 的未結沒有期限（不補預設天數），所以永遠不會自己變「逾期」
+    let t = todo(&w, "之後再看", &w.impl_);
+    assert!(t["todo"]["due"].is_null(), "{t}");
     assert_eq!(ctx["last_handoff"]["next_step"], "補整合測試");
     assert_eq!(ctx["last_handoff"]["summary"], "寫完快取層");
     assert_eq!(ctx["agent_status"]["status"], "done");
@@ -877,9 +883,13 @@ fn review_counts_work_commit_that_names_the_todo() {
 }
 
 #[test]
-fn review_does_not_count_the_handoff_that_opened_the_todo() {
+fn review_does_not_count_the_handoff_that_mentions_the_todo() {
     let w = two_groups();
-    let r = api::handoff::<&str>(
+    let id = todo(&w, "補上匯出 CSV 功能", &w.plan)["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    api::handoff::<&str>(
         &w.sp,
         "整理 roadmap",
         "排優先序",
@@ -889,9 +899,7 @@ fn review_does_not_count_the_handoff_that_opened_the_todo() {
         "agent",
     )
     .unwrap();
-    let r = v(r);
-    let id = r["todos"][0].as_str().unwrap().to_string();
-    // 剛開：還在進行
+    // 剛開、同一場交接的「剩下」提到同一件事：還在進行，不算已做完的證據
     let now = api::review_todos(&w.sp, &at(&w.plan)).unwrap();
     assert_eq!(review_item(&now, &id)["verdict"], "active");
     // 20 天後、期間沒人提到：擱置（開出它的那筆交接不算「有人提到」，也不算證據）

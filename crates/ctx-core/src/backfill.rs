@@ -1095,7 +1095,8 @@ pub fn accept<S: AsRef<str>>(spine_dir: &Path, repo: &str, ids: &[S]) -> Result<
             }
             't' => {
                 let text = format!("{} {src}", get_s(it, "text", ""));
-                let r = agentapi::add_todo(spine_dir, &text, None, &t, false, "backfill")?;
+                // 回補維持 Python 的行為（補預設期限）；agent 平常開的未結沒給 due 就沒有期限
+                let r = agentapi::add_todo_default_due(spine_dir, &text, &t, "backfill")?;
                 written.push(r.id);
             }
             _ => {

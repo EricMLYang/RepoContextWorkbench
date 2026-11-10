@@ -184,6 +184,11 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   開場注入的未結照同一順序列前 6 項，擱置的不逐項列、只給一行數字＋`ctx todo review`；`context_for` 超過 30 項時的截斷也用
   同一順序（`agentapi::sort_loops_for_reading`）。對拍：`next --json`／`context --json` 不比順序與 `next`。
 - **agent 的脈絡瘦身**（2026-11-10，使用者定：agent 的作業是主軸，不為人的判斷付 token；準則見 `DEVELOPMENT.md` §6）：
+  - 未結從源頭少開（2026-11-10，使用者定；實測歷來約 290 項未結，約九成是交接的 `remaining` 開的、沒人回來關）：
+    `handoff` 的 `remaining` 不再各開一個未結，只寫進交接的「剩下」那一行（回傳的 `todos` 一律空陣列，欄位留著）；
+    `add_todo`、`ctx append --type open-loop`、MCP `spine_append` 沒給 due 就沒有期限，不補 `openloop_default_due_days`
+    （這個設定只剩回補舊會話 `backfill` 在用，那條路維持 Python 的行為）；開場約定的收尾那句拿掉「剩什麼」。
+    對拍劇本改成一律明給 due、交接不帶 `--remaining`，由 Rust 測試把關（`parity.py` 的 `TODO_SOURCE_WHY`）。
   - 未結超過 7 天沒動靜（`spine::LOOP_ACTIVE_DAYS`：這段期間沒開、也沒有事件提到 `#N`）不進 `context_for.open_loops`、`next_work`、
     summary 的下一步、情境卡、開場注入，只給數量（`open_loops_dormant`／`dormant`）。`ctx todo list`／`tidy`／`review` 照舊是全部。
   - 開場注入：再拿掉「等使用者決定」的未結（`agentapi::asks_user`）、每項截 90 字、列 5 項；沒登記目標不印；下一步跟交接的接續點相同不重印；

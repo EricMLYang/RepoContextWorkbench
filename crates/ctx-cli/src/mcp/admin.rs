@@ -191,11 +191,8 @@ pub(super) fn t_spine_append(d: &Path, a: &Args) -> Result<String> {
     let etype = arg_s(a, "type").ok_or_else(|| Error::invalid("'type'"))?;
     let source = arg_s(a, "source").ok_or_else(|| Error::invalid("'source'"))?;
     let body = arg_s(a, "body").unwrap_or_default();
-    let mut tokens = arg_list(a, "kv");
-    if etype == "open-loop" {
-        let due_days = config::load(d)?.thresholds().openloop_default_due_days;
-        tokens = spine::default_due_tokens(&tokens, &body, due_days, None);
-    }
+    // open-loop 沒帶 due 就沒有期限（刻意差異：不再補預設天數，見 RUST_PORTING）
+    let tokens = arg_list(a, "kv");
     let ev = spine::append_event(d, &etype, &source, &tokens, &body, None)?;
     Ok(format!("已寫入：{}", ev.header()))
 }
