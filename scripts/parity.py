@@ -448,7 +448,8 @@ FILE_ALLOWED_USED = set()
 
 RULES_WHY = ("Rust 才有的內容，比對前拿掉：反芻推薦的 rules（N-20）、search 的 decisions（F-22）、"
              "context_for 的 hints 與開場的提醒段／新能力那一行（N-22）、"
-             "repo 名片（2026-10-13：search 的 repo_profiles、context_for 的 roster、開場的同組成員段）")
+             "repo 名片（2026-10-13：search 的 repo_profiles、context_for 的 roster、開場的同組成員段）、"
+             "context_for.last_handoff.repo（2026-11-10 R11：同組別的 repo 留的交接，開場標出是誰的）")
 
 
 def strip_rust_only(v):
@@ -472,6 +473,10 @@ def strip_rust_only(v):
             hit = True
         if "open_loops" in v and "scope" in v and "repo_class" in v:  # context_for 的所在 repo 類別（2026-10-18）
             del v["repo_class"]
+            hit = True
+        lh = v.get("last_handoff") if ("open_loops" in v and "scope" in v) else None
+        if isinstance(lh, dict) and "repo" in lh:  # 交接是哪個 repo 留的（2026-11-10 R11）
+            del lh["repo"]
             hit = True
         if "rel" in v and "commit" in v and "linked_from" in v:  # read_from 的反向連結（F-69，2026-10-15）
             del v["linked_from"]

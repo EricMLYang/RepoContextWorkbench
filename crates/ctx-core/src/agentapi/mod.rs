@@ -439,7 +439,8 @@ pub fn event_dict(ev: &Event) -> Value {
 }
 
 /// context_for 的最近事件（2026-11-10 夜間檢討 R3，Rust 才改）：同一份資料 agent 每場都要付 token，所以——
-/// 上次交接那筆不重複（已在 `last_handoff`）；連續、同類型、同一句話的併成一筆帶 `count`；
+/// 上次交接那筆不重複（已在 `last_handoff`）；未結的開／關與 hook 的提醒不列（未結在 `open_loops`，R11）；
+/// 連續、同類型、同一句話的併成一筆帶 `count`；
 /// `body` 只在比 `text` 多東西時才給。
 fn recent_compact<'a>(
     newest_first: impl Iterator<Item = &'a Event>,
@@ -560,6 +561,8 @@ fn last_handoff(events: &[Event], s: &Scope) -> Option<Value> {
         "source": best.source, "summary": summary.trim(),
         "done": field("完成"), "remaining": field("剩下"),
         "next_step": field("下次從這裡接"),
+        // Rust 才有（2026-11-10 R11）：交接是哪個 repo 留的——同組別的 repo 開場要講清楚那是別人的接續點
+        "repo": kv_opt(best, "repo"),
     }))
 }
 
@@ -616,7 +619,8 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         evs.iter()
             .rev()
             .copied()
-            .filter(|e| e.etype != EventType::Decision || !superseded.contains_key(&event_ref(e))),
+            .filter(|e| e.etype != EventType::Decision || !superseded.contains_key(&event_ref(e)))
+            .filter(|e| !context::is_bookkeeping(e)),
         handoff
             .as_ref()
             .and_then(|h| h.get("ref"))

@@ -217,6 +217,10 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
     算成未提交（追蹤中被 Finder 改了的也不算）——card_notes 唯一的「未提交檔案」就是它，開場與收件匣天天提醒。
   - `context_for.reopen` 拿掉（R10）：「何時重看」是人的判斷（上一輪已把開場的「該重看」移到 `ctx health`，這個鍵漏了）；
     `ctx health` 的提醒改由 `agentapi::reopen_items` 自己算。agent 要找前例用 `search_knowledge` 的 `decisions` 段。
+  - 別人的交接與簿記（R11）：`context_for.last_handoff` 多一個 `repo`（哪個 repo 留的）；開場遇到同組別的 repo 留的交接，寫成
+    「同組上次交接（在 X…）」＋「X 那邊下一步：…（不是這個 repo 的事，除非使用者要你接）」，原本寫「下次從這裡接」，draftagent 開場會以為要去測工作台 App。
+    會話料與 `context_for` 的最近事件不列未結的開／關（還開著的在未結段；早就關掉的「opened」會被當成還開著）與 hook 記給人看的提醒
+    （`context::is_bookkeeping`）。`group context` 照舊（對拍）。
 - **屬於多個組的 repo 用哪個組當主場**（2026-11-10）：`where_am_i` 依序看——App 開這場會話時的牌組（環境變數
   `CTX_HOME_GROUP`，`term::create_agent` 放的）→ 使用者在 App 正看著的牌組（`.state/screen.json` 的 `group`）→ 第一個。
   只在 repo 屬於兩個以上的組時才看；`note` 會說用了哪個、為什麼。Python 一律第一個。

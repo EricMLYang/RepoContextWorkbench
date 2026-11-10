@@ -1597,8 +1597,10 @@ fn test_group_name_with_space_can_log_handoff_and_close() {
     // 關掉（主場檢查要認得換寫過的組名）
     assert!(api::close_todo(&sp, &num, None, Some(&vms), false, "agent").is_ok());
     // 任務包照樣找得到組
+    // 未結的開／關不進最近事件（R11）；交接在 last_handoff：這裡確認範圍仍認得換寫過的組名
     let ctx = api::context_for(&sp, &at(&vms), false).unwrap();
-    assert!(ctx["recent_events"].as_array().unwrap().len() >= 3);
+    assert_eq!(ctx["last_handoff"]["next_step"], "接著做 B");
+    assert!(ctx["open_loops"].as_array().unwrap().is_empty());
 }
 
 /// F-63 MCP workbench_apply：預設只預覽；confirm 才執行；主場外要同意；畫面動作略過；記一筆。
@@ -1762,8 +1764,10 @@ fn test_context_for_recent_events_are_compact() {
     let w = two_groups();
     api::log_decision(&w.sp, "先前的判斷", &at(&w.impl_), None, false, "agent").unwrap();
     for _ in 0..5 {
-        todo(&w, "一樣的事", &w.impl_);
+        api::log_decision(&w.sp, "一樣的事", &at(&w.impl_), None, false, "agent").unwrap();
     }
+    // 未結的開關是簿記，不進最近事件（R11；還開著的在 open_loops）
+    todo(&w, "開了一項", &w.impl_);
     api::handoff(
         &w.sp,
         "寫完快取層",
@@ -1789,5 +1793,48 @@ fn test_context_for_recent_events_are_compact() {
     assert_eq!(same[0]["count"], 5);
     assert!(same[0].get("body").is_none());
     assert!(rec.iter().any(|e| e["text"] == "先前的判斷"));
+    assert!(rec.iter().all(|e| e["type"] != "open-loop"), "{rec:?}");
+    assert_eq!(ctx["open_loops"].as_array().unwrap().len(), 1);
     assert!(ctx.get("card").is_none());
+}
+
+/// 2026-11-10 R11：同組別的 repo 留的交接，開場標出是誰的、接續點不是你的事；自己 repo 的照舊「下次從這裡接」
+#[test]
+fn test_opening_labels_handoff_from_another_repo() {
+    let w = two_groups();
+    api::handoff(
+        &w.sp,
+        "寫完快取層",
+        "補整合測試",
+        &[] as &[&str],
+        &at(&w.impl_),
+        false,
+        "agent",
+    )
+    .unwrap();
+    let open = |p: &Path, sid: &str| {
+        let out = hooks::session_start(
+            &w.sp,
+            &json!({"session_id": sid, "cwd": p.to_string_lossy()}),
+            None,
+        );
+        let v: Value = serde_json::from_str(&out).unwrap();
+        v["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let plan = open(&w.plan, "p1");
+    assert!(
+        plan.contains("同組上次交接（在 impl") && plan.contains("impl 那邊下一步：補整合測試"),
+        "{plan}"
+    );
+    assert!(!plan.contains("下次從這裡接"), "{plan}");
+    let own = open(&w.impl_, "i1");
+    assert!(
+        own.contains("下次從這裡接：補整合測試") && !own.contains("同組上次交接"),
+        "{own}"
+    );
+    let ctx = api::context_for(&w.sp, &at(&w.plan), false).unwrap();
+    assert_eq!(ctx["last_handoff"]["repo"], "impl");
 }

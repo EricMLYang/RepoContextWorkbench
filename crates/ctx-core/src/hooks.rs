@@ -222,13 +222,34 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
         } else {
             crate::pystr::clip(done.trim(), HANDOFF_DONE_CHARS)
         };
-        out.push(format!(
-            "上次交接（{}，{}）：{shown}",
-            s(ho, "at"),
-            s(ho, "source")
-        ));
-        if let Some(ns) = ho["next_step"].as_str().filter(|x| !x.is_empty()) {
-            out.push(format!("  下次從這裡接：{ns}"));
+        // 同組別的 repo 留的交接（2026-11-10 R11）：標出是誰的，接續點是那邊的事，不是你的
+        let here = w["repo"]["id"].as_str().unwrap_or("");
+        let other = ho["repo"]
+            .as_str()
+            .filter(|r| !r.is_empty() && *r != here && !here.is_empty());
+        match other {
+            Some(r) => {
+                out.push(format!(
+                    "同組上次交接（在 {r}，{}，{}）：{shown}",
+                    s(ho, "at"),
+                    s(ho, "source")
+                ));
+                if let Some(ns) = ho["next_step"].as_str().filter(|x| !x.is_empty()) {
+                    out.push(format!(
+                        "  {r} 那邊下一步：{ns}（不是這個 repo 的事，除非使用者要你接）"
+                    ));
+                }
+            }
+            None => {
+                out.push(format!(
+                    "上次交接（{}，{}）：{shown}",
+                    s(ho, "at"),
+                    s(ho, "source")
+                ));
+                if let Some(ns) = ho["next_step"].as_str().filter(|x| !x.is_empty()) {
+                    out.push(format!("  下次從這裡接：{ns}"));
+                }
+            }
         }
     } else if lp.is_object() {
         out.push(format!(
