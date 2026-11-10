@@ -848,7 +848,8 @@ def main():
     C("upstream 後", ["upstream"])
     # 「產品」只有一個 repo：Rust 的開場句改講 repo（#73）——兩邊換成同一個樣子再比
     solo = lambda s: re.sub(r'"?(組)?情境卡＋文件地圖已備好', "<CARD>已備好", s).replace(
-        "（repo 現況、", "（<PARTS>、").replace("（成員角色、", "（<PARTS>、").replace('任務：寫文"', "任務：寫文")
+        "（repo 現況、", "（<PARTS>、").replace("（成員角色、脈動、", "（<PARTS>、").replace('任務：寫文"', "任務：寫文")
+    # 2026-11-10 R4：單一 repo 的情境卡不再有脈動段（跟「這個 repo」那行重複），開場句跟著不提
     C("session --print", ["session", "--group", "產品", "--task", "寫文", "--print"],
       stdout_fix=lambda s: solo(re.sub(r"<CTX>[^\n]*", "<CTX…>", s)))
     C("setup --dry-run", ["setup", "--spine", "{R}/spine", "--dry-run"], spine=False)

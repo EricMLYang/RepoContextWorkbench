@@ -283,12 +283,12 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
     };
     // 範圍只有一個 repo：不講「組」與成員角色（#73）
     let (card, parts) = if entries.len() == 1 {
-        ("情境卡", "repo 現況")
+        ("情境卡", "repo 現況、未結")
     } else {
-        ("組情境卡", "成員角色")
+        ("組情境卡", "成員角色、脈動、未結")
     };
     let prompt = format!(
-        "{card}＋文件地圖已備好：{}——先讀情境卡（{parts}、脈動、未結、你的角色），\
+        "{card}＋文件地圖已備好：{}——先讀情境卡（{parts}、你的角色），\
          需要細節再照地圖挑檔細讀，不要整包讀完。任務：{}",
         out.display(),
         task.unwrap_or(DEFAULT_TASK)

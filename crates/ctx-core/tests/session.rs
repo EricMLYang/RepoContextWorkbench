@@ -256,6 +256,13 @@ fn test_single_repo_session_in_solo_group_uses_group() {
     assert!(text.contains("屬於牌組「My Solo」") && text.contains("## 這個 repo"));
     assert!(text.contains("**repo 管家**") && !text.contains("組管家"));
     assert!(text.contains("## 未結（open loops，本 repo）"));
+    // 2026-11-10 R4：有交代任務就直接做；開場注入已給的工具說明、給人看的「各階段的責任」、跟上面重複的脈動都不放
+    assert!(text.contains("任務有交代就直接做"));
+    assert!(
+        !text.contains("各階段的責任")
+            && !text.contains("## 脈動")
+            && !text.contains("## 工作方式")
+    );
     let prompt = plan.cmd.last().unwrap();
     assert!(prompt.starts_with("情境卡＋文件地圖已備好") && prompt.contains("repo 現況"));
     assert_eq!(presented_group(&d).as_deref(), Some("My_Solo")); // 標頭空白換 _
@@ -324,6 +331,7 @@ fn test_group_session_keeps_group_wording() {
     );
     let text = std::fs::read_to_string(&plan.pack_path).unwrap();
     assert!(text.starts_with("# 組情境卡 g1") && text.contains("組管家"));
+    assert!(text.contains("任務有交代就直接做") && !text.contains("各階段的責任"));
     assert!(plan
         .cmd
         .last()

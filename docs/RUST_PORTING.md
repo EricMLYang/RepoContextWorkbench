@@ -203,6 +203,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   - `context_for` 瘦身（R3）：最近事件不重複 `last_handoff` 那筆、連續同類型同一句話併成一筆帶 `count`、`body` 跟 `text` 一樣就不給；
     MCP 的 `card` 預設改 false（markdown 卡跟其他欄位是同一份資料；CLI `ctx context` 照舊印卡）；工具說明、MCP instructions、skill 開工那步
     改成「開場注入已給摘要，要細節才呼叫」——原本每場會話開場注入之後又整包拿一次。實測 MCP 回傳 16.1K → 10.9K 字。對拍見 `SLIM_CONTEXT_WHY`。
+  - 會話料的角色說明（R4）：`ROLE_PROMPT_SOLO`／`ROLE_PROMPT_SESSION_GROUP` 收成一段「約定」——有交代任務就直接做（原本不管任務都要先講三件事）、
+    先問的動作改成刪除／任務沒交代到的改檔／動其他 repo／對外送出；拿掉「各階段的責任」（給人看的設計說明）與跟開場注入重複的工具清單。
+    單一 repo 的卡不再印脈動段（跟「這個 repo」那行同一件事）。`group context`／MCP `group_context` 照舊用 `ROLE_PROMPT`（對拍）。實測情境卡 6.5K → 5.6K 字。
 - **屬於多個組的 repo 用哪個組當主場**（2026-11-10）：`where_am_i` 依序看——App 開這場會話時的牌組（環境變數
   `CTX_HOME_GROUP`，`term::create_agent` 放的）→ 使用者在 App 正看著的牌組（`.state/screen.json` 的 `group`）→ 第一個。
   只在 repo 屬於兩個以上的組時才看；`note` 會說用了哪個、為什麼。Python 一律第一個。

@@ -46,34 +46,35 @@ pub const ROLE_PROMPT: &str = "你是這組 repo 的**組管家**（group stewar
 - 無事不報：沒有異常就一句話帶過，不要把正常狀態講成待辦。
 ";
 
-/// 範圍只有一個 repo 時的角色說明（Rust 才有，2026-10-15，#73）：不講「組」與成員關係。
-/// 只用在會話料（`session::build`）；CLI `group context`／MCP `group_context` 照舊用 [`ROLE_PROMPT`]（跟 Python 對拍）。
+/// 會話料（`session::build`）的角色說明——範圍只有一個 repo（#73，2026-10-15）。
+/// CLI `group context`／MCP `group_context` 照舊用 [`ROLE_PROMPT`]（跟 Python 對拍）。
+///
+/// 2026-11-10 夜間檢討 R4 精簡：開場注入（hook）已經給了工具與留痕約定，這裡只放卡片才有的——
+/// 有交代任務就直接做（原本不管任務是什麼都要先講三件事）、哪些動作先問、範圍怎麼讀、文件地圖怎麼用。
+/// 「各階段的責任」是給人看的設計說明，agent 拿到做不了什麼，拿掉。
 pub const ROLE_PROMPT_SOLO: &str = "你是這個 repo 的**repo 管家**——這次的工作範圍就是這一個 repo。
 
-## 開場先講三件事（各一行，講完再問我要做什麼）
-1. 你拿到的脈絡：repo 現況、脈動、未結、最近事件——有缺就直接說缺。
-2. 這次預計產出什麼：一句話講清楚交付物。
-3. 哪些動作要我先確認：改檔、動其他 repo、刪除、對外送出，一律先問。
+## 約定
+- 任務有交代就直接做；只叫你「先讀情境卡」時，用三行講：拿到哪些脈絡（缺什麼直說）、這次預計產出什麼、哪些動作要我先確認，再問我要做什麼。
+- 先問我再做：刪除、任務沒交代到的改檔、動其他 repo（同組的也一樣）、對外送出（push、發佈、寄信）。
+- 開場注入寫的「工作範圍『某組』」是留痕（未結、判斷、對講）看得到的範圍，不是這次要動手的範圍。
+- 要細節照下方文件地圖挑檔讀，不要整包讀；別的 repo 用 `search_knowledge`／`read_from`（會留引用）。
+- 留痕是工作台看得到你進度的唯一依據：判斷 `log_decision`、待辦 `add_todo`、等我或卡住 `report_status`，收尾一定 `handoff`。
+  沒掛 MCP 就用 `ctx <log|todo|status|handoff> --json`。
+- 無事不報：沒有異常就一句話帶過，不要把正常狀態講成待辦。
+";
 
-## 各階段的責任（同一個你，不同時機）
-- 開場：整理變化、接回上次工作 → 我要看到現況、來源、可繼續的任務。
-- 出現問題：查清楚、辨認缺漏 → 我要看到判斷理由、還不知道什麼、建議下一步。
-- 執行任務：在這個 repo 裡工作、遇到阻塞立刻回報 → 我要知道你在處理什麼、是否輪到我回應。
-- 結束工作：整理成果與未完成事項 → 我要能檢閱成果，並知道下次從哪接回。
+/// 會話料的角色說明——範圍是多個 repo 的組（2026-11-10 夜間檢討 R4，Rust 才有；理由同 [`ROLE_PROMPT_SOLO`]）。
+pub const ROLE_PROMPT_SESSION_GROUP: &str = "你是這組 repo 的**組管家**（group steward）——工作單位是「這一組」，不是單一 repo。
 
-## 範圍
-- 本卡的 repo 就是這次的工作範圍；要讀別的 repo 用 `search_knowledge`／`read_from`（會留引用），要改先問。
-- 開場注入若寫「工作範圍『某組』（N 個 repo）」：那是這個 repo 所屬的牌組，也是留痕工具（未結、判斷、對講）看得到的範圍，
-  不是這次要動手的範圍——要改的仍只有本卡這個 repo，同組其他 repo 一樣先問。
-- 本卡不是工具層的權限限制；正因為沒有硬性阻擋，越界之前一定要先問。
-
-## 工作方式
-- 先讀完本情境卡再動手；需要細節再用文件地圖挑檔讀，不要整包吞。
-- 出手留痕（MCP repo-context 工具，或 `ctx <指令> --json`）：做了判斷 `log_decision`、
-  發現待辦 `add_todo`、處理完 `close_todo`、等我回應或卡住 `report_status`。
-  留痕是工作台唯一看得到你進度的依據——沒留痕＝沒回報。
-- 隨時可用 `context_for` 重抓脈絡、`next_work` 看該做什麼。
-- 收尾一定呼叫 `handoff`：完成了什麼、還剩什麼、下次從哪裡接回。
+## 約定
+- 任務有交代就直接做；只叫你「先讀情境卡」時，用三行講：拿到哪些脈絡（缺什麼直說）、這次預計產出什麼、哪些動作要我先確認，再問我要做什麼。
+- 先問我再做：刪除、任務沒交代到的改檔、動組外的 repo、對外送出（push、發佈、寄信）。
+- 本卡不是工具層的權限限制，工具碰得到的不只本組——正因為沒有硬性阻擋，越界之前一定先問。
+- 尊重關係：PM repo 管方向、code repo 管實作。講結論標明來自哪個 repo 哪份檔；跨 repo 的彙整產物落 spine 的 `groups/<組>/materials/`。
+- 要細節照下方文件地圖挑檔讀，不要整包讀。
+- 留痕是工作台看得到你進度的唯一依據：判斷 `log_decision`、待辦 `add_todo`、等我或卡住 `report_status`，收尾一定 `handoff`。
+  沒掛 MCP 就用 `ctx <log|todo|status|handoff> --json`。
 - 無事不報：沒有異常就一句話帶過，不要把正常狀態講成待辦。
 ";
 
@@ -284,11 +285,14 @@ fn build_card(
             outside.join("；")
         ));
     }
-    out.extend([
-        String::new(),
-        "## 脈動".into(),
-        collect::pulse_line(&collect::group_pulse(&states)),
-    ]);
+    // 只有一個 repo 時脈動跟上面那行講的是同一件事（近 7 天幾個 commit、最新一筆），不重複
+    if !solo {
+        out.extend([
+            String::new(),
+            "## 脈動".into(),
+            collect::pulse_line(&collect::group_pulse(&states)),
+        ]);
+    }
     let events = spine::iter_events(spine_dir)?;
     let all_loops: Vec<Event> = spine::open_loops_of(&events)
         .into_iter()
@@ -333,7 +337,11 @@ fn build_card(
     let role = cfg
         .str("session.role_prompt")
         .filter(|s| !s.is_empty())
-        .unwrap_or(if solo { ROLE_PROMPT_SOLO } else { ROLE_PROMPT });
+        .unwrap_or(match (solo, solo_wording) {
+            (true, _) => ROLE_PROMPT_SOLO,
+            (false, true) => ROLE_PROMPT_SESSION_GROUP,
+            (false, false) => ROLE_PROMPT,
+        });
     out.extend([
         String::new(),
         "## 你的角色".into(),
