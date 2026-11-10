@@ -89,6 +89,9 @@ desktop/src（React，只管畫面）── IPC ┘
   要**人**判斷的事（還做不做、判斷後來怎樣、要不要設關係、這個 repo 還算進行中嗎、請寫一句目標）不放進去，
   改放人的畫面（App 收件匣／「清理未結…」、`ctx health`、`ctx todo tidy`）。新增任何會進 agent 脈絡的內容前先問：
   「agent 拿到這段，現在能做什麼？」答不出來就不放。量法：對 spine 副本跑 `ctx hook session-start`、`ctx context --json` 看字數。
+  另外三條（2026-11-10 夜間檢討）：**有用量數據就看數據**——推薦類的段落看命中率（`ctx fresh --stats`：推 253 用上 1 就拿掉）；
+  **同一件事只講一次**——開場注入給了的，`context_for`、情境卡、skill 不再重講（工具清單、交接、脈動），要細節的才去拉；
+  **別人的東西標出是誰的**——同組別的 repo 留的交接、會話，寫清楚是哪個 repo 的，不要寫成「下次從這裡接」。
 - **hook 回應紀律**（N-42）：觀測類 hook（Stop／Notification／PreToolUse／PostToolUse／UserPromptSubmit／statusLine）
   必須 < 100ms 回、不等網路、不印會擋住 Claude Code 的東西；讀逐字稿只讀尾巴固定位元組。PreToolUse 每次工具呼叫都會
   spawn 一次 `ctx`，任何會讓它變慢的改動（讀事件、讀 registry、git）都不准放進這條路徑。核准類 hook 若將來要回決定，
