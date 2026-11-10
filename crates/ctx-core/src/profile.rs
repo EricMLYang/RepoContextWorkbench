@@ -375,6 +375,13 @@ pub fn roster(spine_dir: &Path, entries: &[Repo], here: Option<&str>) -> Vec<Ros
         peers
             .iter()
             .filter(|p| p["repo"] == id && p["sid"].as_str() != me.as_deref())
+            // 2026-11-10 R7：做完這一輪、閒著的會話不列——開場要知道的是「現在有人在動」，閒著的不會撞到你
+            .filter(|p| {
+                !matches!(
+                    crate::status::AgentStatus::parse(p["status"].as_str().unwrap_or("")),
+                    Some(crate::status::AgentStatus::Finished | crate::status::AgentStatus::Done)
+                )
+            })
             .take(3)
             .map(|p| {
                 let what = p["title"].as_str().unwrap_or("agent");

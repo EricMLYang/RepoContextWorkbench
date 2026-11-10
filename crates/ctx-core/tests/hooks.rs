@@ -95,7 +95,12 @@ fn test_session_start_injects_neighbor_map_and_drift() {
             && ctx.contains("`notes:書摘`→books/")
             && ctx.contains("逐章書摘")
     );
-    assert!(ctx.contains("改了 1 次") && ctx.contains("read_from"));
+    // 2026-11-10 R7：上游變動只給一行數字與怎麼看（細節在 `ctx refs drift`）
+    assert!(
+        ctx.contains("上游檔有 1 份之後又改了")
+            && ctx.contains("ctx refs drift")
+            && ctx.contains("read_from")
+    );
     let other = hooks::session_start(
         &w.sp,
         &json!({"session_id": "s2", "cwd": w.other.to_string_lossy()}),

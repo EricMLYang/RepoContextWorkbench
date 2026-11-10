@@ -324,7 +324,10 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
         })
         .take(3)
     {
-        out.push(format!("注意：{}", s(a, "text")));
+        // 收件匣的文案是問人的（「本週要處理嗎？」）；給 agent 的只講事實
+        let text = s(a, "text");
+        let text = text.strip_suffix("，本週要處理嗎？").unwrap_or(text);
+        out.push(format!("注意：{text}（跟這次任務無關就別動）"));
     }
     let st = &ctx["agent_status"];
     if matches!(st["status"].as_str(), Some("waiting") | Some("blocked")) {
@@ -388,9 +391,12 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
         );
         out.extend(crossref::neighbor_lines(&c.neighbors, 4));
     }
+    // 2026-11-10 R7：只給一行數字——跟這次任務有關時 agent 才需要細節（`ctx refs drift`），原本每場列 3～4 行
     if !c.drift.is_empty() {
-        out.push("你之前引用過的上游檔之後又改了（本地的副本或結論可能過期）：".into());
-        out.extend(crossref::drift_lines(&c.drift, 3));
+        out.push(format!(
+            "你之前引用過的上游檔有 {} 份之後又改了；這次要用到那些結論時先 `ctx refs drift` 看是哪些。",
+            c.drift.len()
+        ));
     }
     out.extend([
         String::new(),

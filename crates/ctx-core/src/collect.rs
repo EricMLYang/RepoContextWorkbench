@@ -152,6 +152,8 @@ pub fn collect_repo(entry: &RepoSpec) -> RepoState {
         };
         return st;
     }
+    // 2026-11-10 R7：系統雜檔（.DS_Store 等，追蹤中或沒追蹤）不算「未提交」——Finder 開過資料夾就會冒出來，
+    // 開場與收件匣一直說「有 1 個未提交檔案、本週要處理嗎」，實際上沒有東西要處理
     // status 不 trim 整份輸出：porcelain 第一行開頭的空白（" M file"）是欄位的一部分。
     // --no-optional-locks：背景採集不拿 index.lock、不回寫 index（只讀不寫使用者 repo；
     // agent 同時在 commit 也不會撞到「index.lock exists」）
@@ -163,6 +165,7 @@ pub fn collect_repo(entry: &RepoSpec) -> RepoState {
     let dirty_files: Vec<String> = out
         .lines()
         .filter(|ln| !ln.trim().is_empty())
+        .filter(|ln| !is_os_junk(ln))
         .map(|ln| {
             ln.chars()
                 .skip(3)
@@ -490,4 +493,31 @@ pub fn format_table(states: &[RepoState]) -> String {
         ));
     }
     lines.join("\n")
+}
+
+/// porcelain 一列是不是系統雜檔（`?? .DS_Store`、` M sub/Thumbs.db`）。被 commit 進去過的也算雜檔：
+/// Finder 每次開資料夾都會改它，「改了」不代表有事要處理（card_notes 實測：唯一的未提交就是追蹤中的 .DS_Store）。
+fn is_os_junk(porcelain_line: &str) -> bool {
+    const JUNK: [&str; 3] = [".DS_Store", "Thumbs.db", "desktop.ini"];
+    let path: String = porcelain_line.chars().skip(3).collect();
+    let path = path.trim().trim_matches('"');
+    let name = path
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or(path);
+    JUNK.contains(&name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_os_junk;
+
+    #[test]
+    fn untracked_os_junk_is_not_dirty() {
+        assert!(is_os_junk("?? .DS_Store"));
+        assert!(is_os_junk("?? notes/Thumbs.db"));
+        assert!(is_os_junk(" M .DS_Store"), "追蹤中的也是雜檔");
+        assert!(!is_os_junk("?? notes/plan.md"));
+    }
 }

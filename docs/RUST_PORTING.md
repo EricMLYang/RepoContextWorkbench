@@ -212,6 +212,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   - 開場注入的工作約定（R6）：工具名單那行（agent 自己的工具清單就有）改成只講沒掛 MCP 時的 `ctx … --json` 退路；
     「改掉舊判斷→supersedes／outcome_of／todo brief／workbench_apply」那行拿掉（用法在各工具說明）；有同組成員段時標題只寫「N 個 repo」不重列名單。
     `hooks::TOOLS_LINE` 刪除。實測 RepoContextWorkbench 開場 2,592 → 約 1,550 字（含 R2 拿掉新料）。
+  - 開場注入的雜訊（R7）：上游檔變動（drift）從 3～4 行細節收成一行數字＋`ctx refs drift`；名冊的「agent 在做」不列做完這一輪、閒著的會話；
+    「注意」行拿掉問人的「本週要處理嗎？」改成「跟這次任務無關就別動」。採集（`collect`）不把 `.DS_Store`／`Thumbs.db`／`desktop.ini`
+    算成未提交（追蹤中被 Finder 改了的也不算）——card_notes 唯一的「未提交檔案」就是它，開場與收件匣天天提醒。
 - **屬於多個組的 repo 用哪個組當主場**（2026-11-10）：`where_am_i` 依序看——App 開這場會話時的牌組（環境變數
   `CTX_HOME_GROUP`，`term::create_agent` 放的）→ 使用者在 App 正看著的牌組（`.state/screen.json` 的 `group`）→ 第一個。
   只在 repo 屬於兩個以上的組時才看；`note` 會說用了哪個、為什麼。Python 一律第一個。
