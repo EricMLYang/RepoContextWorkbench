@@ -1031,9 +1031,9 @@ fn reopen_condition_with_past_date_is_flagged_at_session_start() {
     )
     .unwrap();
     log_ext(&w, "索引用 JSON", None, Some("repo 超過 50 個")).unwrap();
+    // 2026-11-10 R10：「何時重看」是人的判斷，不進 context_for（只在 ctx health 的提醒）
     let ctx = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
-    let reopen = ctx["reopen"].as_array().unwrap();
-    assert_eq!(reopen.len(), 2);
+    assert!(ctx.get("reopen").is_none());
     let (hints, out) = human_hints_and_opening(&w, "ro");
     assert!(
         hints.contains("該重看：先不做 Windows") && hints.contains("有條件的判斷：索引用 JSON"),

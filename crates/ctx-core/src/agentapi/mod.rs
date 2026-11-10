@@ -623,19 +623,8 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
             .and_then(Value::as_str),
         8,
     );
-    let td = today();
-    let snoozes = reopen_snoozes(spine_dir);
-    let reopen: Vec<Value> = evs
-        .iter()
-        .rev()
-        .filter(|e| e.etype == EventType::Decision && !superseded.contains_key(&event_ref(e)))
-        .filter_map(|e| {
-            let cond = reopen_when(e)?;
-            let due = reopen_is_due(&cond, &event_ref(e), &td, &snoozes);
-            Some(json!({"ref": event_ref(e), "text": first(e), "when": cond, "due": due}))
-        })
-        .take(5)
-        .collect();
+    // 帶重看條件的判斷（`reopen`）2026-11-10 R10 起不進 context_for：「何時重看」是人的判斷，
+    // 只給 `ctx health`／App（[`reopen_items`]）；agent 要找前例用 search_knowledge 的 decisions 段
     let ids: Vec<String> = entries.iter().map(Repo::id).collect();
     let rid = w.repo_id().map(str::to_string);
     let neighbors = match &rid {
@@ -672,9 +661,6 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         "neighbors": neighbors,
         "drift": drift,
     });
-    if !reopen.is_empty() {
-        out["reopen"] = Value::Array(reopen);
-    }
     // Rust 才有（2026-10-13）：組員名冊——同組有誰、在哪、什麼角色、有沒有會話在跑；只有一個 repo 就不給這個鍵
     let roster = roster_of(spine_dir, &entries, &w);
     if !roster.is_empty() {
@@ -730,6 +716,29 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         neighbors,
         drift,
     })
+}
+
+/// 範圍內帶「何時重看」條件的有效判斷（新到舊，最多 5 筆）：`{ref, text, when, due}`。
+/// 給人看的提醒（[`human_hints`]）用；2026-11-10 R10 起不再放進 context_for。
+pub(crate) fn reopen_items(spine_dir: &Path, t: &Target) -> Result<Vec<Value>> {
+    let w = where_am_i(spine_dir, t.cwd.as_deref())?;
+    let s = scope_of(spine_dir, &w, t)?;
+    let all = spine::iter_events(spine_dir)?;
+    let superseded = superseded_map(&all);
+    let td = today();
+    let snoozes = reopen_snoozes(spine_dir);
+    Ok(all
+        .iter()
+        .rev()
+        .filter(|e| e.etype == EventType::Decision && s.contains(e))
+        .filter(|e| !superseded.contains_key(&event_ref(e)))
+        .filter_map(|e| {
+            let cond = reopen_when(e)?;
+            let due = reopen_is_due(&cond, &event_ref(e), &td, &snoozes);
+            Some(json!({"ref": event_ref(e), "text": first(e), "when": cond, "due": due}))
+        })
+        .take(5)
+        .collect())
 }
 
 /// 對應 `agentapi.next_work`：接下來值得做的事，依序：逾期未結 → 上次交接的下一步 → 有 due 的未結 →

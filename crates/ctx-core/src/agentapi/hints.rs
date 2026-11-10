@@ -18,7 +18,8 @@ fn collect_hints(spine_dir: &Path, t: &Target, ctx: &Value) -> Vec<Value> {
     if let Some(h) = review_hint(spine_dir, t) {
         push("review", h);
     }
-    let reopen: Vec<&Value> = ctx["reopen"].as_array().into_iter().flatten().collect();
+    let reopen_all = reopen_items(spine_dir, t).unwrap_or_default();
+    let reopen: Vec<&Value> = reopen_all.iter().collect();
     for r in reopen.iter().filter(|r| r["due"] == true).take(2) {
         push(
             "reopen",

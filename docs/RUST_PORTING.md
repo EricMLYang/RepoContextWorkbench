@@ -148,7 +148,7 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
 - **判斷取代＋何時重看**（2026-10-10，ideation F-07；Python 沒有）：`log_decision` 可帶 `supersedes`（`decision:<id>`，要存在）
   與 `reopen_when`。寫進 body 的結構化行 `取代：decision:<id>`、`何時重看：<條件>`，被取代的同時寫成 `ref:` token——
   標頭文法不變，Python 讀得回（只是不懂它的意思）。被取代的判斷不再出現在 `context_for` 的最近事件、反芻的手上工作
-  與推給別組的判斷候選；帶重看條件的有效判斷列在 `context_for.reopen`（只在有的時候出現），開場注入「該重看」（條件裡
+  與推給別組的判斷候選；帶重看條件的有效判斷列在 `context_for.reopen`（只在有的時候出現；2026-11-10 R10 起不再列，見下方瘦身），開場注入「該重看」（條件裡
   的日期已到）／「有條件的判斷」各一行。MCP `log_decision` 多兩個選填參數（對拍時拿掉後比，記為允許差異）。
   App（F-46）：重看條件日期已到的有效判斷在收件匣成卡 `reopen`（「該重看的判斷」一段），出口＝開會話重看（任務帶好
   supersedes 的做法）／延 14 天（`reopen_defer`，記在 `.state/reopen_snooze.json`；agent 開場的「該重看」也一起延後）。
@@ -215,6 +215,8 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   - 開場注入的雜訊（R7）：上游檔變動（drift）從 3～4 行細節收成一行數字＋`ctx refs drift`；名冊的「agent 在做」不列做完這一輪、閒著的會話；
     「注意」行拿掉問人的「本週要處理嗎？」改成「跟這次任務無關就別動」。採集（`collect`）不把 `.DS_Store`／`Thumbs.db`／`desktop.ini`
     算成未提交（追蹤中被 Finder 改了的也不算）——card_notes 唯一的「未提交檔案」就是它，開場與收件匣天天提醒。
+  - `context_for.reopen` 拿掉（R10）：「何時重看」是人的判斷（上一輪已把開場的「該重看」移到 `ctx health`，這個鍵漏了）；
+    `ctx health` 的提醒改由 `agentapi::reopen_items` 自己算。agent 要找前例用 `search_knowledge` 的 `decisions` 段。
 - **屬於多個組的 repo 用哪個組當主場**（2026-11-10）：`where_am_i` 依序看——App 開這場會話時的牌組（環境變數
   `CTX_HOME_GROUP`，`term::create_agent` 放的）→ 使用者在 App 正看著的牌組（`.state/screen.json` 的 `group`）→ 第一個。
   只在 repo 屬於兩個以上的組時才看；`note` 會說用了哪個、為什麼。Python 一律第一個。
