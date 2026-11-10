@@ -135,6 +135,55 @@ fn member_line(entry: &Repo, state: Option<&RepoState>, rels_of: &[RelationView]
     line
 }
 
+/// 事件在卡片上的一句話。交接事件的標題在寫入時截到 80 字（`交接：<完成的第一行>`）：
+/// 完成那行比標題長就補「…」，讓 agent 知道是截斷而不是話沒講完。
+fn event_text(ev: &Event) -> String {
+    if ev.body.is_empty() {
+        return ev.tokens.join(" ");
+    }
+    let first = ev.first_line();
+    if let Some(head) = first.strip_prefix("交接：") {
+        let done = ev
+            .body
+            .lines()
+            .find_map(|l| l.strip_prefix("完成："))
+            .unwrap_or("");
+        if done.chars().count() > head.chars().count() && done.starts_with(head) {
+            return format!("{first}…");
+        }
+    }
+    first.to_string()
+}
+
+/// 最近事件（新到舊，最多 `max` 行）：連續、同類型、同一句話的事件併成一行並標「×N」
+/// （2026-11-10：一次關掉 228 項未結留下的 closed 事件把 8 格佔滿，真正的近況擠不進來）。
+fn recent_event_lines(evs: &[&Event], max: usize) -> Vec<String> {
+    let mut out: Vec<(String, String, usize)> = Vec::new(); // (前綴, 內容, 次數)
+    for ev in evs.iter().rev() {
+        let text = event_text(ev);
+        if let Some(last) = out.last_mut() {
+            if last.1 == text && last.0.ends_with(&format!("{} [{}]", ev.etype, ev.source)) {
+                last.2 += 1;
+                continue;
+            }
+        }
+        if out.len() == max {
+            break;
+        }
+        let prefix = format!("{} {} {} [{}]", ev.date, ev.time, ev.etype, ev.source);
+        out.push((prefix, text, 1));
+    }
+    out.into_iter()
+        .map(|(p, t, n)| {
+            if n > 1 {
+                format!("- {p} {t}（×{n}）")
+            } else {
+                format!("- {p} {t}")
+            }
+        })
+        .collect()
+}
+
 /// 範圍判定統一走 spine.in_scope（簡報／摘要／會話回報同一份規則）。
 fn in_scope_of(ev: &Event, scoped: bool, gkey: &str, ids: &[String]) -> bool {
     if scoped {
@@ -278,16 +327,8 @@ fn build_card(
     if evs.is_empty() {
         out.push("（無）".into());
     }
-    for ev in evs.iter().skip(evs.len().saturating_sub(8)).rev() {
-        let first = if ev.body.is_empty() {
-            ev.tokens.join(" ")
-        } else {
-            ev.first_line().to_string()
-        };
-        out.push(format!(
-            "- {} {} {} [{}] {first}",
-            ev.date, ev.time, ev.etype, ev.source
-        ));
+    for line in recent_event_lines(&evs, 8) {
+        out.push(line);
     }
     let role = cfg
         .str("session.role_prompt")

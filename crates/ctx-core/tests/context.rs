@@ -85,3 +85,34 @@ fn test_context_adhoc_scope() {
     let members = text.split("## 脈動").next().unwrap();
     assert!(members.contains("repo-b") && !members.contains("- repo-a"));
 }
+
+/// 連續、同一句話的事件併成一行（×N），不佔滿最近事件的格子（2026-11-10）
+#[test]
+fn test_context_recent_events_collapse_repeats() {
+    let (_t, d) = spine_with_repos();
+    let now = Local::now().naive_local();
+    spine::append_event(
+        &d,
+        "decision",
+        "manual",
+        &["group:g1"],
+        "先前的判斷",
+        Some(now - Duration::minutes(30)),
+    )
+    .unwrap();
+    for i in 0..10 {
+        spine::append_event(
+            &d,
+            "open-loop",
+            "agent",
+            &[&format!("#{}", i + 1), "group:g1"],
+            "closed → 一次清掉",
+            Some(now - Duration::minutes(20 - i)),
+        )
+        .unwrap();
+    }
+    let text = context::build_context(&d, Some("g1"), None, None, None).unwrap();
+    assert_eq!(text.matches("closed → 一次清掉").count(), 1, "{text}");
+    assert!(text.contains("closed → 一次清掉（×10）"), "{text}");
+    assert!(text.contains("先前的判斷"), "被洗掉的近況要回來：{text}");
+}
