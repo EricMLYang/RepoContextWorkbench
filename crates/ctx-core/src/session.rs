@@ -227,7 +227,7 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
     let text = format!(
         "{}\n{}",
         context::build_session_card(spine_dir, group, repos, Some(now))?,
-        pack::pack_index(&refs, 80)
+        pack::session_map(&refs, pack::session_map_cap(refs.len()))
     );
     // 資料夾用登記的原名（只給組時 resolve_group 回的就是原名；給的可能是換寫過的 PM_Group）
     let by_group_only = repos.is_none_or(<[String]>::is_empty);

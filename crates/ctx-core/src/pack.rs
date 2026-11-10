@@ -190,6 +190,94 @@ pub fn pack_index(entries: &[RepoRef], max_files_per_repo: usize) -> String {
     out.join("\n") + "\n"
 }
 
+/// 會話料的文件地圖（Rust 才有，2026-11-10 夜間檢討 R5）。[`pack_index`] 照行數由大到小列 80 個，
+/// 實測一組 4 個 repo 的卡 22K 字、知識組 58K 字——agent 讀一次情境卡就整份吞進去，而大檔不等於該讀的檔。
+/// 改成：
+/// - **入口文件在前**（根目錄的 README／AGENTS／CLAUDE、`docs/README.md`），其餘照**最近修改**排（正在動的才是脈絡）；
+/// - 每個 repo 最多 `cap` 個（呼叫端依範圍大小給），其餘只給數量並指向 `search_knowledge`；
+/// - 只有一行字的檔（`CLAUDE.md` 只寫 `@AGENTS.md` 這種轉址）、模板（檔名 `_template` 開頭）不列。
+pub fn session_map(entries: &[RepoRef], cap: usize) -> String {
+    const ENTRY: [&str; 4] = ["README.md", "AGENTS.md", "CLAUDE.md", "docs/README.md"];
+    let mut out =
+        vec!["# 文件地圖（入口在前、其餘照最近修改；要哪份自己讀，不要整包讀）".to_string()];
+    for e in entries {
+        let root = expanduser(&e.path);
+        if !root.is_dir() {
+            continue;
+        }
+        // (rel, 行數, 首標題, mtime 秒)
+        let mut infos: Vec<(String, usize, String, i64)> = Vec::new();
+        let mut total = 0usize;
+        for f in doc_files(&root) {
+            total += 1;
+            let rel = rel_posix(&f, &root);
+            let fname = rel.rsplit('/').next().unwrap_or(&rel);
+            if fname.starts_with("_template") {
+                continue;
+            }
+            let Ok(text) = read_text_lossy(&f) else {
+                continue;
+            };
+            if text.lines().filter(|l| !l.trim().is_empty()).count() <= 1 {
+                continue; // 只有一行：轉址（`@AGENTS.md`）或空殼
+            }
+            let lines = text.matches('\n').count() + 1;
+            let mut heading = splitlines(&text)
+                .into_iter()
+                .find(|ln| ln.starts_with('#'))
+                .map(|ln| ln.trim_start_matches('#').trim().to_string())
+                .unwrap_or_default();
+            if heading == fname || Some(heading.as_str()) == fname.strip_suffix(".md") {
+                heading.clear(); // 標題就是檔名（`# AGENTS.md`），不重複
+            }
+            let mtime = std::fs::metadata(&f)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_secs() as i64);
+            infos.push((rel, lines, heading, mtime));
+        }
+        infos.sort_by(|a, b| {
+            let ea = ENTRY.iter().position(|x| *x == a.0).unwrap_or(ENTRY.len());
+            let eb = ENTRY.iter().position(|x| *x == b.0).unwrap_or(ENTRY.len());
+            ea.cmp(&eb).then(b.3.cmp(&a.3)).then(a.0.cmp(&b.0))
+        });
+        out.push(format!(
+            "\n## {}（{} 個 md，路徑：{}）",
+            e.id,
+            total,
+            root.display()
+        ));
+        for (rel, lines, heading, mtime) in infos.iter().take(cap) {
+            let day = chrono::DateTime::from_timestamp(*mtime, 0)
+                .map(|t| t.with_timezone(&chrono::Local).format("%m-%d").to_string())
+                .unwrap_or_default();
+            let tail = if heading.is_empty() {
+                String::new()
+            } else {
+                format!("｜{heading}")
+            };
+            out.push(format!("- {rel}（{lines} 行，{day} 改）{tail}"));
+        }
+        if infos.len() > cap {
+            out.push(format!(
+                "- …另 {} 個沒列：用 `search_knowledge` 找",
+                infos.len() - cap
+            ));
+        }
+    }
+    out.join("\n") + "\n"
+}
+
+/// 會話料的文件地圖每個 repo 列幾個：一個 repo 就多給，組越大每個給越少（總量約 40～50 行）。
+pub fn session_map_cap(repos: usize) -> usize {
+    match repos {
+        0 | 1 => 40,
+        2 | 3 => 15,
+        _ => 10,
+    }
+}
+
 /// `estimate` 的一列。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Estimate {

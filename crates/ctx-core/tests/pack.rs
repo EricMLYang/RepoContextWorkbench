@@ -130,3 +130,29 @@ fn pack_index_lists_map_not_fulltext() {
     let small = pack::pack_index(&w.refs(), 1);
     assert!(small.contains("- …另 1 個較小檔未列"));
 }
+
+/// 會話料的文件地圖（2026-11-10 R5）：入口文件在前、其餘照最近修改；轉址檔與模板不列；超過上限只給數量
+#[test]
+fn session_map_puts_entry_docs_first_and_skips_pointers() {
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("r");
+    std::fs::create_dir_all(root.join("docs")).unwrap();
+    std::fs::write(root.join("CLAUDE.md"), "@AGENTS.md\n").unwrap();
+    std::fs::write(root.join("docs/_template_round.md"), "# t\n\na\nb\n").unwrap();
+    std::fs::write(root.join("docs/old.md"), "# 舊的\n\na\nb\n").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    std::fs::write(root.join("docs/new.md"), "# 新的\n\na\nb\n").unwrap();
+    std::fs::write(root.join("README.md"), "# 專案\n\na\nb\n").unwrap();
+    let refs = vec![pack::RepoRef::new("r", &root)];
+    let text = pack::session_map(&refs, 10);
+    let pos = |s: &str| text.find(s).unwrap_or_else(|| panic!("缺 {s}：{text}"));
+    assert!(
+        pos("- README.md") < pos("- docs/new.md") && pos("- docs/new.md") < pos("- docs/old.md")
+    );
+    assert!(
+        !text.contains("CLAUDE.md") && !text.contains("_template"),
+        "{text}"
+    );
+    let small = pack::session_map(&refs, 1);
+    assert!(small.contains("…另 2 個沒列"), "{small}");
+}
