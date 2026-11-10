@@ -816,9 +816,16 @@ pub fn next_work(spine_dir: &Path, t: &Target, limit: usize) -> Result<Value> {
     }
     if let Some(ho) = &ho {
         if let Some(ns) = ho["next_step"].as_str().filter(|x| !x.is_empty()) {
+            // 同組別的 repo 留的交接（R11）：講出是誰的，別讓這個 repo 的 agent 以為是自己的接續點
+            let here = w.repo_id().unwrap_or("");
+            let whose = ho["repo"]
+                .as_str()
+                .filter(|r| !r.is_empty() && *r != here && !here.is_empty())
+                .map(|r| format!("{r} 的"))
+                .unwrap_or_default();
             items.push(json!({
                 "kind": "handoff", "ref": ho["ref"], "text": ns,
-                "why": format!("上次交接（{}，{}）留下的下一步",
+                "why": format!("{whose}上次交接（{}，{}）留下的下一步",
                                ho["at"].as_str().unwrap_or(""), ho["source"].as_str().unwrap_or("")),
             }));
         }

@@ -1837,4 +1837,12 @@ fn test_opening_labels_handoff_from_another_repo() {
     );
     let ctx = api::context_for(&w.sp, &at(&w.plan), false).unwrap();
     assert_eq!(ctx["last_handoff"]["repo"], "impl");
+    let nxt = api::next_work(&w.sp, &at(&w.plan), 5).unwrap();
+    assert!(
+        nxt["items"][0]["why"]
+            .as_str()
+            .unwrap()
+            .starts_with("impl 的上次交接"),
+        "{nxt}"
+    );
 }
