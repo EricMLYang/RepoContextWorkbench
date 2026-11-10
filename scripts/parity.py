@@ -40,7 +40,32 @@ def _drop_dirty_days(obj):
     return obj
 
 
+NEXT_ORDER_WHY = ("下一步的排序（2026-11-10，Rust 才改）：上次交接的接續點排最前，逾期超過 14 天的未結（擱置）排最後、"
+                  "理由改寫成「還做不做」——Python 是逾期一律最前。比對時不看順序與 why／next 的內容，項目集合照比")
+
+
+def _next_items_unordered(obj):
+    if isinstance(obj, dict) and isinstance(obj.get("items"), list):
+        for it in obj["items"]:
+            if isinstance(it, dict):
+                it.pop("why", None)
+        obj["items"].sort(key=lambda it: json.dumps(it, ensure_ascii=False, sort_keys=True))
+    return obj
+
+
+def _drop_next(obj):
+    if isinstance(obj, dict):
+        obj.pop("next", None)
+        if isinstance(obj.get("open_loops"), list):
+            obj["open_loops"].sort(key=lambda it: json.dumps(it, ensure_ascii=False, sort_keys=True))
+    return obj
+
+
 ALLOW = {
+    "next --json": (NEXT_ORDER_WHY, _next_items_unordered),
+    "next 寫完後": (NEXT_ORDER_WHY, _next_items_unordered),
+    "context --json": (NEXT_ORDER_WHY, _drop_next),
+    "context 寫完後": (NEXT_ORDER_WHY, _drop_next),
     "collect --json": (
         "collect dirty_days：Python 版用最舊 dirty 檔 mtime 卻只看前幾個檔（實測會漏掉較舊的檔），"
         "Rust 已修成看全部 dirty 檔——數值可能不同，其餘欄位照比",

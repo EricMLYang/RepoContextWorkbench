@@ -259,7 +259,15 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
             .map(|n| n as usize)
             .unwrap_or(loops.len());
         out.push(format!("未結（{total}）："));
-        for lp in loops.iter().take(6) {
+        // 2026-11-10：照「該先處理的」排（不是開立順序）；逾期太久的（擱置）不逐項列，只給一行數字——
+        // 切進一組時先看到的是活的事，不是兩個月前回填的舊項
+        let td = crate::agentapi::today();
+        let mut sorted = loops.clone();
+        crate::agentapi::sort_loops_for_reading(&mut sorted, &td);
+        let is_stale = |lp: &Value| crate::agentapi::loop_stale(lp["due"].as_str(), &td);
+        let live: Vec<&Value> = sorted.iter().filter(|lp| !is_stale(lp)).collect();
+        let listed_stale = sorted.len() - live.len();
+        for lp in live.iter().take(6) {
             let flag = if lp["overdue"] == true {
                 "，已逾期"
             } else {
@@ -273,10 +281,18 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
             let text = BACKFILL_TAIL.replace_all(s(lp, "text"), "");
             out.push(format!("- {} {}{due}", py_str(&lp["id"]), text.trim_end()));
         }
-        if total > 6 {
+        let shown = live.len().min(6);
+        // context_for 超過上限被截掉的也算進「另 N 項」；擱置的另外講
+        let more = total.saturating_sub(shown + listed_stale);
+        if more > 0 {
             out.push(format!(
-                "- …另 {} 項（next_work 或 ctx todo list 看完整清單）",
-                total - 6.min(loops.len())
+                "- …另 {more} 項（next_work 或 ctx todo list 看完整清單）"
+            ));
+        }
+        if listed_stale > 0 {
+            out.push(format!(
+                "- 擱置 {listed_stale} 項（逾期超過 {} 天沒結，這裡不列）：`ctx todo review` 看哪些可以 close",
+                crate::agentapi::STALE_OVERDUE_DAYS
             ));
         }
     }

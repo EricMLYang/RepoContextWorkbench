@@ -178,6 +178,11 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
 - **收件匣卡片上人直接寫判斷**（2026-10-20；Python 沒有）：判斷回顧卡「記結果…」＝action `decision_outcome`（log_decision 帶
   outcome_of）、該重看卡「改判斷…」＝`decision_supersede`（帶 supersedes），都是 source=manual、範圍照卡片的組／repo，
   且是主按鈕；之前只能開會話或延期，判斷結果記錄率一直 0%。
+- **下一步與未結的排序**（2026-11-10；真資料 230 項未結、151 項逾期，開場的「建議下一步」指到兩個月前的回填項）：
+  `next_work`／`ctx next` 與 summary 的「可接續的一步」改成：交接之後才到期的逾期項 → **上次交接的下一步** → 其他逾期 →
+  還沒到期 → **擱置**（逾期超過 `STALE_OVERDUE_DAYS`＝14 天，最近到期的先，理由寫「還做不做」）。Python 是逾期一律最前。
+  開場注入的未結照同一順序列前 6 項，擱置的不逐項列、只給一行數字＋`ctx todo review`；`context_for` 超過 30 項時的截斷也用
+  同一順序（`agentapi::sort_loops_for_reading`）。對拍：`next --json`／`context --json` 不比順序與 `next`。
 - **`ctx todo list`**（2026-10-20；Python 沒有）：範圍內全部未結、逾期在前，`--json` 跟 `next_work` 的 todo 同一種物件；
   沒掛 MCP 的 agent（CLI 模式）之前只能靠 `ctx next` 的前 5 項。
 - **任務包 `ctx todo brief #N`**（2026-10-10，ideation F-42；Python 沒有）：把一項未結組成給全新會話的 markdown——

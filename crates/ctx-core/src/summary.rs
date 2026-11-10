@@ -240,7 +240,7 @@ fn handoff_next(events: &[Event], gkey: &str, ids: &[String], scoped: bool) -> O
     ))
 }
 
-/// 可接續的一步＝有依據的一件事：先看到期未結，再看觸發閾值的問句。
+/// 可接續的一步＝有依據的一件事：上次交接的下一步，再看到期未結，再看觸發閾值的問句。
 #[allow(clippy::too_many_arguments)]
 fn next_step(
     events: &[Event],
@@ -263,10 +263,15 @@ fn next_step(
             due_best = Some((due, ev));
         }
     }
-    let overdue = due_best.is_some_and(|(d, _)| d < today);
-    if !overdue {
-        // 上次交接留下的下一步（agentapi.handoff 寫的 decision）排在逾期之後、一般到期之前
-        if let Some(ho) = handoff_next(events, gkey, ids, scoped) {
+    // 2026-11-10（刻意跟 Python 不同）：交接留下的下一步排最前；只有「交接之後才到期、現在已逾期」的未結能蓋過它
+    // ——寫交接的人當時就知道更舊的逾期項，仍選了這一步。沒有交接時照舊：最早到期的未結。
+    if let Some(ho) = handoff_next(events, gkey, ids, scoped) {
+        let ho_date = ho.at.as_deref().and_then(|at| at.split(' ').next());
+        let newer_overdue = match (due_best, ho_date) {
+            (Some((d, _)), Some(h)) => d < today && d >= h,
+            _ => false,
+        };
+        if !newer_overdue {
             return (Some(ho), None);
         }
     }

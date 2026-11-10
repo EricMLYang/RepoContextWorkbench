@@ -392,7 +392,7 @@ pub fn event_dict(ev: &Event) -> Value {
     })
 }
 
-fn today() -> String {
+pub(crate) fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()
 }
 
@@ -406,6 +406,18 @@ pub fn loop_dict(ev: &Event, today_s: Option<&str>) -> Value {
         "repo": kv_opt(ev, "repo"), "opened": ev.stamp(),
         "source": ev.source,
     })
+}
+
+/// 逾期超過這麼多天還沒結＝擱置：排到清單最後、開場不逐項列（2026-11-10）。
+pub const STALE_OVERDUE_DAYS: i64 = 14;
+
+/// 這項未結是不是擱置（到期日比 `today` 早超過 [`STALE_OVERDUE_DAYS`] 天）。日期看不懂就當不是。
+pub fn loop_stale(due: Option<&str>, today: &str) -> bool {
+    let parse = |d: &str| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok();
+    match (due.and_then(parse), parse(today)) {
+        (Some(d), Some(t)) => (t - d).num_days() > STALE_OVERDUE_DAYS,
+        _ => false,
+    }
 }
 
 fn open_loops(spine_dir: &Path, s: &Scope) -> Result<Vec<Event>> {
@@ -667,15 +679,32 @@ pub fn next_work(spine_dir: &Path, t: &Target, limit: usize) -> Result<Value> {
         .collect();
     let due_of = |lp: &Value| lp["due"].as_str().map(str::to_string);
     let todo_item = |lp: &Value, why: String| json!({"kind": "todo", "id": lp["id"], "text": lp["text"], "due": lp["due"], "why": why});
-    let mut items: Vec<Value> = Vec::new();
-    let mut overdue: Vec<&Value> = loops.iter().filter(|lp| lp["overdue"] == true).collect();
-    overdue.sort_by_key(|lp| due_of(lp));
-    for lp in overdue {
-        let why = format!("未結事項已逾期（due {}）", due_of(lp).unwrap_or_default());
-        items.push(todo_item(lp, why));
-    }
+    // 順序（2026-11-10，刻意跟 Python 不同）：切回來最先要看到的是「上次留下的接續點」，不是最舊的逾期項——
+    // 交接之後才到期的逾期項（寫交接時還不知道會拖過）→ 交接的下一步 → 其他逾期 → 還沒到期 → 擱置（逾期太久）
     let all = spine::iter_events(spine_dir)?;
-    if let Some(ho) = last_handoff(&all, &s) {
+    let ho = last_handoff(&all, &s);
+    let ho_date = ho
+        .as_ref()
+        .and_then(|h| h["at"].as_str())
+        .and_then(|at| at.split(' ').next())
+        .map(str::to_string);
+    let stale = |lp: &Value| loop_stale(lp["due"].as_str(), &td);
+    let since_handoff = |lp: &Value| match (&ho_date, lp["due"].as_str()) {
+        (Some(h), Some(d)) => d >= h.as_str(),
+        _ => false,
+    };
+    let overdue_why =
+        |lp: &Value| format!("未結事項已逾期（due {}）", due_of(lp).unwrap_or_default());
+    let mut items: Vec<Value> = Vec::new();
+    let mut overdue: Vec<&Value> = loops
+        .iter()
+        .filter(|lp| lp["overdue"] == true && !stale(lp))
+        .collect();
+    overdue.sort_by_key(|lp| due_of(lp));
+    for lp in overdue.iter().filter(|lp| since_handoff(lp)) {
+        items.push(todo_item(lp, overdue_why(lp)));
+    }
+    if let Some(ho) = &ho {
         if let Some(ns) = ho["next_step"].as_str().filter(|x| !x.is_empty()) {
             items.push(json!({
                 "kind": "handoff", "ref": ho["ref"], "text": ns,
@@ -683,6 +712,9 @@ pub fn next_work(spine_dir: &Path, t: &Target, limit: usize) -> Result<Value> {
                                ho["at"].as_str().unwrap_or(""), ho["source"].as_str().unwrap_or("")),
             }));
         }
+    }
+    for lp in overdue.iter().filter(|lp| !since_handoff(lp)) {
+        items.push(todo_item(lp, overdue_why(lp)));
     }
     let mut rest: Vec<&Value> = loops.iter().filter(|lp| lp["overdue"] != true).collect();
     rest.sort_by_key(|lp| {
@@ -694,6 +726,16 @@ pub fn next_work(spine_dir: &Path, t: &Target, limit: usize) -> Result<Value> {
             Some(d) => format!("未結事項，due {d}"),
             None => "未結事項（沒有 due）".to_string(),
         };
+        items.push(todo_item(lp, why));
+    }
+    // 擱置的排最後、最近到期的先：留在清單裡查得到，但不擋住真正要接的事
+    let mut shelved: Vec<&Value> = loops.iter().filter(|lp| stale(lp)).collect();
+    shelved.sort_by_key(|lp| std::cmp::Reverse(due_of(lp)));
+    for lp in shelved {
+        let why = format!(
+            "逾期超過 {STALE_OVERDUE_DAYS} 天沒結（due {}）——還要做就給新的 due，不做就 close（ctx todo review 看證據）",
+            due_of(lp).unwrap_or_default()
+        );
         items.push(todo_item(lp, why));
     }
     if items.len() < limit {
@@ -1596,6 +1638,26 @@ const CONTEXT_NOTE_CHARS: usize = 300;
 /// `context_for` 一次最多給幾項未結（N-26）。
 pub const CONTEXT_LOOP_CAP: usize = 30;
 
+/// 給人／agent 讀的順序：逾期的先、再依到期日（沒期限的在後），擱置的（逾期太久）排最後、最近到期的先。穩定排序。
+pub fn sort_loops_for_reading(loops: &mut [Value], today: &str) {
+    let due_of = |lp: &Value| lp["due"].as_str().map(str::to_string);
+    let stale = |lp: &Value| loop_stale(lp["due"].as_str(), today);
+    // 先把擱置的照「最近到期的先」排好，再用穩定排序把它們整批推到最後
+    loops.sort_by_key(|lp| std::cmp::Reverse(if stale(lp) { due_of(lp) } else { None }));
+    loops.sort_by_key(|lp| {
+        let due = due_of(lp);
+        if stale(lp) {
+            (3u8, String::new())
+        } else if lp["overdue"] == true {
+            (0, due.unwrap_or_default())
+        } else if let Some(d) = due {
+            (1, d)
+        } else {
+            (2, String::new())
+        }
+    });
+}
+
 fn cap_open_loops(out: &mut Value) {
     let Some(loops) = out["open_loops"].as_array_mut() else {
         return;
@@ -1605,14 +1667,7 @@ fn cap_open_loops(out: &mut Value) {
     }
     let total = loops.len();
     // 穩定排序：逾期的先、再依到期日（沒期限的最後），同類保留原順序
-    loops.sort_by_key(|lp| {
-        let due = lp["due"].as_str().map(str::to_string);
-        (
-            lp["overdue"] != true,
-            due.is_none(),
-            due.unwrap_or_default(),
-        )
-    });
+    sort_loops_for_reading(loops, &today());
     loops.truncate(CONTEXT_LOOP_CAP);
     out["open_loops_more"] = json!({
         "count": total - CONTEXT_LOOP_CAP, "total": total,

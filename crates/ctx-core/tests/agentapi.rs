@@ -242,13 +242,23 @@ fn test_handoff_becomes_next_step_and_opens_remaining() {
     assert_eq!(s.progress.unwrap().text, "交接：寫完快取層");
 }
 
+/// 2026-11-10：切回來先看到上次留下的接續點；很久以前就逾期的未結不蓋過它（排在後面、擱置的排最後）。
 #[test]
-fn test_overdue_todo_outranks_handoff() {
+fn test_handoff_outranks_older_overdue_todo() {
     let w = two_groups();
     api::add_todo(
         &w.sp,
         "早該做完",
         Some("2020-01-01"),
+        &at(&w.impl_),
+        false,
+        "agent",
+    )
+    .unwrap();
+    api::add_todo(
+        &w.sp,
+        "下週的事",
+        Some("2999-01-01"),
         &at(&w.impl_),
         false,
         "agent",
@@ -266,12 +276,31 @@ fn test_overdue_todo_outranks_handoff() {
     .unwrap();
     let nxt = api::next_work(&w.sp, &at(&w.impl_), 5).unwrap();
     let items = nxt["items"].as_array().unwrap();
-    let kinds: Vec<&str> = items[..2]
-        .iter()
-        .map(|i| i["kind"].as_str().unwrap())
-        .collect();
-    assert_eq!(kinds, vec!["todo", "handoff"]);
-    assert!(items[0]["why"].as_str().unwrap().contains("逾期"));
+    assert_eq!(items[0]["kind"], "handoff");
+    assert_eq!(items[0]["text"], "繼續");
+    // 還沒到期的在擱置的前面；擱置的說明要人決定還做不做
+    assert_eq!(items[1]["text"], "下週的事");
+    assert_eq!(items[2]["text"], "早該做完");
+    assert!(items[2]["why"].as_str().unwrap().contains("逾期超過"));
+    let s = summary::build_summary(&w.sp, Some("產品"), None, None, None, None).unwrap();
+    assert_eq!(s.next.unwrap().text, "繼續");
+}
+
+#[test]
+fn test_loop_order_puts_shelved_last() {
+    let mut loops = vec![
+        json!({"id": "#1", "due": "2020-01-01", "overdue": true}),
+        json!({"id": "#2", "due": null, "overdue": false}),
+        json!({"id": "#3", "due": "2026-11-08", "overdue": true}),
+        json!({"id": "#4", "due": "2026-12-01", "overdue": false}),
+        json!({"id": "#5", "due": "2026-09-01", "overdue": true}),
+    ];
+    api::sort_loops_for_reading(&mut loops, "2026-11-10");
+    let ids: Vec<&str> = loops.iter().map(|l| l["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, vec!["#3", "#4", "#2", "#5", "#1"]);
+    assert!(api::loop_stale(Some("2026-10-26"), "2026-11-10"));
+    assert!(!api::loop_stale(Some("2026-10-27"), "2026-11-10"));
+    assert!(!api::loop_stale(None, "2026-11-10"));
 }
 
 #[test]
