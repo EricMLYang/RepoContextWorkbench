@@ -84,6 +84,63 @@ pub fn mcp_json_status(spine_dir: &Path) -> serde_json::Value {
     }
 }
 
+/// Claude Code 使用者層設定檔（`ctx setup --claude` 用 `claude mcp add -s user` 寫進去的地方）。
+fn claude_user_config() -> PathBuf {
+    match std::env::var_os("CLAUDE_CONFIG_DIR").filter(|s| !s.is_empty()) {
+        Some(dir) => PathBuf::from(dir).join(".claude.json"),
+        None => crate::fsutil::expanduser("~/.claude.json"),
+    }
+}
+
+/// 使用者層已經掛了指向**同一份 spine** 的 ctx MCP 嗎（Rust 才有，2026-11-10）。
+/// 是＝App 開會話不用再 `--mcp-config` 掛一次。讀不到、指令不見、spine 不同都算沒有（照舊掛）。
+pub fn global_mcp_covers(spine_dir: &Path) -> bool {
+    global_mcp_covers_with(
+        spine_dir,
+        &claude_user_config(),
+        &config::load_user_config(),
+    )
+}
+
+/// 同 [`global_mcp_covers`]，設定檔由呼叫端給（測試用）。
+pub fn global_mcp_covers_with(
+    spine_dir: &Path,
+    claude_json: &Path,
+    user_cfg: &serde_json::Value,
+) -> bool {
+    let Some(v) = std::fs::read_to_string(claude_json)
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+    else {
+        return false;
+    };
+    let entry = &v["mcpServers"][crate::agentsetup::MCP_NAME];
+    let cmd = entry["command"].as_str().unwrap_or("");
+    if cmd.is_empty() || !Path::new(cmd).is_file() {
+        return false;
+    }
+    let args: Vec<&str> = entry["args"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a.as_str())
+        .collect();
+    if !args.contains(&"mcp") {
+        return false;
+    }
+    // server 用哪份 spine：參數有 --spine 就是它，否則是 `ctx setup` 記住的那份
+    let theirs = args
+        .iter()
+        .position(|a| *a == "--spine")
+        .and_then(|i| args.get(i + 1).copied())
+        .or_else(|| user_cfg["spine"].as_str())
+        .filter(|s| !s.is_empty());
+    match theirs {
+        Some(t) => crate::fsutil::resolve(Path::new(t)) == crate::fsutil::resolve(spine_dir),
+        None => false,
+    }
+}
+
 /// [`build`] 的參數（對應 Python 的關鍵字參數）。`agent` 空＝claude。
 #[derive(Debug, Clone, Default)]
 pub struct SessionOpts<'a> {
@@ -237,7 +294,9 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
         task.unwrap_or(DEFAULT_TASK)
     );
     let mut cmd = spec.cmd.clone();
-    if repo.is_some() && spec.mcp == "mcp-config" {
+    // 2026-11-10：`ctx setup --claude` 已經在使用者層掛了同一份 spine 的 MCP 時不再掛一次——
+    // 不然每場 App 會話有兩個 server（repo-context＋repo_context）、工具定義兩份、多一個 ctx 行程
+    if repo.is_some() && spec.mcp == "mcp-config" && !global_mcp_covers(spine_dir) {
         // 等號形式必須：claude 的 --mcp-config 吃多值，空格形式會把後面的
         // 帶料 prompt 也吞成設定檔路徑（L4 實錘：Invalid MCP configuration）
         cmd.push(format!("--mcp-config={}", mcp_json.display()));

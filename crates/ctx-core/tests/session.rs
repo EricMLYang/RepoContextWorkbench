@@ -330,3 +330,44 @@ fn test_group_session_keeps_group_wording() {
         .unwrap()
         .starts_with("組情境卡＋文件地圖已備好"));
 }
+
+// Rust 才有（2026-11-10）：使用者層已經掛了同一份 spine 的 MCP，App 開會話就不再掛一次
+#[test]
+fn test_global_mcp_covers_only_same_spine_and_live_command() {
+    let (_t, d) = spine();
+    let real = d.join("ctx-bin");
+    std::fs::write(&real, "").unwrap();
+    let cj = d.join("claude.json");
+    let write = |command: &Path, args: serde_json::Value| {
+        std::fs::write(
+            &cj,
+            serde_json::json!({"mcpServers": {"repo-context": {"command": command, "args": args}}})
+                .to_string(),
+        )
+        .unwrap();
+    };
+    let here = serde_json::json!({"spine": d});
+    let other = serde_json::json!({"spine": "/somewhere/else"});
+    // 沒有設定檔＝沒掛
+    assert!(!session::global_mcp_covers_with(&d, &cj, &here));
+    // `ctx mcp`（不帶 --spine）：看 ctx setup 記住的 spine
+    write(&real, serde_json::json!(["mcp"]));
+    assert!(session::global_mcp_covers_with(&d, &cj, &here));
+    assert!(!session::global_mcp_covers_with(&d, &cj, &other));
+    assert!(!session::global_mcp_covers_with(
+        &d,
+        &cj,
+        &serde_json::json!({})
+    ));
+    // 帶 --spine 的以參數為準
+    write(&real, serde_json::json!(["--spine", d, "mcp"]));
+    assert!(session::global_mcp_covers_with(&d, &cj, &other));
+    write(
+        &real,
+        serde_json::json!(["--spine", "/somewhere/else", "mcp"]),
+    );
+    assert!(!session::global_mcp_covers_with(&d, &cj, &here));
+    // 指令不在了（舊 bundle 被刪）＝當沒掛，照舊用 --mcp-config
+    write(Path::new("/no/such/ctx"), serde_json::json!(["mcp"]));
+    assert!(!session::global_mcp_covers_with(&d, &cj, &here));
+}

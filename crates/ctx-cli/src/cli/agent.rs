@@ -604,7 +604,7 @@ pub fn cmd_log(ctx: &Ctx, a: &LogArgs) -> CmdResult {
 pub enum TodoAction {
     Add,
     Close,
-    /// 範圍內全部未結（逾期在前）；沒掛 MCP 時代替 next_work 看完整清單
+    /// 範圍內全部未結（該先處理的在前，擱置的最後）；沒掛 MCP 時代替 next_work 看完整清單
     List,
     /// 體檢：哪些可能已處理（附證據）、哪些擱置太久（Rust 才有）
     Review,
@@ -704,7 +704,7 @@ pub fn cmd_todo(ctx: &Ctx, a: &TodoArgs) -> CmdResult {
                     _ => {
                         return Err(fail(
                             "bad_request",
-                            &format!(
+                            format!(
                                 "--close 只收 done／shelved／ask（逗號分隔），看不懂「{name}」"
                             ),
                             None,

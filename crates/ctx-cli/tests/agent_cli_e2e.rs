@@ -179,7 +179,7 @@ fn test_setup_rejects_non_spine() {
 
 // Rust 才有（2026-10-20）：todo list——範圍內全部未結，逾期在前；沒掛 MCP 的 agent 用
 #[test]
-fn todo_list_shows_all_open_loops_overdue_first() {
+fn todo_list_shows_all_open_loops_shelved_last() {
     let e = env_spine();
     let c = ctx(e.tmp()).cwd(&e.impl_).env("REPOENGINE_SPINE", &e.sp);
     assert_eq!(c.clone().run(&["todo", "add", "沒期限", "--json"]).code, 0);
@@ -204,8 +204,9 @@ fn todo_list_shows_all_open_loops_overdue_first() {
         .iter()
         .map(|lp| lp["text"].as_str().unwrap())
         .collect();
-    // 沒給 due 的會補預設期限（config openloop_default_due_days，幾天後），所以排在 2099 之前
-    assert_eq!(texts, vec!["早過期", "沒期限", "很久以後"]);
+    // 沒給 due 的會補預設期限（config openloop_default_due_days，幾天後），所以排在 2099 之前；
+    // 逾期超過 14 天的算擱置，排最後（2026-11-10）
+    assert_eq!(texts, vec!["沒期限", "很久以後", "早過期"]);
     let r = c.run(&["todo", "list"]);
     assert_eq!(r.code, 0);
     assert!(r.stdout.contains("逾期 1"), "{}", r.stdout);

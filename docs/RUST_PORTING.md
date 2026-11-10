@@ -183,6 +183,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   還沒到期 → **擱置**（逾期超過 `STALE_OVERDUE_DAYS`＝14 天，最近到期的先，理由寫「還做不做」）。Python 是逾期一律最前。
   開場注入的未結照同一順序列前 6 項，擱置的不逐項列、只給一行數字＋`ctx todo review`；`context_for` 超過 30 項時的截斷也用
   同一順序（`agentapi::sort_loops_for_reading`）。對拍：`next --json`／`context --json` 不比順序與 `next`。
+- **App 開會話不重複掛 MCP**（2026-11-10）：`ctx setup --claude` 已在使用者層掛 `repo-context`、而且指向同一份 spine
+  （參數的 `--spine`，沒有就看 `ctx setup` 記住的）時，`session::build` 不再加 `--mcp-config`（`session::global_mcp_covers`）。
+  之前每場 App 會話同時連上 `repo-context` 與 `repo_context`：工具定義兩份、多一個 `ctx mcp` 行程。指令不見或 spine 不同照舊掛。
 - **未結清理**（2026-11-10；Python 沒有）：`agentapi::tidy`——`tidy_todos` 把範圍內的未結分成 done／shelved／ask／live
   （用體檢的證據、到期日、文字，不叫模型），`close_todos` 一次關一批（個別失敗不擋其他項），`close_buckets` 整類關。
   入口：`ctx todo tidy [--close done,shelved,ask]`、`ctx todo close 68 72 128`（多個編號）、MCP `tidy_todos`（帶 `close` 才關）、

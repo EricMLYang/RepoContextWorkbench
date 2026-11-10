@@ -530,6 +530,10 @@ def mcp_compare(name, sides, msgs, admin, results, cwd="repos/impl"):
     if len(la) != len(lb):
         problems.append(f"回應數 py={len(la)} rs={len(lb)}；stderr rs={outs[1].stderr[-300:]}")
     allowed = set()
+    for x in la:  # next_work 的說明：Rust 改了排序（NEXT_ORDER_WHY），兩邊都不比這段文字
+        for t in ((x.get("result") or {}).get("tools") or []):
+            if t.get("name") == "next_work":
+                t["description"] = ""
     for y in lb:
         drop_mcp_extras(y, allowed)
         for c in (y.get("result") or {}).get("content") or []:
