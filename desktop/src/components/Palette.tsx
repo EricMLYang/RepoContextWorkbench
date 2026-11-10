@@ -14,6 +14,7 @@ import { useSnapshot, useStore, useUi, useUiState } from "../store/context";
 import { agentCommandsSpec } from "./sessions/AgentCommands";
 import { promptLibrarySpec } from "./sessions/PromptLibrary";
 import { transcriptSpec } from "./sessions/Transcript";
+import { tidyTodosSpec } from "./todos/TidyTodos";
 
 /** 打字後多久才問引擎（毫秒）——邊打邊找，不必每個字都問。 */
 const DEBOUNCE_MS = 120;
@@ -279,6 +280,12 @@ export function Palette({ onClose, initial = "" }: { onClose: () => void; initia
         await store.refreshState();
         ui.selectTerm(r.sid);
       },
+    },
+    {
+      id: "tidy",
+      label: "清理未結（目前範圍）…",
+      keys: "todo tidy loops 未結 待辦 清理 逾期",
+      run: () => ui.openDetail(tidyTodosSpec()),
     },
     {
       id: "refresh",

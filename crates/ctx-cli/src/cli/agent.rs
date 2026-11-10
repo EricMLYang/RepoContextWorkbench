@@ -610,14 +610,21 @@ pub enum TodoAction {
     Review,
     /// 任務包：把一項未結組成給全新會話的 markdown（目標／背景／輸入／限制／完成條件；Rust 才有）
     Brief,
+    /// 清理：分成可能已做完／擱置太久／等你決定／還在進行；--close 整類關掉（Rust 才有）
+    Tidy,
 }
 
 #[derive(Args, Debug)]
 pub struct TodoArgs {
     pub action: TodoAction,
-    /// add：要做的事；close／brief：編號（#3 或 3）；list／review：不用
+    /// add：要做的事；close／brief：編號（#3 或 3）；list／review／tidy：不用
     #[arg(default_value = "")]
     pub text: String,
+    /// close：再多幾個編號，一次關一批（`ctx todo close 68 72 128`；Rust 才有）
+    pub more: Vec<String>,
+    /// tidy 時：把這幾類整批關掉（逗號分隔：done＝可能已做完、shelved＝擱置太久、ask＝等你決定）
+    #[arg(long, value_delimiter = ',')]
+    pub close: Vec<String>,
     /// YYYY-MM-DD
     #[arg(long)]
     pub due: Option<String>,
@@ -634,7 +641,12 @@ pub struct TodoArgs {
 }
 
 pub fn cmd_todo(ctx: &Ctx, a: &TodoArgs) -> CmdResult {
-    if a.text.is_empty() && !matches!(a.action, TodoAction::Review | TodoAction::List) {
+    if a.text.is_empty()
+        && !matches!(
+            a.action,
+            TodoAction::Review | TodoAction::List | TodoAction::Tidy
+        )
+    {
         return Err(fail(
             "bad_request",
             "todo add／close／brief 需要 <TEXT>（add：要做的事；close／brief：編號）",
@@ -678,6 +690,53 @@ pub fn cmd_todo(ctx: &Ctx, a: &TodoArgs) -> CmdResult {
                     agentapi::add_todo(d, &a.text, nz(&a.due), &t, a.w.cross_scope_ok, a.w.source())
                 },
                 h_written,
+            )
+        }
+        TodoAction::Tidy => {
+            let t = a.scope.target();
+            if a.close.is_empty() {
+                return agent_call(ctx, |d| agentapi::tidy_todos(d, &t), h_tidy);
+            }
+            let mut buckets = Vec::new();
+            for name in &a.close {
+                match agentapi::TidyBucket::parse(name) {
+                    Some(b) if b != agentapi::TidyBucket::Live => buckets.push(b),
+                    _ => {
+                        return Err(fail(
+                            "bad_request",
+                            &format!(
+                                "--close 只收 done／shelved／ask（逗號分隔），看不懂「{name}」"
+                            ),
+                            None,
+                            2,
+                        ))
+                    }
+                }
+            }
+            agent_call(
+                ctx,
+                |d| agentapi::close_buckets(d, &buckets, &t, a.w.cross_scope_ok, a.w.source()),
+                h_closed_many,
+            )
+        }
+        TodoAction::Close if !a.more.is_empty() => {
+            let c = cwd_path(&a.scope.cwd);
+            let ids: Vec<&str> = std::iter::once(a.text.as_str())
+                .chain(a.more.iter().map(String::as_str))
+                .collect();
+            agent_call(
+                ctx,
+                |d| {
+                    agentapi::close_todos(
+                        d,
+                        &ids,
+                        nz(&a.note),
+                        c.as_deref(),
+                        a.w.cross_scope_ok,
+                        a.w.source(),
+                    )
+                },
+                h_closed_many,
             )
         }
         TodoAction::Close => {
@@ -739,6 +798,76 @@ fn h_list(r: &Value) -> String {
             None => String::new(),
         };
         out.push(format!("- {} {}{}", s(lp, "id"), s(lp, "text"), due));
+    }
+    out.join("\n")
+}
+
+/// 批次關閉的結果：關了哪些、哪些沒關成（附原因）。
+fn h_closed_many(r: &Value) -> String {
+    let mut out = vec![format!("已關閉 {} 項", arr(r, "closed").len())];
+    for c in arr(r, "closed") {
+        out.push(format!(
+            "- {} {}",
+            s(c, "id"),
+            pystr::take_chars(&s(c, "closed"), 60)
+        ));
+    }
+    let failed = arr(r, "failed");
+    if !failed.is_empty() {
+        out.push(format!("沒關成 {} 項：", failed.len()));
+        for f in failed {
+            out.push(format!("- {} {}", s(f, "id"), s(f, "error")));
+        }
+    }
+    out.join("\n")
+}
+
+/// 清理清單：一類一段，每段最後附整批關掉的指令；還在進行的只給數字。
+fn h_tidy(r: &Value) -> String {
+    let c = &r["counts"];
+    let mut out = vec![format!(
+        "未結清理（{}）：共 {} 項——可能已做完 {}、擱置太久 {}、等你決定 {}、還在進行 {}",
+        s(&r["scope"], "label"),
+        s(c, "total"),
+        s(c, "done"),
+        s(c, "shelved"),
+        s(c, "ask"),
+        s(c, "live")
+    )];
+    for b in agentapi::TidyBucket::ALL {
+        if b == agentapi::TidyBucket::Live {
+            continue;
+        }
+        let items: Vec<&Value> = arr(r, "items")
+            .iter()
+            .filter(|it| it["bucket"] == b.as_str())
+            .collect();
+        if items.is_empty() {
+            continue;
+        }
+        out.push(String::new());
+        out.push(format!("## {}（{}）", b.label(), items.len()));
+        for it in &items {
+            out.push(format!(
+                "- {} {}",
+                s(it, "id"),
+                pystr::take_chars(&s(it, "text"), 80)
+            ));
+            if let Some(e) = arr(it, "evidence").first() {
+                out.push(format!(
+                    "    · {} {}",
+                    s(e, "ref"),
+                    pystr::take_chars(&s(e, "text"), 60)
+                ));
+            }
+        }
+        out.push(format!(
+            "  整類關掉：ctx todo tidy --close {}　｜　只關幾項：ctx todo close <編號> <編號> … --note \"怎麼結的\"",
+            b.as_str()
+        ));
+    }
+    if s(c, "done") == "0" && s(c, "shelved") == "0" && s(c, "ask") == "0" {
+        out.push("沒有可以直接清掉的。".into());
     }
     out.join("\n")
 }

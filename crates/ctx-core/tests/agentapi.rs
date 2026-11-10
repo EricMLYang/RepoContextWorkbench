@@ -286,6 +286,62 @@ fn test_handoff_outranks_older_overdue_todo() {
     assert_eq!(s.next.unwrap().text, "繼續");
 }
 
+/// 2026-11-10：清理——分類（擱置／等你決定／還在進行）＋一次關一批；個別失敗不擋其他項。
+#[test]
+fn test_tidy_buckets_and_batch_close() {
+    let w = two_groups();
+    let add = |text: &str, due: &str| {
+        api::add_todo(&w.sp, text, Some(due), &at(&w.impl_), false, "agent").unwrap();
+    };
+    add("兩年前的事", "2020-01-01");
+    add("使用者決定：要不要換快取", "2999-01-01");
+    add("補整合測試", "2999-01-01");
+    let t = api::tidy_todos(&w.sp, &at(&w.impl_)).unwrap();
+    assert_eq!(t["counts"]["total"], 3);
+    let bucket = |text: &str| {
+        t["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|it| it["text"] == text)
+            .map(|it| it["bucket"].as_str().unwrap().to_string())
+            .unwrap()
+    };
+    assert_eq!(bucket("兩年前的事"), "shelved");
+    assert_eq!(bucket("使用者決定：要不要換快取"), "ask");
+    assert_eq!(bucket("補整合測試"), "live");
+    assert_eq!(t["suggest_close"], json!(["#1"]));
+
+    // 一次關兩項，其中一個編號不存在：關得掉的照關
+    let r = api::close_todos(
+        &w.sp,
+        &["#1", "#99", "1"],
+        Some("不做了"),
+        Some(&w.impl_),
+        false,
+        "manual",
+    )
+    .unwrap();
+    assert_eq!(r["closed"].as_array().unwrap().len(), 1);
+    assert_eq!(r["failed"][0]["id"], "#99");
+    // 全部都關不掉才是錯誤
+    assert!(api::close_todos(&w.sp, &["#99"], None, Some(&w.impl_), false, "manual").is_err());
+
+    // 整類關掉
+    let r = api::close_buckets(
+        &w.sp,
+        &[api::TidyBucket::Ask],
+        &at(&w.impl_),
+        false,
+        "manual",
+    )
+    .unwrap();
+    assert_eq!(r["closed"][0]["id"], "#2");
+    let left = api::list_todos(&w.sp, &at(&w.impl_)).unwrap();
+    assert_eq!(left["count"], 1);
+    assert_eq!(left["loops"][0]["text"], "補整合測試");
+}
+
 #[test]
 fn test_loop_order_puts_shelved_last() {
     let mut loops = vec![

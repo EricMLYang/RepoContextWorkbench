@@ -111,6 +111,9 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("collide_rerun", a_collide_rerun),
     ("ignore", a_ignore),
     ("close_loop", a_close_loop),
+    ("todo_tidy", a_todo_tidy),
+    ("close_loops", a_close_loops),
+    ("todo_tidy_brief", a_todo_tidy_brief),
     ("loop_defer", a_loop_defer),
     ("defer", a_defer),
     ("tier", a_tier),
@@ -206,6 +209,8 @@ const READ_ONLY: &[&str] = &[
     "repo_github",
     "commit_diff",
     "past_sessions",
+    "todo_tidy",
+    "todo_tidy_brief",
     "session_transcript",
     "agent_commands",
     "prompts",
@@ -656,6 +661,85 @@ fn a_ignore(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
         None,
     )?;
     Ok(ok())
+}
+
+/// 畫面範圍（`{group?, repos?}`；都沒有＝全部）。
+#[derive(serde::Deserialize)]
+struct TidyScope {
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default)]
+    repos: Option<Vec<String>>,
+}
+
+impl TidyScope {
+    /// 主場用 spine 自己（不是登記的 repo）＝沒有主場：範圍完全照畫面選的。
+    fn target(self, d: &Path) -> crate::agentapi::Target {
+        crate::agentapi::Target {
+            cwd: Some(d.to_path_buf()),
+            group: self.group,
+            repos: self.repos,
+        }
+    }
+}
+
+/// Rust 才有（2026-11-10）：未結清理清單——範圍內的未結分成可能已做完／擱置太久／等你決定／還在進行（同 `ctx todo tidy`）。
+fn a_todo_tidy(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let scope: TidyScope = parse("todo_tidy", p)?;
+    crate::agentapi::tidy_todos(d, &scope.target(d))
+}
+
+#[derive(serde::Deserialize)]
+struct CloseLoopsArgs {
+    nums: Vec<String>,
+    #[serde(default)]
+    note: Option<String>,
+}
+
+/// Rust 才有（2026-11-10）：一次關一批未結（人在 App 勾的＝manual，不受主場限制）。
+/// 回 `{closed: [{id, closed}], failed: [{id, error}]}`。
+fn a_close_loops(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let CloseLoopsArgs { nums, note } = parse("close_loops", p)?;
+    if let Some(bad) = nums.iter().find(|n| !valid_loop_num(n)) {
+        return Err(Error::invalid(format!("loop 編號不合法: {bad}")));
+    }
+    if nums.is_empty() {
+        return Err(Error::invalid("close_loops 需要 nums"));
+    }
+    let note = note.filter(|n| !n.trim().is_empty());
+    crate::agentapi::close_todos(
+        d,
+        &nums,
+        Some(note.as_deref().unwrap_or("從工作台清理")),
+        Some(d),
+        true,
+        "manual",
+    )
+}
+
+/// Rust 才有（2026-11-10）：請 agent 整理未結的任務文字（先列給人看、同意才關）。
+fn a_todo_tidy_brief(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let scope: TidyScope = parse("todo_tidy_brief", p)?;
+    let tidy = crate::agentapi::tidy_todos(d, &scope.target(d))?;
+    let c = &tidy["counts"];
+    let n = |k: &str| c[k].as_u64().unwrap_or(0);
+    let text = format!(
+        "整理「{}」的未結事項（共 {} 項：可能已做完 {}、擱置太久 {}、等我決定 {}、還在進行 {}）。目標：只留真的還要做的。\n\n\
+         1. 呼叫 `tidy_todos`（沒掛 MCP 就 `ctx todo tidy --json`）拿分類。\n\
+         2. 「可能已做完」：逐項看證據的 commit／判斷，確認真的做完才算。\n\
+         3. 「擱置太久」「還在進行」：對照 repo 現況（git log、相關檔案），判斷還有沒有意義；內容重複的只留一項。\n\
+         4. 「等我決定」：整理成一張表一次問我（每題一行、附你的建議），不要一題一題問。\n\
+         5. 列出你建議關掉的（編號、一句理由）和建議留下的（為什麼還重要），**等我同意後**才用 `tidy_todos` 的 close 一次關掉，note 寫怎麼結的。\n\
+         6. 留下的若期限已過，問我要不要給新的期限。\n\n\
+         不要改任何 repo 的檔案；這次只整理未結清單。",
+        tidy["scope"]["label"].as_str().unwrap_or("目前範圍"),
+        n("total"),
+        n("done"),
+        n("shelved"),
+        n("ask"),
+        n("live"),
+    );
+    Ok(json!({"ok": true, "text": text, "counts": c}))
 }
 
 fn a_close_loop(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {

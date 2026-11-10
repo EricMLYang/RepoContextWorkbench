@@ -183,6 +183,11 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   還沒到期 → **擱置**（逾期超過 `STALE_OVERDUE_DAYS`＝14 天，最近到期的先，理由寫「還做不做」）。Python 是逾期一律最前。
   開場注入的未結照同一順序列前 6 項，擱置的不逐項列、只給一行數字＋`ctx todo review`；`context_for` 超過 30 項時的截斷也用
   同一順序（`agentapi::sort_loops_for_reading`）。對拍：`next --json`／`context --json` 不比順序與 `next`。
+- **未結清理**（2026-11-10；Python 沒有）：`agentapi::tidy`——`tidy_todos` 把範圍內的未結分成 done／shelved／ask／live
+  （用體檢的證據、到期日、文字，不叫模型），`close_todos` 一次關一批（個別失敗不擋其他項），`close_buckets` 整類關。
+  入口：`ctx todo tidy [--close done,shelved,ask]`、`ctx todo close 68 72 128`（多個編號）、MCP `tidy_todos`（帶 `close` 才關）、
+  App 的「清理未結…」（收件匣底部、⌘K；action `todo_tidy`／`close_loops`／`todo_tidy_brief`）。
+  緣由：230 項未結裡 226 項是 agent 開的、202 項的期限是自動加的 14 天，App 裡又沒有清單可看可關，所以只增不減。
 - **`ctx todo list`**（2026-10-20；Python 沒有）：範圍內全部未結、逾期在前，`--json` 跟 `next_work` 的 todo 同一種物件；
   沒掛 MCP 的 agent（CLI 模式）之前只能靠 `ctx next` 的前 5 項。
 - **任務包 `ctx todo brief #N`**（2026-10-10，ideation F-42；Python 沒有）：把一項未結組成給全新會話的 markdown——

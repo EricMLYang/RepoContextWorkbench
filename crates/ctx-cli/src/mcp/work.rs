@@ -110,6 +110,20 @@ pub(super) fn w_close_todo(d: &Path, a: &Args, here: &Path) -> Result<Value> {
         "agent",
     ))
 }
+pub(super) fn w_tidy_todos(d: &Path, a: &Args, here: &Path) -> Result<Value> {
+    let ids = arg_list(a, "close");
+    if ids.is_empty() {
+        return agentapi::tidy_todos(d, &target(a, here));
+    }
+    agentapi::close_todos(
+        d,
+        &ids,
+        nz(a, "note").as_deref(),
+        Some(&cwd_of(a, here)),
+        arg_flag(a, "cross_scope_ok"),
+        "agent",
+    )
+}
 pub(super) fn w_status(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("report_status", a, &["status"])?;
     json(agentapi::report_status(

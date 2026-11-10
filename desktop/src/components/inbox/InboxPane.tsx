@@ -5,6 +5,7 @@ import { cardSections, emptyState, type CardSection } from "../../lib/view";
 import { useSnapshot, useUi } from "../../store/context";
 import { Card } from "./Card";
 import { cardDetailSpec, useRunAction } from "./cardActions";
+import { tidyTodosSpec } from "../todos/TidyTodos";
 import { Summary } from "./Summary";
 
 /** 每段一次畫幾張卡（N-25）。 */
@@ -127,6 +128,17 @@ export function InboxPane({
           ? `本次檢查 ${scan.states.length} 個 repo · ${scan.quiet} 個未觸發提醒條件`
           : ""}
       </p>
+      {stateReady && state.repos.length ? (
+        <button
+          type="button"
+          id="tidybtn"
+          className="linkish"
+          title="把目前範圍的未結分成可能已做完／擱置太久／等你決定／還在進行，勾了一次關掉"
+          onClick={() => ui.openDetail(tidyTodosSpec())}
+        >
+          清理未結…
+        </button>
+      ) : null}
     </section>
   );
 }

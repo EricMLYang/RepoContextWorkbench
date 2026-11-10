@@ -119,6 +119,9 @@ Rust 端簽名建議：
 | `profile_draft_brief`（Rust 才有，唯讀） | `{ids?}`（沒給＝還沒寫介紹、沒封存的 repo，最多 10 個） | `text`（請 agent 起草名片的任務：只讀 repo、先列草稿給人確認、確認後才 `ctx registry describe`；附已用過的角色）, `repos`。都寫了＝錯誤「沒有要起草的 repo（都寫了介紹）」 |
 | `repo_changes`（Rust 才有，唯讀） | `{id}` | `id`, `changes: [{path, status: "modified"\|"added"\|"deleted"\|"renamed"\|"untracked"\|"conflicted"}]`, `more`（超過 500 個沒列的數量）。`git --no-optional-locks status --porcelain=v1 -z --untracked-files=all`（不拿 index.lock、不回寫 index）；不是 git repo＝錯誤「不是 git repo：<path>」 |
 | `scope_changes`（Rust 才有，唯讀） | `{group?, repos?}`（畫面範圍；都沒有＝所有沒封存的 repo） | `repos: [{id, changes, more, error?}]`——只回有變更的 repo（照範圍順序，各 repo 平行跑 `repo_changes` 同一套）；不是 git 的略過。真資料 18 個 repo 約 70ms |
+| `todo_tidy`（Rust 才有，唯讀；2026-11-10） | `{group?, repos?}`（畫面範圍；都沒有＝全部） | `scope`, `counts: {done, shelved, ask, live, total}`, `suggest_close: [#N]`, `items: [{id, text, bucket: "done"\|"shelved"\|"ask"\|"live", why, due, overdue, opened, age_days, evidence}]`（evidence 只有 done 帶一筆）——同 `ctx todo tidy` |
+| `close_loops`（Rust 才有；2026-11-10） | `{nums: [#N], note?}` | `closed: [{id, closed}]`, `failed: [{id, error}]`——人在 App 勾的（source＝manual，不受主場限制）；個別失敗不擋其他項，全部失敗才是錯誤 |
+| `todo_tidy_brief`（Rust 才有，唯讀；2026-11-10） | `{group?, repos?}` | `text`（請 agent 整理未結的任務：先分類、對照 repo 現況、列給人看、同意後才關）, `counts` |
 | `review_brief`（Rust 才有，唯讀） | `{id}` | `text`（請 agent 審查還沒 commit 的變更：檔案清單＋先不改檔不 commit、摘要、風險、建議怎麼切 commit、用 log_decision 記結論）, `count`。沒有變更＝錯誤「<id> 沒有還沒 commit 的變更」 |
 | `file_diff`（Rust 才有，唯讀） | `{id, path}`（相對 repo，只能往下走；檔案可以已刪除） | `id`, `path`, `diff`（`git diff HEAD`；還沒追蹤的跟空檔比；repo 還沒 commit 就對暫存區；沒有差異＝空字串）, `truncated`（超過 512 KB） |
 | `group_notes`（Rust 才有） | `{group}`（已儲存的牌組） | `group`, `path`（`<spine>/groups/<組>/notes.md`）, `notes: [{at, text}]`（新的在前） |

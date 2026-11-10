@@ -51,7 +51,7 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
         ),
         work(
             "next_work",
-            "接下來值得做什麼（依序：逾期未結 → 上次交接的下一步 → 其他未結 → 需要注意的 repo），\
+            "接下來值得做什麼（依序：上次交接的下一步 → 逾期未結 → 其他未結 → 擱置太久的 → 需要注意的 repo），\
              每項都附 why。",
             s_(
                 cat(vec![
@@ -139,6 +139,25 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
                 &["id"],
             ),
             w_close_todo,
+        ),
+        work(
+            "tidy_todos",
+            "未結清理（使用者說「幫我清未結」時用）。不帶 close＝把範圍內的未結分成 done（可能已做完，附證據）／\
+             shelved（擱置太久）／ask（等使用者決定）／live（還在進行），並回 suggest_close。\
+             帶 close（編號陣列）＝一次關一批。先把要關的列給使用者看，他同意才帶 close。",
+            s_(
+                cat(vec![
+                    vec![
+                        ("close", d_(arr_t(), "要關掉的未結編號，例 [\"#3\", \"#7\"]；省略＝只列不關")),
+                        ("note", d_(str_t(), "怎麼結的，一句話（整批共用）")),
+                    ],
+                    cwd_props(),
+                    scope_props(),
+                    cross_props(),
+                ]),
+                &[],
+            ),
+            w_tidy_todos,
         ),
         work(
             "report_status",

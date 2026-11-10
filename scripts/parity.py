@@ -104,6 +104,7 @@ MCP_EXTRA_TOOLS = {
     "workbench_apply": "改工作台設定 workbench_apply（F-63 App 助手同一份白名單，2026-10-15，Rust 才有）",
     "registry_class": "repo 類別 registry_class（2026-10-18，Rust 才有，docs/REPO_CLASSES.md）",
     "what_user_sees": "使用者畫面 what_user_sees（2026-10-24，Rust 才有：App 回報主區在看什麼，agent 被問才讀）",
+    "tidy_todos": "未結清理 tidy_todos（2026-11-10，Rust 才有：分類＋一次關一批）",
     "send_message": MAILBOX_REASON,
     "messages": MAILBOX_REASON,
 }
@@ -122,6 +123,10 @@ def drop_mcp_extras(resp, allowed):
             tools.remove(t)
             allowed.add(MCP_EXTRA_TOOLS[t["name"]])
     for t in ((resp.get("result") or {}).get("tools") or []):
+        if t.get("name") == "next_work" and "description" in t:  # 排序改了，說明跟著改（NEXT_ORDER_WHY）
+            if "擱置" in t["description"]:
+                allowed.add(NEXT_ORDER_WHY)
+            t["description"] = ""
         props = (t.get("inputSchema") or {}).get("properties") or {}
         for name, param, why in MCP_EXTRA_PARAMS:
             if t.get("name") == name and param in props:

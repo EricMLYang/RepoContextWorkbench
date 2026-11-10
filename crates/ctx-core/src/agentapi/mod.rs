@@ -661,10 +661,7 @@ pub fn list_todos(spine_dir: &Path, t: &Target) -> Result<Value> {
         .iter()
         .map(|e| loop_dict(e, Some(&td)))
         .collect();
-    loops.sort_by_key(|lp| {
-        let d = lp["due"].as_str().map(str::to_string);
-        (lp["overdue"] != true, d.is_none(), d.unwrap_or_default())
-    });
+    sort_loops_for_reading(&mut loops, &td);
     let overdue = loops.iter().filter(|lp| lp["overdue"] == true).count();
     Ok(json!({"ok": true, "scope": s, "count": loops.len(), "overdue": overdue, "loops": loops}))
 }
@@ -1679,6 +1676,8 @@ fn cap_open_loops(out: &mut Value) {
 
 mod review;
 pub use review::*;
+mod tidy;
+pub use tidy::*;
 mod decision_search;
 use decision_search::*;
 mod fresh_try;

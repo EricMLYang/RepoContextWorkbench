@@ -2997,6 +2997,63 @@ body.withpicks #main {
   margin-top: 4px;
 }
 
+/* 清理未結（2026-11-10） */
+.tidylist {
+  max-height: 56vh;
+  overflow: auto;
+}
+.tidybucket {
+  border-bottom: 1px solid var(--line);
+  padding: 6px 0;
+}
+.tidybucket > summary {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  cursor: pointer;
+}
+.tidybucket > summary .small.muted {
+  flex: 1;
+  min-width: 0;
+}
+.tidytitle {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tidybucket ul {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.tidyrow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.tidyrow input {
+  margin-top: 3px;
+}
+.tidycopy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tidytext,
+.tidycopy .small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tidynote {
+  width: 100%;
+  margin-top: 8px;
+}
+#tidybtn {
+  font-size: 12px;
+}
+
 /* F-75 差異逐行留言 */
 .diffview .dl {
   position: relative;

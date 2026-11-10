@@ -667,6 +667,31 @@ export interface ScanParams {
 // ── 動作（POST /api/<name>；Tauri: run_action {name, payload}）────────
 
 /** 會被 term_create／collide 等帶上的範圍。 */
+/** 未結清理的分類（引擎 `agentapi::TidyBucket`）。 */
+export type TidyBucket = "done" | "shelved" | "ask" | "live";
+
+export interface TidyItem {
+  id: string;
+  text: string;
+  bucket: TidyBucket;
+  why: string;
+  due: string | null;
+  overdue: boolean;
+  opened: string;
+  age_days: number;
+  /** 只有「可能已做完」會帶一筆證據。 */
+  evidence: { kind: string; ref: string; at: string; text: string }[];
+}
+
+export interface TidyResult {
+  ok: true;
+  scope: { group: string | null; repos: string[] | null; label: string };
+  counts: { done: number; shelved: number; ask: number; live: number; total: number };
+  /** 引擎建議可以直接關的編號（可能已做完＋擱置太久）。 */
+  suggest_close: string[];
+  items: TidyItem[];
+}
+
 export interface ScopePayload {
   group?: string | null;
   repos?: string[] | null;
@@ -811,6 +836,22 @@ export interface ActionMap {
       /** 已 commit 但還沒 push 的檔（相對路徑；沒上游分支＝空）。檔案樹標 ↑。 */
       unpushed?: string[];
     };
+  };
+  /** Rust 才有（2026-11-10）：未結清理清單——範圍內的未結分四類（同 `ctx todo tidy`）。 */
+  todo_tidy: { payload: ScopePayload; result: TidyResult };
+  /** Rust 才有（2026-11-10）：一次關一批未結；個別失敗不擋其他項。 */
+  close_loops: {
+    payload: { nums: string[]; note?: string };
+    result: {
+      ok: true;
+      closed: { id: string; closed: string }[];
+      failed: { id: string; error: string }[];
+    };
+  };
+  /** Rust 才有（2026-11-10）：請 agent 整理未結的任務文字（先列給人看、同意才關）。 */
+  todo_tidy_brief: {
+    payload: ScopePayload;
+    result: { ok: true; text: string; counts: TidyResult["counts"] };
   };
   /** Rust 才有：範圍內每個 repo 還沒 commit 的變更（只回有變更的；git 失敗的帶 error）。 */
   scope_changes: {
@@ -1083,6 +1124,9 @@ export const ACTION_NAMES: ActionName[] = [
   "collide_rerun",
   "ignore",
   "close_loop",
+  "todo_tidy",
+  "close_loops",
+  "todo_tidy_brief",
   "loop_defer",
   "defer",
   "tier",
