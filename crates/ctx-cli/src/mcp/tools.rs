@@ -36,14 +36,14 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
         ),
         work(
             "context_for",
-            "開場一次拿齊這個範圍的脈絡：目標、上次交接、建議下一步、未結事項（帶 id）、\
-             最近事件（帶 ref）、關係、需要注意的 repo、agent 狀態；card＝可直接閱讀的情境卡。\
-             開工前先呼叫一次。",
+            "這個範圍的完整脈絡：目標、上次交接、建議下一步、未結事項（帶 id）、\
+             最近事件（帶 ref）、關係、需要注意的 repo、agent 狀態。開場注入已經給了摘要（交接、未結、同組成員）——\
+             要更多細節、或做到一半要重抓時才呼叫。",
             s_(
                 cat(vec![
                     cwd_props(),
                     scope_props(),
-                    vec![("card", d_(bool_t(), "是否附 markdown 情境卡（預設 true）"))],
+                    vec![("card", d_(bool_t(), "是否另附 markdown 情境卡（內容跟其他欄位相同；預設 false）"))],
                 ]),
                 &[],
             ),

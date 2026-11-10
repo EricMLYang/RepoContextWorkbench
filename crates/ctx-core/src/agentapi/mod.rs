@@ -438,6 +438,42 @@ pub fn event_dict(ev: &Event) -> Value {
     })
 }
 
+/// context_for 的最近事件（2026-11-10 夜間檢討 R3，Rust 才改）：同一份資料 agent 每場都要付 token，所以——
+/// 上次交接那筆不重複（已在 `last_handoff`）；連續、同類型、同一句話的併成一筆帶 `count`；
+/// `body` 只在比 `text` 多東西時才給。
+fn recent_compact<'a>(
+    newest_first: impl Iterator<Item = &'a Event>,
+    skip_ref: Option<&str>,
+    max: usize,
+) -> Vec<Value> {
+    let mut out: Vec<Value> = Vec::new();
+    for e in newest_first {
+        let r = event_ref(e);
+        if skip_ref == Some(r.as_str()) {
+            continue;
+        }
+        let text = first(e);
+        if let Some(last) = out.last_mut() {
+            if last["type"] == e.etype.as_str() && last["text"] == text.as_str() {
+                let n = last["count"].as_u64().unwrap_or(1) + 1;
+                last["count"] = json!(n);
+                continue;
+            }
+        }
+        if out.len() == max {
+            break;
+        }
+        let mut d = event_dict(e);
+        if e.body.trim() == text.trim() {
+            if let Some(m) = d.as_object_mut() {
+                m.remove("body");
+            }
+        }
+        out.push(d);
+    }
+    out
+}
+
 pub(crate) fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()
 }
@@ -575,13 +611,18 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         .collect();
     // Rust 才有（F-07）：被取代的判斷不列進最近事件（要看沿革用 query）；帶重看條件的有效判斷另列
     let superseded = superseded_map(&all);
-    let recent: Vec<Value> = evs
-        .iter()
-        .rev()
-        .filter(|e| e.etype != EventType::Decision || !superseded.contains_key(&event_ref(e)))
-        .take(8)
-        .map(|e| event_dict(e))
-        .collect();
+    let handoff = last_handoff(&all, &s);
+    let recent = recent_compact(
+        evs.iter()
+            .rev()
+            .copied()
+            .filter(|e| e.etype != EventType::Decision || !superseded.contains_key(&event_ref(e))),
+        handoff
+            .as_ref()
+            .and_then(|h| h.get("ref"))
+            .and_then(Value::as_str),
+        8,
+    );
     let td = today();
     let snoozes = reopen_snoozes(spine_dir);
     let reopen: Vec<Value> = evs
@@ -619,7 +660,7 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         "scope": scope_json(&s),
         "goal": summ.goal, "goal_gap": summ.goal_gap,
         "last_progress": summ.progress,
-        "last_handoff": last_handoff(&all, &s),
+        "last_handoff": handoff,
         "next": summ.next, "next_gap": summ.next_gap,
         "changes": summ.changes,
         "open_loops": live.iter().map(|e| loop_dict(e, None)).collect::<Vec<_>>(),

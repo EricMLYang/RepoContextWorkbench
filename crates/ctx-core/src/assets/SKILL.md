@@ -8,9 +8,9 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 使用者把 repo 分成「組」（例如 PM repo＋實作 repo＋研究筆記）。你的工作範圍（主場）
 由目前目錄推出：所在 repo 所屬的組。每一次工作都走同一個節奏：
 
-1. **開工**：`context_for` —— 目標、上次交接、建議下一步、未結事項（帶 `#N` id）、最近事件（帶 ref）。
-   不確定要做什麼時用 `next_work`（每項附 why）。
-   SessionStart hook 已經注入精簡版時，需要細節再呼叫。
+1. **開工**：SessionStart hook 已經注入摘要（所在 repo、上次交接、未結、同組成員），夠用就直接做事。
+   要更多細節（最近事件帶 ref、未結全文、關係）才呼叫 `context_for`；不確定要做什麼時用 `next_work`（每項附 why）。
+   沒有開場注入（hook 沒掛）時先呼叫一次 `context_for`。
 2. **工作中**
    - 做了判斷或結論 → `log_decision`（第一行結論，後面寫依據與來源檔）
    - 發現之後要處理的事 → `add_todo`；處理完 → `close_todo`（用 `#N`）

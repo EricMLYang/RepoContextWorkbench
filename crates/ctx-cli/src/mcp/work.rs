@@ -60,7 +60,7 @@ pub(super) fn w_context(d: &Path, a: &Args, here: &Path) -> Result<Value> {
         .get("card")
         .filter(|v| !v.is_null())
         .map(truthy)
-        .unwrap_or(true);
+        .unwrap_or(false);
     agentapi::context_for(d, &target(a, here), card)
 }
 pub(super) fn w_next(d: &Path, a: &Args, here: &Path) -> Result<Value> {

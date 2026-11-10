@@ -102,6 +102,28 @@ def strip_py_fresh(v):
     return hit
 
 
+SLIM_CONTEXT_WHY = ("context_for 瘦身（2026-11-10 夜間檢討 R3，Rust 才改）：最近事件不重複上次交接、連續同一句話併成一筆帶 count、"
+                    "body 跟 text 一樣就不給；MCP 的 card 預設改 false（內容跟其他欄位重複），工具說明改成「開場注入已給摘要，要細節才呼叫」。"
+                    "比對時兩邊都拿掉 recent_events／card 與 context_for 的說明，由 Rust 測試把關")
+
+
+def slim_context(v):
+    """兩邊的 context_for（有 open_loops＋scope 的 dict）拿掉 recent_events／card。回傳有沒有拿掉東西。"""
+    hit = False
+    if isinstance(v, dict):
+        if "open_loops" in v and "scope" in v:
+            for k in ("recent_events", "card"):
+                if k in v:
+                    del v[k]
+                    hit = True
+        for x in v.values():
+            hit = slim_context(x) or hit
+    elif isinstance(v, list):
+        for x in v:
+            hit = slim_context(x) or hit
+    return hit
+
+
 ALLOW = {
     "hook session-start": (LEAN_OPENING_WHY, _lean_opening),
     "next --json": (NEXT_ORDER_WHY, _next_items_unordered),
@@ -159,6 +181,10 @@ def drop_mcp_extras(resp, allowed):
     if isinstance(ins, str) and "send_message" in ins:  # initialize 說明的對講那一句（F-121）
         res["instructions"] = re.sub(r"要同組別的 repo 的 agent 做事就 send_message[^。]*。", "", ins)
         allowed.add(MAILBOX_REASON)
+    ins = res.get("instructions")
+    if isinstance(ins, str) and "要細節才 context_for；" in ins:  # SLIM_CONTEXT_WHY
+        res["instructions"] = ins.replace("開場注入已給摘要，要細節才 context_for；", "開工先 context_for，")
+        allowed.add(SLIM_CONTEXT_WHY)
     tools = (resp.get("result") or {}).get("tools")
     if isinstance(tools, list):
         for t in [t for t in tools if t.get("name") in MCP_EXTRA_TOOLS]:
@@ -550,6 +576,8 @@ def compare(name, sides, args, *, cwd=None, stdin=None, spine=True, json_out=Non
                 allowed.add(RULES_WHY)
             if strip_py_fresh(ja):
                 allowed.add(FRESH_WHY)
+            if slim_context(ja) | slim_context(jb):
+                allowed.add(SLIM_CONTEXT_WHY)
             d = deep_eq(ja, jb)
             if d and name in ALLOW:
                 why, fix = ALLOW[name]
@@ -586,6 +614,19 @@ def mcp_compare(name, sides, msgs, admin, results, cwd="repos/impl"):
             if j is not None and strip_py_fresh(j):
                 c["text"] = json.dumps(j, ensure_ascii=False)
                 allowed.add(FRESH_WHY)
+    for r in la + lb:  # SLIM_CONTEXT_WHY
+        for t in ((r.get("result") or {}).get("tools") or []):
+            if t.get("name") == "context_for":
+                t["description"] = ""
+                card = ((t.get("inputSchema") or {}).get("properties") or {}).get("card")
+                if isinstance(card, dict):
+                    card["description"] = ""
+                allowed.add(SLIM_CONTEXT_WHY)
+        for c in (r.get("result") or {}).get("content") or []:
+            j = parse_maybe_json(c.get("text", ""))
+            if j is not None and slim_context(j):
+                c["text"] = json.dumps(j, ensure_ascii=False)
+                allowed.add(SLIM_CONTEXT_WHY)
     for x in la:  # next_work 的說明：Rust 改了排序（NEXT_ORDER_WHY），兩邊都不比這段文字
         for t in ((x.get("result") or {}).get("tools") or []):
             if t.get("name") in ("next_work", "add_todo", "handoff"):
@@ -642,7 +683,7 @@ def main():
 
     # ── 讀（初始狀態）──
     C("instructions", ["instructions"], spine=False,
-      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作)（Rust 版）\n.*?(?=\n## )", "", re.sub(r"`remaining` [^。]*。", "", re.sub(r"\n## 反芻推薦（別人替你先找好的）\n.*?(?=\n## )", "", s, flags=re.S)), flags=re.S))  # 收尾那句見 TODO_SOURCE_WHY；反芻那節見 FRESH_WHY
+      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作)（Rust 版）\n.*?(?=\n## )", "", re.sub(r"`remaining` [^。]*。", "", re.sub(r"\n## 反芻推薦（別人替你先找好的）\n.*?(?=\n## )", "", re.sub(r"\n1\. \*\*開工\*\*.*?(?=\n2\. )", "", s, flags=re.S), flags=re.S)), flags=re.S))  # 收尾那句見 TODO_SOURCE_WHY；反芻那節見 FRESH_WHY；開工那步見 SLIM_CONTEXT_WHY
     C("registry list", ["registry", "list"])
     C("registry list --json", ["registry", "list", "--json"])
     C("registry relations", ["registry", "relations"])

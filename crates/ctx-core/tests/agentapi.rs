@@ -1753,3 +1753,39 @@ fn what_user_sees_reads_what_the_app_reported() {
         .screen
         .is_none());
 }
+
+/// 2026-11-10 夜間檢討 R3：context_for 的最近事件不重複上次交接、連續同一句話併成一筆（count）、body 跟 text 一樣就不給
+#[test]
+fn test_context_for_recent_events_are_compact() {
+    let w = two_groups();
+    api::log_decision(&w.sp, "先前的判斷", &at(&w.impl_), None, false, "agent").unwrap();
+    for _ in 0..5 {
+        todo(&w, "一樣的事", &w.impl_);
+    }
+    api::handoff(
+        &w.sp,
+        "寫完快取層",
+        "補測試",
+        &[] as &[&str],
+        &at(&w.impl_),
+        false,
+        "agent",
+    )
+    .unwrap();
+    let ctx = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
+    let rec = ctx["recent_events"].as_array().unwrap();
+    let href = ctx["last_handoff"]["ref"].as_str().unwrap();
+    assert!(
+        rec.iter().all(|e| e["ref"] != href),
+        "交接已在 last_handoff：{rec:?}"
+    );
+    let same: Vec<&Value> = rec
+        .iter()
+        .filter(|e| e["text"].as_str().unwrap_or("").contains("一樣的事"))
+        .collect();
+    assert_eq!(same.len(), 1, "{rec:?}");
+    assert_eq!(same[0]["count"], 5);
+    assert!(same[0].get("body").is_none());
+    assert!(rec.iter().any(|e| e["text"] == "先前的判斷"));
+    assert!(ctx.get("card").is_none());
+}
