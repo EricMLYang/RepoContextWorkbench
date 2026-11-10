@@ -659,6 +659,15 @@ impl TermManager {
                 .to_string_lossy()
                 .into_owned(),
         ));
+        // 屬於多個組的 repo：會話裡的 hook／MCP 照開會話時的牌組算主場（agentapi::HOME_GROUP_ENV）
+        if let Some(g) = launch
+            .home_group
+            .as_ref()
+            .or(launch.group.as_ref())
+            .filter(|g| !g.is_empty())
+        {
+            env.push((crate::agentapi::HOME_GROUP_ENV.to_string(), g.clone()));
+        }
         let spec = SpawnSpec {
             argv: login_shell_wrap(&launch.argv),
             cwd: Some(launch.cwd.clone()),

@@ -342,6 +342,50 @@ fn test_tidy_buckets_and_batch_close() {
     assert_eq!(left["loops"][0]["text"], "補整合測試");
 }
 
+/// 2026-11-10：屬於多個組的 repo——使用者在 App 正看著哪個牌組就用哪個；看的是不相干的牌組才退回第一個。
+#[test]
+fn test_multi_group_repo_follows_the_deck_on_screen() {
+    let w = two_groups();
+    registry::add_group(&w.sp, "另一組", &["impl", "notes"]).unwrap();
+    let screen = |group: &str| {
+        std::fs::create_dir_all(w.sp.join(".state")).unwrap();
+        std::fs::write(
+            w.sp.join(".state").join("screen.json"),
+            json!({"view": {"kind": "workspace", "tab": "inbox"}, "group": group, "at": "2026-11-10T10:00:00"})
+                .to_string(),
+        )
+        .unwrap();
+    };
+    // 沒有畫面回報：第一個
+    let here = api::where_am_i(&w.sp, Some(&w.impl_)).unwrap();
+    assert_eq!(here.group.as_deref(), Some("產品"));
+    assert!(here.note.unwrap().contains("預設用第一個"));
+    // 正看著「另一組」：用它，範圍跟著是那一組
+    screen("另一組");
+    let here = api::where_am_i(&w.sp, Some(&w.impl_)).unwrap();
+    assert_eq!(here.group.as_deref(), Some("另一組"));
+    assert!(here.note.unwrap().contains("正看著「另一組」"));
+    let ctx = api::context_for(&w.sp, &at(&w.impl_), false).unwrap();
+    assert_eq!(ctx["scope"]["label"], "另一組");
+    // 正看著這個 repo 不在的牌組：不相干，照舊第一個；只屬於一個組的 repo 不受影響
+    screen("研究");
+    assert_eq!(
+        api::where_am_i(&w.sp, Some(&w.impl_))
+            .unwrap()
+            .group
+            .as_deref(),
+        Some("產品")
+    );
+    screen("另一組");
+    assert_eq!(
+        api::where_am_i(&w.sp, Some(&w.plan))
+            .unwrap()
+            .group
+            .as_deref(),
+        Some("產品")
+    );
+}
+
 #[test]
 fn test_loop_order_puts_shelved_last() {
     let mut loops = vec![

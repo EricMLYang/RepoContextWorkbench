@@ -183,6 +183,9 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   還沒到期 → **擱置**（逾期超過 `STALE_OVERDUE_DAYS`＝14 天，最近到期的先，理由寫「還做不做」）。Python 是逾期一律最前。
   開場注入的未結照同一順序列前 6 項，擱置的不逐項列、只給一行數字＋`ctx todo review`；`context_for` 超過 30 項時的截斷也用
   同一順序（`agentapi::sort_loops_for_reading`）。對拍：`next --json`／`context --json` 不比順序與 `next`。
+- **屬於多個組的 repo 用哪個組當主場**（2026-11-10）：`where_am_i` 依序看——App 開這場會話時的牌組（環境變數
+  `CTX_HOME_GROUP`，`term::create_agent` 放的）→ 使用者在 App 正看著的牌組（`.state/screen.json` 的 `group`）→ 第一個。
+  只在 repo 屬於兩個以上的組時才看；`note` 會說用了哪個、為什麼。Python 一律第一個。
 - **App 切牌組**（2026-11-10，只有前端）：每個牌組記住自己的檔案分頁、正在看的檔、右側欄、工作區分頁、目前會話
   （`localStorage` 的 `view:<鍵>`，鍵＝`scopeMemoryKey`：牌組各一份、所有 repo 一份、臨時範圍共用一份；沒存的分頁不丟）；
   切回採集過的範圍先顯示上次的結果再背景更新（store 的 `scanCache`，只放記憶體）；⌘1～⌘9 切第 n 個牌組、⌘0 回所有 repo。

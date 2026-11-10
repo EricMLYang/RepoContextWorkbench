@@ -139,6 +139,36 @@ impl Where {
 }
 
 /// 對應 `agentapi.where_am_i`：cwd → 所在 repo、所屬組、主場範圍。認不出來也回結果（registered=false＋hint）。
+/// App 開 agent 會話時放進環境的牌組名（見 `term::create_agent`）：會話裡的 hook 與 MCP 都拿它當主場的組。
+pub const HOME_GROUP_ENV: &str = "CTX_HOME_GROUP";
+
+/// 屬於多個組的 repo 這次用了哪個組、為什麼。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HomeGroupWhy {
+    /// 沒有別的線索：第一個（或只有一個、沒有）。
+    First,
+    /// App 開這場會話時指定的。
+    Session,
+    /// 使用者在 App 正看著的牌組。
+    Screen,
+}
+
+fn pick_home_group(spine_dir: &Path, groups: &[String]) -> (Option<String>, HomeGroupWhy) {
+    if groups.len() > 1 {
+        let has = |g: &str| groups.iter().any(|x| x == g);
+        if let Some(g) = std::env::var(HOME_GROUP_ENV).ok().filter(|g| has(g)) {
+            return (Some(g), HomeGroupWhy::Session);
+        }
+        if let Some(g) = crate::screen::read(spine_dir)
+            .and_then(|sc| sc.input.group)
+            .filter(|g| has(g))
+        {
+            return (Some(g), HomeGroupWhy::Screen);
+        }
+    }
+    (groups.first().cloned(), HomeGroupWhy::First)
+}
+
 pub fn where_am_i(spine_dir: &Path, cwd: Option<&Path>) -> Result<Where> {
     let here = match cwd {
         Some(c) => resolve_path(c),
@@ -175,11 +205,15 @@ pub fn where_am_i(spine_dir: &Path, cwd: Option<&Path>) -> Result<Where> {
         registered: best.is_some(),
         in_spine,
         repo: None,
-        group: groups.first().cloned(),
+        group: None,
         groups,
         note: None,
         hint: None,
     };
+    // 屬於多個組時用哪一個（2026-11-10，Rust 才有）：App 開會話時指定的組 → 使用者在 App 正看著的牌組 → 第一個。
+    // 之前一律第一個：在 MI3.0 工作時開 RD-ontology 的會話，拿到的卻是 Knowledge 的未結與名冊。
+    let (picked, why) = pick_home_group(spine_dir, &out.groups);
+    out.group = picked;
     if let Some(b) = best {
         out.repo = Some(WhereRepo {
             id: b.id(),
@@ -188,10 +222,22 @@ pub fn where_am_i(spine_dir: &Path, cwd: Option<&Path>) -> Result<Where> {
             tier: b.tier_str().unwrap_or_else(|| "active".into()),
         });
         if out.groups.len() > 1 {
-            out.note = Some(format!(
-                "此 repo 屬於多個組（{}），預設用第一個；要換組就在呼叫時帶 group。",
-                out.groups.join("、")
-            ));
+            out.note = Some(match why {
+                HomeGroupWhy::First => format!(
+                    "此 repo 屬於多個組（{}），預設用第一個；要換組就在呼叫時帶 group。",
+                    out.groups.join("、")
+                ),
+                HomeGroupWhy::Session => format!(
+                    "此 repo 屬於多個組（{}），這場會話是從「{}」開的，就用它；要換組就在呼叫時帶 group。",
+                    out.groups.join("、"),
+                    out.group.as_deref().unwrap_or("")
+                ),
+                HomeGroupWhy::Screen => format!(
+                    "此 repo 屬於多個組（{}），使用者在工作台正看著「{}」，就用它；要換組就在呼叫時帶 group。",
+                    out.groups.join("、"),
+                    out.group.as_deref().unwrap_or("")
+                ),
+            });
         } else if out.groups.is_empty() {
             out.note = Some("此 repo 還沒編進任何組，範圍只有它自己。".into());
         }
