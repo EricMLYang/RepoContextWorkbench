@@ -32,7 +32,7 @@ use crate::pack::RepoRef;
 use crate::pystr::{repr, splitlines};
 use crate::registry::{self, Repo};
 use crate::repocard::{self, ProcProbe};
-use crate::ruminate::{self, Link};
+use crate::ruminate;
 use crate::spine::{self, Event, EventType};
 use crate::status::{self, AgentStatus, StatusRecord};
 use crate::{brief, collect, config, context, summary, Error, Result};
@@ -535,7 +535,6 @@ pub struct ContextFor {
     pub value: Value,
     pub neighbors: Vec<Neighbor>,
     pub drift: Vec<Drift>,
-    pub fresh: Vec<Link>,
 }
 
 /// 對應 `agentapi.context_for`：開場一次拿齊——我在哪、範圍、目標、上次交接、下一步、未結、
@@ -544,7 +543,7 @@ pub fn context_for(spine_dir: &Path, t: &Target, card: bool) -> Result<Value> {
     Ok(context_for_full(spine_dir, t, card)?.value)
 }
 
-/// 同 [`context_for`]，另外回傳型別化的 neighbors／drift／fresh（hooks 渲染用）。
+/// 同 [`context_for`]，另外回傳型別化的 neighbors／drift（hooks 渲染用）。
 pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<ContextFor> {
     let w = where_am_i(spine_dir, t.cwd.as_deref())?;
     let s = scope_of(spine_dir, &w, t)?;
@@ -606,14 +605,8 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         Some(r) => crossref::drift(spine_dir, Some(r), None)?,
         None => Vec::new(),
     };
-    // Rust 才有（N-20）：開場只給目前規則、近幾天的推薦（舊規則雜訊不再每次被推）
-    let fresh: Vec<Link> = match &s.group {
-        Some(g) => ruminate::push_links(spine_dir, g, None)?
-            .into_iter()
-            .take(5)
-            .collect(),
-        None => Vec::new(),
-    };
+    // 反芻新料（N-20）不進 agent 的脈絡（2026-11-10）：開場推了 253 筆、agent 用上 1 筆——
+    // 每場會話都付 token、幾乎沒人用。推薦照算，給人在 App 收件匣／`ctx fresh` 看。
     let attention: Vec<Value> = cards
         .iter()
         .map(|c| json!({"repo": c.repo, "kind": c.qkind.name(), "text": c.title}))
@@ -637,7 +630,6 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         "attention": attention,
         "neighbors": neighbors,
         "drift": drift,
-        "fresh": fresh,
     });
     if !reopen.is_empty() {
         out["reopen"] = Value::Array(reopen);
@@ -696,7 +688,6 @@ pub fn context_for_full(spine_dir: &Path, t: &Target, card: bool) -> Result<Cont
         value: out,
         neighbors,
         drift,
-        fresh,
     })
 }
 

@@ -782,7 +782,6 @@ fn context_for_keys_and_no_card() {
             "attention",
             "neighbors",
             "drift",
-            "fresh",
             // Rust 才有（2026-10-13）：組員名冊
             "roster"
         ]

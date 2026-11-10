@@ -78,8 +78,28 @@ def _lean_opening(obj):
         ac = re.sub(r"\n建議下一步：[^\n]*", "", ac)
         ac = re.sub(r"\n（另有未結不列：[^\n]*", "", ac)
         ac = re.sub(r"\n- 收尾一定呼叫 handoff[^\n]*", "", ac)  # TODO_SOURCE_WHY：「剩什麼」拿掉
+        ac = re.sub(r"\n## 自上次以來跟你手上工作相關的新料[^\n]*\n(?:[^\n#][^\n]*\n)*", "\n", ac)  # FRESH_WHY
         hso["additionalContext"] = ac
     return obj
+
+
+FRESH_WHY = ("反芻新料不進 agent 的脈絡（2026-11-10，Rust 才改）：開場推了 253 筆、agent 用上 1 筆——context_for 拿掉 fresh 鍵、"
+             "開場注入拿掉新料段、skill 拿掉反芻推薦那節；推薦照算，`ctx fresh` 與 App 看得到。比對時從 Python 那邊拿掉")
+
+
+def strip_py_fresh(v):
+    """Python 那邊的 context_for（有 open_loops＋scope 的 dict）拿掉 fresh 鍵。回傳有沒有拿掉東西。"""
+    hit = False
+    if isinstance(v, dict):
+        if "open_loops" in v and "scope" in v and "fresh" in v:
+            del v["fresh"]
+            hit = True
+        for x in v.values():
+            hit = strip_py_fresh(x) or hit
+    elif isinstance(v, list):
+        for x in v:
+            hit = strip_py_fresh(x) or hit
+    return hit
 
 
 ALLOW = {
@@ -528,6 +548,8 @@ def compare(name, sides, args, *, cwd=None, stdin=None, spine=True, json_out=Non
         else:
             if strip_rust_only(jb):
                 allowed.add(RULES_WHY)
+            if strip_py_fresh(ja):
+                allowed.add(FRESH_WHY)
             d = deep_eq(ja, jb)
             if d and name in ALLOW:
                 why, fix = ALLOW[name]
@@ -558,6 +580,12 @@ def mcp_compare(name, sides, msgs, admin, results, cwd="repos/impl"):
     if len(la) != len(lb):
         problems.append(f"回應數 py={len(la)} rs={len(lb)}；stderr rs={outs[1].stderr[-300:]}")
     allowed = set()
+    for x in la:  # FRESH_WHY：Python 的 context_for 多一個 fresh 鍵
+        for c in (x.get("result") or {}).get("content") or []:
+            j = parse_maybe_json(c.get("text", ""))
+            if j is not None and strip_py_fresh(j):
+                c["text"] = json.dumps(j, ensure_ascii=False)
+                allowed.add(FRESH_WHY)
     for x in la:  # next_work 的說明：Rust 改了排序（NEXT_ORDER_WHY），兩邊都不比這段文字
         for t in ((x.get("result") or {}).get("tools") or []):
             if t.get("name") in ("next_work", "add_todo", "handoff"):
@@ -614,7 +642,7 @@ def main():
 
     # ── 讀（初始狀態）──
     C("instructions", ["instructions"], spine=False,
-      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作)（Rust 版）\n.*?(?=\n## )", "", re.sub(r"`remaining` [^。]*。", "", s), flags=re.S))  # 收尾那句見 TODO_SOURCE_WHY
+      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作)（Rust 版）\n.*?(?=\n## )", "", re.sub(r"`remaining` [^。]*。", "", re.sub(r"\n## 反芻推薦（別人替你先找好的）\n.*?(?=\n## )", "", s, flags=re.S)), flags=re.S))  # 收尾那句見 TODO_SOURCE_WHY；反芻那節見 FRESH_WHY
     C("registry list", ["registry", "list"])
     C("registry list --json", ["registry", "list", "--json"])
     C("registry relations", ["registry", "relations"])

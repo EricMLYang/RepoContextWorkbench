@@ -142,9 +142,10 @@ fn rum_world() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
     (t, sp, impl_, cards)
 }
 
-/// test_ruminate.py::test_session_start_shows_fresh
+/// test_ruminate.py::test_session_start_shows_fresh 的反面（2026-11-10，Rust 才改）：反芻照算、`ctx fresh` 看得到，
+/// 但不進開場注入與 context_for——推 253 筆、agent 用上 1 筆。
 #[test]
-fn test_session_start_shows_fresh() {
+fn test_session_start_leaves_fresh_out() {
     let (_t, sp, impl_, cards) = rum_world();
     std::fs::write(cards.join("索引重建.md"), CARD).unwrap();
     ruminate::run(&sp, None, None).unwrap();
@@ -154,9 +155,17 @@ fn test_session_start_shows_fresh() {
         None,
     );
     let text = context_of(&out);
-    assert!(text.contains("反芻") && text.contains("cards:索引重建.md"));
+    assert!(
+        !text.contains("反芻") && !text.contains("cards:索引重建.md"),
+        "{text}"
+    );
     let ctx = api::context_for(&sp, &Target::at(&impl_), false).unwrap();
-    assert_eq!(ctx["fresh"][0]["ref"], "cards:索引重建.md");
+    assert!(ctx.get("fresh").is_none());
+    assert_eq!(
+        ruminate::fresh(&sp, "產品", false).unwrap().len(),
+        1,
+        "推薦照算"
+    );
 }
 
 /// test_agent_cli_e2e.py::test_hook_commands_via_stdin 的引擎部分：stdin JSON → 輸出字串；

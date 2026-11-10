@@ -74,13 +74,6 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
   先不帶 `confirm` 拿預覽、把每一步給使用者看，同意後才帶 `confirm=true`；不要直接改 registry.yaml。
   沒掛 MCP：`ctx assist "<一句話>" --json` 看計畫，使用者同意後加 `--yes`。
 
-## 反芻推薦（別人替你先找好的）
-
-開場注入若有「自上次以來跟你手上工作相關的新料」：那是排程在會話之間，拿本組的目標／未結／
-最近判斷去比對**別組新進的知識與判斷**得到的，每筆附共同詞（為什麼推）。跟這次任務有關就
-`read_from` 那個 ref（讀了會算「用上了」，推薦就會越調越準）；無關就略過，不必解釋。
-要看完整清單：`ctx fresh --json`。
-
 ## 判斷的沿革、回顧與交辦（Rust 版）
 
 開場只帶你現在能動手的：上次交接的接續點、最近 7 天有動靜的未結。超過 7 天沒動靜、或在等使用者決定的未結只給數字——
@@ -102,7 +95,6 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
   `tidy_todos` 帶 `close: ["#3", "#7"]`（或 `ctx todo close 3 7 --note "…"`、整類 `ctx todo tidy --close shelved`）。
 - **交辦給新會話**：`ctx todo brief '#N'` 產生任務包（目標／背景／輸入／限制／完成條件）。
 - **關係建議**：`ctx registry suggest --json`；使用者同意才 `ctx registry relate`。
-- **新料拿來試**：`ctx fresh --try <id>` 在推薦所屬的組開一個帶出處的待辦。
 - **之前談過的會話**：使用者提到「上次那個…」時，`ctx sessions --query <詞> --json` 找範圍內過去的 Claude Code 會話
   （標題、最後回覆、`claude --resume` 指令、逐字稿 `path`）；交接沒寫到的細節再去逐字稿找，別憑印象。
   要接手一場會話：`ctx sessions --digest <id>` 印出交接包（你說的話、動過的檔、跑過的指令、最後回覆，秘密已遮），比整份逐字稿短。

@@ -45,29 +45,19 @@ pub const START_BUDGET: usize = 3000;
 /// 開場「上次交接」最多印幾個字（完整的「完成」段；超過補「…」）。
 const HANDOFF_DONE_CHARS: usize = 160;
 
-/// 開場注入收斂的一層：新料最多幾筆、名冊介紹最多幾個字元（None＝不截）。
+/// 開場注入收斂的一層：名冊介紹最多幾個字元（None＝不截）。
 #[derive(Debug, Clone, Copy)]
 struct Trim {
-    fresh: usize,
     desc_chars: Option<usize>,
 }
 
-/// 由寬到緊。新料命中率低（R35：推了 59、用上 1），先截名冊介紹、再少推新料。
-const START_TRIMS: [Trim; 4] = [
+/// 由寬到緊。
+const START_TRIMS: [Trim; 3] = [
+    Trim { desc_chars: None },
     Trim {
-        fresh: 3,
-        desc_chars: None,
-    },
-    Trim {
-        fresh: 3,
         desc_chars: Some(40),
     },
     Trim {
-        fresh: 1,
-        desc_chars: Some(40),
-    },
-    Trim {
-        fresh: 0,
         desc_chars: Some(24),
     },
 ];
@@ -402,20 +392,6 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
         out.push("你之前引用過的上游檔之後又改了（本地的副本或結論可能過期）：".into());
         out.extend(crossref::drift_lines(&c.drift, 3));
     }
-    if !c.fresh.is_empty() && trim.fresh == 0 {
-        out.push(format!(
-            "（另有 {} 筆反芻新料，開場預算不夠沒列：`ctx fresh` 看）",
-            c.fresh.len()
-        ));
-    } else if !c.fresh.is_empty() {
-        out.push(String::new());
-        out.push("## 自上次以來跟你手上工作相關的新料（反芻；別組新進的知識或判斷）".into());
-        out.extend(ruminate::link_lines(&c.fresh, trim.fresh));
-        out.push(
-            "用得上就 read_from 那個 ref；不相關可略過（使用者可 `ctx fresh --dismiss <id>`）。"
-                .into(),
-        );
-    }
     out.extend([
         String::new(),
         "## 工作約定（repo-context）".into(),
@@ -708,64 +684,39 @@ pub fn parse_payload(stdin: &str) -> Value {
 mod tests {
     use super::*;
 
-    fn ctx(members: usize, fresh: usize) -> ContextFor {
+    fn ctx(members: usize) -> ContextFor {
         let long = "很長的介紹".repeat(30);
         let roster: Vec<Value> = (0..members)
             .map(
                 |i| json!({"id": format!("r{i}"), "path": format!("/x/r{i}"), "description": long}),
             )
             .collect();
-        let links = (0..fresh)
-            .map(|i| {
-                serde_json::from_value(json!({
-                    "id": format!("r{i}"), "group": "g", "kind": "file", "repo": "notes",
-                    "ref": format!("notes:a{i}.md"), "title": "t", "stamp": 0, "score": 1.0,
-                    "terms": ["甲", "乙"], "basis": [], "found": "2026-10-18 00:00", "status": "new",
-                    "snippets": [{"line": 1, "text": "片段".repeat(60)}]
-                }))
-                .unwrap()
-            })
-            .collect();
         ContextFor {
             value: json!({"where": {"repo": {"id": "r0"}}, "scope": {"label": "g", "repos": ["r0"]},
                           "goal": {"text": "目標"}, "roster": roster}),
             neighbors: vec![],
             drift: vec![],
-            fresh: links,
         }
     }
 
     #[test]
     fn small_context_is_not_trimmed() {
-        let t = render_start(&ctx(2, 3));
+        let t = render_start(&ctx(2));
         assert!(t.chars().count() <= START_BUDGET);
-        assert_eq!(t.matches("- [r").count(), 3, "{t}");
         assert!(t.contains(&"很長的介紹".repeat(30)));
     }
 
     #[test]
-    fn over_budget_clips_roster_and_tightest_drops_fresh() {
-        let t = render_start(&ctx(20, 3));
+    fn over_budget_clips_roster_keeps_conventions() {
+        let t = render_start(&ctx(20));
         assert!(t.chars().count() <= START_BUDGET, "{}", t.chars().count());
         assert!(!t.contains(&"很長的介紹".repeat(30)));
-        // 最緊那層：新料只剩一行指引
-        let tight = render_start_with(&ctx(20, 3), START_TRIMS[3]);
-        assert!(tight.contains("另有 3 筆反芻新料"), "{tight}");
-        // 工作約定一定在
         assert!(t.contains("## 工作約定"));
     }
 
     #[test]
-    fn mid_budget_keeps_one_fresh() {
-        // 名冊截短後還超一點：新料只留 1 筆
-        let full = render_start_with(&ctx(7, 3), START_TRIMS[1])
-            .chars()
-            .count();
-        let one = render_start_with(&ctx(7, 3), START_TRIMS[2])
-            .chars()
-            .count();
-        assert!(full > one);
-        let t = render_start(&ctx(7, 3));
-        assert!(t.chars().count() <= START_BUDGET);
+    fn opening_has_no_fresh_section() {
+        // 反芻新料不進 agent 的脈絡（2026-11-10：推 253 用上 1）
+        assert!(!render_start(&ctx(2)).contains("新料"));
     }
 }

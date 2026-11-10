@@ -196,6 +196,10 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   - 「## 提醒」段與 `context_for.hints` 拿掉（未結體檢、該重看、判斷回顧、關係建議）；改在 `ctx health` 的「要你判斷的」（`agentapi::human_hints`）。
   - 實測（真 spine 副本，RepoContextWorkbench）：開場 3,325 → 2,674 字（其中未結與提醒 2,076 → 約 900）；`context_for` 約 27,000 → 20,000 字。
   - 對拍：`hook session-start` 拿掉目標提示、建議下一步、不列的數字三種行再比。
+  - 反芻新料不進 agent 的脈絡（2026-11-10 夜間檢討 R2；`ctx fresh --stats`：推了 253 筆、用上 1 筆）：`context_for` 拿掉 `fresh` 鍵、
+    開場注入拿掉「自上次以來…新料」段（開場預算的收斂層只剩名冊介紹的長度）、skill 拿掉「反芻推薦」那節。
+    反芻照排程算，App 收件匣與 `ctx fresh` 照舊看得到。對拍見 `parity.py` 的 `FRESH_WHY`。
+  - 情境卡的最近事件：連續、同類型、同一句話的事件併成一行標「×N」；交接標題（寫入時截 80 字）被截斷時補「…」。
 - **屬於多個組的 repo 用哪個組當主場**（2026-11-10）：`where_am_i` 依序看——App 開這場會話時的牌組（環境變數
   `CTX_HOME_GROUP`，`term::create_agent` 放的）→ 使用者在 App 正看著的牌組（`.state/screen.json` 的 `group`）→ 第一個。
   只在 repo 屬於兩個以上的組時才看；`note` 會說用了哪個、為什麼。Python 一律第一個。
