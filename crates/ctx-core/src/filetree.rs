@@ -130,6 +130,46 @@ fn ignored(root: &Path, rels: &[PathBuf]) -> Vec<bool> {
     out
 }
 
+/// 檔名的自然順序（跟 VS Code 檔案總管的預設一樣）：不分大小寫，連續的數字當一個數比——
+/// `2_topics` 排在 `10_business` 前面、`ch9` 在 `ch10` 前面。數值一樣時前導零少的在前（`1` 在 `01` 前）。
+fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    let (a, b): (Vec<char>, Vec<char>) = (
+        a.to_lowercase().chars().collect(),
+        b.to_lowercase().chars().collect(),
+    );
+    let digits =
+        |s: &[char], from: usize| s[from..].iter().take_while(|c| c.is_ascii_digit()).count();
+    let (mut i, mut j) = (0, 0);
+    let mut zeros = Ordering::Equal;
+    while i < a.len() && j < b.len() {
+        if a[i].is_ascii_digit() && b[j].is_ascii_digit() {
+            let (na, nb) = (digits(&a, i), digits(&b, j));
+            let strip = |s: &[char]| -> Vec<char> {
+                let z = s.iter().take_while(|c| **c == '0').count();
+                s[z.min(s.len().saturating_sub(1))..].to_vec()
+            };
+            let (da, db) = (strip(&a[i..i + na]), strip(&b[j..j + nb]));
+            let ord = da.len().cmp(&db.len()).then_with(|| da.cmp(&db));
+            if ord != Ordering::Equal {
+                return ord;
+            }
+            zeros = zeros.then(na.cmp(&nb));
+            i += na;
+            j += nb;
+        } else {
+            match a[i].cmp(&b[j]) {
+                Ordering::Equal => {
+                    i += 1;
+                    j += 1;
+                }
+                ord => return ord,
+            }
+        }
+    }
+    (a.len() - i).cmp(&(b.len() - j)).then(zeros)
+}
+
 /// 列出 `root/dir` 這一層。
 pub fn list_dir(root: &Path, dir: &str) -> Result<Listing> {
     let (rel_dir, root_real, target_real) = resolve_in(root, dir, "資料夾")?;
@@ -161,7 +201,7 @@ pub fn list_dir(root: &Path, dir: &str) -> Result<Listing> {
     entries.sort_by(|a, b| {
         b.dir
             .cmp(&a.dir)
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            .then_with(|| natural_cmp(&a.name, &b.name))
             .then_with(|| a.name.cmp(&b.name))
     });
     let more = entries.len().saturating_sub(MAX_ENTRIES);
@@ -1120,6 +1160,54 @@ mod tests {
         let sub = list_dir(r, "src").unwrap();
         assert_eq!(sub.entries[0].rel, PathBuf::from("src").join("main.rs"));
         assert_eq!(sub.entries[0].abs, r.join("src").join("main.rs"));
+    }
+
+    #[test]
+    fn names_sort_in_natural_order() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path();
+        for d in [
+            "10_business",
+            "2_topics",
+            "0_portfolio",
+            "01_inbox",
+            "tools",
+        ] {
+            std::fs::create_dir(r.join(d)).unwrap();
+        }
+        for f in [
+            "ch10.md",
+            "ch9.md",
+            "Ch1.md",
+            "b.md",
+            "20261110_x.md",
+            "20260901_y.md",
+        ] {
+            std::fs::write(r.join(f), "").unwrap();
+        }
+        let l = list_dir(r, "").unwrap();
+        let got: Vec<String> = l.entries.iter().map(|e| e.name.clone()).collect();
+        assert_eq!(
+            got,
+            [
+                "0_portfolio",
+                "01_inbox",
+                "2_topics",
+                "10_business",
+                "tools",
+                "20260901_y.md",
+                "20261110_x.md",
+                "b.md",
+                "Ch1.md",
+                "ch9.md",
+                "ch10.md"
+            ]
+        );
+        use std::cmp::Ordering::*;
+        assert_eq!(natural_cmp("a1", "a01"), Less);
+        assert_eq!(natural_cmp("a", "a1"), Less);
+        assert_eq!(natural_cmp("a00", "a0"), Greater);
+        assert_eq!(natural_cmp("x", "X"), Equal);
     }
 
     #[test]
