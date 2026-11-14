@@ -56,6 +56,8 @@ pub enum RejectCode {
     InvalidEvent,
     /// 外部動作失敗（例：讀檔、git）。
     Failed,
+    /// 對象正在忙（例：那個 repo 的會話正在處理中，不要打斷；Rust 才有，2026-11-14 接力）。
+    Busy,
 }
 
 impl RejectCode {
@@ -67,6 +69,7 @@ impl RejectCode {
             RejectCode::Secret => "secret",
             RejectCode::InvalidEvent => "invalid_event",
             RejectCode::Failed => "failed",
+            RejectCode::Busy => "busy",
         }
     }
 }

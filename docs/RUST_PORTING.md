@@ -239,6 +239,8 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   App 會話狀態（`mailbox::peers`）、hook 的「會話結束但沒有交接」、git 狀態，把範圍內的 repo 分成 ready／needs_you／unhandoffed／stale／busy／no_handoff／missing
   （優先序與「在等你」的通用詞見 `relay.rs`；參考類、暫停、封存不列）；`relay::report` 看 `--since` 之後的 handoff、commit（`gitlog::since`）、會話，結論 done／waiting／running／no_handoff／idle。
   第 1 輪只有 CLI（`ctx relay plan|report`，`--json`），純讀取；沒有 MCP 工具，`parity` 不涉及。
+  第 2 輪：`relay::answer`（`ctx relay answer <repo> "<回覆>"`）純計算——任務文字＋送達方式 `Delivery`（existing_session／resume／new_session）。
+  resume 只在逐字稿（`history::past_sessions`）的時間涵蓋交接、而且內容裡真的有這筆交接的 ref 時才給；會話正在處理中回新的 `RejectCode::Busy`（`"busy"`，只加不改）。
 - **`ctx todo list`**（2026-10-20；Python 沒有）：範圍內全部未結、逾期在前，`--json` 跟 `next_work` 的 todo 同一種物件；
   沒掛 MCP 的 agent（CLI 模式）之前只能靠 `ctx next` 的前 5 項。
 - **任務包 `ctx todo brief #N`**（2026-10-10，ideation F-42；Python 沒有）：把一項未結組成給全新會話的 markdown——

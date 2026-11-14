@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::{Duration, Local, NaiveDateTime};
 use ctx_core::registry::{add_group, add_repo, set_class, set_field, AddRepo, RepoClass};
-use ctx_core::relay::{self, RelayScope, RelayStatus, SessionNow, Verdict};
+use ctx_core::relay::{self, Delivery, RelayScope, RelayStatus, SessionNow, Verdict};
 use ctx_core::session_status::{path_for, record_hook, StatusHook};
 use ctx_core::spine;
 use ctx_core::testkit::{make_git_repo, spine};
@@ -199,6 +199,10 @@ fn plan_priority_and_dirty_note() {
     let b = register(&d, t, "busy-ask", 6);
     handoff(&d, "busy-ask", ago(1, 0), "草稿", "等你決定");
     session(&d, "t2", &b, StatusHook::Permission);
+    // 會話開著、這一輪做完（閒著），下一步不是在等你
+    let io = register(&d, t, "idle-open", 6);
+    handoff(&d, "idle-open", ago(1, 0), "做完", "做 T");
+    session(&d, "t5", &io, StatusHook::Stop);
     // 沒 commit 的檔
     let w = register(&d, t, "dirty", 6);
     std::fs::write(w.join("x.md"), "x").unwrap();
@@ -213,8 +217,24 @@ fn plan_priority_and_dirty_note() {
     let oa = row(&p, "old-ask");
     assert_eq!(oa.status, RelayStatus::Stale);
     assert!(oa.prompt.is_none());
-    assert_eq!(row(&p, "busy-ask").status, RelayStatus::Busy);
-    assert!(row(&p, "busy-ask").notes[0].contains("等你"));
+    // 會話開著、在等你：不是「處理中」，而是在等你回一句
+    let ba = row(&p, "busy-ask");
+    assert_eq!(ba.status, RelayStatus::SessionOpen);
+    assert!(ba.notes[0].contains("等你"));
+    assert!(ba.waits_on_you);
+    assert!(oa.waits_on_you, "太舊且在等你也算等你回覆");
+    assert!(!row(&p, "dirty").waits_on_you);
+    let io = row(&p, "idle-open");
+    assert_eq!(io.status, RelayStatus::SessionOpen, "閒著的會話也算開著");
+    assert!(!io.waits_on_you, "下一步不是在等你");
+    // 等你回覆的：old-ask（太舊＋等你）、busy-ask（會話開著＋等你）
+    assert_eq!(p.waiting_on_you, 2);
+    let v = serde_json::to_value(&p).unwrap();
+    assert!(v["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["status"] == "session_open"));
     let dr = row(&p, "dirty");
     assert_eq!(dr.status, RelayStatus::Ready);
     assert!(
@@ -303,4 +323,176 @@ fn report_verdicts_and_total() {
     let only = relay::report(&d, &RelayScope::Repos(vec!["done".into()]), &since).unwrap();
     assert_eq!(only.rows.len(), 1);
     assert!(relay::report(&d, &RelayScope::All, "上週").is_err());
+}
+
+/// 寫一份假的 Claude Code 逐字稿（`history::past_sessions` 讀得到的格式），內容含 `extra`。
+fn transcript(root: &Path, cwd: &Path, id: &str, started: &str, extra: &str) {
+    let dir = root.join(ctx_core::history::project_dir_name(cwd));
+    std::fs::create_dir_all(&dir).unwrap();
+    let rows = [
+        json!({"type":"user","entrypoint":"cli","cwd":cwd,"timestamp":started,
+               "gitBranch":"main","message":{"content":"接著做"}}),
+        json!({"type":"user","message":{"content":[{"type":"tool_result","content":extra}]}}),
+        json!({"type":"assistant","message":{"content":[{"type":"text","text":"交接好了"}]}}),
+    ];
+    let text: Vec<String> = rows.iter().map(|r| r.to_string()).collect();
+    let f = dir.join(format!("{id}.jsonl"));
+    std::fs::write(&f, text.join("\n") + "\n").unwrap();
+    // 最後活動設成 10 分鐘前（兩分鐘內還在寫的會被當成可能還開著）
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(600);
+    std::fs::File::options()
+        .write(true)
+        .open(&f)
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
+}
+
+/// 照 `agentapi::handoff` 寫一筆有 id 的交接，回傳 ref。
+fn handoff_with_id(d: &Path, repo: &str, when: NaiveDateTime, id: &str, next: &str) -> String {
+    let body = format!("交接：做完 Z\n完成：做完 Z\n剩下：無\n下次從這裡接：{next}");
+    spine::append_event(
+        d,
+        "decision",
+        "agent",
+        &[format!("id:{id}"), format!("repo:{repo}")],
+        &body,
+        Some(when),
+    )
+    .unwrap();
+    format!("decision:{id}")
+}
+
+#[test]
+fn answer_delivery_kinds() {
+    let (tmp, d) = spine();
+    let t = tmp.path();
+    let root = t.join("claude-projects");
+    let when = ago(0, 3);
+    let utc = |x: NaiveDateTime| {
+        x.and_local_timezone(Local)
+            .unwrap()
+            .with_timezone(&chrono::Utc)
+            .format("%Y-%m-%dT%H:%M:%SZ")
+            .to_string()
+    };
+
+    // 開著的會話（等你）→ 在那場會話貼上
+    let open = register(&d, t, "open", 6);
+    handoff(&d, "open", when, "草稿", "等你挑方案");
+    session(&d, "t1", &open, StatusHook::Permission);
+    // 逐字稿裡有這筆交接的 ref → resume
+    let res = register(&d, t, "res", 6);
+    let rf = handoff_with_id(&d, "res", when, "2026-01-01-d7", "等使用者決定 A 或 B");
+    transcript(
+        &root,
+        &res,
+        "aaaaaaaa-1111-2222-3333-444444444444",
+        &utc(when - Duration::hours(1)),
+        &format!("{{\"ok\":true,\"ref\":\"{rf}\"}}"),
+    );
+    // 時間對得上、但逐字稿裡沒有這筆 ref → 不猜，開新會話
+    let other = register(&d, t, "other", 6);
+    handoff_with_id(&d, "other", when, "2026-01-01-d8", "等你決定");
+    transcript(
+        &root,
+        &other,
+        "bbbbbbbb-1111-2222-3333-444444444444",
+        &utc(when - Duration::hours(1)),
+        "{\"ok\":true,\"ref\":\"decision:2026-01-01-d9\"}",
+    );
+    // 交接沒有 id（ref 只是時間）→ 不猜
+    register(&d, t, "noid", 6);
+    handoff(&d, "noid", when, "草稿", "等你決定");
+
+    let before = event_count(&d);
+    let a = relay::answer_with(&d, "open", "選方案 B", Some(&root)).unwrap();
+    assert!(
+        matches!(&a.delivery, Delivery::ExistingSession { sid, state } if sid == "t1" && *state == SessionNow::NeedsYou)
+    );
+    assert!(a.commands.is_empty());
+    assert!(a.task.contains("使用者的回覆：選方案 B"), "{}", a.task);
+    assert!(a.task.contains("下次從這裡接：等你挑方案"), "{}", a.task);
+    assert!(a.task.contains("不要自己猜"), "{}", a.task);
+
+    let r = relay::answer_with(&d, "res", "選 A", Some(&root)).unwrap();
+    match &r.delivery {
+        Delivery::Resume {
+            claude_session_id,
+            cwd,
+        } => {
+            assert_eq!(claude_session_id, "aaaaaaaa-1111-2222-3333-444444444444");
+            assert_eq!(Path::new(cwd), res.as_path());
+        }
+        other => panic!("應該 resume：{other:?}"),
+    }
+    assert!(
+        r.commands[0].contains("claude --resume aaaaaaaa-1111-2222-3333-444444444444 '"),
+        "{}",
+        r.commands[0]
+    );
+    assert_eq!(r.handoff_ref, rf);
+
+    let o = relay::answer_with(&d, "other", "好", Some(&root)).unwrap();
+    assert!(
+        matches!(o.delivery, Delivery::NewSession { .. }),
+        "{:?}",
+        o.delivery
+    );
+    assert!(
+        o.commands[0].starts_with("ctx session --repos other --repo other --task '"),
+        "{}",
+        o.commands[0]
+    );
+    let n = relay::answer_with(&d, "noid", "好", Some(&root)).unwrap();
+    assert!(matches!(n.delivery, Delivery::NewSession { .. }));
+    assert_eq!(event_count(&d), before, "answer 不寫事件");
+
+    // JSON：送達方式帶 kind
+    let v = serde_json::to_value(&r).unwrap();
+    assert_eq!(v["delivery"]["kind"], "resume");
+
+    // 交接摘要很長也不超過約 800 字；回覆經過 redact
+    let long = "很長的下一步".repeat(300);
+    handoff(&d, "noid", ago(0, 1), &"完成很多事".repeat(200), &long);
+    let secret = "sk-ant-FAKEFAKEFAKEFAKE"; // 假的憑證樣式，只用來測遮蔽
+    let l = relay::answer_with(&d, "noid", &format!("用這把 key {secret}"), Some(&root)).unwrap();
+    assert!(l.task.chars().count() <= 900, "{}", l.task.chars().count());
+    assert!(!l.task.contains(secret));
+    assert!(l.redacted >= 1);
+}
+
+#[test]
+fn answer_errors() {
+    let (tmp, d) = spine();
+    let t = tmp.path();
+    let code = |e: ctx_core::Error| match e {
+        ctx_core::Error::Rejected { code, .. } => code.as_str(),
+        other => panic!("應該是 Rejected：{other:?}"),
+    };
+    register(&d, t, "none", 6);
+    register(&d, t, "gone", 6);
+    handoff(&d, "gone", ago(1, 0), "做完", "等你決定");
+    std::fs::remove_dir_all(t.join("gone")).unwrap();
+    let busy = register(&d, t, "busy", 6);
+    handoff(&d, "busy", ago(1, 0), "做完", "等你決定");
+    session(&d, "t1", &busy, StatusHook::ToolStart);
+
+    assert_eq!(
+        code(relay::answer(&d, "nope", "好").unwrap_err()),
+        "not_found"
+    );
+    assert_eq!(
+        code(relay::answer(&d, "gone", "好").unwrap_err()),
+        "not_found"
+    );
+    assert_eq!(
+        code(relay::answer(&d, "none", "好").unwrap_err()),
+        "not_found"
+    );
+    assert_eq!(code(relay::answer(&d, "busy", "好").unwrap_err()), "busy");
+    assert_eq!(
+        code(relay::answer(&d, "busy", "  ").unwrap_err()),
+        "bad_request"
+    );
 }

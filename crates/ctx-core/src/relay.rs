@@ -26,7 +26,7 @@ use crate::collect::{self, RepoSpec, RepoState};
 use crate::registry::{self, Repo, Tier};
 use crate::spine::{self, Event, EventType};
 use crate::status::AgentStatus;
-use crate::{gitlog, Error, Result};
+use crate::{gitlog, Error, RejectCode, Result};
 
 /// 交接超過幾天就不直接接（可能過時，要先看現況）。
 pub const STALE_DAYS: i64 = 14;
@@ -75,9 +75,9 @@ pub fn waits_on_you(next_step: &str) -> bool {
 
 /// 一個 repo 這次能不能接力。判斷照下面的**優先序**，先符合的算數：
 ///
-/// `Missing` ＞ `Busy` ＞ `Unhandoffed` ＞ `NoHandoff` ＞ `Stale` ＞ `NeedsYou` ＞ `Ready`
+/// `Missing` ＞ `Busy` ＞ `SessionOpen` ＞ `Unhandoffed` ＞ `NoHandoff` ＞ `Stale` ＞ `NeedsYou` ＞ `Ready`
 ///
-/// 理由：路徑不在什麼都做不了；有會話在跑就別再開一個；交接之後又有沒交接的會話，交接的下一步可能已經過時
+/// 理由：路徑不在什麼都做不了；有會話正在處理就別打斷；會話開著（閒著、等你）就在那場接著做、別再開一個；交接之後又有沒交接的會話，交接的下一步可能已經過時
 /// （沒交接過、卻有沒交接的會話也算這類——先補交接最有用）；沒交接就沒有可接的；
 /// 太舊的交接即使寫著「等你」也要先看現況；最後才看下一步是不是在等你。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -93,17 +93,20 @@ pub enum RelayStatus {
     NoHandoff,
     /// 上次交接之後又有會話結束時沒交接（最近 [`STALE_DAYS`] 天內）：下一步可能過時，先補交接。
     Unhandoffed,
-    /// 這個 repo 現在有 App 會話在跑。
+    /// 這個 repo 有 App 會話正在處理中（不要打斷）。
     Busy,
+    /// 這個 repo 有 App 會話開著、閒著或在等你（第 2 輪）：其實是在等人回一句，用 `relay answer` 送到那場會話。
+    SessionOpen,
     /// 登記的路徑不存在。
     Missing,
 }
 
 impl RelayStatus {
     /// 表上列出的順序（也是 `counts` 的順序）。
-    pub const ORDER: [RelayStatus; 7] = [
+    pub const ORDER: [RelayStatus; 8] = [
         RelayStatus::Ready,
         RelayStatus::NeedsYou,
+        RelayStatus::SessionOpen,
         RelayStatus::Unhandoffed,
         RelayStatus::Stale,
         RelayStatus::Busy,
@@ -119,6 +122,7 @@ impl RelayStatus {
             RelayStatus::NoHandoff => "no_handoff",
             RelayStatus::Unhandoffed => "unhandoffed",
             RelayStatus::Busy => "busy",
+            RelayStatus::SessionOpen => "session_open",
             RelayStatus::Missing => "missing",
         }
     }
@@ -131,7 +135,8 @@ impl RelayStatus {
             RelayStatus::Stale => "交接太舊",
             RelayStatus::NoHandoff => "沒有交接",
             RelayStatus::Unhandoffed => "先補交接",
-            RelayStatus::Busy => "會話在跑",
+            RelayStatus::Busy => "會話處理中",
+            RelayStatus::SessionOpen => "會話開著（閒著／等你）",
             RelayStatus::Missing => "路徑不存在",
         }
     }
@@ -162,6 +167,8 @@ pub struct PlanRow {
     pub prompt: Option<String>,
     /// 備註（沒 commit 的檔、在跑的會話、沒交接的會話…）
     pub notes: Vec<String>,
+    /// 這列在等你回一句（NeedsYou、會話開著且下一步在等你、太舊且下一步在等你）——`relay answer` 的對象
+    pub waits_on_you: bool,
 }
 
 /// 一種狀態有幾個。
@@ -184,6 +191,8 @@ pub struct Plan {
     pub counts: Vec<StatusCount>,
     /// 沒列的 repo 數（參考類、暫停、封存）
     pub skipped: usize,
+    /// 等你回覆的共幾件（`waits_on_you` 的列數）
+    pub waiting_on_you: usize,
 }
 
 /// 現在的會話（App 開的，看狀態檔）。
@@ -404,7 +413,11 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
                 sid.map(|s| format!(" {s}")).unwrap_or_default(),
                 session.label()
             ));
-            RelayStatus::Busy
+            if session == SessionNow::Running {
+                RelayStatus::Busy
+            } else {
+                RelayStatus::SessionOpen
+            }
         } else if let Some(g) = gap {
             notes.push(format!("{} 的會話結束時沒有交接", g.stamp()));
             RelayStatus::Unhandoffed
@@ -446,6 +459,11 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
             next_step: next,
             prompt,
             notes,
+            waits_on_you: match status {
+                RelayStatus::NeedsYou => true,
+                RelayStatus::SessionOpen | RelayStatus::Stale => waits,
+                _ => false,
+            },
         });
     }
     rows.sort_by(|a, b| {
@@ -466,6 +484,7 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
     Ok(Plan {
         scope: label,
         at: now.format("%Y-%m-%d %H:%M").to_string(),
+        waiting_on_you: rows.iter().filter(|r| r.waits_on_you).count(),
         rows,
         counts,
         skipped,
@@ -704,6 +723,225 @@ pub fn report(spine_dir: &Path, scope: &RelayScope, since: &str) -> Result<Repor
         rows,
         total,
         skipped,
+    })
+}
+
+// ---------------------------------------------------------------- answer（第 2 輪）
+
+/// 送給 agent 的任務文字大約多長（超過就截交接摘要與下一步；使用者的回覆不截）。
+pub const ANSWER_CHARS: usize = 800;
+
+/// 回覆要怎麼送到 agent。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Delivery {
+    /// 這個 repo 有 App 會話開著（閒著或在等你）：在那場會話貼上任務文字。
+    ExistingSession { sid: String, state: SessionNow },
+    /// 沒有開著的會話，但找得到留下這筆交接的 Claude Code 會話：`claude --resume` 接回去。
+    Resume {
+        claude_session_id: String,
+        cwd: String,
+    },
+    /// 開一場新的會話。
+    NewSession { cwd: String },
+}
+
+/// `answer` 的結果：要送的任務文字＋怎麼送。純計算，不寫事件、不開會話。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Answer {
+    pub repo: String,
+    pub path: String,
+    pub handoff_at: String,
+    pub handoff_ref: String,
+    pub next_step: Option<String>,
+    /// 要送給 agent 的任務文字
+    pub task: String,
+    pub delivery: Delivery,
+    /// 可以直接貼到終端機的指令（ExistingSession 沒有——在 App 的那場會話貼上任務文字）
+    pub commands: Vec<String>,
+    /// 回覆裡遮掉幾處像憑證的字
+    pub redacted: usize,
+}
+
+fn rejected(code: RejectCode, msg: String, hint: &str) -> Error {
+    Error::rejected(code, msg, Some(hint.to_string()))
+}
+
+/// 組任務文字：上次交接（時間、ref、完成摘要、下一步）＋使用者的回覆＋怎麼接。
+fn answer_task(repo: &str, h: &Handoff, reply: &str) -> String {
+    let head = format!("接續 {repo} 上次的交接（{}，{}）。", h.at, h.reference);
+    let tail = "照回覆接著做；回覆沒涵蓋到、仍要人決定的部分不要自己猜，做完能做的就 handoff 並寫清楚還在等什麼。";
+    let reply_line = format!("使用者的回覆：{reply}");
+    let fixed = head.chars().count() + tail.chars().count() + reply_line.chars().count() + 20;
+    let room = ANSWER_CHARS.saturating_sub(fixed);
+    // 下一步比完成摘要重要：先給下一步，剩下的給摘要；兩個都至少留一點
+    let summary_src = h
+        .done
+        .as_deref()
+        .filter(|d| !d.trim().is_empty())
+        .unwrap_or(&h.summary);
+    let next_src = h.next_step.as_deref().unwrap_or("（沒寫）");
+    let next_room = room.saturating_mul(2) / 3;
+    let next = crate::pystr::clip(next_src.trim(), next_room.max(60));
+    let summary_room = room.saturating_sub(next.chars().count()).max(40);
+    let summary = crate::pystr::clip(summary_src.trim(), summary_room.min(160));
+    [
+        head,
+        format!("完成：{summary}"),
+        format!("下次從這裡接：{next}"),
+        reply_line,
+        tail.to_string(),
+    ]
+    .join("\n")
+}
+
+/// 留下這筆交接的 Claude Code 會話：範圍是這個 repo 的過去會話裡，時間涵蓋交接時間（開始 ≤ 交接 ≤ 最後活動），
+/// 而且逐字稿裡真的有這筆交接的 ref（`handoff` 回傳的 `decision:<日>-dN`）。
+/// 交接沒有 id（ref 只是 `decision:HH:MM`，不唯一）就不猜；兩分鐘內還在寫的（可能還開著）也不接。
+fn resume_source(
+    spine_dir: &Path,
+    repo: &str,
+    h: &Handoff,
+    projects_root: Option<&Path>,
+) -> Option<(String, String)> {
+    let has_id = h
+        .reference
+        .split_once(':')
+        .is_some_and(|(_, k)| k.contains('-'));
+    if !has_id {
+        return None;
+    }
+    let at = parse_at(&h.at)?;
+    let ids = [repo.to_string()];
+    let past =
+        crate::history::past_sessions(spine_dir, None, Some(&ids), usize::MAX, projects_root)
+            .ok()?;
+    past.into_iter()
+        .filter(|ps| !ps.live)
+        .filter(|ps| parse_at(&ps.updated).is_some_and(|u| u >= at))
+        .filter(|ps| {
+            ps.started
+                .as_deref()
+                .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
+                .map(|t| t.with_timezone(&Local).naive_local())
+                .is_none_or(|t| t <= at + chrono::Duration::minutes(1))
+        })
+        .find(|ps| {
+            std::fs::read(&ps.path).is_ok_and(|b| {
+                let needle = h.reference.as_bytes();
+                b.windows(needle.len()).any(|w| w == needle)
+            })
+        })
+        .map(|ps| (ps.id, ps.cwd))
+}
+
+/// 人回了一句，組出要送給這個 repo 的 agent 的任務與送達方式。純計算。
+///
+/// 錯誤（都是 [`Error::Rejected`]）：repo 沒登記／路徑不存在／沒有交接（`not_found`）、
+/// 回覆是空的（`bad_request`）、有會話正在處理中（`busy`——不要打斷，等它這輪做完）。
+pub fn answer(spine_dir: &Path, repo: &str, reply: &str) -> Result<Answer> {
+    answer_with(spine_dir, repo, reply, None)
+}
+
+/// 同 [`answer`]，指定 Claude Code 逐字稿的根目錄（測試用；`None`＝`~/.claude/projects`）。
+pub fn answer_with(
+    spine_dir: &Path,
+    repo: &str,
+    reply: &str,
+    projects_root: Option<&Path>,
+) -> Result<Answer> {
+    let reply = reply.trim();
+    if reply.is_empty() {
+        return Err(rejected(
+            RejectCode::BadRequest,
+            "回覆是空的".into(),
+            "寫一句要給 agent 的回覆，例：ctx relay answer <repo> \"選方案 B\"",
+        ));
+    }
+    let (reply, redacted) = crate::redact::redact_secrets(reply);
+    let data = registry::load(spine_dir)?;
+    let Some(entry) = data.repo(repo) else {
+        return Err(rejected(
+            RejectCode::NotFound,
+            format!("repo 沒登記：{repo}"),
+            "用 ctx relay plan --all 看登記的 repo id",
+        ));
+    };
+    let id = entry.id();
+    let path = crate::fsutil::expanduser(entry.path());
+    if !path.is_dir() {
+        return Err(rejected(
+            RejectCode::NotFound,
+            format!("{id} 登記的路徑不存在：{}", path.display()),
+            "先把 repo 放回原處，或用 ctx registry 改登記的路徑",
+        ));
+    }
+    let events = spine::iter_events(spine_dir)?;
+    let Some(ev) = events
+        .iter()
+        .rfind(|ev| agentapi::is_handoff(ev) && of_repo(ev, &id))
+    else {
+        return Err(rejected(
+            RejectCode::NotFound,
+            format!("{id} 沒有交接，沒有可接的下一步"),
+            "直接開會話交代任務：ctx session --repos <repo> --repo <repo> --task \"…\"",
+        ));
+    };
+    let h = agentapi::parse_handoff(ev);
+    let (session, sid) = session_of(&sessions_by_repo(spine_dir), &id);
+    if session == SessionNow::Running {
+        return Err(rejected(
+            RejectCode::Busy,
+            format!(
+                "{id} 的會話{}正在處理中，不要打斷",
+                sid.map(|s| format!(" {s} ")).unwrap_or_default()
+            ),
+            "等它這一輪做完（ctx relay plan 會顯示「會話開著」）再回覆",
+        ));
+    }
+    let task = answer_task(&id, &h, &reply);
+    let cwd = path.to_string_lossy().into_owned();
+    let q = crate::term::shlex_quote;
+    let (delivery, commands) = match (session, sid) {
+        (SessionNow::NeedsYou | SessionNow::Idle, Some(sid)) => (
+            Delivery::ExistingSession {
+                sid,
+                state: session,
+            },
+            Vec::new(),
+        ),
+        _ => match resume_source(spine_dir, &id, &h, projects_root) {
+            Some((cid, dir)) => {
+                let cmd = format!("cd {} && claude --resume {cid} {}", q(&dir), q(&task));
+                (
+                    Delivery::Resume {
+                        claude_session_id: cid,
+                        cwd: dir,
+                    },
+                    vec![cmd],
+                )
+            }
+            None => {
+                // 範圍只有這個 repo（只給 --repo 的話情境卡會是全部 repo）
+                let cmd = format!(
+                    "ctx session --repos {0} --repo {0} --task {1}",
+                    q(&id),
+                    q(&task)
+                );
+                (Delivery::NewSession { cwd }, vec![cmd])
+            }
+        },
+    };
+    Ok(Answer {
+        repo: id,
+        path: path.to_string_lossy().into_owned(),
+        handoff_at: h.at.clone(),
+        handoff_ref: h.reference.clone(),
+        next_step: h.next_step.clone(),
+        task,
+        delivery,
+        commands,
+        redacted,
     })
 }
 

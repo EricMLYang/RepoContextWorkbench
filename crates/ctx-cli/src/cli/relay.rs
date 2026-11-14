@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use clap::{Args, Subcommand};
 use ctx_core::agentapi;
 use ctx_core::pystr::clip;
-use ctx_core::relay::{self, Plan, RelayScope, RelayStatus, Report, Verdict};
+use ctx_core::relay::{self, Answer, Delivery, Plan, RelayScope, RelayStatus, Report, Verdict};
 
 use super::agent::agent_err;
 use super::common::{fail, split_opt, CmdResult, Ctx, Exit, EXIT_REJECTED};
@@ -29,7 +29,7 @@ pub struct RelayScopeArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum RelayCmd {
-    /// 接力前：每個 repo 能不能直接從上次交接的下一步接著做（可接／等你／先補交接／交接太舊／會話在跑／沒有交接／路徑不存在）
+    /// 接力前：每個 repo 能不能直接從上次交接的下一步接著做（可接／等你／會話開著／先補交接／交接太舊／會話處理中／沒有交接／路徑不存在）
     Plan {
         #[command(flatten)]
         scope: RelayScopeArgs,
@@ -44,6 +44,13 @@ pub enum RelayCmd {
         /// 逗號分隔 repo id（指定時照列，不略過參考類）
         #[arg(long, conflicts_with_all = ["group", "all"])]
         repos: Option<String>,
+    },
+    /// 回覆一個在等你的 repo：組出帶著上次交接與你這句回覆的任務，印出怎麼送（開著的會話／claude --resume／新會話）。只印，不開會話
+    Answer {
+        /// 登記的 repo id
+        repo: String,
+        /// 你的回覆（一句話）
+        reply: String,
     },
 }
 
@@ -91,6 +98,10 @@ pub fn cmd_relay(ctx: &Ctx, cmd: &RelayCmd) -> CmdResult {
             let rep = relay::report(&d, &sc, since).map_err(agent_err)?;
             ctx.emit(&rep, render_report);
         }
+        RelayCmd::Answer { repo, reply } => {
+            let a = relay::answer(&d, repo, reply).map_err(agent_err)?;
+            ctx.emit(&a, render_answer);
+        }
     }
     Ok(())
 }
@@ -111,6 +122,7 @@ fn render_plan(p: &Plan) -> String {
         head.push_str(&format!("；略過 {} 個（參考類、暫停、封存）", p.skipped));
     }
     out.push(head);
+    out.push(format!("等你回覆的共 {} 件", p.waiting_on_you));
     for st in RelayStatus::ORDER {
         let rows: Vec<_> = p.rows.iter().filter(|r| r.status == st).collect();
         if rows.is_empty() {
@@ -138,6 +150,9 @@ fn render_plan(p: &Plan) -> String {
             }
             if !r.notes.is_empty() {
                 out.push(format!("  備註：{}", r.notes.join("；")));
+            }
+            if r.waits_on_you || st == RelayStatus::SessionOpen {
+                out.push(format!("  回覆：ctx relay answer {} \"…\"", r.repo));
             }
         }
     }
@@ -208,6 +223,49 @@ fn render_report(r: &Report) -> String {
                 }
             }
         }
+    }
+    out.join("\n")
+}
+
+fn render_answer(a: &Answer) -> String {
+    let mut out = vec![
+        format!(
+            "# 接力 answer：{}（handoff {}，{}）",
+            a.repo, a.handoff_at, a.handoff_ref
+        ),
+        String::new(),
+        "## 任務文字".to_string(),
+        a.task.clone(),
+        String::new(),
+        "## 送達方式".to_string(),
+    ];
+    match &a.delivery {
+        Delivery::ExistingSession { sid, state } => {
+            out.push(format!(
+                "App 裡開著的會話 {sid}（{}）：在 App 的那場會話貼上上面的任務文字",
+                state.label()
+            ));
+        }
+        Delivery::Resume {
+            claude_session_id,
+            cwd,
+        } => {
+            out.push(format!(
+                "接回留下這筆 handoff 的 Claude Code 會話 {claude_session_id}（目錄 {cwd}）"
+            ));
+        }
+        Delivery::NewSession { cwd } => {
+            out.push(format!("開一場新會話（目錄 {cwd}）"));
+        }
+    }
+    if !a.commands.is_empty() {
+        out.push(String::new());
+        out.push("## 指令（貼到終端機）".to_string());
+        out.extend(a.commands.iter().cloned());
+    }
+    if a.redacted > 0 {
+        out.push(String::new());
+        out.push(format!("（回覆裡有 {} 處像憑證的字，已遮掉）", a.redacted));
     }
     out.join("\n")
 }
