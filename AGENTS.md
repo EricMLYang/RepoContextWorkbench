@@ -15,6 +15,8 @@
 - 型別表達狀態，不用字串或布林旗標拼湊。
 - 引擎 crate 不依賴 Tauri；殼只做視窗、IPC、選單列、通知、PTY 轉接。
 - 依賴從嚴：標準庫或主流 crate（serde、clap、portable-pty）能做的就不加新的。
+- 磁碟衛生：收尾跑 `bash scripts/check.sh`（結尾自動 `cargo sweep --time 2`）。只直接跑 `cargo test／clippy／build` 的話舊產物不會回收，
+  收尾前自己補一次 `cargo sweep --time 2`；不要 `cargo clean`。細節見 `docs/DEVELOPMENT.md` §7。
 
 ## React
 - 只負責畫面和互動，不放業務邏輯；資料一律從引擎取得，不在前端算。

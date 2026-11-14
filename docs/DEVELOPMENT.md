@@ -131,6 +131,8 @@ desktop/src（React，只管畫面）── IPC ┘
   只刪 2 天沒被任何 build 用到的產物，再刪 2 天沒動的 `target/debug/incremental/*`（sweep 不管這裡），不影響今天的增量編譯。
   2026-10-22 改：原本 7 天，密集開發 4 天就留下 7 GiB 舊版產物＋1.6 GB 舊 incremental（target 19 GB → 11 GB）。全清（`cargo clean --profile dev`）只在 sweep 之後還是太大時才做，
   代價是下一次重編相依約 5～10 分鐘。App 舊版備份在 `~/.cache/repo-context/app-backups/`，`scripts/install-app.sh` 自動只留 3 份（每份約 19 MB）。
+  2026-11-14 補：sweep 只掛在 `check.sh`，整場只直接跑 `cargo test／clippy` 就不會掃——那天 `target` 又長到 20 GB，手動 sweep 清掉 12.79 GiB。
+  沒走 `check.sh` 的會話收尾前要自己跑一次 `cargo sweep --time 2`（`AGENTS.md` 也寫了）。
 
 ## 8. 資訊安全
 
