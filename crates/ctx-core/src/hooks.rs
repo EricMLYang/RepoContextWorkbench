@@ -470,6 +470,11 @@ fn session_start_inner(
     let cwd_p = PathBuf::from(&cwd);
     let w = agentapi::where_am_i(spine_dir, Some(&cwd_p))?;
     let Some(repo) = w.repo.clone() else {
+        // F-125：在 spine 裡開的會話＝總管——注入總管簡報＋作業規則。不記 marker：總管不交接，
+        // SessionEnd 找不到 marker 就什麼都不記（不會被當成「沒交接就結束」，別的 repo 的事件也算不到它頭上）。
+        if w.in_spine {
+            return steward_start(spine_dir, payload, now);
+        }
         return Ok(String::new());
     };
     let ctx = agentapi::context_for_full(spine_dir, &Target::at(&cwd_p), false)?;
@@ -522,6 +527,20 @@ fn session_start_inner(
     )?;
     let _ = sweep_stale_markers(spine_dir, now);
     Ok(output)
+}
+
+/// 總管會話的開場（F-125）：簡報＋作業規則；真的會話（有 session_id）才記「總管看過了」，
+/// 下次簡報的 registry 變更從這裡算。
+fn steward_start(spine_dir: &Path, payload: &Value, now: Option<NaiveDateTime>) -> Result<String> {
+    let now = now.unwrap_or_else(|| Local::now().naive_local());
+    let b = crate::steward::brief(spine_dir, now)?;
+    if has_session_id(payload) {
+        crate::steward::mark_seen(spine_dir, now)?;
+    }
+    Ok(py_dumps(&json!({"hookSpecificOutput": {
+        "hookEventName": "SessionStart",
+        "additionalContext": format!("{}\n\n{}", b.text, crate::steward::RULES_MD.trim_end()),
+    }})))
 }
 
 /// Rust 才有（N-16）：會話被直接關掉（沒走 SessionEnd）時 marker 會一直留著。開場時把開了超過

@@ -140,6 +140,12 @@ pub enum RegistryCmd {
     },
     /// 讀關係（給 id＝站在該 repo 兩向讀）
     Relations { id: Option<String> },
+    /// 一段時間內 registry 的變更結果（新增／移除／變更；同一個對象只列最後的樣子）＋路徑不存在的 repo（Rust 才有）
+    Changes {
+        /// 從什麼時候算起："YYYY-MM-DD HH:MM"（預設近 7 天）
+        #[arg(long)]
+        since: Option<String>,
+    },
     /// 建議該設的關係：文件互相提到、引用紀錄、只有兩邊有的主題詞（Rust 才有；只建議，不寫）
     Suggest {
         /// 打掉一筆建議（不相關）：給兩個 repo id，之後不再建議
@@ -232,6 +238,7 @@ pub fn cmd_registry(ctx: &Ctx, c: &RegistryCmd) -> CmdResult {
             json!({"a": a, "b": b, "kind": kind}),
         ),
         Relations { id } => registry_relations(ctx, id.as_deref()),
+        Changes { since } => super::steward::cmd_registry_changes(ctx, since.as_deref()),
         Suggest { dismiss } => match dismiss.as_deref() {
             Some([a, b]) => {
                 ctx_core::relsuggest::dismiss(&ctx.spine_dir()?, a, b)?;

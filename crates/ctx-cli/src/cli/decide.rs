@@ -15,6 +15,9 @@ use super::common::{fail, split_opt, CmdResult, Ctx, Exit, EXIT_REJECTED};
 use super::relay::{render_answer, scope_of, RelayScopeArgs};
 use ctx_core::RejectCode;
 
+/// 卡片幾張以上時頁尾提示可以讓總管先整理（F-125）。
+const STEWARD_HINT_CARDS: usize = 5;
+
 /// 人看的卡上，問題最多幾個字（--json 是全文）。
 const QUESTION_CHARS: usize = 300;
 
@@ -69,6 +72,17 @@ pub enum DecideCmd {
     },
     /// 放行規則一覽：等級、since、paths、放行與推翻次數、升級建議、policy.yaml 的問題
     Rules,
+    /// 在一張卡上留「總管建議」（選項編號或一句話）；使用者回答時看得到。不是回答，agent（總管）可以下
+    Suggest {
+        /// 登記的 repo id
+        repo: String,
+        /// 建議：選項編號，或一句話（可以不加引號）
+        #[arg(required = true, num_args = 1..)]
+        text: Vec<String>,
+        /// 為什麼這樣建議（一句話）
+        #[arg(long)]
+        why: Option<String>,
+    },
 }
 
 /// Claude Code 在它的 Bash 工具裡設的環境變數（值是 `1`）。
@@ -145,6 +159,23 @@ pub fn cmd_decide(ctx: &Ctx, cmd: &DecideCmd) -> CmdResult {
             let r = decide::overturn(&d, reference, why.as_deref()).map_err(agent_err)?;
             ctx.emit(&r, render_overturned);
         }
+        DecideCmd::Suggest { repo, text, why } => {
+            let r =
+                decide::suggest(&d, repo, &text.join(" "), why.as_deref()).map_err(agent_err)?;
+            ctx.emit(&r, |r| {
+                let mut line = format!(
+                    "已在 {} 的卡上留總管建議：{}{}　{}",
+                    r.note.repo,
+                    r.note.option.map(|n| format!("{n}) ")).unwrap_or_default(),
+                    r.note.text,
+                    r.note.reference
+                );
+                if let Some(w) = &r.note.why {
+                    line.push_str(&format!("\n理由：{w}"));
+                }
+                line
+            });
+        }
         DecideCmd::Rules => {
             let r = decide::rules_report(&d).map_err(agent_err)?;
             ctx.emit(&r, render_rules);
@@ -177,6 +208,10 @@ fn render_list(q: &Queue) -> String {
         out.extend(card_lines(i + 1, c));
     }
     out.extend(hint_lines(&q.suggestions));
+    if q.cards.len() >= STEWARD_HINT_CARDS {
+        out.push(String::new());
+        out.push("讓總管先整理：ctx session --steward".into());
+    }
     out.join("\n")
 }
 
@@ -231,6 +266,17 @@ fn card_lines(n: usize, c: &Card) -> Vec<String> {
             .collect();
         out.push(format!("   證據：{}", ev.join("、")));
     }
+    if let Some(n) = &c.steward {
+        let mut line = format!(
+            "   總管建議：{}{}",
+            n.option.map(|k| format!("{k}) ")).unwrap_or_default(),
+            n.text
+        );
+        if let Some(w) = &n.why {
+            line.push_str(&format!("（{w}）"));
+        }
+        out.push(line);
+    }
     let age = if c.days > 0 {
         format!("放了 {} 天", c.days)
     } else if c.hours > 0 {
@@ -281,6 +327,10 @@ fn render_decided(r: &Decided) -> String {
         ),
         String::new(),
     ];
+    if let Some(sug) = &r.steward_differs {
+        out.push(format!("總管建議的是「{sug}」，你選的是「{}」", a.answer));
+        out.push(String::new());
+    }
     if let Some(rule) = &r.downgraded {
         out.push(format!(
             "這類原本自動放行，這次跟建議不同 → {}/{} 降回每次都問（since {}）",

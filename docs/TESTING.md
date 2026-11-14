@@ -267,6 +267,19 @@
 | 8h-12 | `ctx health` | 「決策」一行：要你決定幾件、人回答幾次與照建議比例、自動放行與被推翻幾次、從交接到回答的中位時間（沒資料寫「沒資料」） | [ ] | [ ] |
 | 8h-13 | 請 agent 在它的會話裡跑 `ctx decide trust <repo> commit` 或 `ctx decide answer <repo> 1` | 被拒（`human_only`）：「這要使用者自己在終端或 App 下」，提示用 `ctx decide request`；policy.yaml 與 spine 都沒變 | [ ] | [ ] |
 
+## 8i. 總管（F-125，2026-11-14）——**引擎測試與 spine 副本試跑已過；真的總管會話還沒人測過**
+
+| # | 操作 | 應該看到 | macOS | Windows |
+|---|---|---|---|---|
+| 8i-1 | 終端跑 `ctx steward` | 不超過 2000 字：要你決定（前 5 件）、各組一行，有才印的自動放行／放行規則／registry 變更／異常；每段標題後面帶下一步的指令 | [ ] | [ ] |
+| 8i-2 | `ctx registry changes --since "2026-10-01 00:00"` | 分「新增／移除／變更」，同一個 repo 改很多次只列最後的樣子；最後列路徑不存在的 repo | [ ] | [ ] |
+| 8i-3 | `ctx session --steward`（或 `--print` 看指令） | 在 spine 目錄開一場會話；開場就是總管簡報＋作業規則；不在任何 repo 的範圍 | [ ] | [ ] |
+| 8i-4 | 在總管會話裡請它整理要你決定的事 | 它讀各 repo 的交接與證據後用 `ctx decide suggest <repo> <建議> --why …` 留建議；不會替你 answer／trust（被拒） | [ ] | [ ] |
+| 8i-5 | `ctx decide list --all` | 有建議的卡多一行「總管建議：…（理由）」；卡片 ≥ 5 張時頁尾「讓總管先整理：ctx session --steward」 | [ ] | [ ] |
+| 8i-6 | 照跟總管不同的選項 `ctx decide answer <repo> <n>` | 輸出多一句「總管建議的是 X，你選的是 Y」 | [ ] | [ ] |
+| 8i-7 | 結束總管會話（不交接） | 收件匣與 `ctx relay plan` 都沒有多一筆「會話結束但沒有交接」 | [ ] | [ ] |
+| 8i-8 | 再開一次總管會話 | registry 變更段只列上次總管開場之後的 | [ ] | [ ] |
+
 ## 9. 要你決定
 
 - [ ] **#76**：App 助手、碰撞判定、`ask_repo`、backfill 都用 `claude -p`（程式化呼叫；BAT 引 2026-06-15 政策說它走另計的額度，

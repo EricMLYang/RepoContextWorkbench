@@ -287,6 +287,57 @@ fn test_new_primitives_pipeline() {
     let r = cs.ok(&["session", "--group", "g1", "--task", "寫文", "--print"]);
     assert!(r.stdout.contains("料：") && r.stdout.contains("claude"));
     assert!(spine_dir.join(".mcp.json").exists());
+
+    // F-125：session --steward --print——cwd 是 spine、沒給任務就不帶 prompt；跟 --group／--repos／--repo 互斥
+    let home = tmp.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let ch = cs.clone().home(&home);
+    let r = ch.ok(&["session", "--steward", "--print"]);
+    let lines: Vec<&str> = r.stdout.lines().collect();
+    assert!(
+        lines[0].starts_with("料：") && lines[0].ends_with("steward-brief.md"),
+        "{}",
+        r.stdout
+    );
+    let spine_real = spine_dir.canonicalize().unwrap();
+    assert!(
+        lines[1] == format!("cd {}", spine_dir.display())
+            || lines[1] == format!("cd {}", spine_real.display()),
+        "{}",
+        r.stdout
+    );
+    assert!(lines[2].starts_with("claude"), "{}", r.stdout);
+    assert!(
+        lines[2].contains("--mcp-config="),
+        "使用者層沒掛 MCP 就掛：{}",
+        r.stdout
+    );
+    assert!(
+        !lines[2].contains("情境卡"),
+        "總管不帶情境卡的 prompt：{}",
+        r.stdout
+    );
+    let brief = std::fs::read_to_string(spine_dir.join(".state/steward-brief.md")).unwrap();
+    assert!(brief.starts_with("# 總管簡報") && brief.contains("總管的作業規則"));
+    let r = ch.ok(&[
+        "session",
+        "--steward",
+        "--task",
+        "先整理 Knowledge 組的卡",
+        "--print",
+    ]);
+    assert!(r.stdout.contains("先整理 Knowledge 組的卡"), "{}", r.stdout);
+    for other in [
+        ["--group", "g1"],
+        ["--repos", "repo-a"],
+        ["--repo", "repo-a"],
+    ] {
+        let mut args = vec!["session", "--steward", "--print"];
+        args.extend(other);
+        let r = ch.run(&args);
+        assert_eq!(r.code, 2, "{args:?}：{}", r.stderr);
+        assert!(r.stderr.contains("cannot be used with"), "{}", r.stderr);
+    }
 }
 
 /// MCP server 走真 stdio：initialize → tools/list → tools/call（含 validator 拒寫）。

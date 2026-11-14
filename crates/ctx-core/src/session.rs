@@ -312,6 +312,86 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
     })
 }
 
+/// 這場會話的範圍（F-125）：一般的會話（組、repo 清單、單一 repo——細節在 [`SessionOpts`]），或總管。
+/// 第 5 輪前端開會話也走這個入口（[`plan`]）。
+#[derive(Debug, Clone)]
+pub enum SessionScope<'a> {
+    /// 組／repo 清單／單一 repo
+    Work(SessionOpts<'a>),
+    /// 總管：工作目錄＝spine，不屬於任何 repo
+    Steward {
+        task: Option<&'a str>,
+        agent: Option<&'a str>,
+    },
+}
+
+/// 依範圍組會話（[`build`] 或 [`build_steward`]）。
+pub fn plan(spine_dir: &Path, scope: SessionScope<'_>) -> Result<SessionPlan> {
+    match scope {
+        SessionScope::Work(o) => build(spine_dir, o),
+        SessionScope::Steward { task, agent } => build_steward(spine_dir, task, agent),
+    }
+}
+
+/// 總管會話（F-125）：cwd＝spine。開場（SessionStart hook）會注入總管簡報與作業規則，所以不寫情境卡、
+/// 沒給任務就不帶 prompt；會話料（`pack_path`）是這次的簡報（`.state/steward-brief.md`，給沒有 hook 的 agent 讀）。
+/// MCP 照一般會話的規則掛（使用者層已掛同一份 spine 就不重複）。
+pub fn build_steward(
+    spine_dir: &Path,
+    task: Option<&str>,
+    agent: Option<&str>,
+) -> Result<SessionPlan> {
+    build_steward_with(spine_dir, task, agent, &ctx_exe()?)
+}
+
+/// 同 [`build_steward`]，`.mcp.json` 裡的 `ctx` 執行檔由呼叫端給。
+pub fn build_steward_with(
+    spine_dir: &Path,
+    task: Option<&str>,
+    agent: Option<&str>,
+    ctx: &Path,
+) -> Result<SessionPlan> {
+    let agent = agent.filter(|a| !a.is_empty()).unwrap_or("claude");
+    let cfg = config::load(spine_dir)?;
+    let agents = cfg.agents();
+    let Some((_, spec)) = agents.iter().find(|(k, _)| k == agent) else {
+        return Err(Error::invalid(format!(
+            "未知 agent: {agent}（config agents: 目前有 {}）",
+            agents
+                .iter()
+                .map(|(k, _)| k.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )));
+    };
+    let now = Local::now().naive_local();
+    let brief = crate::steward::brief(spine_dir, now)?;
+    let out = spine_dir.join(".state").join("steward-brief.md");
+    if let Some(parent) = out.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    crate::fsutil::write_atomic(
+        &out,
+        format!("{}\n\n{}", brief.text, crate::steward::RULES_MD).as_bytes(),
+    )?;
+    let mcp_json = ensure_mcp_json_with(spine_dir, ctx)?;
+    let mut cmd = spec.cmd.clone();
+    if spec.mcp == "mcp-config" && !global_mcp_covers(spine_dir) {
+        cmd.push(format!("--mcp-config={}", mcp_json.display()));
+    }
+    if let Some(t) = task.filter(|t| !t.trim().is_empty()) {
+        cmd.extend(spec.prompt_flag.iter().cloned());
+        cmd.push(t.to_string());
+    }
+    Ok(SessionPlan {
+        cwd: spine_dir.to_path_buf(),
+        cmd,
+        pack_path: out,
+        claude_code: spec.mcp == "mcp-config",
+        flags_at: spec.cmd.len(),
+    })
+}
+
 /// config 裡這個 agent 是不是 Claude Code（`mcp: mcp-config`：吃 `--settings`、`--permission-mode` 這些旗標）。
 /// 不認得的 agent 回錯。Rust 才有（F-96）。
 pub fn is_claude_code(spine_dir: &Path, agent: &str) -> Result<bool> {

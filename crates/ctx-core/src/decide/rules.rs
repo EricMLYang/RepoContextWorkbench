@@ -493,3 +493,56 @@ pub fn health_stats(spine_dir: &Path, days: i64, now: NaiveDateTime) -> Result<D
         policy_problems: policy::load(spine_dir).problems,
     })
 }
+
+// ---------------------------------------------------------------- suggest（總管建議，F-125）
+
+/// `decide suggest` 的結果。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Suggested {
+    #[serde(flatten)]
+    pub note: StewardNote,
+    /// 卡上的問題
+    pub question: String,
+}
+
+/// 總管在一張卡上留建議（選項編號或一句話＋理由）。不是回答：不算連續、不算抽查、不讓卡消失；
+/// 人回答時看得到。沒有這張卡（沒在等、已回答）＝`not_found`。agent 可以下。
+pub fn suggest(spine_dir: &Path, repo: &str, text: &str, why: Option<&str>) -> Result<Suggested> {
+    let text = one_line(text);
+    if text.is_empty() {
+        return Err(rejected(
+            RejectCode::BadRequest,
+            "建議是空的".into(),
+            "寫選項編號或一句話，例：ctx decide suggest <repo> 2 --why \"…\"".into(),
+        ));
+    }
+    let id = registered(spine_dir, repo)?;
+    let now = Local::now().naive_local();
+    let plan = relay::plan_at(spine_dir, &RelayScope::Repos(vec![id.clone()]), now)?;
+    let data = registry::load(spine_dir)?;
+    let notes = log::steward_notes_of(&spine::iter_events(spine_dir)?);
+    let Some(card) = plan
+        .rows
+        .iter()
+        .find(|r| r.repo == id)
+        .and_then(|r| card_of(spine_dir, r, &data, &notes, now, true))
+    else {
+        return Err(rejected(
+            RejectCode::NotFound,
+            format!(
+                "{id} 沒有在等使用者決定的卡（最後一筆交接沒在等，或已經回答過），建議無處可留"
+            ),
+            "用 ctx decide list --all 看現在有哪些卡".into(),
+        ));
+    };
+    let (answer, option) = resolve_reply(&card, &text)?;
+    let r = log::write_steward_note(spine_dir, &id, &card.handoff_ref, &answer, option, why, now)?;
+    let note = log::steward_notes_of(&spine::iter_events(spine_dir)?)
+        .into_iter()
+        .find(|n| n.reference == r)
+        .ok_or_else(|| Error::invalid("總管建議寫入後讀不回來"))?;
+    Ok(Suggested {
+        note,
+        question: card.question,
+    })
+}

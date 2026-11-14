@@ -295,7 +295,8 @@ fn of_repo(ev: &Event, id: &str) -> bool {
         .is_some_and(|r| !r.is_empty() && spine::same_token(r, id))
 }
 
-fn is_no_handoff(ev: &Event) -> bool {
+/// hook 記的「agent 會話結束但沒有交接」（總管簡報的異常段也用）。
+pub fn is_no_handoff(ev: &Event) -> bool {
     ev.etype == EventType::Suggestion && ev.source == "hook" && ev.body.starts_with(NO_HANDOFF_MARK)
 }
 

@@ -295,6 +295,27 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
     `PlanRow` 多 `answered`（回答留痕的 ref，沒有不出現）。
   - **`ctx health`** 多 `decide` 鍵（`decide::health_stats`）：要你決定幾件、期間人回答幾次、有建議幾次、照建議幾次與比例、自動放行與被推翻幾次、
     交接到回答的中位小時（沒資料＝null，文字寫「沒資料」）、policy 的問題。
+- **總管**（2026-11-14，F-125 第 3 輪；Python 沒有）：
+  - **`ctx registry changes [--since "YYYY-MM-DD HH:MM"] [--json]`**（`registry_log.rs`，預設近 7 天，`--since` 同 `relay::parse_since`）：從 `ADMIN_TAG` 的 decision
+    （`ops::call` 各操作 `audit` 寫死的句子）合成**結果**：`added`／`removed`／`changed`（`RegChange{area: repo|group|relation|export, name, details, at, events}`），
+    同一個對象只留最後的樣子（同面向後蓋前；tier 留最早的舊值；tag 把增減併起來），期間內登記又移出的不列。用現在的 registry 對帳：
+    留痕說移出、現在還在的改列「變更」（或「新增」）並說明是登記回來那一步沒留痕；變更過、現在不在的標出來。另附 `missing_paths`（封存的不算）與 `unrecognized`。
+    **沒留 ADMIN 痕的寫入**（沒補，原因：會改 Python 對拍的 spine 輸出或要動 App 的 action）：`registry scan --register`（`registry::scan_register`，CLI 與 MCP admin 都走它，完全不留痕）、
+    App 的「加入資料夾」（`a_group_add_folder`）與「登記 repo」（`a_register_repos`，留的是沒有 ADMIN_TAG 的 decision）、`ctx spawn` 的出生登記。
+  - **`ctx steward [--json]`**（`steward.rs`）：簡報 ≤ `BRIEF_MAX_CHARS`（2000 字元），段落依序：要你決定（前 5 張：repo｜問題｜類別或「舊交接」｜放了多久｜有沒有總管建議）、
+    自動放行（近 7 天筆數，0 不印）、放行規則（升級建議＋policy 問題，沒有不印）、registry 變更（自上次總管開場，第一次 7 天；沒有不印）、各組（等你／在跑／可接／最後交接；沿用 relay plan 的列）、
+    異常（路徑不存在、近 7 天沒交接就結束；沒有不印）。每段標題帶下一步的指令。超過上限從最後一段的最後一項砍起，最後一行「還有 N 項：<指令>」。plan 只跑一次（`decide::queue_of`）。
+    `--json` 是 `Brief`（`text` 是裁切後的文字，其他欄位是全部）。人在終端看不記「看過了」。
+  - **spine 裡的開場**：`hooks::session_start` 在 cwd 在 spine 裡、又不在任何登記 repo 時注入「總管簡報＋`assets/STEWARD.md` 的作業規則」（之前是 0 位元組）；
+    有 session_id 才記 `.state/steward.json` 的 `seen`。**不寫 marker**，所以 SessionEnd 什麼都不記（不會變成「沒交接就結束」，別的 repo 的事件也算不到它頭上）。
+    未登記目錄仍 0 位元組；一般 repo 的開場不變。副本上 release 約 0.45 秒（第一次 0.9 秒）。
+  - **總管建議 `ctx decide suggest <repo> <選項編號｜一句話…> [--why]`**（agent 可以下，沒有 MCP 工具）：留痕 `chosen [steward] id:<日>-q<N> repo:<id> ref:<交接 ref>`，
+    第一行 `〔決定〕<repo>：總管建議「…」`、`建議：`、`理由：`、機器行 `decide suggest[ option:<n>]`。不是回答（`history` 不收）：不算連續、不算抽查、不讓卡消失。
+    `Card.steward`（`StewardNote{ref, at, repo, handoff_ref, text, option, why}`，最新一筆、時間不早於交接；新交接自然失效）；`Decided.steward_differs`（總管建議跟你答的不同才有）。沒有卡＝`not_found`。
+  - **`ctx session --steward [--task …] [--print]`**：`session::SessionScope { Work(SessionOpts), Steward{task, agent} }`＋`session::plan`（第 5 輪前端走這個入口），
+    `build_steward`：cwd＝spine，`pack_path`＝`.state/steward-brief.md`（簡報＋規則，給沒有 hook 的 agent 讀），MCP 照一般規則掛，沒任務不帶 prompt；跟 `--group／--repos／--repo` 互斥。
+    既有的 `SessionOpts`／`build` 不動。
+  - `ctx decide list` 卡片 ≥ 5 張時頁尾一句「讓總管先整理：ctx session --steward」。`relay::is_no_handoff` 改成 pub。
 - **`ctx todo list`**（2026-10-20；Python 沒有）：範圍內全部未結、逾期在前，`--json` 跟 `next_work` 的 todo 同一種物件；
   沒掛 MCP 的 agent（CLI 模式）之前只能靠 `ctx next` 的前 5 項。
 - **任務包 `ctx todo brief #N`**（2026-10-10，ideation F-42；Python 沒有）：把一項未結組成給全新會話的 markdown——

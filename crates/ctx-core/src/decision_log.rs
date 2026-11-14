@@ -183,13 +183,17 @@ fn is_overturn(m: &[&str]) -> bool {
     m.first() == Some(&"overturn")
 }
 
+fn is_suggest(m: &[&str]) -> bool {
+    m.first() == Some(&"suggest")
+}
+
 /// 一筆事件 → 回答；不是回答（不是留痕、是推翻）＝None。
 fn answered_of(ev: &Event) -> Option<Answered> {
     if !spine::is_decide_record(ev) {
         return None;
     }
     let m = machine(ev);
-    if is_overturn(&m) {
+    if is_overturn(&m) || is_suggest(&m) {
         return None;
     }
     let by = match tok(&m, "by:") {
@@ -317,6 +321,92 @@ pub fn write_answer(spine_dir: &Path, a: &NewAnswer, now: NaiveDateTime) -> Resu
     };
     let ev = append(spine_dir, source, tokens, &body.join("\n"), now)?;
     answered_of(&ev).ok_or_else(|| crate::Error::invalid("回答留痕寫入後讀不回來"))
+}
+
+/// 總管在卡上留的建議（F-125）：不是回答、不算連續、不算抽查，只給人回答時參考。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StewardNote {
+    /// 留痕的 ref
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub at: String,
+    pub repo: String,
+    /// 指向哪筆交接
+    pub handoff_ref: String,
+    /// 建議的答案（選項編號已換成選項文字）
+    pub text: String,
+    /// 建議的是第幾個選項
+    pub option: Option<usize>,
+    pub why: Option<String>,
+}
+
+/// 來源：總管會話（agent）留的。
+pub const SOURCE_STEWARD: &str = "steward";
+
+/// 全部總管建議（舊到新）。
+pub fn steward_notes_of(events: &[Event]) -> Vec<StewardNote> {
+    events
+        .iter()
+        .filter(|e| spine::is_decide_record(e))
+        .filter_map(|e| {
+            let m = machine(e);
+            if !is_suggest(&m) {
+                return None;
+            }
+            Some(StewardNote {
+                reference: e.reference(),
+                at: e.stamp(),
+                repo: e.kv("repo").unwrap_or("").to_string(),
+                handoff_ref: e.kv("ref").filter(|r| !r.is_empty())?.to_string(),
+                text: line_value(e, "建議：").unwrap_or("").to_string(),
+                option: tok(&m, "option:").and_then(|n| n.parse().ok()),
+                why: line_value(e, "理由：")
+                    .filter(|w| !w.is_empty())
+                    .map(str::to_string),
+            })
+        })
+        .collect()
+}
+
+/// 這筆交接最新的總管建議（時間不早於交接）。
+pub fn steward_note_for<'a>(
+    notes: &'a [StewardNote],
+    repo: &str,
+    handoff_ref: &str,
+    handoff_at: &str,
+) -> Option<&'a StewardNote> {
+    notes.iter().rfind(|n| {
+        spine::same_token(&n.repo, repo)
+            && n.handoff_ref == handoff_ref
+            && n.at.as_str() >= handoff_at
+    })
+}
+
+/// 寫一筆總管建議（指向交接）。
+pub fn write_steward_note(
+    spine_dir: &Path,
+    repo: &str,
+    handoff_ref: &str,
+    text: &str,
+    option: Option<usize>,
+    why: Option<&str>,
+    now: NaiveDateTime,
+) -> Result<String> {
+    let text = one_line(text);
+    let mut body = vec![
+        format!("{DECIDE_TAG}{repo}：總管建議「{}」", clip(&text)),
+        format!("建議：{text}"),
+    ];
+    if let Some(w) = why.map(one_line).filter(|w| !w.is_empty()) {
+        body.push(format!("理由：{w}"));
+    }
+    let mut m = format!("{MACHINE_HEAD} suggest");
+    if let Some(n) = option {
+        m.push_str(&format!(" option:{n}"));
+    }
+    body.push(m);
+    let tokens = vec![format!("repo:{repo}"), format!("ref:{handoff_ref}")];
+    Ok(append(spine_dir, SOURCE_STEWARD, tokens, &body.join("\n"), now)?.reference())
 }
 
 /// 推翻一筆規則放行的留痕（指向那筆放行）。回傳推翻那筆的 ref。

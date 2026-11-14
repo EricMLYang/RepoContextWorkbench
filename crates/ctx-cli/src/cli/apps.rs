@@ -14,6 +14,9 @@ use super::common::{split_opt, CmdResult, Ctx, Exit, EXIT_REJECTED};
 
 #[derive(Args, Debug)]
 pub struct SessionArgs {
+    /// 總管會話：工作目錄＝spine，不屬於任何 repo（開場注入總管簡報與作業規則）
+    #[arg(long, conflicts_with_all = ["group", "repos", "repo"])]
+    pub steward: bool,
     #[arg(long)]
     pub group: Option<String>,
     #[arg(long)]
@@ -34,17 +37,21 @@ pub struct SessionArgs {
 pub fn cmd_session(ctx: &Ctx, a: &SessionArgs) -> CmdResult {
     let d = ctx.spine_dir()?;
     let ids = split_opt(a.repos.as_deref());
-    let plan = session::build(
-        &d,
-        SessionOpts {
+    let task = a.task.as_deref().filter(|s| !s.is_empty());
+    let agent = Some(a.agent.as_str()).filter(|s| !s.is_empty());
+    let scope = if a.steward {
+        session::SessionScope::Steward { task, agent }
+    } else {
+        session::SessionScope::Work(SessionOpts {
             group: a.group.as_deref(),
             repos: ids.as_deref(),
             repo: a.repo.as_deref().filter(|s| !s.is_empty()),
-            task: a.task.as_deref().filter(|s| !s.is_empty()),
-            agent: Some(a.agent.as_str()).filter(|s| !s.is_empty()),
+            task,
+            agent,
             home_group: None,
-        },
-    )?;
+        })
+    };
+    let plan = session::plan(&d, scope)?;
     println!("料：{}", plan.pack_path.display());
     if a.print_only {
         println!("cd {}", plan.cwd.display());

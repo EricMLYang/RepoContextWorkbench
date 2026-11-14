@@ -552,6 +552,16 @@ fn test_decide_human_only_commands_refused_in_agent_shell() {
     ]);
     assert_eq!(r.json()["decision"], "wait");
     assert_eq!(agent.run(&["decide", "untrust", "impl", "push"]).code, 0);
+    // 總管建議 agent 可以下；卡片上看得到
+    let r = agent.run(&["decide", "suggest", "impl", "2", "--why", "測試還沒跑"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert!(r.stdout.contains("總管建議：2) 不要"), "{}", r.stdout);
+    let r = agent.run(&["decide", "list", "--all"]);
+    assert!(
+        r.stdout.contains("總管建議：2) 不要（測試還沒跑）"),
+        "{}",
+        r.stdout
+    );
     // 使用者本人：成功
     assert_eq!(human.run(&["decide", "trust", "impl", "commit"]).code, 0);
     assert_eq!(human.run(&["decide", "answer", "impl", "1"]).code, 0);
