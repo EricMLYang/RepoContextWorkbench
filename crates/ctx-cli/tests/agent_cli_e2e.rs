@@ -378,3 +378,97 @@ fn test_worktrees_lists_and_removes_only_clean_ones() {
     assert!(!wt.exists());
     assert_ne!(c.run(&["worktrees", "nope"]).code, 0);
 }
+
+/// F-123：`ctx handoff --ask …` → `ctx decide list` 的卡（編號選項、建議、證據在不在、回覆指令）→
+/// `ctx decide answer <repo> 2`（照建議、印送達方式）→ 卡消失。
+#[test]
+fn test_handoff_ask_and_decide_cli() {
+    let e = env_spine();
+    let c = ctx(e.tmp()).cwd(&e.impl_).env("REPOENGINE_SPINE", &e.sp);
+    // 旗標都要搭 --ask
+    let r = c.run(&["handoff", "--done", "x", "--next", "y", "--kind", "commit"]);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    let r = c.run(&[
+        "handoff",
+        "--done",
+        "草稿好了",
+        "--next",
+        "等使用者挑排序",
+        "--ask",
+        "首頁排序用哪個？",
+        "--kind",
+        "choose",
+        "--option",
+        "依修改時間",
+        "--option",
+        "依名稱",
+        "--recommend",
+        "1",
+        "--evidence",
+        "README.md",
+        "--evidence",
+        "docs/none.md",
+        "--irreversible",
+        "--json",
+    ]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert_eq!(r.json()["ask"]["recommend"], "依修改時間");
+    let r = c.run(&[
+        "handoff",
+        "--done",
+        "x",
+        "--next",
+        "y",
+        "--ask",
+        "q",
+        "--option",
+        "A",
+        "--recommend",
+        "B",
+        "--json",
+    ]);
+    assert!(r.code == 2 && r.json()["error"] == "bad_request");
+
+    let r = c.run(&["decide", "list", "--all"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let out = &r.stdout;
+    for want in [
+        "1. impl",
+        "問：首頁排序用哪個？",
+        "1) 依修改時間　← 建議",
+        "2) 依名稱",
+        "類別：選方案；做了收不回來",
+        "證據：README.md、docs/none.md（不存在）",
+        "→ ctx decide answer impl 1",
+    ] {
+        assert!(out.contains(want), "缺「{want}」：\n{out}");
+    }
+    let r = c.run(&["decide", "list", "--all", "--json"]);
+    assert_eq!(r.json()["cards"][0]["structured"], true);
+
+    let r = c.run(&["decide", "answer", "impl", "9"]);
+    assert!(
+        r.code != 0 && r.stderr.contains("1) 依修改時間"),
+        "{}",
+        r.stderr
+    );
+    let r = c.run(&["decide", "answer", "impl", "1"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert!(
+        r.stdout
+            .contains("已記下：impl「首頁排序用哪個？」→ 依修改時間（第 1 個選項，照建議）"),
+        "{}",
+        r.stdout
+    );
+    assert!(
+        r.stdout
+            .contains("使用者對「首頁排序用哪個？」的回答是：依修改時間"),
+        "{}",
+        r.stdout
+    );
+    let r = c.run(&["decide", "list", "--all"]);
+    assert!(r.stdout.starts_with("沒有要你決定的事"), "{}", r.stdout);
+    // 答過了就沒有卡（回覆多個字不用加引號）
+    let r = c.run(&["decide", "answer", "impl", "好", "的", "--json"]);
+    assert!(r.code == 2 && r.json()["error"] == "not_found");
+}

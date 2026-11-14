@@ -22,6 +22,7 @@ use regex::Regex;
 use serde::Serialize;
 
 use crate::agentapi::{self, mailbox, Handoff};
+use crate::ask::Ask;
 use crate::collect::{self, RepoSpec, RepoState};
 use crate::registry::{self, Repo, Tier};
 use crate::spine::{self, Event, EventType};
@@ -32,6 +33,9 @@ use crate::{gitlog, Error, RejectCode, Result};
 pub const STALE_DAYS: i64 = 14;
 /// report 每個 repo 列前幾個 commit 標題。
 pub const REPORT_COMMITS: usize = 3;
+
+/// plan 列的備註：下一步在等你（決策卡不重印這句，卡片本身就是在等你）。
+pub const NOTE_WAITS: &str = "下一步在等你";
 
 /// hook 在會話結束、期間沒交接時寫的 suggestion 第一行開頭（見 `hooks.rs` 的 SessionEnd）。
 const NO_HANDOFF_MARK: &str = "agent 會話結束但沒有交接";
@@ -169,6 +173,9 @@ pub struct PlanRow {
     pub notes: Vec<String>,
     /// 這列在等你回一句（NeedsYou、會話開著且下一步在等你、太舊且下一步在等你）——`relay answer` 的對象
     pub waits_on_you: bool,
+    /// 上次交接帶的提問（問題、選項、建議…；F-123）。沒有＝不出現這個鍵
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ask: Option<Ask>,
 }
 
 /// 一種狀態有幾個。
@@ -374,6 +381,7 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
     let (label, entries, skipped) = members(spine_dir, scope)?;
     let states = states_of(spine_dir, &entries);
     let events = spine::iter_events(spine_dir)?;
+    let history = crate::decide::history_of(&events);
     let sessions = sessions_by_repo(spine_dir);
     let mut rows: Vec<PlanRow> = Vec::with_capacity(entries.len());
     for ((entry, group), st) in entries.iter().zip(&states) {
@@ -402,8 +410,22 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
                 && h_stamp.as_ref().is_none_or(|s| e.stamp() > *s)
         });
         let (session, sid) = session_of(&sessions, &id);
-        let waits = next.as_deref().is_some_and(waits_on_you);
+        // 交接帶了提問（F-123）就是在等你，不用再猜下一步的文字
+        let ask = h.as_ref().and_then(|h| h.ask.clone());
+        // 已經用 `ctx decide answer` 回答過的交接不再等你：任務帶著回答，可以接（F-123）
+        let answered = h
+            .as_ref()
+            .and_then(|h| crate::decide::answer_of(&history, &id, &h.reference, &h.at));
+        let waits =
+            answered.is_none() && (ask.is_some() || next.as_deref().is_some_and(waits_on_you));
         let mut notes = Vec::new();
+        if let Some(a) = answered {
+            notes.push(format!(
+                "已回答（{}）：{}",
+                a.reference,
+                crate::pystr::clip(&a.answer, 60)
+            ));
+        }
         let status = if !st.exists {
             notes.push(format!("登記的路徑不存在：{}", st.path));
             RelayStatus::Missing
@@ -429,11 +451,11 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
         } else if age_days.is_some_and(|d| d > STALE_DAYS) {
             notes.push(format!("交接是 {} 天前", age_days.unwrap_or_default()));
             if waits {
-                notes.push("下一步在等你".into());
+                notes.push(NOTE_WAITS.into());
             }
             RelayStatus::Stale
         } else if waits {
-            notes.push("下一步在等你".into());
+            notes.push(NOTE_WAITS.into());
             RelayStatus::NeedsYou
         } else {
             RelayStatus::Ready
@@ -442,13 +464,18 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
             notes.push(format!("{} 個檔沒 commit", st.dirty));
         }
         // 太舊又在等你的不給任務：agent 接了也只能回頭問你
-        let prompt = prompt_for(
-            status,
-            h.as_ref()
-                .filter(|_| next.is_some() && !(status == RelayStatus::Stale && waits)),
-            age_days.unwrap_or_default(),
-            gap.map(Event::stamp).as_deref(),
-        );
+        let prompt = match (answered, &h) {
+            (Some(a), Some(h)) if matches!(status, RelayStatus::Ready | RelayStatus::Stale) => {
+                Some(answer_task(&id, h, &a.answer))
+            }
+            _ => prompt_for(
+                status,
+                h.as_ref()
+                    .filter(|_| next.is_some() && !(status == RelayStatus::Stale && waits)),
+                age_days.unwrap_or_default(),
+                gap.map(Event::stamp).as_deref(),
+            ),
+        };
         rows.push(PlanRow {
             repo: id,
             group: group.clone(),
@@ -464,6 +491,7 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
                 RelayStatus::SessionOpen | RelayStatus::Stale => waits,
                 _ => false,
             },
+            ask,
         });
     }
     rows.sort_by(|a, b| {
@@ -624,15 +652,20 @@ pub fn report(spine_dir: &Path, scope: &RelayScope, since: &str) -> Result<Repor
     let (label, entries, skipped) = members(spine_dir, scope)?;
     let states = states_of(spine_dir, &entries);
     let events = spine::iter_events(spine_dir)?;
+    let history = crate::decide::history_of(&events);
     let sessions = sessions_by_repo(spine_dir);
     let mut rows = Vec::with_capacity(entries.len());
     for ((entry, group), st) in entries.iter().zip(&states) {
         let id = entry.id();
+        // 最後一筆交接在等你：帶了提問或下一步的文字在等人，而且還沒用 decide answer 回答（F-123，同 plan）
+        let mut last_waits = false;
         let handoffs: Vec<HandoffBrief> = events
             .iter()
             .filter(|ev| agentapi::is_handoff(ev) && of_repo(ev, &id) && ev.stamp() >= since)
             .map(|ev| {
                 let h = agentapi::parse_handoff(ev);
+                last_waits = (h.ask.is_some() || h.next_step.as_deref().is_some_and(waits_on_you))
+                    && crate::decide::answer_of(&history, &id, &h.reference, &h.at).is_none();
                 HandoffBrief {
                     at: h.at,
                     reference: h.reference,
@@ -647,10 +680,6 @@ pub fn report(spine_dir: &Path, scope: &RelayScope, since: &str) -> Result<Repor
             (0, Vec::new())
         };
         let (session, _) = session_of(&sessions, &id);
-        let last_waits = handoffs
-            .last()
-            .and_then(|h| h.next_step.as_deref())
-            .is_some_and(waits_on_you);
         let verdict = if session == SessionNow::Running {
             Verdict::Running
         } else if session == SessionNow::NeedsYou || last_waits {
@@ -771,7 +800,11 @@ fn rejected(code: RejectCode, msg: String, hint: &str) -> Error {
 fn answer_task(repo: &str, h: &Handoff, reply: &str) -> String {
     let head = format!("接續 {repo} 上次的交接（{}，{}）。", h.at, h.reference);
     let tail = "照回覆接著做；回覆沒涵蓋到、仍要人決定的部分不要自己猜，做完能做的就 handoff 並寫清楚還在等什麼。";
-    let reply_line = format!("使用者的回覆：{reply}");
+    // 交接帶了提問（F-123）：講清楚這是在回答哪一題
+    let reply_line = match &h.ask {
+        Some(a) => format!("使用者對「{}」的回答是：{reply}", a.question),
+        None => format!("使用者的回覆：{reply}"),
+    };
     let fixed = head.chars().count() + tail.chars().count() + reply_line.chars().count() + 20;
     let room = ANSWER_CHARS.saturating_sub(fixed);
     // 下一步比完成摘要重要：先給下一步，剩下的給摘要；兩個都至少留一點

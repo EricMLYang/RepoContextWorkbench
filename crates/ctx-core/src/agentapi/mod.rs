@@ -25,6 +25,7 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 use std::sync::LazyLock;
 
+use crate::ask::{Ask, AskInput};
 use crate::crossref::{self, Drift, Neighbor, RunText, MAX_READ_CHARS};
 use crate::fsutil::{expanduser, resolve as py_resolve};
 use crate::knowledge;
@@ -551,6 +552,9 @@ pub struct Handoff {
     pub next_step: Option<String>,
     /// 交接是哪個 repo 留的（事件的 `repo:` token）
     pub repo: Option<String>,
+    /// 要人決定的提問（F-123；交接沒寫提問欄位＝None，JSON 不出現這個鍵）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ask: Option<Ask>,
 }
 
 /// 把一筆交接事件拆成欄位（同一個鍵出現多次取最後一次，同 Python）。
@@ -582,6 +586,7 @@ pub fn parse_handoff(ev: &Event) -> Handoff {
         remaining: field("剩下"),
         next_step: field("下次從這裡接"),
         repo: kv_opt(ev, "repo"),
+        ask: Ask::from_fields(field),
     }
 }
 
@@ -1192,7 +1197,7 @@ pub fn repo_status(
 
 // ---------------------------------------------------------------- 寫
 
-fn next_id(events: &[Event], date_str: &str, prefix: &str) -> String {
+pub(crate) fn next_id(events: &[Event], date_str: &str, prefix: &str) -> String {
     let used: HashSet<&str> = events.iter().filter_map(|e| e.kv("id")).collect();
     let mut n = 1;
     while used.contains(format!("{date_str}-{prefix}{n}").as_str()) {
@@ -1302,6 +1307,9 @@ pub struct HandedOff {
     pub reference: String,
     pub todos: Vec<String>,
     pub event: Value,
+    /// 寫進交接的提問（正規化過：建議已換成選項文字）；沒帶提問＝不出現這個鍵（F-123）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ask: Option<Ask>,
 }
 
 /// 對應 `agentapi.log_decision`：記一筆判斷（decision）。回傳 ref，之後可以用它引用這筆。
@@ -1732,11 +1740,37 @@ pub fn handoff<S: AsRef<str>>(
     cross_scope_ok: bool,
     source: &str,
 ) -> Result<HandedOff> {
+    handoff_with_ask(
+        spine_dir,
+        done,
+        next_step,
+        remaining,
+        None,
+        t,
+        cross_scope_ok,
+        source,
+    )
+}
+
+/// 同 [`handoff`]，另帶要人決定的提問（F-123）：驗過才寫，提問幾行接在「下次從這裡接：」之後
+/// （格式見 [`crate::ask`]）。`ask`＝None 時寫出的 body 跟 [`handoff`] 一個位元組都不差。
+#[allow(clippy::too_many_arguments)]
+pub fn handoff_with_ask<S: AsRef<str>>(
+    spine_dir: &Path,
+    done: &str,
+    next_step: &str,
+    remaining: &[S],
+    ask: Option<&AskInput>,
+    t: &Target,
+    cross_scope_ok: bool,
+    source: &str,
+) -> Result<HandedOff> {
     let w = where_am_i(spine_dir, t.cwd.as_deref())?;
     let s = scope_of(spine_dir, &w, t)?;
     check_write_scope(spine_dir, &w, &s, cross_scope_ok)?;
     let done = clean(done, "done")?;
     let next_step = clean(next_step, "next_step")?;
+    let ask = ask.map(AskInput::validate).transpose()?;
     let remaining: Vec<&str> = remaining
         .iter()
         .map(AsRef::as_ref)
@@ -1760,13 +1794,16 @@ pub fn handoff<S: AsRef<str>>(
             .collect::<Vec<_>>()
             .join("；")
     };
-    let body = [
+    let mut lines = vec![
         format!("交接：{head}"),
         format!("完成：{}", done_lines.join(" ")),
         format!("剩下：{rem}"),
         format!("下次從這裡接：{}", splitlines(&next_step).join(" ")),
-    ]
-    .join("\n");
+    ];
+    if let Some(a) = &ask {
+        lines.extend(a.body_lines());
+    }
+    let body = lines.join("\n");
     let mut toks = vec![format!("id:{eid}")];
     toks.extend(tokens_for(&s, w.repo_id()));
     let ev = append(spine_dir, "decision", source, &toks, &body)?;
@@ -1776,6 +1813,7 @@ pub fn handoff<S: AsRef<str>>(
         reference: event_ref(&ev),
         todos: Vec::new(),
         event: event_dict(&ev),
+        ask,
     })
 }
 

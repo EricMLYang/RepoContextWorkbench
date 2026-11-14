@@ -160,6 +160,7 @@ MCP_EXTRA_PARAMS = [
     ("log_decision", "supersedes", "log_decision 多了選填 supersedes／reopen_when（F-07 判斷取代＋何時重看，Rust 才有）"),
     ("log_decision", "reopen_when", "log_decision 多了選填 supersedes／reopen_when（F-07 判斷取代＋何時重看，Rust 才有）"),
     ("log_decision", "outcome_of", "log_decision 多了選填 outcome_of（F-23 判斷回顧：記結果，Rust 才有）"),
+    ("handoff", "ask", "handoff 多了選填 ask（F-123 提問欄位：要使用者決定的問題、選項、建議，Rust 才有）"),
 ]
 
 
@@ -691,7 +692,7 @@ def main():
 
     # ── 讀（初始狀態）──
     C("instructions", ["instructions"], spine=False,
-      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作)（Rust 版）\n.*?(?=\n## )", "", re.sub(r"`remaining` [^。]*。", "", re.sub(r"\n## 反芻推薦（別人替你先找好的）\n.*?(?=\n## )", "", re.sub(r"\n1\. \*\*開工\*\*.*?(?=\n2\. )", "", s, flags=re.S), flags=re.S)), flags=re.S))  # 收尾那句見 TODO_SOURCE_WHY；反芻那節見 FRESH_WHY；開工那步見 SLIM_CONTEXT_WHY
+      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作|要使用者決定時)（Rust 版）\n.*?(?=\n## )", "", re.sub(r"`remaining` [^。]*。", "", re.sub(r"\n## 反芻推薦（別人替你先找好的）\n.*?(?=\n## )", "", re.sub(r"\n1\. \*\*開工\*\*.*?(?=\n2\. )", "", s, flags=re.S), flags=re.S)), flags=re.S))  # 收尾那句見 TODO_SOURCE_WHY；反芻那節見 FRESH_WHY；開工那步見 SLIM_CONTEXT_WHY
     C("registry list", ["registry", "list"])
     C("registry list --json", ["registry", "list", "--json"])
     C("registry relations", ["registry", "relations"])

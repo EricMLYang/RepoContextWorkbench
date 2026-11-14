@@ -99,6 +99,14 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
   要接手一場會話：`ctx sessions --digest <id>` 印出交接包（你說的話、動過的檔、跑過的指令、最後回覆，秘密已遮），比整份逐字稿短。
 - **清 worktree**：`ctx worktrees <repo> --json` 看哪些乾淨、哪些有只在那裡的 commit；使用者同意才 `--remove <path>`（不強制、分支留著）。
 
+## 要使用者決定時（Rust 版）
+
+- 收尾時下一步在等使用者決定、確認或驗收（要不要 commit、選哪個方案、看畫面、手動測），`handoff` 帶 `ask`：
+  `question` 寫成不看程式也答得出來的一句話（好：「首頁排序改成依修改時間（A）還是維持依名稱（B）？」；差：「要繼續嗎？」），
+  `options` 給選項、`recommend` 標你建議的、`kind` 選類別、做了收不回來設 `reversible=false`、`evidence` 給要看的檔。
+  使用者在 `ctx decide list` 一次看各 repo 的提問、用編號回答，回答會連同交接送回給下一場會話。
+- 沒掛 MCP：`ctx handoff --done "…" --next "…" --ask "問題" --kind choose --option A --option B --recommend 1 --evidence docs/x.md`。
+
 ## 範圍規則
 
 - 查詢預設只看主場。寫入主場以外的組會被拒（`error: cross_scope`）。

@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::Local;
 use ctx_core::agentapi::{self, SearchOpts, Target};
+use ctx_core::ask::AskInput;
 use ctx_core::collect::{self, RepoSpec};
 use ctx_core::ops::{self, Via};
 use ctx_core::pack::{self, RepoRef};

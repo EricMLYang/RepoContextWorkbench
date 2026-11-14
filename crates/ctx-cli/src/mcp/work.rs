@@ -135,15 +135,59 @@ pub(super) fn w_status(d: &Path, a: &Args, here: &Path) -> Result<Value> {
 }
 pub(super) fn w_handoff(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("handoff", a, &["done", "next_step"])?;
-    json(agentapi::handoff(
+    let ask = ask_arg(a)?;
+    json(agentapi::handoff_with_ask(
         d,
         &arg_s(a, "done").unwrap_or_default(),
         &arg_s(a, "next_step").unwrap_or_default(),
         &arg_list(a, "remaining"),
+        ask.as_ref(),
         &target(a, here),
         arg_flag(a, "cross_scope_ok"),
         "agent",
     ))
+}
+
+/// `handoff` 的 `ask` 參數 → [`AskInput`]（驗證在引擎）。有的 client 會把物件包成 JSON 字串送來，照樣認；
+/// 不是 JSON 的字串當成只有問題。
+fn ask_arg(a: &Args) -> Result<Option<AskInput>> {
+    let m = match a.get("ask") {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::String(s)) if s.trim().is_empty() => return Ok(None),
+        Some(Value::String(s)) => match serde_json::from_str::<Value>(s) {
+            Ok(Value::Object(m)) => m,
+            _ => {
+                let mut m = Map::new();
+                m.insert("question".into(), Value::String(s.clone()));
+                m
+            }
+        },
+        Some(Value::Object(m)) => m.clone(),
+        Some(_) => {
+            return Err(Error::rejected(
+                ctx_core::RejectCode::BadRequest,
+                "ask 要是物件：{question, kind?, options?, recommend?, reversible?, evidence?}",
+                None,
+            ))
+        }
+    };
+    let s = |k: &str| match m.get(k) {
+        None | Some(Value::Null) => None,
+        Some(x) => Some(pystr::py_str(x)),
+    };
+    let list = |k: &str| match m.get(k) {
+        Some(Value::Array(xs)) => xs.iter().map(pystr::py_str).collect(),
+        None | Some(Value::Null) => Vec::new(),
+        Some(x) => vec![pystr::py_str(x)],
+    };
+    Ok(Some(AskInput {
+        question: s("question").unwrap_or_default(),
+        kind: s("kind"),
+        options: list("options"),
+        recommend: s("recommend"),
+        reversible: m.get("reversible").filter(|x| !x.is_null()).map(truthy),
+        evidence: list("evidence"),
+    }))
 }
 pub(super) fn w_send_message(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("send_message", a, &["text"])?;

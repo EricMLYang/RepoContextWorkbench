@@ -136,9 +136,12 @@ fn member_line(entry: &Repo, state: Option<&RepoState>, rels_of: &[RelationView]
     line
 }
 
-/// 給 agent 的最近事件不列的簿記：未結的開／關、hook 記給人看的提醒。
+/// 給 agent 的最近事件不列的簿記：未結的開／關、hook 記給人看的提醒、人回答決策卡的留痕
+/// （[`spine::DECIDE_TAG`]；回答已經寫進送給 agent 的任務，F-123）。
 pub(crate) fn is_bookkeeping(ev: &Event) -> bool {
-    ev.etype == EventType::OpenLoop || (ev.etype == EventType::Suggestion && ev.source == "hook")
+    ev.etype == EventType::OpenLoop
+        || (ev.etype == EventType::Suggestion && ev.source == "hook")
+        || spine::is_decide_record(ev)
 }
 
 /// 事件在卡片上的一句話。交接事件的標題在寫入時截到 80 字（`交接：<完成的第一行>`）：
@@ -335,6 +338,8 @@ fn build_card(
         // 會話料（給 agent 的）不列未結的開／關（還開著的在上面「未結」段；早就關掉的「opened」會被當成還開著）
         // 與 hook 記給人看的提醒（「會話結束但沒有交接」）——2026-11-10 R11
         .filter(|ev| !solo_wording || !is_bookkeeping(ev))
+        // 回答決策卡的留痕是工具的操作紀錄，組卡也不列（F-123）
+        .filter(|ev| !spine::is_decide_record(ev))
         .collect();
     if evs.is_empty() {
         out.push("（無）".into());

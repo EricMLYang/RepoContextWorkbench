@@ -11,6 +11,7 @@ pub mod agent;
 pub mod apps;
 pub mod common;
 pub mod daily;
+pub mod decide;
 pub mod health;
 pub mod relay;
 pub mod setup;
@@ -166,6 +167,11 @@ pub enum Cmd {
         #[command(subcommand)]
         cmd: relay::RelayCmd,
     },
+    /// 要你決定：list 列出各 repo 在等你決定的卡（問題、編號選項、建議、證據）／answer <repo> <編號｜一句話> 回答並印出怎麼送給 agent（Rust 才有）
+    Decide {
+        #[command(subcommand)]
+        cmd: decide::DecideCmd,
+    },
     /// 知識 ↔ repo 相關度：這段文字跟哪些 repo 的哪些檔最相關
     Search(agent::SearchArgs),
     /// 反芻推薦：別組新進的知識／判斷中，跟主場手上工作強相關的
@@ -255,6 +261,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Handoff(a) => agent::cmd_handoff(ctx, a),
         Msg { cmd } => agent::cmd_msg(ctx, cmd),
         Relay { cmd } => relay::cmd_relay(ctx, cmd),
+        Decide { cmd } => decide::cmd_decide(ctx, cmd),
         Search(a) => agent::cmd_search(ctx, a),
         Fresh(a) => agent::cmd_fresh(ctx, a),
         Health { days } => health::cmd_health(ctx, *days),

@@ -241,6 +241,29 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   第 1 輪只有 CLI（`ctx relay plan|report`，`--json`），純讀取；沒有 MCP 工具，`parity` 不涉及。
   第 2 輪：`relay::answer`（`ctx relay answer <repo> "<回覆>"`）純計算——任務文字＋送達方式 `Delivery`（existing_session／resume／new_session）。
   resume 只在逐字稿（`history::past_sessions`）的時間涵蓋交接、而且內容裡真的有這筆交接的 ref 時才給；會話正在處理中回新的 `RejectCode::Busy`（`"busy"`，只加不改）。
+- **提問欄位與決策佇列**（2026-11-14，F-123 第 1 輪；Python 沒有）：
+  - **交接的提問欄位**（`ask.rs`）：`handoff` 多選填 `ask`（question 必填；kind、options、recommend、reversible 預設 true、evidence）。
+    寫成交接 body 在「下次從這裡接：」之後的幾行：`要你決定：…`、`類別：<kind>`、`選項：A｜B｜C`（沒選項不寫）、`建議：<選項文字>`（沒建議不寫；
+    給編號會換成選項文字）、`可逆：是｜否`、`證據：p1；p2`（沒證據不寫）。類別 snake_case 字串是合約：`commit`、`content_review`、`config_change`、
+    `choose`、`visual_check`、`manual_test`、`push`、`publish`、`delete`、`send_external`、`other`；`AskKind::auto_approvable` 寫死
+    push／publish／delete／send_external／visual_check／manual_test／other 不能自動放行（第 2 輪用）。分隔字元出現在值裡＝`bad_request` 拒寫
+    （不跳脫）；建議不在選項裡、類別看不懂、證據是絕對路徑也拒。**沒帶 ask 時 body 跟以前一個位元組都不差**。讀回（`parse_handoff` 的 `ask`）寬鬆：
+    看不懂的類別＝other、「可逆」不是「是」＝否。`Handoff`、`HandedOff`、`relay::PlanRow` 多 `ask`（沒有就不出現這個鍵）。
+    入口：MCP `handoff` 的 `ask` 物件（也收包成 JSON 字串的物件；`parity.py` 記為 Rust 才有的選填參數）、
+    CLI `ctx handoff --ask <問題> [--kind K] [--option A …] [--recommend 1] [--irreversible] [--evidence 路徑 …]`。
+  - **接力**：交接有 ask 就算「在等你」（不再只靠 regex；優先序不變；`report` 的 waiting 同一套）；`relay::answer` 的任務文字改寫「使用者對「<問題>」的回答是：<答案>」。
+    已經 `decide answer` 過的交接不再算等你：plan 那列變 ready（太舊的仍是 stale），任務＝帶著回答的任務文字，備註「已回答（<留痕 ref>）：<答案>」。
+    人看的 plan 在等你的列，回覆指令改提示 `ctx decide answer`（會留痕）；會話開著但沒在等你的照舊 `ctx relay answer`。
+  - **決策佇列**（`decide.rs`）：`ctx decide list [--group G｜--all] [--json]`——每個 repo 最後一筆交接、還沒回答、而且帶 ask 或接力判斷在等你
+    （`PlanRow::waits_on_you`）的出一張卡（名片介紹與角色、問題、編號選項、建議、可逆、證據在不在、放了幾天／幾小時、接力的備註）；
+    帶 ask 的在前、同段交接新的在前；路徑不存在、會話處理中的不列。`ctx decide answer <repo> <編號｜一句話…> [--json]`——純數字且有選項＝那個選項，
+    超出範圍 `bad_request` 列出選項；先跑 `relay::answer_with`（送不出去就停，**不留痕**），再留痕、回傳留痕＋送達方式。
+  - **回答留痕**：`chosen [cli] id:<日>-q<N> repo:<id> ref:<交接 ref>`，body 第一行 `〔決定〕<repo>：<問題> → <回答>`（`spine::DECIDE_TAG`），
+    接著 `問題：`、`回答：`、`建議：`（有才寫），最後一行給程式讀：`decide kind:<kind|none> follow:<followed|differed|no_recommendation>`。
+    類別與照不照建議放 body 而不是標頭 token：標頭的 token 文法是跟 Python 與舊版 `ctx` 共用的合約，多一種鍵會讓它們讀整份 spine 失敗。
+    `decide::history` 讀回（`Answered`），第 2 輪從這裡算「同一個 repo＋類別連續幾次照建議」。「已回答」＝有留痕的 ref 指向那筆交接、而且時間不早於它
+    （沒 id 的 ref 只有時間，不同天會撞）；新的交接自然蓋掉舊的。留痕不進 context_for 的最近事件與情境卡、開場注入、SessionEnd 的留痕計數
+    （`context::is_bookkeeping`、`spine::is_decide_record`）；型別是 chosen，所以判斷回顧、工作摘要的上次進度、反芻、交接判定、收件匣本來就不收。
 - **`ctx todo list`**（2026-10-20；Python 沒有）：範圍內全部未結、逾期在前，`--json` 跟 `next_work` 的 todo 同一種物件；
   沒掛 MCP 的 agent（CLI 模式）之前只能靠 `ctx next` 的前 5 項。
 - **任務包 `ctx todo brief #N`**（2026-10-10，ideation F-42；Python 沒有）：把一項未結組成給全新會話的 markdown——

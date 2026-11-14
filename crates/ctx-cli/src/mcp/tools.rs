@@ -191,6 +191,7 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
                         ("done", d_(str_t(), "這次完成了什麼（成果、改了哪些檔）")),
                         ("next_step", d_(str_t(), "下次從哪裡接，一句話")),
                         ("remaining", d_(arr_t(), "可省略：沒做完的事，只寫進交接文字，不開未結")),
+                        ("ask", ask_schema()),
                     ],
                     cwd_props(),
                     scope_props(),

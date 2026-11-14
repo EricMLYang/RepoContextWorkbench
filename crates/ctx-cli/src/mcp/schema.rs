@@ -64,6 +64,31 @@ pub(super) fn cross_props() -> Vec<(&'static str, Value)> {
     )]
 }
 
+/// `handoff` 的 `ask` 物件（F-123）。描述每場會話都花 token：只講什麼時候填、好壞各一例。
+pub(super) fn ask_schema() -> Value {
+    let mut kind = d_(str_t(), "類別；省略＝other");
+    kind["enum"] = json!(ctx_core::ask::AskKind::NAMES);
+    let mut v = s_(
+        vec![
+            ("question", d_(str_t(), "一句不看程式也答得出來的問題")),
+            ("kind", kind),
+            ("options", d_(arr_t(), "選項（使用者用 1 起算的編號回答）")),
+            ("recommend", d_(str_t(), "你建議的選項（文字或編號）")),
+            ("reversible", d_(bool_t(), "做了收得回來嗎；預設 true")),
+            (
+                "evidence",
+                d_(arr_t(), "要看的檔：repo 內相對路徑或 <repo>:<路徑>"),
+            ),
+        ],
+        &["question"],
+    );
+    v["description"] = json!(
+        "可省略：下一步在等使用者決定／確認／驗收時才填，使用者會在決策佇列（ctx decide）看到並用編號回答。\
+         好：「首頁排序要改成依修改時間（A）還是維持依名稱（B）？」；差：「要繼續嗎？」"
+    );
+    v
+}
+
 pub(super) fn cat(parts: Vec<Vec<(&'static str, Value)>>) -> Vec<(&'static str, Value)> {
     parts.into_iter().flatten().collect()
 }

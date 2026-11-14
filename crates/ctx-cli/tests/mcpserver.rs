@@ -196,3 +196,73 @@ fn test_relation_and_context_tools() {
     let txt = text(&tool(&d, "group_context", json!({"group": "g1"})));
     assert!(txt.starts_with("# 組情境卡 g1") && txt.contains("## 脈動"));
 }
+
+/// F-123：handoff 的 ask 參數——物件、包成 JSON 字串的物件都認；驗不過回 bad_request 且不寫；schema 有 kind 的 enum。
+#[test]
+fn test_handoff_ask_param() {
+    let (tmp, d) = spine_with_repos();
+    let a = tmp.path().join("repo-a");
+    let cwd = a.to_string_lossy().to_string();
+    let r = call(&d, "tools/list", json!({}));
+    let ho = r["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "handoff")
+        .unwrap()
+        .clone();
+    let ask = &ho["inputSchema"]["properties"]["ask"];
+    assert_eq!(ask["type"], "object");
+    assert_eq!(ask["required"], json!(["question"]));
+    assert_eq!(ask["properties"]["kind"]["enum"][0], "commit");
+    assert!(ask["description"].as_str().unwrap().contains("要繼續嗎"));
+
+    let ok = tool(
+        &d,
+        "handoff",
+        json!({"cwd": cwd, "done": "草稿", "next_step": "等使用者挑",
+               "ask": {"question": "用 A 還是 B？", "kind": "choose", "options": ["A", "B"],
+                       "recommend": 2, "reversible": false, "evidence": ["README.md"]}}),
+    );
+    let v: Value = serde_json::from_str(&text(&ok)).unwrap();
+    assert_eq!(v["ok"], true, "{v}");
+    assert_eq!(v["ask"]["recommend"], "B");
+    assert_eq!(v["ask"]["reversible"], false);
+    let ev = spine_mod::iter_events(&d)
+        .unwrap()
+        .into_iter()
+        .rev()
+        .find(|e| e.etype == EventType::Decision)
+        .unwrap();
+    assert!(ev.body.contains("\n要你決定：用 A 還是 B？\n類別：choose\n選項：A｜B\n建議：B\n可逆：否\n證據：README.md"), "{}", ev.body);
+
+    let s = tool(
+        &d,
+        "handoff",
+        json!({"cwd": cwd, "done": "草稿", "next_step": "等使用者挑",
+               "ask": "{\"question\": \"要 commit 嗎？\", \"kind\": \"commit\"}"}),
+    );
+    let v: Value = serde_json::from_str(&text(&s)).unwrap();
+    assert_eq!(v["ask"]["kind"], "commit", "{v}");
+
+    let before = spine_mod::iter_events(&d).unwrap().len();
+    let bad = tool(
+        &d,
+        "handoff",
+        json!({"cwd": cwd, "done": "草稿", "next_step": "等使用者挑",
+               "ask": {"question": "哪個？", "options": ["A", "B"], "recommend": "C"}}),
+    );
+    let v: Value = serde_json::from_str(&text(&bad)).unwrap();
+    assert_eq!(v["error"], "bad_request", "{v}");
+    assert!(v["hint"].as_str().unwrap().contains("1) A"));
+    assert_eq!(spine_mod::iter_events(&d).unwrap().len(), before);
+
+    // 沒帶 ask：回傳沒有 ask 鍵
+    let plain = tool(
+        &d,
+        "handoff",
+        json!({"cwd": cwd, "done": "x", "next_step": "y"}),
+    );
+    let v: Value = serde_json::from_str(&text(&plain)).unwrap();
+    assert!(v.get("ask").is_none(), "{v}");
+}

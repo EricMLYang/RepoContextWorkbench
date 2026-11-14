@@ -952,21 +952,62 @@ pub struct HandoffArgs {
     #[arg(long)]
     pub remaining: Vec<String>,
     #[command(flatten)]
+    pub ask: HandoffAskArgs,
+    #[command(flatten)]
     pub scope: Scoped,
     #[command(flatten)]
     pub w: WriteOpts,
 }
 
+/// 交接的提問欄位（F-123）：下一步在等使用者決定／確認／驗收時才給；使用者用 `ctx decide` 回答。
+#[derive(Args, Debug, Clone, Default)]
+pub struct HandoffAskArgs {
+    /// 要使用者決定的問題（一句不看程式也答得出來的話）；以下旗標都要搭配它
+    #[arg(long = "ask", value_name = "問題")]
+    pub question: Option<String>,
+    /// 提問的類別
+    #[arg(long, requires = "question", value_parser = ctx_core::ask::AskKind::NAMES)]
+    pub kind: Option<String>,
+    /// 選項（可重複；使用者用 1 起算的編號回答）
+    #[arg(long = "option", requires = "question", value_name = "選項")]
+    pub options: Vec<String>,
+    /// 你建議哪個（選項文字或編號）
+    #[arg(long, requires = "question")]
+    pub recommend: Option<String>,
+    /// 這件事做了收不回來（預設可逆）
+    #[arg(long, requires = "question")]
+    pub irreversible: bool,
+    /// 要看的檔（可重複；repo 內相對路徑或 <repo>:<路徑>）
+    #[arg(long, requires = "question", value_name = "路徑")]
+    pub evidence: Vec<String>,
+}
+
+impl HandoffAskArgs {
+    fn input(&self) -> Option<ctx_core::ask::AskInput> {
+        let q = self.question.as_ref()?;
+        Some(ctx_core::ask::AskInput {
+            question: q.clone(),
+            kind: self.kind.clone(),
+            options: self.options.clone(),
+            recommend: self.recommend.clone(),
+            reversible: self.irreversible.then_some(false),
+            evidence: self.evidence.clone(),
+        })
+    }
+}
+
 pub fn cmd_handoff(ctx: &Ctx, a: &HandoffArgs) -> CmdResult {
     let t = a.scope.target();
+    let ask = a.ask.input();
     agent_call(
         ctx,
         |d| {
-            agentapi::handoff(
+            agentapi::handoff_with_ask(
                 d,
                 &a.done,
                 &a.next_step,
                 &a.remaining,
+                ask.as_ref(),
                 &t,
                 a.w.cross_scope_ok,
                 a.w.source(),

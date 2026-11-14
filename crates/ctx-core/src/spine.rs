@@ -47,6 +47,15 @@ pub const LOCK_NAME: &str = ".engine.lock";
 /// 是「改了設定」不是「做了工作」——工作摘要的「上次進度」不拿它充數。
 pub const ADMIN_TAG: &str = "〔registry〕";
 
+/// 人回答決策卡的留痕（`chosen` 事件，`decide::answer` 寫的）的 body 前綴（F-123，Rust 才有）：
+/// 是工具留的操作紀錄——不是要回顧的判斷、不是工作進度、不是交接，也不進 agent 的開場與最近事件。
+pub const DECIDE_TAG: &str = "〔決定〕";
+
+/// 這筆是不是回答決策卡的留痕（見 [`DECIDE_TAG`]）。
+pub fn is_decide_record(ev: &Event) -> bool {
+    ev.etype == EventType::Chosen && ev.body.starts_with(DECIDE_TAG)
+}
+
 /// 空 token 清單（`append_event(.., NO_TOKENS, ..)`，免得型別推不出來）。
 pub const NO_TOKENS: &[&str] = &[];
 

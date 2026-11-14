@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
 use ctx_core::agentapi;
+use ctx_core::ask::numbered;
 use ctx_core::pystr::clip;
 use ctx_core::relay::{self, Answer, Delivery, Plan, RelayScope, RelayStatus, Report, Verdict};
 
@@ -55,7 +56,11 @@ pub enum RelayCmd {
 }
 
 /// 參數 → 範圍。沒給＝目前目錄所屬的組（不在組裡但登記過＝只看這個 repo）。
-fn scope_of(d: &Path, a: &RelayScopeArgs, repos: Option<&str>) -> Result<RelayScope, Exit> {
+pub(super) fn scope_of(
+    d: &Path,
+    a: &RelayScopeArgs,
+    repos: Option<&str>,
+) -> Result<RelayScope, Exit> {
     if let Some(ids) = split_opt(repos) {
         return Ok(RelayScope::Repos(ids));
     }
@@ -142,6 +147,13 @@ fn render_plan(p: &Plan) -> String {
             if let Some(n) = &r.next_step {
                 out.push(format!("  下一步：{}", clip(n, SHOWN_CHARS)));
             }
+            // 交接帶了提問（F-123）
+            if let Some(a) = &r.ask {
+                out.push(format!("  要你決定：{}", clip(&a.question, SHOWN_CHARS)));
+                if !a.options.is_empty() {
+                    out.push(format!("  選項：{}", numbered(&a.options).join("　")));
+                }
+            }
             // 可接的任務就是「接續上次交接：<下一步>」，不重印；其他狀態的任務跟下一步不同才印
             if st != RelayStatus::Ready {
                 if let Some(pr) = &r.prompt {
@@ -151,7 +163,15 @@ fn render_plan(p: &Plan) -> String {
             if !r.notes.is_empty() {
                 out.push(format!("  備註：{}", r.notes.join("；")));
             }
-            if r.waits_on_you || st == RelayStatus::SessionOpen {
+            // 在等你的用 decide answer（會留痕，F-123）；會話開著但沒在等你的照舊直接送一句
+            if r.waits_on_you {
+                let what = if r.ask.is_some() {
+                    "<編號或一句話>"
+                } else {
+                    "\"…\""
+                };
+                out.push(format!("  回覆：ctx decide answer {} {what}", r.repo));
+            } else if st == RelayStatus::SessionOpen {
                 out.push(format!("  回覆：ctx relay answer {} \"…\"", r.repo));
             }
         }
@@ -227,7 +247,7 @@ fn render_report(r: &Report) -> String {
     out.join("\n")
 }
 
-fn render_answer(a: &Answer) -> String {
+pub(super) fn render_answer(a: &Answer) -> String {
     let mut out = vec![
         format!(
             "# 接力 answer：{}（handoff {}，{}）",

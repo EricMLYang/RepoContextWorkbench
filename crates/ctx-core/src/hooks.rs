@@ -611,7 +611,12 @@ fn session_end_inner(
         .to_string();
     let (mut traces, mut handed_off) = (0usize, false);
     for ev in spine::iter_events(spine_dir)? {
-        if ev.stamp() < started || ev.source == "hook" || ev.source == "monitor" {
+        // 人在終端回答決策卡的留痕（F-123）不是這場會話的工作
+        if ev.stamp() < started
+            || ev.source == "hook"
+            || ev.source == "monitor"
+            || spine::is_decide_record(&ev)
+        {
             continue;
         }
         if !agentapi::in_scope_of(&ev, group.as_deref(), repos.as_deref()) {
