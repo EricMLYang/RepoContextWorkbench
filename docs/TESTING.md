@@ -246,7 +246,7 @@
 | 8g-2 | `ctx relay answer <等你的 repo> "你的回覆"` | 印出任務文字（上次交接＋你的回覆）和一行指令：`claude --resume …`、`ctx session …`，或「貼進開著的會話 tN」；不會自己開會話 | [ ] | [ ] |
 | 8g-3 | 把 8g-2 印的指令貼到終端執行 | agent 帶著你的回覆接著做，不用再解釋前情；做完有交接 | [ ] | [ ] |
 | 8g-4 | 對會話正在做事的 repo 跑 `ctx relay answer` | 被拒（`busy`，exit 2），請你等它這輪做完 | [ ] | [ ] |
-| 8g-5 | 8g-3 做完後跑 `ctx relay report --since "今天 HH:MM" --all` | 那個 repo 標「做完」，附新的交接與 commit 數 | [ ] | [ ] |
+| 8g-5 | 8g-3 做完後跑 `ctx relay report --since "YYYY-MM-DD HH:MM" --all` | 那個 repo 標「做完」，附新的交接與 commit 數 | [ ] | [ ] |
 | 8g-6 | App 左側檔案樹，看名稱帶數字的資料夾與檔案 | 資料夾在前；數字當數值排（`2_topics` 在 `10_business` 前、`ch9` 在 `ch10` 前），不分大小寫 | [ ] | [ ] |
 
 ## 9. 要你決定
