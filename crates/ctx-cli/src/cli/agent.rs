@@ -70,7 +70,7 @@ impl Scoped {
 }
 
 /// `_agent_call` 的錯誤出口：AgentError → (code, message, hint)；ValueError → bad_request。
-fn agent_err(e: Error) -> Exit {
+pub(super) fn agent_err(e: Error) -> Exit {
     match e {
         Error::Rejected {
             code,

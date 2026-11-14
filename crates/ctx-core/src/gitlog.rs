@@ -41,6 +41,49 @@ pub fn log(root: &Path, limit: usize) -> Vec<Commit> {
     if code != 0 {
         return Vec::new();
     }
+    parse_log(&out)
+}
+
+/// `since`（`YYYY-MM-DD HH:MM`，本機時間）之後的 commit：(總數, 最新的 `limit` 個)。
+/// 不是 git repo、還沒有 commit＝(0, 空)。只讀（`git log`／`rev-list` 不拿 index 鎖，仍帶 `--no-optional-locks`）。
+/// Rust 才有（2026-11-14，接力 `relay report`）。
+pub fn since(root: &Path, since: &str, limit: usize) -> (usize, Vec<Commit>) {
+    let after = format!("--since={since}");
+    let (code, count) = crate::crossref::git(
+        root,
+        &["--no-optional-locks", "rev-list", "--count", &after, "HEAD"],
+        GIT_TIMEOUT,
+    );
+    let total = if code == 0 {
+        count.trim().parse().unwrap_or(0)
+    } else {
+        0
+    };
+    if total == 0 {
+        return (0, Vec::new());
+    }
+    let n = format!("-n{}", limit.clamp(1, LOG_MAX));
+    let (code, out) = crate::crossref::git(
+        root,
+        &[
+            "--no-optional-locks",
+            "log",
+            &n,
+            &after,
+            "--no-color",
+            "--format=%H%x1f%h%x1f%s%x1f%an%x1f%cI%x1e",
+        ],
+        GIT_TIMEOUT,
+    );
+    let commits = if code == 0 {
+        parse_log(&out)
+    } else {
+        Vec::new()
+    };
+    (total, commits)
+}
+
+fn parse_log(out: &str) -> Vec<Commit> {
     out.split('\u{1e}')
         .filter_map(|rec| {
             let f: Vec<&str> = rec.trim_matches('\n').split('\u{1f}').collect();

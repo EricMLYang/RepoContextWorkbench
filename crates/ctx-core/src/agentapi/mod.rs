@@ -531,15 +531,32 @@ fn dormant_note(count: usize) -> Value {
     })
 }
 
-fn is_handoff(ev: &Event) -> bool {
+/// 這筆事件是不是收尾交接（decision，第一行「交接：…」）。
+pub fn is_handoff(ev: &Event) -> bool {
     ev.etype == EventType::Decision && ev.body.starts_with("交接")
 }
 
-/// 對應 `_last_handoff`：範圍內最後一筆「交接：…」decision 的欄位。
-fn last_handoff(events: &[Event], s: &Scope) -> Option<Value> {
-    let best = events.iter().rfind(|ev| is_handoff(ev) && s.contains(ev))?;
+/// 一筆交接拆出來的欄位（`handoff` 寫的「完成／剩下／下次從這裡接」）。
+/// `last_handoff`（context_for）與 `relay`（接力）共用同一份解析。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Handoff {
+    #[serde(rename = "ref")]
+    pub reference: String,
+    /// `YYYY-MM-DD HH:MM`
+    pub at: String,
+    pub source: String,
+    pub summary: String,
+    pub done: Option<String>,
+    pub remaining: Option<String>,
+    pub next_step: Option<String>,
+    /// 交接是哪個 repo 留的（事件的 `repo:` token）
+    pub repo: Option<String>,
+}
+
+/// 把一筆交接事件拆成欄位（同一個鍵出現多次取最後一次，同 Python）。
+pub fn parse_handoff(ev: &Event) -> Handoff {
     let mut fields: Vec<(String, String)> = Vec::new();
-    for ln in splitlines(&best.body).into_iter().skip(1) {
+    for ln in splitlines(&ev.body).into_iter().skip(1) {
         if let Some((k, v)) = ln.split_once('：') {
             let k = k.trim().to_string();
             let v = v.trim().to_string();
@@ -555,14 +572,30 @@ fn last_handoff(events: &[Event], s: &Scope) -> Option<Value> {
             .find(|(kk, _)| kk == k)
             .map(|(_, v)| v.clone())
     };
-    let summary: String = first(best).chars().skip(3).collect();
+    let summary: String = first(ev).chars().skip(3).collect();
+    Handoff {
+        reference: event_ref(ev),
+        at: format!("{} {}", ev.date, ev.time),
+        source: ev.source.clone(),
+        summary: summary.trim().to_string(),
+        done: field("完成"),
+        remaining: field("剩下"),
+        next_step: field("下次從這裡接"),
+        repo: kv_opt(ev, "repo"),
+    }
+}
+
+/// 對應 `_last_handoff`：範圍內最後一筆「交接：…」decision 的欄位。
+fn last_handoff(events: &[Event], s: &Scope) -> Option<Value> {
+    let best = events.iter().rfind(|ev| is_handoff(ev) && s.contains(ev))?;
+    let h = parse_handoff(best);
     Some(json!({
-        "ref": event_ref(best), "at": format!("{} {}", best.date, best.time),
-        "source": best.source, "summary": summary.trim(),
-        "done": field("完成"), "remaining": field("剩下"),
-        "next_step": field("下次從這裡接"),
+        "ref": h.reference, "at": h.at,
+        "source": h.source, "summary": h.summary,
+        "done": h.done, "remaining": h.remaining,
+        "next_step": h.next_step,
         // Rust 才有（2026-11-10 R11）：交接是哪個 repo 留的——同組別的 repo 開場要講清楚那是別人的接續點
-        "repo": kv_opt(best, "repo"),
+        "repo": h.repo,
     }))
 }
 

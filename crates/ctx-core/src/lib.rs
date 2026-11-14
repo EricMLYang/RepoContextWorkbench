@@ -41,6 +41,7 @@ pub mod pyjson;
 pub mod pystr;
 pub mod redact;
 pub mod registry;
+pub mod relay;
 pub mod relsuggest;
 pub mod repocard;
 pub mod route;

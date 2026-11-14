@@ -12,6 +12,7 @@ pub mod apps;
 pub mod common;
 pub mod daily;
 pub mod health;
+pub mod relay;
 pub mod setup;
 
 use clap::{Parser, Subcommand};
@@ -160,6 +161,11 @@ pub enum Cmd {
         #[command(subcommand)]
         cmd: agent::MsgCmd,
     },
+    /// 接力：plan 看哪些 repo 能從上次交接的下一步直接接著做／report --since 看事後各 repo 做了什麼（Rust 才有）
+    Relay {
+        #[command(subcommand)]
+        cmd: relay::RelayCmd,
+    },
     /// 知識 ↔ repo 相關度：這段文字跟哪些 repo 的哪些檔最相關
     Search(agent::SearchArgs),
     /// 反芻推薦：別組新進的知識／判斷中，跟主場手上工作強相關的
@@ -248,6 +254,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Status(a) => agent::cmd_status(ctx, a),
         Handoff(a) => agent::cmd_handoff(ctx, a),
         Msg { cmd } => agent::cmd_msg(ctx, cmd),
+        Relay { cmd } => relay::cmd_relay(ctx, cmd),
         Search(a) => agent::cmd_search(ctx, a),
         Fresh(a) => agent::cmd_fresh(ctx, a),
         Health { days } => health::cmd_health(ctx, *days),

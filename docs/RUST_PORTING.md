@@ -235,6 +235,10 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   入口：`ctx todo tidy [--close done,shelved,ask]`、`ctx todo close 68 72 128`（多個編號）、MCP `tidy_todos`（帶 `close` 才關）、
   App 的「清理未結…」（收件匣底部、⌘K；action `todo_tidy`／`close_loops`／`todo_tidy_brief`）。
   緣由：230 項未結裡 226 項是 agent 開的、202 項的期限是自動加的 14 天，App 裡又沒有清單可看可關，所以只增不減。
+- **接力 `ctx relay`**（2026-11-14，F-122；Python 沒有）：`relay::plan` 依每個 repo 最後一筆交接（`agentapi::parse_handoff`，跟 `context_for` 同一份解析）、
+  App 會話狀態（`mailbox::peers`）、hook 的「會話結束但沒有交接」、git 狀態，把範圍內的 repo 分成 ready／needs_you／unhandoffed／stale／busy／no_handoff／missing
+  （優先序與「在等你」的通用詞見 `relay.rs`；參考類、暫停、封存不列）；`relay::report` 看 `--since` 之後的 handoff、commit（`gitlog::since`）、會話，結論 done／waiting／running／no_handoff／idle。
+  第 1 輪只有 CLI（`ctx relay plan|report`，`--json`），純讀取；沒有 MCP 工具，`parity` 不涉及。
 - **`ctx todo list`**（2026-10-20；Python 沒有）：範圍內全部未結、逾期在前，`--json` 跟 `next_work` 的 todo 同一種物件；
   沒掛 MCP 的 agent（CLI 模式）之前只能靠 `ctx next` 的前 5 項。
 - **任務包 `ctx todo brief #N`**（2026-10-10，ideation F-42；Python 沒有）：把一項未結組成給全新會話的 markdown——
