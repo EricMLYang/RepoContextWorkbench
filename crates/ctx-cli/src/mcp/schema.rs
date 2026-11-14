@@ -83,10 +83,26 @@ pub(super) fn ask_schema() -> Value {
         &["question"],
     );
     v["description"] = json!(
-        "可省略：下一步在等使用者決定／確認／驗收時才填，使用者會在決策佇列（ctx decide）看到並用編號回答。\
+        "可省略：下一步在等使用者決定／確認／驗收時才填，使用者會在決策佇列（ctx decide）看到並用編號回答；這類已設成自動放行時回傳多 auto（就是答案）。\
          好：「首頁排序要改成依修改時間（A）還是維持依名稱（B）？」；差：「要繼續嗎？」"
     );
     v
+}
+
+/// `request_decision` 的參數：跟 `ask` 物件同一組欄位，攤在最上層。
+pub(super) fn ask_props() -> Vec<(&'static str, Value)> {
+    let schema = ask_schema();
+    [
+        "question",
+        "kind",
+        "options",
+        "recommend",
+        "reversible",
+        "evidence",
+    ]
+    .into_iter()
+    .map(|k| (k, schema["properties"][k].clone()))
+    .collect()
 }
 
 pub(super) fn cat(parts: Vec<Vec<(&'static str, Value)>>) -> Vec<(&'static str, Value)> {

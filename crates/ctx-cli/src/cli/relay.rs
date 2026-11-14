@@ -127,7 +127,10 @@ fn render_plan(p: &Plan) -> String {
         head.push_str(&format!("；略過 {} 個（參考類、暫停、封存）", p.skipped));
     }
     out.push(head);
-    out.push(format!("等你回覆的共 {} 件", p.waiting_on_you));
+    out.push(format!(
+        "要你決定的共 {} 件（卡片：ctx decide list）",
+        p.waiting_on_you
+    ));
     for st in RelayStatus::ORDER {
         let rows: Vec<_> = p.rows.iter().filter(|r| r.status == st).collect();
         if rows.is_empty() {
@@ -164,7 +167,7 @@ fn render_plan(p: &Plan) -> String {
                 out.push(format!("  備註：{}", r.notes.join("；")));
             }
             // 在等你的用 decide answer（會留痕，F-123）；會話開著但沒在等你的照舊直接送一句
-            if r.waits_on_you {
+            if r.is_decision_card(false) {
                 let what = if r.ask.is_some() {
                     "<編號或一句話>"
                 } else {

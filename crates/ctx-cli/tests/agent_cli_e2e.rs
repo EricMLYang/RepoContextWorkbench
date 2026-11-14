@@ -384,7 +384,11 @@ fn test_worktrees_lists_and_removes_only_clean_ones() {
 #[test]
 fn test_handoff_ask_and_decide_cli() {
     let e = env_spine();
-    let c = ctx(e.tmp()).cwd(&e.impl_).env("REPOENGINE_SPINE", &e.sp);
+    // decide answer 是使用者本人的動作：測試常在 agent 的 shell 裡跑，拿掉 CLAUDECODE
+    let c = ctx(e.tmp())
+        .cwd(&e.impl_)
+        .env("REPOENGINE_SPINE", &e.sp)
+        .without("CLAUDECODE");
     // 旗標都要搭 --ask
     let r = c.run(&["handoff", "--done", "x", "--next", "y", "--kind", "commit"]);
     assert_eq!(r.code, 2, "{}", r.stderr);
@@ -471,4 +475,84 @@ fn test_handoff_ask_and_decide_cli() {
     // 答過了就沒有卡（回覆多個字不用加引號）
     let r = c.run(&["decide", "answer", "impl", "好", "的", "--json"]);
     assert!(r.code == 2 && r.json()["error"] == "not_found");
+}
+
+/// F-124：在 agent 的 shell（CLAUDECODE=1）裡，decide trust／answer 被拒（human_only、exit 2），policy.yaml 與 spine 都沒寫；
+/// untrust、request、list、rules 照常；拿掉環境變數就成功。
+#[test]
+fn test_decide_human_only_commands_refused_in_agent_shell() {
+    let e = env_spine();
+    let human = ctx(e.tmp())
+        .cwd(&e.impl_)
+        .env("REPOENGINE_SPINE", &e.sp)
+        .without("CLAUDECODE");
+    let agent = human.clone().env("CLAUDECODE", "1");
+    let r = human.run(&[
+        "handoff",
+        "--done",
+        "草稿",
+        "--next",
+        "等使用者決定",
+        "--ask",
+        "要 commit 嗎？",
+        "--kind",
+        "commit",
+        "--option",
+        "要",
+        "--option",
+        "不要",
+        "--recommend",
+        "1",
+    ]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let events = |sp: &Path| -> String {
+        std::fs::read_dir(sp.join("spine/events"))
+            .unwrap()
+            .map(|f| std::fs::read_to_string(f.unwrap().path()).unwrap())
+            .collect()
+    };
+    let before = events(&e.sp);
+    for args in [
+        vec!["decide", "trust", "impl", "commit", "--json"],
+        vec!["decide", "answer", "impl", "1", "--json"],
+    ] {
+        let r = agent.run(&args);
+        assert_eq!(r.code, 2, "{args:?}：{}", r.stdout);
+        let v = r.json();
+        assert_eq!(v["error"], "human_only");
+        assert!(v["message"]
+            .as_str()
+            .unwrap()
+            .contains("使用者自己在終端或 App 下"));
+        assert!(v["hint"].as_str().unwrap().contains("ctx decide request"));
+    }
+    let r = agent.run(&["decide", "trust", "impl", "commit"]);
+    assert!(
+        r.code != 0 && r.stderr.contains("agent 不能代做"),
+        "{}",
+        r.stderr
+    );
+    assert!(!e.sp.join("policy.yaml").exists(), "沒寫 policy.yaml");
+    assert_eq!(events(&e.sp), before, "spine 沒多一筆");
+    // 收緊與查詢照常
+    assert_eq!(agent.run(&["decide", "list", "--all"]).code, 0);
+    assert_eq!(agent.run(&["decide", "rules"]).code, 0);
+    let r = agent.run(&[
+        "decide",
+        "request",
+        "--ask",
+        "要 commit 嗎？",
+        "--kind",
+        "commit",
+        "--option",
+        "要",
+        "--recommend",
+        "1",
+        "--json",
+    ]);
+    assert_eq!(r.json()["decision"], "wait");
+    assert_eq!(agent.run(&["decide", "untrust", "impl", "push"]).code, 0);
+    // 使用者本人：成功
+    assert_eq!(human.run(&["decide", "trust", "impl", "commit"]).code, 0);
+    assert_eq!(human.run(&["decide", "answer", "impl", "1"]).code, 0);
 }

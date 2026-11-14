@@ -58,6 +58,8 @@ pub enum RejectCode {
     Failed,
     /// 對象正在忙（例：那個 repo 的會話正在處理中，不要打斷；Rust 才有，2026-11-14 接力）。
     Busy,
+    /// 這是使用者本人才做的動作（例：放寬放行規則、替使用者回答決策卡），agent 不能代做（Rust 才有，2026-11-14 F-124）。
+    HumanOnly,
 }
 
 impl RejectCode {
@@ -70,6 +72,7 @@ impl RejectCode {
             RejectCode::InvalidEvent => "invalid_event",
             RejectCode::Failed => "failed",
             RejectCode::Busy => "busy",
+            RejectCode::HumanOnly => "human_only",
         }
     }
 }

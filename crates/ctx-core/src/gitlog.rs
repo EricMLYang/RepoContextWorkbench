@@ -135,6 +135,42 @@ pub fn show(root: &Path, sha: &str) -> Result<(String, bool)> {
     Ok((text, truncated))
 }
 
+/// 沒 commit 的檔（含未追蹤；改名的新舊路徑都列），repo 內相對路徑、`/` 分隔。
+/// 放行規則（`policy` 的 `paths`）用：引擎自己查，不信 agent 說的。不是 git repo 或 git 失敗＝錯誤。
+/// 只讀（`--no-optional-locks`）。Rust 才有（2026-11-14，F-124）。
+pub fn dirty_files(root: &Path) -> Result<Vec<String>> {
+    let (code, out) = crate::crossref::git(
+        root,
+        &[
+            "--no-optional-locks",
+            "status",
+            "--porcelain",
+            "-z",
+            "--untracked-files=all",
+        ],
+        GIT_TIMEOUT,
+    );
+    if code != 0 {
+        return Err(Error::External(format!(
+            "{} 查不到 git 狀態（不是 git repo 或 git 失敗）",
+            root.display()
+        )));
+    }
+    let mut files = Vec::new();
+    let mut it = out.split('\0').filter(|x| !x.is_empty());
+    while let Some(entry) = it.next() {
+        let (xy, path) = (entry.get(..2).unwrap_or(""), entry.get(3..).unwrap_or(""));
+        files.push(path.to_string());
+        // 改名／複製：下一段是原本的路徑
+        if xy.starts_with(['R', 'C']) {
+            if let Some(orig) = it.next() {
+                files.push(orig.to_string());
+            }
+        }
+    }
+    Ok(files)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -173,6 +173,7 @@ MCP_EXTRA_TOOLS = {
     "registry_class": "repo 類別 registry_class（2026-10-18，Rust 才有，docs/REPO_CLASSES.md）",
     "what_user_sees": "使用者畫面 what_user_sees（2026-10-24，Rust 才有：App 回報主區在看什麼，agent 被問才讀）",
     "tidy_todos": "未結清理 tidy_todos（2026-11-10，Rust 才有：分類＋一次關一批）",
+    "request_decision": "放行規則 request_decision（F-124，2026-11-14，Rust 才有：做到一半要人決定時先問，規則允許就自動放行）",
     "send_message": MAILBOX_REASON,
     "messages": MAILBOX_REASON,
 }

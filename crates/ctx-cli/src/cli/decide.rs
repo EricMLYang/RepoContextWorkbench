@@ -1,13 +1,19 @@
-//! `ctx decide`：要你決定（F-123，Rust 才有）——list 列出各 repo 在等你決定的卡，answer 回答一張並印出怎麼送給 agent。
-//! 判斷都在 `ctx_core::decide`；這裡只轉參數、排版。文字輸出寫給不記得這個 repo 細節的人看。
+//! `ctx decide`：要你決定（F-123／F-124，Rust 才有）——list 列出各 repo 在等你決定的卡，answer 回答一張並印出怎麼送給 agent；
+//! request 是 agent 做到一半先問放行規則；trust／untrust／overturn／rules 是人管放行規則。
+//! 判斷都在 `ctx_core::decide`／`ctx_core::policy`；這裡只轉參數、排版。文字輸出寫給不記得這個 repo 細節的人看。
 
 use clap::Subcommand;
-use ctx_core::decide::{self, Card, Decided, FollowRec, Queue};
+use ctx_core::decide::{
+    self, AutoList, Card, Decided, FollowRec, LevelChanged, Overturned, PastAnswers, Queue,
+    RulesReport, TrustHint,
+};
+use ctx_core::policy::{Decision, Level};
 use ctx_core::pystr::clip;
 
-use super::agent::agent_err;
-use super::common::{CmdResult, Ctx};
+use super::agent::{agent_err, HandoffAskArgs, Scoped, WriteOpts};
+use super::common::{fail, split_opt, CmdResult, Ctx, Exit, EXIT_REJECTED};
 use super::relay::{render_answer, scope_of, RelayScopeArgs};
+use ctx_core::RejectCode;
 
 /// 人看的卡上，問題最多幾個字（--json 是全文）。
 const QUESTION_CHARS: usize = 300;
@@ -18,6 +24,12 @@ pub enum DecideCmd {
     List {
         #[command(flatten)]
         scope: RelayScopeArgs,
+        /// 改列最近的自動放行（全部 repo；每筆附推翻指令）
+        #[arg(long = "auto", conflicts_with = "group")]
+        auto: bool,
+        /// 跟 --auto 一起用：從什麼時候算起（"YYYY-MM-DD HH:MM"；預設近 7 天）
+        #[arg(long, requires = "auto")]
+        since: Option<String>,
     },
     /// 回答一張卡：選項編號或一句話。留一筆痕，印出怎麼把回答送給那個 repo 的 agent（只印，不開會話）
     Answer {
@@ -27,12 +39,76 @@ pub enum DecideCmd {
         #[arg(required = true, num_args = 1..)]
         reply: Vec<String>,
     },
+    /// agent 做到一半要人決定時先問（沒掛 MCP 時用；同 MCP request_decision）：放行規則允許就回答案，否則回 wait 與原因
+    Request {
+        #[command(flatten)]
+        ask: HandoffAskArgs,
+        #[command(flatten)]
+        scope: Scoped,
+        #[command(flatten)]
+        w: WriteOpts,
+    },
+    /// 以後這類照建議自動放行（commit、content_review、config_change、choose 才行）
+    Trust {
+        repo: String,
+        kind: String,
+        /// 只在沒 commit 的檔全落在這些前綴底下時放行（逗號分隔，例 docs/,notes/）
+        #[arg(long)]
+        paths: Option<String>,
+    },
+    /// 降回每次都問
+    Untrust { repo: String, kind: String },
+    /// 推翻一筆自動放行：留痕、規則降回每次都問，那筆交接回到佇列
+    Overturn {
+        /// 放行的 ref（ctx decide list --auto 看得到）
+        #[arg(value_name = "REF")]
+        reference: String,
+        /// 為什麼推翻（一句話）
+        #[arg(long)]
+        why: Option<String>,
+    },
+    /// 放行規則一覽：等級、since、paths、放行與推翻次數、升級建議、policy.yaml 的問題
+    Rules,
+}
+
+/// Claude Code 在它的 Bash 工具裡設的環境變數（值是 `1`）。
+const AGENT_SHELL_ENV: &str = "CLAUDECODE";
+
+/// 使用者本人才做的子命令（放寬規則、替使用者回答）：在 agent 的 shell 裡跑就拒絕。
+///
+/// 只擋「順手就做」——agent 照著輸出裡的 `ctx decide trust …` 就複製貼上、或自己幫使用者答卡；不是防惡意：
+/// agent 硬要 unset 環境變數擋不住，但做了就有留痕（policy.yaml 跟著 git、回答進 spine）。沒有繞過的旗標。
+/// 只放在 CLI：App 的 IPC 直接呼叫引擎，那是人在按。
+fn refuse_agent_shell(what: &str) -> Result<(), Exit> {
+    if std::env::var_os(AGENT_SHELL_ENV).is_some_and(|v| !v.is_empty() && v != "0") {
+        return Err(fail(
+            RejectCode::HumanOnly.as_str(),
+            format!("{what}是使用者本人的決定，agent 不能代做：這要使用者自己在終端或 App 下"),
+            Some(
+                "agent 要問使用者就用 ctx decide request（或 MCP request_decision），沒放行就收尾 handoff 帶同一個提問、等使用者回答"
+                    .into(),
+            ),
+            EXIT_REJECTED,
+        ));
+    }
+    Ok(())
 }
 
 pub fn cmd_decide(ctx: &Ctx, cmd: &DecideCmd) -> CmdResult {
+    match cmd {
+        DecideCmd::Answer { .. } => refuse_agent_shell("回答決策卡")?,
+        DecideCmd::Trust { .. } => refuse_agent_shell("把一類提問改成自動放行")?,
+        _ => {}
+    }
     let d = ctx.spine_dir()?;
     match cmd {
-        DecideCmd::List { scope } => {
+        DecideCmd::List {
+            auto: true, since, ..
+        } => {
+            let l = decide::auto_list(&d, since.as_deref()).map_err(agent_err)?;
+            ctx.emit(&l, render_auto);
+        }
+        DecideCmd::List { scope, .. } => {
             let sc = scope_of(&d, scope, None)?;
             let q = decide::list(&d, &sc).map_err(agent_err)?;
             ctx.emit(&q, render_list);
@@ -41,13 +117,56 @@ pub fn cmd_decide(ctx: &Ctx, cmd: &DecideCmd) -> CmdResult {
             let r = decide::answer(&d, repo, &reply.join(" ")).map_err(agent_err)?;
             ctx.emit(&r, render_decided);
         }
+        DecideCmd::Request { ask, scope, w } => {
+            let Some(input) = ask.input() else {
+                return Err(fail(
+                    "bad_request",
+                    "要用 --ask 給問題",
+                    Some("例：ctx decide request --ask \"要 commit 嗎？\" --kind commit --option 要 --option 不要 --recommend 1".into()),
+                    EXIT_REJECTED,
+                ));
+            };
+            let r = decide::request(&d, &scope.target(), &input, w.cross_scope_ok)
+                .map_err(agent_err)?;
+            ctx.emit(&r, render_request);
+        }
+        DecideCmd::Trust { repo, kind, paths } => {
+            let paths = paths
+                .as_ref()
+                .map(|p| split_opt(Some(p)).unwrap_or_default());
+            let r = decide::trust(&d, repo, kind, paths).map_err(agent_err)?;
+            ctx.emit(&r, |x| render_level("以後照建議自動放行", x));
+        }
+        DecideCmd::Untrust { repo, kind } => {
+            let r = decide::untrust(&d, repo, kind).map_err(agent_err)?;
+            ctx.emit(&r, |x| render_level("降回每次都問", x));
+        }
+        DecideCmd::Overturn { reference, why } => {
+            let r = decide::overturn(&d, reference, why.as_deref()).map_err(agent_err)?;
+            ctx.emit(&r, render_overturned);
+        }
+        DecideCmd::Rules => {
+            let r = decide::rules_report(&d).map_err(agent_err)?;
+            ctx.emit(&r, render_rules);
+        }
     }
     Ok(())
 }
 
+fn hint_lines(hints: &[TrustHint]) -> Vec<String> {
+    if hints.is_empty() {
+        return Vec::new();
+    }
+    let mut out = vec![String::new(), "## 可以升級成自動放行".to_string()];
+    out.extend(hints.iter().map(|h| format!("- {}", h.line())));
+    out
+}
+
 fn render_list(q: &Queue) -> String {
     if q.cards.is_empty() {
-        return format!("沒有要你決定的事（{}，{}）。", q.scope, q.at);
+        let mut out = vec![format!("沒有要你決定的事（{}，{}）。", q.scope, q.at)];
+        out.extend(hint_lines(&q.suggestions));
+        return out.join("\n");
     }
     let mut out = vec![
         format!("# 要你決定：{}（{}）", q.scope, q.at),
@@ -57,6 +176,7 @@ fn render_list(q: &Queue) -> String {
         out.push(String::new());
         out.extend(card_lines(i + 1, c));
     }
+    out.extend(hint_lines(&q.suggestions));
     out.join("\n")
 }
 
@@ -161,6 +281,178 @@ fn render_decided(r: &Decided) -> String {
         ),
         String::new(),
     ];
+    if let Some(rule) = &r.downgraded {
+        out.push(format!(
+            "這類原本自動放行，這次跟建議不同 → {}/{} 降回每次都問（since {}）",
+            rule.repo,
+            rule.kind.as_str(),
+            rule.since
+        ));
+        out.push(String::new());
+    }
     out.push(render_answer(&r.relay));
+    if let Some(h) = &r.suggestion {
+        out.push(String::new());
+        out.push(h.line());
+    }
+    out.join("\n")
+}
+
+fn render_request(d: &Decision) -> String {
+    match d {
+        Decision::Auto(a) => format!(
+            "auto：照「{}」接著做（規則 {}，留痕 {}；使用者要推翻：ctx decide overturn {}）",
+            a.answer, a.rule, a.reference, a.reference
+        ),
+        Decision::Wait { reason } => format!(
+            "wait（{}）：{}\n能做的先做完，收尾 handoff 帶同一個提問（--ask …），使用者會在 ctx decide list 看到",
+            reason.code, reason.message
+        ),
+    }
+}
+
+fn past_line(p: &PastAnswers) -> String {
+    if p.answers == 0 {
+        "這類還沒有人回答過的紀錄".to_string()
+    } else {
+        format!(
+            "這類過去人回答 {} 次：照建議 {}、跟建議不同 {}；目前連續照建議 {} 次",
+            p.answers, p.followed, p.differed, p.streak
+        )
+    }
+}
+
+fn render_level(what: &str, x: &LevelChanged) -> String {
+    let prev = match x.previous {
+        Some(Level::Auto) => "原本是自動放行",
+        Some(Level::Ask) => "原本是每次都問",
+        None => "原本沒有規則",
+    };
+    let mut out = vec![
+        format!(
+            "{}/{}：{what}（{prev}；since {}）",
+            x.rule.repo,
+            x.rule.kind.as_str(),
+            x.rule.since
+        ),
+        past_line(&x.past),
+    ];
+    if !x.rule.paths.is_empty() {
+        out.push(format!(
+            "只在沒 commit 的檔全在這些路徑底下時放行：{}",
+            x.rule.paths.join("、")
+        ));
+    }
+    out.join("\n")
+}
+
+fn render_overturned(o: &Overturned) -> String {
+    let a = &o.approval;
+    let mut out = vec![format!(
+        "已推翻：{}「{}」→ {}（{}，{}）　留痕 {}",
+        a.repo,
+        clip(&a.question, 80),
+        a.answer,
+        a.rule.as_deref().unwrap_or("—"),
+        a.reference,
+        o.reference
+    )];
+    match (&o.rule, &o.note) {
+        (Some(r), _) => out.push(format!(
+            "{}/{} 降回每次都問（since {}），連續計數從現在算",
+            r.repo,
+            r.kind.as_str(),
+            r.since
+        )),
+        (None, Some(n)) => out.push(n.clone()),
+        (None, None) => {}
+    }
+    if a.handoff_ref.is_some() {
+        out.push("那筆交接回到 ctx decide list；已經照放行的答案動手的 agent，要另外跟它說".into());
+    } else {
+        out.push("這筆是 agent 做到一半問的：它可能已經照答案做了，要另外跟它說".into());
+    }
+    out.join("\n")
+}
+
+fn render_rules(r: &RulesReport) -> String {
+    let mut out = vec![format!(
+        "# 放行規則（{}{}）",
+        r.file,
+        if r.exists {
+            ""
+        } else {
+            "，還沒有這個檔"
+        }
+    )];
+    if r.rules.is_empty() {
+        out.push("沒有規則：每個提問都問人。".into());
+    }
+    for x in &r.rules {
+        let level = match x.rule.level {
+            Level::Auto => "自動放行",
+            Level::Ask => "每次都問",
+        };
+        let mut line = format!(
+            "- {}/{}：{level}（since {}）",
+            x.rule.repo,
+            x.rule.kind.as_str(),
+            x.rule.since
+        );
+        if !x.rule.paths.is_empty() {
+            line.push_str(&format!("；paths {}", x.rule.paths.join("、")));
+        }
+        // since 只到分鐘：ask 時「since 之後放行 N」數到的是降級前同一分鐘那筆，會誤導，只講怎麼回到 ask 的
+        match x.rule.level {
+            Level::Auto => line.push_str(&format!(
+                "；since 之後放行 {}、被推翻 {}",
+                x.approvals, x.overturned
+            )),
+            Level::Ask if x.overturned > 0 => line.push_str(&format!(
+                "；被推翻 {} 次後降回（自 since 起每次都問）",
+                x.overturned
+            )),
+            Level::Ask => {}
+        }
+        out.push(line);
+    }
+    out.extend(hint_lines(&r.suggestions));
+    if !r.problems.is_empty() {
+        out.push(String::new());
+        out.push("## policy.yaml 的問題（這些條目不生效＝照樣問人）".into());
+        out.extend(r.problems.iter().map(|p| format!("- {p}")));
+    }
+    out.join("\n")
+}
+
+fn render_auto(l: &AutoList) -> String {
+    if l.items.is_empty() {
+        return format!("{} 之後沒有自動放行。", l.since);
+    }
+    let mut out = vec![format!(
+        "# 自動放行（{} 之後，{} 筆）",
+        l.since,
+        l.items.len()
+    )];
+    for it in &l.items {
+        let a = &it.approval;
+        out.push(String::new());
+        out.push(format!(
+            "- {} {}（{}）{}",
+            a.at,
+            a.repo,
+            a.rule.as_deref().unwrap_or("—"),
+            if a.overturned_by.is_some() {
+                "　已推翻"
+            } else {
+                ""
+            }
+        ));
+        out.push(format!("  問：{}", clip(&a.question, QUESTION_CHARS)));
+        out.push(format!("  答：{}", a.answer));
+        if let Some(c) = &it.command {
+            out.push(format!("  → {c}"));
+        }
+    }
     out.join("\n")
 }

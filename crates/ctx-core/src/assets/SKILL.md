@@ -101,11 +101,15 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 
 ## 要使用者決定時（Rust 版）
 
+- 做到一半需要使用者決定（要不要 commit、選哪個方案…），**先** `request_decision`（參數同下面的 `ask`）：
+  回 `auto` 就照 `answer` 接著做、不用停；回 `wait` 才把能做的做完、收尾交接等人。
+  回答決策卡（`ctx decide answer`）與升級成自動（`ctx decide trust`）是使用者的事，agent 不要代做（在 agent 的 shell 裡會被拒）。
 - 收尾時下一步在等使用者決定、確認或驗收（要不要 commit、選哪個方案、看畫面、手動測），`handoff` 帶 `ask`：
   `question` 寫成不看程式也答得出來的一句話（好：「首頁排序改成依修改時間（A）還是維持依名稱（B）？」；差：「要繼續嗎？」），
   `options` 給選項、`recommend` 標你建議的、`kind` 選類別、做了收不回來設 `reversible=false`、`evidence` 給要看的檔。
   使用者在 `ctx decide list` 一次看各 repo 的提問、用編號回答，回答會連同交接送回給下一場會話。
-- 沒掛 MCP：`ctx handoff --done "…" --next "…" --ask "問題" --kind choose --option A --option B --recommend 1 --evidence docs/x.md`。
+- 沒掛 MCP：`ctx decide request --ask "問題" --kind commit --option 要 --option 不要 --recommend 1 --json`；
+  `ctx handoff --done "…" --next "…" --ask "問題" --kind choose --option A --option B --recommend 1 --evidence docs/x.md`。
 
 ## 範圍規則
 

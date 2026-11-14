@@ -171,6 +171,11 @@ fn ask_arg(a: &Args) -> Result<Option<AskInput>> {
             ))
         }
     };
+    Ok(Some(ask_from_map(&m)))
+}
+
+/// 提問的欄位（question、kind、options、recommend、reversible、evidence）→ [`AskInput`]。
+fn ask_from_map(m: &Map<String, Value>) -> AskInput {
     let s = |k: &str| match m.get(k) {
         None | Some(Value::Null) => None,
         Some(x) => Some(pystr::py_str(x)),
@@ -180,14 +185,25 @@ fn ask_arg(a: &Args) -> Result<Option<AskInput>> {
         None | Some(Value::Null) => Vec::new(),
         Some(x) => vec![pystr::py_str(x)],
     };
-    Ok(Some(AskInput {
+    AskInput {
         question: s("question").unwrap_or_default(),
         kind: s("kind"),
         options: list("options"),
         recommend: s("recommend"),
         reversible: m.get("reversible").filter(|x| !x.is_null()).map(truthy),
         evidence: list("evidence"),
-    }))
+    }
+}
+
+/// F-124：做到一半要人決定時先問放行規則。
+pub(super) fn w_request_decision(d: &Path, a: &Args, here: &Path) -> Result<Value> {
+    need("request_decision", a, &["question"])?;
+    json(ctx_core::decide::request(
+        d,
+        &target(a, here),
+        &ask_from_map(a),
+        arg_flag(a, "cross_scope_ok"),
+    ))
 }
 pub(super) fn w_send_message(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     need("send_message", a, &["text"])?;

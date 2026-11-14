@@ -35,6 +35,7 @@ pub struct Ctx {
     cwd: Option<PathBuf>,
     home: Option<PathBuf>,
     env: Vec<(String, String)>,
+    unset: Vec<String>,
     stdin: Option<String>,
 }
 
@@ -46,6 +47,7 @@ pub fn ctx(tmp: &Path) -> Ctx {
         cwd: None,
         home: None,
         env: Vec::new(),
+        unset: Vec::new(),
         stdin: None,
     }
 }
@@ -67,6 +69,11 @@ impl Ctx {
     pub fn env(mut self, k: &str, v: impl AsRef<std::ffi::OsStr>) -> Self {
         self.env
             .push((k.to_string(), v.as_ref().to_string_lossy().into_owned()));
+        self
+    }
+    /// 拿掉一個環境變數（例：`CLAUDECODE`——測試常在 agent 的 shell 裡跑，使用者本人才做的指令要拿掉它）。
+    pub fn without(mut self, k: &str) -> Self {
+        self.unset.push(k.to_string());
         self
     }
     pub fn stdin(mut self, s: &str) -> Self {
@@ -93,6 +100,10 @@ impl Ctx {
                 .env("XDG_CONFIG_HOME", h.join(".config"))
                 .env("CLAUDE_CONFIG_DIR", h.join(".claude"))
                 .env("PATH", "/usr/bin:/bin");
+        }
+        // 先拿掉、再設：`.without(k).env(k, v)` 以設的為準
+        for k in &self.unset {
+            c.env_remove(k);
         }
         for (k, v) in &self.env {
             c.env(k, v);

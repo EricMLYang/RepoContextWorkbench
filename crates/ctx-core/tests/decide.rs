@@ -425,7 +425,7 @@ fn answer_by_number_records_and_clears_card() {
     assert_eq!(r.option, Some(2));
     assert_eq!(r.answered.follow, FollowRec::Followed);
     assert_eq!(r.answered.kind, Some(AskKind::Choose));
-    assert_eq!(r.answered.handoff_ref, rf);
+    assert_eq!(r.answered.handoff_ref.as_deref(), Some(rf.as_str()));
     assert_eq!(r.relay.handoff_ref, rf);
     assert!(
         r.relay
@@ -444,7 +444,7 @@ fn answer_by_number_records_and_clears_card() {
     assert!(ev
         .body
         .lines()
-        .any(|l| l == "decide kind:choose follow:followed"));
+        .any(|l| l == "decide kind:choose follow:followed by:human rev:yes"));
     let v = serde_json::to_value(&r).unwrap();
     assert_eq!(v["ref"], r.answered.reference);
     assert_eq!(v["follow"], "followed");

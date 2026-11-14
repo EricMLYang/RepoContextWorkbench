@@ -179,6 +179,25 @@ impl Event {
     pub fn first_line(&self) -> &str {
         splitlines(&self.body).first().copied().unwrap_or("")
     }
+
+    /// 可放進 `ref:` token 的鍵：`<type>:<id>`，沒有 id 用 `<type>:<HH:MM>`（`agentapi::event_ref` 同一份）。
+    pub fn reference(&self) -> String {
+        let key = self
+            .kv("id")
+            .filter(|s| !s.is_empty())
+            .unwrap_or(&self.time);
+        format!("{}:{key}", self.etype.as_str())
+    }
+}
+
+/// 下一個沒用過的事件 id：`<日>-<前綴><N>`（N 從 1 起，跳過任何事件已用的 id）。
+pub fn next_event_id(events: &[Event], date_str: &str, prefix: &str) -> String {
+    let used: HashSet<&str> = events.iter().filter_map(|e| e.kv("id")).collect();
+    let mut n = 1;
+    while used.contains(format!("{date_str}-{prefix}{n}").as_str()) {
+        n += 1;
+    }
+    format!("{date_str}-{prefix}{n}")
 }
 
 /// 對應 `spine.parse_header`。

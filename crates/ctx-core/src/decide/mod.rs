@@ -1,29 +1,19 @@
-//! 決策佇列（F-123 第 1 輪，2026-11-14，Rust 才有）：把各 repo「在等你決定」的事排成一疊卡，一張一張答。
+//! 決策佇列（F-123／F-124，2026-11-14，Rust 才有）：把各 repo「在等你決定」的事排成一疊卡，一張一張答；
+//! 同一類問題人連續照建議回答後，可以升級成放行規則（[`crate::policy`]），之後照建議自動放行。
 //!
 //! 為什麼要有：agent 收尾時常停在「等你決定／確認／驗收」，這些事散在二十幾個 repo 的交接裡；人要一個一個
 //! 回想那個 repo 在做什麼、問題是什麼、該怎麼回。佇列把它們收成卡（repo 一行介紹、問題、編號選項、建議、證據、
-//! 放了多久），回答時用編號就好，並留一筆痕（答了什麼、有沒有照建議），第 2 輪的放行規則從這些痕算統計。
+//! 放了多久），回答時用編號就好，並留一筆痕（[`crate::decision_log`]）。
 //!
 //! 判斷都沿用既有的：
-//! - 每個 repo 現在怎樣（路徑在不在、有沒有會話正在處理、下一步是不是在等你）：[`relay::plan_at`]
+//! - 每個 repo 現在怎樣、這列算不算一張卡：[`relay::plan_at`]、[`relay::PlanRow::is_decision_card`]
+//!   （接力的「要你決定的共 N 件」同一個算法）
 //! - 交接的欄位與提問：[`crate::agentapi::parse_handoff`]／[`crate::ask`]
 //! - 回覆怎麼送到 agent：[`relay::answer_with`]（只印不開會話）
+//! - 回答、放行、推翻的留痕：[`crate::decision_log`]；放行判定與規則檔：[`crate::policy`]
 //!
-//! 卡＝範圍內每個 repo 的**最後一筆交接**，還沒被回答、而且：帶了提問（`structured`），或沒帶提問但接力判斷
-//! 下一步在等你（[`relay::PlanRow::waits_on_you`]）。路徑不存在、有會話正在處理中的不列。
-//! 「已回答」＝有一筆回答留痕（[`spine::DECIDE_TAG`]）指向那筆交接、而且時間不早於它；新的交接自然蓋掉舊的。
-//!
-//! 回答留痕的格式（`chosen [cli] id:<日>-q<N> repo:<id> ref:<交接 ref>`）：
-//! ```text
-//! 〔決定〕<repo>：<問題> → <回答>
-//! 問題：<問題>
-//! 回答：<回答>
-//! 建議：<建議>                ← 沒建議不寫這行
-//! decide kind:<類別|none> follow:<followed|differed|no_recommendation>
-//! ```
-//! 最後一行是給程式讀的（[`history`]），不用解析自由文字就算得出「同一個 repo＋類別連續幾次照建議」。
-//! 類別與照不照建議放在 body 而不是標頭 token：標頭的 token 文法（`#N`／`group:`／`repo:`／`ref:`／`due:`／`id:`）
-//! 是跟 Python 版與舊版 `ctx` 共用的合約，多一種鍵會讓舊版讀整份 spine 失敗。
+//! 卡＝範圍內每個 repo 的**最後一筆交接**，還沒被回答（人回答或規則放行、沒被推翻）、而且帶了提問（`structured`），
+//! 或沒帶提問但接力判斷下一步在等你。路徑不存在、有會話正在處理中的不列。新的交接自然蓋掉舊的。
 
 use std::path::Path;
 use std::sync::LazyLock;
@@ -33,70 +23,18 @@ use regex::Regex;
 use serde::Serialize;
 
 use crate::ask::{numbered, AskKind};
+use crate::decision_log::{self as log, NewAnswer};
+use crate::policy::{self, Level, Rule};
 use crate::registry::{self, RegistryData};
 use crate::relay::{self, PlanRow, RelayScope, RelayStatus};
-use crate::spine::{self, Event, EventType, DECIDE_TAG};
-use crate::{agentapi, Error, RejectCode, Result};
+use crate::{spine, Error, RejectCode, Result};
 
-/// 回答留痕的事件來源（使用者在終端下的指令）。
-pub const SOURCE: &str = "cli";
-/// 回答留痕的 id 前綴（`<日>-q<N>`）。
-const ID_PREFIX: &str = "q";
-/// 機器讀的那一行的開頭。
-const MACHINE_HEAD: &str = "decide ";
-/// 留痕第一行的問題、回答各最多幾個字（全文在後面兩行）。
-const HEAD_CHARS: usize = 60;
+pub use crate::decision_log::{answer_of, history, history_of, Answered, AnsweredBy, FollowRec};
+
+mod rules;
+pub use rules::*;
 
 // ---------------------------------------------------------------- 型別
-
-/// 有沒有照建議回答。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FollowRec {
-    /// 回答就是建議的那個
-    Followed,
-    /// 有建議，但回答不一樣
-    Differed,
-    /// 卡上沒有建議
-    NoRecommendation,
-}
-
-impl FollowRec {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            FollowRec::Followed => "followed",
-            FollowRec::Differed => "differed",
-            FollowRec::NoRecommendation => "no_recommendation",
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            FollowRec::Followed => "照建議",
-            FollowRec::Differed => "跟建議不同",
-            FollowRec::NoRecommendation => "沒有建議",
-        }
-    }
-
-    fn parse(s: &str) -> Option<FollowRec> {
-        [
-            FollowRec::Followed,
-            FollowRec::Differed,
-            FollowRec::NoRecommendation,
-        ]
-        .into_iter()
-        .find(|f| f.as_str() == s)
-    }
-
-    /// 回答跟建議比（去頭尾空白後完全相同才算照建議）。
-    pub fn of(recommend: Option<&str>, answer: &str) -> FollowRec {
-        match recommend {
-            None => FollowRec::NoRecommendation,
-            Some(r) if r.trim() == answer.trim() => FollowRec::Followed,
-            Some(_) => FollowRec::Differed,
-        }
-    }
-}
 
 /// 卡上的一個選項。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -164,25 +102,8 @@ pub struct Queue {
     pub cards: Vec<Card>,
     /// 其中帶提問的幾張
     pub structured: usize,
-}
-
-/// 一筆回答留痕讀回來的樣子（[`history`]）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct Answered {
-    /// 留痕的 ref（`chosen:<日>-q<N>`）
-    #[serde(rename = "ref")]
-    pub reference: String,
-    /// `YYYY-MM-DD HH:MM`
-    pub at: String,
-    pub repo: String,
-    /// 回答的是哪筆交接
-    pub handoff_ref: String,
-    /// 沒帶提問的卡＝None
-    pub kind: Option<AskKind>,
-    pub follow: FollowRec,
-    pub question: String,
-    pub answer: String,
-    pub recommend: Option<String>,
+    /// 連續照建議夠多次、可以升級成放行規則的（repo、類別）
+    pub suggestions: Vec<TrustHint>,
 }
 
 /// `answer` 的結果：留下的痕＋怎麼把回答送到 agent。
@@ -194,55 +115,12 @@ pub struct Decided {
     pub option: Option<usize>,
     /// 送達方式（同 `ctx relay answer`）
     pub relay: relay::Answer,
-}
-
-// ---------------------------------------------------------------- 讀留痕
-
-fn line_value<'a>(ev: &'a Event, key: &str) -> Option<&'a str> {
-    crate::pystr::splitlines(&ev.body)
-        .into_iter()
-        .find_map(|ln| ln.strip_prefix(key))
-        .map(str::trim)
-}
-
-/// 一筆事件 → 回答留痕；不是留痕、或沒有指向交接的 ref＝None。
-/// 寬鬆：機器行缺了或看不懂時，類別＝None、照不照建議＝沒有建議（第 2 輪的連續計數因此會斷，不會多算）。
-fn answered_of(ev: &Event) -> Option<Answered> {
-    if !spine::is_decide_record(ev) {
-        return None;
-    }
-    let handoff_ref = ev.kv("ref").filter(|r| !r.is_empty())?.to_string();
-    let machine = line_value(ev, MACHINE_HEAD.trim_end()).unwrap_or("");
-    let tok = |k: &str| {
-        machine
-            .split_whitespace()
-            .find_map(|t| t.strip_prefix(k).map(str::to_string))
-    };
-    Some(Answered {
-        reference: agentapi::event_ref(ev),
-        at: ev.stamp(),
-        repo: ev.kv("repo").unwrap_or("").to_string(),
-        handoff_ref,
-        kind: tok("kind:").and_then(|k| AskKind::parse(&k)),
-        follow: tok("follow:")
-            .and_then(|f| FollowRec::parse(&f))
-            .unwrap_or(FollowRec::NoRecommendation),
-        question: line_value(ev, "問題：").unwrap_or("").to_string(),
-        answer: line_value(ev, "回答：").unwrap_or("").to_string(),
-        recommend: line_value(ev, "建議：")
-            .filter(|r| !r.is_empty())
-            .map(str::to_string),
-    })
-}
-
-/// 全部回答留痕（舊到新）。
-pub fn history(spine_dir: &Path) -> Result<Vec<Answered>> {
-    Ok(history_of(&spine::iter_events(spine_dir)?))
-}
-
-/// 同 [`history`]，從已讀好的事件算。
-pub fn history_of(events: &[Event]) -> Vec<Answered> {
-    events.iter().filter_map(answered_of).collect()
+    /// 這類有 auto 規則、這次卻跟建議不同 → 規則降回 ask（降級後的規則）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub downgraded: Option<Rule>,
+    /// 答完這次，這類連續照建議夠多次了：可以升級
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggestion: Option<TrustHint>,
 }
 
 // ---------------------------------------------------------------- list
@@ -276,42 +154,19 @@ fn parse_at(at: &str) -> Option<NaiveDateTime> {
 }
 
 /// 這筆交接回答過了沒（同一個 repo、指向它、時間不早於它——沒有 id 的 ref 只有時間，不同天會撞）。
-/// 這筆交接的回答（同一個 repo、指向它、時間不早於它——沒有 id 的 ref 只有時間，不同天會撞）；
-/// 答過不只一次取最後一次。接力（[`relay::plan_at`]）也用它：答過的交接不再算「等你」。
-pub fn answer_of<'a>(
-    history: &'a [Answered],
-    repo: &str,
-    handoff_ref: &str,
-    handoff_at: &str,
-) -> Option<&'a Answered> {
-    history.iter().rfind(|a| {
-        spine::same_token(&a.repo, repo)
-            && a.handoff_ref == handoff_ref
-            && a.at.as_str() >= handoff_at
-    })
-}
-
 /// plan 的一列 → 卡；不是卡＝None。`include_blocked`＝路徑不存在、會話處理中的也出卡
 /// （`answer` 用：讓 [`relay::answer_with`] 說出為什麼送不出去，而不是說「沒有卡」）。
 fn card_of(
     spine_dir: &Path,
     row: &PlanRow,
     data: &RegistryData,
-    history: &[Answered],
     now: NaiveDateTime,
     include_blocked: bool,
 ) -> Option<Card> {
-    let blocked = matches!(row.status, RelayStatus::Missing | RelayStatus::Busy);
-    if blocked && !include_blocked {
+    if !row.is_decision_card(include_blocked) {
         return None;
     }
     let (handoff_ref, handoff_at) = (row.handoff_ref.as_ref()?, row.handoff_at.as_ref()?);
-    let waiting = row.ask.is_some()
-        || row.waits_on_you
-        || (blocked && row.next_step.as_deref().is_some_and(relay::waits_on_you));
-    if !waiting || answer_of(history, &row.repo, handoff_ref, handoff_at).is_some() {
-        return None;
-    }
     let entry = data.repo(&row.repo);
     let age = parse_at(handoff_at).map(|at| now - at);
     let (days, hours) = age.map_or((0, 0), |a| (a.num_days(), a.num_hours()));
@@ -375,12 +230,11 @@ pub fn list(spine_dir: &Path, scope: &RelayScope) -> Result<Queue> {
 /// 同 [`list`]，指定「現在」（測試用）。
 pub fn list_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Result<Queue> {
     let plan = relay::plan_at(spine_dir, scope, now)?;
-    let history = history(spine_dir)?;
     let data = registry::load(spine_dir)?;
     let mut cards: Vec<Card> = plan
         .rows
         .iter()
-        .filter_map(|r| card_of(spine_dir, r, &data, &history, now, false))
+        .filter_map(|r| card_of(spine_dir, r, &data, now, false))
         .collect();
     cards.sort_by(|a, b| {
         b.structured
@@ -393,6 +247,7 @@ pub fn list_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
         at: plan.at,
         structured: cards.iter().filter(|c| c.structured).count(),
         cards,
+        suggestions: suggestions(&history(spine_dir)?, &policy::load(spine_dir)),
     })
 }
 
@@ -418,10 +273,6 @@ fn resolve_reply(card: &Card, reply: &str) -> Result<(String, Option<usize>)> {
     }
     let n = texts.iter().position(|t| t == reply).map(|i| i + 1);
     Ok((reply.to_string(), n))
-}
-
-fn clip(s: &str) -> String {
-    crate::pystr::clip(s, HEAD_CHARS)
 }
 
 fn one_line(s: &str) -> String {
@@ -463,13 +314,11 @@ pub fn answer_with(
     let id = entry.id();
     let now = Local::now().naive_local();
     let plan = relay::plan_at(spine_dir, &RelayScope::Repos(vec![id.clone()]), now)?;
-    let events = spine::iter_events(spine_dir)?;
-    let history = history_of(&events);
     let Some(card) = plan
         .rows
         .iter()
         .find(|r| r.repo == id)
-        .and_then(|r| card_of(spine_dir, r, &data, &history, now, true))
+        .and_then(|r| card_of(spine_dir, r, &data, now, true))
     else {
         return Err(rejected(
             RejectCode::NotFound,
@@ -490,64 +339,45 @@ pub fn answer_with(
             "重跑 ctx decide list 看新的卡再回答".into(),
         ));
     }
-    let follow = FollowRec::of(card.recommend.as_deref(), &answer_text);
-    let mut body = vec![
-        format!(
-            "{DECIDE_TAG}{id}：{} → {}",
-            clip(&card.question),
-            clip(&answer_text)
-        ),
-        format!("問題：{}", one_line(&card.question)),
-        format!("回答：{answer_text}"),
-    ];
-    if let Some(r) = &card.recommend {
-        body.push(format!("建議：{r}"));
-    }
-    body.push(format!(
-        "{MACHINE_HEAD}kind:{} follow:{}",
-        card.kind.map_or("none", AskKind::as_str),
-        follow.as_str()
-    ));
-    let eid = agentapi::next_id(&events, &now.format("%Y-%m-%d").to_string(), ID_PREFIX);
-    let tokens = [
-        format!("id:{eid}"),
-        format!("repo:{id}"),
-        format!("ref:{}", card.handoff_ref),
-    ];
-    let ev = spine::append_event(
+    let answered = log::write_answer(
         spine_dir,
-        EventType::Chosen.as_str(),
-        SOURCE,
-        &tokens,
-        &body.join("\n"),
-        None,
+        &NewAnswer {
+            repo: &id,
+            handoff_ref: Some(&card.handoff_ref),
+            question: &card.question,
+            answer: &answer_text,
+            recommend: card.recommend.as_deref(),
+            kind: card.kind,
+            reversible: card.reversible.unwrap_or(false),
+            by: AnsweredBy::Human,
+        },
+        now,
     )?;
-    let answered = answered_of(&ev).ok_or_else(|| Error::invalid("回答留痕寫入後讀不回來"))?;
+    // 這類有 auto 規則、人卻答得跟建議不同：規則降回每次都問（since 更新，連續計數從頭算）
+    let mut downgraded = None;
+    if let Some(k) = card.kind {
+        let pol = policy::load(spine_dir);
+        let is_auto = pol.rule(&id, k).is_some_and(|r| r.level == Level::Auto);
+        if is_auto && answered.follow == FollowRec::Differed {
+            downgraded = Some(policy::set_level(spine_dir, &id, k, Level::Ask, None, now)?);
+        }
+    }
+    let suggestion = card.kind.and_then(|k| {
+        let h = history(spine_dir).ok()?;
+        suggestion_for(&h, &policy::load(spine_dir), &id, k)
+    });
     Ok(Decided {
         answered,
         option,
         relay: relayed,
+        downgraded,
+        suggestion,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn follow_rec_of() {
-        assert_eq!(FollowRec::of(None, "x"), FollowRec::NoRecommendation);
-        assert_eq!(FollowRec::of(Some(" A "), "A"), FollowRec::Followed);
-        assert_eq!(FollowRec::of(Some("A"), "B"), FollowRec::Differed);
-        for f in [
-            FollowRec::Followed,
-            FollowRec::Differed,
-            FollowRec::NoRecommendation,
-        ] {
-            assert_eq!(FollowRec::parse(f.as_str()), Some(f));
-            assert_eq!(serde_json::to_value(f).unwrap(), f.as_str());
-        }
-    }
 
     #[test]
     fn line_suffix_strips_line_numbers() {
@@ -561,41 +391,5 @@ mod tests {
         assert_eq!(cap("r2:src/a.rs:12-30").as_deref(), Some("r2:src/a.rs"));
         assert_eq!(cap("r2:src/a.rs"), None);
         assert_eq!(cap("docs/plan.md"), None);
-    }
-
-    #[test]
-    fn answered_of_is_lenient() {
-        let mk = |body: &str, toks: &[&str]| Event {
-            date: "2026-11-14".into(),
-            time: "10:00".into(),
-            etype: EventType::Chosen,
-            source: "cli".into(),
-            tokens: toks.iter().map(|t| t.to_string()).collect(),
-            body: body.into(),
-        };
-        // 不是留痕
-        assert!(answered_of(&mk("忽略並記錄：x", &["ref:decision:09:00"])).is_none());
-        // 沒有 ref
-        assert!(answered_of(&mk("〔決定〕r：q → a", &["repo:r"])).is_none());
-        // 機器行不見了（人手改過）
-        let a = answered_of(&mk(
-            "〔決定〕r：q → a\n回答：a",
-            &["repo:r", "ref:decision:09:00"],
-        ))
-        .unwrap();
-        assert_eq!(a.kind, None);
-        assert_eq!(a.follow, FollowRec::NoRecommendation);
-        assert_eq!(a.answer, "a");
-        // 完整
-        let b = answered_of(&mk(
-            "〔決定〕r：q → B\n問題：q\n回答：B\n建議：A\ndecide kind:commit follow:differed",
-            &["id:2026-11-14-q1", "repo:r", "ref:decision:2026-11-14-d1"],
-        ))
-        .unwrap();
-        assert_eq!(b.reference, "chosen:2026-11-14-q1");
-        assert_eq!(b.kind, Some(AskKind::Commit));
-        assert_eq!(b.follow, FollowRec::Differed);
-        assert_eq!(b.recommend.as_deref(), Some("A"));
-        assert_eq!(b.handoff_ref, "decision:2026-11-14-d1");
     }
 }

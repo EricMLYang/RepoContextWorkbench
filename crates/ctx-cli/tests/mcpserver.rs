@@ -266,3 +266,32 @@ fn test_handoff_ask_param() {
     let v: Value = serde_json::from_str(&text(&plain)).unwrap();
     assert!(v.get("ask").is_none(), "{v}");
 }
+
+/// F-124：request_decision——沒規則回 wait（附原因）、trust 後回 auto（附答案與 ref）；參數跟 ask 同一組。
+#[test]
+fn test_request_decision_tool() {
+    let (tmp, d) = spine_with_repos();
+    let cwd = tmp.path().join("repo-a").to_string_lossy().to_string();
+    let r = call(&d, "tools/list", json!({}));
+    let t = r["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "request_decision")
+        .unwrap()
+        .clone();
+    assert_eq!(t["inputSchema"]["required"], json!(["question"]));
+    assert_eq!(t["inputSchema"]["properties"]["kind"]["enum"][0], "commit");
+    let args = json!({"cwd": cwd, "question": "要 commit 嗎？", "kind": "commit",
+                      "options": ["要", "不要"], "recommend": 1});
+    let v: Value =
+        serde_json::from_str(&text(&tool(&d, "request_decision", args.clone()))).unwrap();
+    assert_eq!(v["decision"], "wait", "{v}");
+    assert_eq!(v["reason"]["code"], "no_rule");
+    ctx_core::decide::trust(&d, "repo-a", "commit", None).unwrap();
+    let v: Value = serde_json::from_str(&text(&tool(&d, "request_decision", args))).unwrap();
+    assert_eq!(v["decision"], "auto", "{v}");
+    assert_eq!(v["answer"], "要");
+    assert_eq!(v["rule"], "repo-a/commit");
+    assert!(v["ref"].as_str().unwrap().starts_with("chosen:"));
+}

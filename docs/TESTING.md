@@ -242,12 +242,30 @@
 
 | # | 操作 | 應該看到 | macOS | Windows |
 |---|---|---|---|---|
-| 8g-1 | 終端跑 `ctx relay plan --all` | 每個 repo 一列：等你／會話開著／處理中／交接太舊／沒有交接／路徑不存在；最後一行「等你回覆的共 N 件」 | [ ] | [ ] |
+| 8g-1 | 終端跑 `ctx relay plan --all` | 每個 repo 一列：等你／會話開著／處理中／交接太舊／沒有交接／路徑不存在；開頭第三行「要你決定的共 N 件（卡片：ctx decide list）」，N 跟 `ctx decide list --all` 的件數一樣 | [ ] | [ ] |
 | 8g-2 | `ctx relay answer <等你的 repo> "你的回覆"` | 印出任務文字（上次交接＋你的回覆）和一行指令：`claude --resume …`、`ctx session …`，或「貼進開著的會話 tN」；不會自己開會話 | [ ] | [ ] |
 | 8g-3 | 把 8g-2 印的指令貼到終端執行 | agent 帶著你的回覆接著做，不用再解釋前情；做完有交接 | [ ] | [ ] |
 | 8g-4 | 對會話正在做事的 repo 跑 `ctx relay answer` | 被拒（`busy`，exit 2），請你等它這輪做完 | [ ] | [ ] |
 | 8g-5 | 8g-3 做完後跑 `ctx relay report --since "YYYY-MM-DD HH:MM" --all` | 那個 repo 標「做完」，附新的交接與 commit 數 | [ ] | [ ] |
 | 8g-6 | App 左側檔案樹，看名稱帶數字的資料夾與檔案 | 資料夾在前；數字當數值排（`2_topics` 在 `10_business` 前、`ch9` 在 `ch10` 前），不分大小寫 | [ ] | [ ] |
+
+## 8h. 決策佇列與放行規則（F-123／F-124，2026-11-14）——**引擎測試與 spine 副本試跑已過；真 agent 會話、真 spine 還沒人測過**
+
+| # | 操作 | 應該看到 | macOS | Windows |
+|---|---|---|---|---|
+| 8h-1 | 終端跑 `ctx decide list --all` | 每張卡第一行 repo＋一行介紹（沒介紹就是路徑），接著問題、編號選項（建議的標「← 建議」）、證據（不存在的標出來）、放了多久，最後一行可直接複製的 `ctx decide answer …`；件數跟 `ctx relay plan --all` 的「要你決定的共 N 件」一樣 | [ ] | [ ] |
+| 8h-2 | 在某個 repo 的 agent 會話裡請它收尾時用 `handoff` 帶 `ask`（或終端 `ctx handoff --ask "…" --kind commit --option 要 --option 不要 --recommend 1`） | `ctx decide list` 那張卡排在最前，選項有編號 | [ ] | [ ] |
+| 8h-3 | `ctx decide answer <repo> 2` | 「已記下：…（第 2 個選項，照建議／跟建議不同）」＋任務文字（「使用者對「…」的回答是：…」）與送達方式；卡從 `decide list` 消失；`relay plan` 那個 repo 變「可接」、備註「已回答」 | [ ] | [ ] |
+| 8h-4 | `ctx decide answer <repo> 9`（超過選項數） | 被拒，提示列出 1) 2) 3) 的選項；spine 沒多一筆 | [ ] | [ ] |
+| 8h-5 | 對會話正在做事的 repo 跑 `ctx decide answer` | 被拒（`busy`），spine 沒多一筆 | [ ] | [ ] |
+| 8h-6 | 同一個 repo、同一類（例 commit）連三次「交接帶提問 → 照建議回答」 | 第三次回答的輸出最後一行、`decide list` 頁尾、`decide rules` 都出現「以後這類都照建議自動放行？ctx decide trust <repo> commit」 | [ ] | [ ] |
+| 8h-7 | 照著跑 `ctx decide trust <repo> commit` | 印出這類過去的紀錄（幾次照建議、幾次不同）；spine 根目錄的 `policy.yaml` 多一條 `level: auto` | [ ] | [ ] |
+| 8h-8 | 在那個 repo 的 agent 會話裡，讓它做到一半要問你要不要 commit | agent 先呼叫 `request_decision`，拿到 `auto` 就照答案接著做、不停下來問；`ctx decide list --auto` 列出這筆，附 `ctx decide overturn <ref>` | [ ] | [ ] |
+| 8h-9 | `ctx decide overturn <ref> --why "…"` | 規則降回每次都問；之後同類的 `request_decision` 回 wait；`decide rules` 的「被推翻」+1、不馬上又跳升級建議 | [ ] | [ ] |
+| 8h-10 | 手改 `policy.yaml`：把某條 `level` 改成亂寫的字，或把 `kind: push` 寫成 `level: auto` | `ctx decide rules` 與 `ctx health` 都說出哪一條壞了／不生效；同類提問照樣問你 | [ ] | [ ] |
+| 8h-11 | `ctx decide trust <repo> commit --paths docs/` 後，在 repo 根目錄留一個沒 commit 的檔再讓 agent 問 | 回 wait，原因列出那個檔不在 docs/ 底下 | [ ] | [ ] |
+| 8h-12 | `ctx health` | 「決策」一行：要你決定幾件、人回答幾次與照建議比例、自動放行與被推翻幾次、從交接到回答的中位時間（沒資料寫「沒資料」） | [ ] | [ ] |
+| 8h-13 | 請 agent 在它的會話裡跑 `ctx decide trust <repo> commit` 或 `ctx decide answer <repo> 1` | 被拒（`human_only`）：「這要使用者自己在終端或 App 下」，提示用 `ctx decide request`；policy.yaml 與 spine 都沒變 | [ ] | [ ] |
 
 ## 9. 要你決定
 

@@ -426,8 +426,7 @@ fn kv_opt(ev: &Event, k: &str) -> Option<String> {
 
 /// 對應 `agentapi.event_ref`：可放進 `ref:` token 的鍵——有 id 用 id，沒有用 HH:MM。
 pub fn event_ref(ev: &Event) -> String {
-    let key = ev.kv("id").filter(|s| !s.is_empty()).unwrap_or(&ev.time);
-    format!("{}:{key}", ev.etype.as_str())
+    ev.reference()
 }
 
 /// 對應 `agentapi.event_dict`。
@@ -1197,13 +1196,8 @@ pub fn repo_status(
 
 // ---------------------------------------------------------------- 寫
 
-pub(crate) fn next_id(events: &[Event], date_str: &str, prefix: &str) -> String {
-    let used: HashSet<&str> = events.iter().filter_map(|e| e.kv("id")).collect();
-    let mut n = 1;
-    while used.contains(format!("{date_str}-{prefix}{n}").as_str()) {
-        n += 1;
-    }
-    format!("{date_str}-{prefix}{n}")
+fn next_id(events: &[Event], date_str: &str, prefix: &str) -> String {
+    spine::next_event_id(events, date_str, prefix)
 }
 
 static LOOP_NUM_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^#\d+$").expect("固定 regex"));
@@ -1310,6 +1304,9 @@ pub struct HandedOff {
     /// 寫進交接的提問（正規化過：建議已換成選項文字）；沒帶提問＝不出現這個鍵（F-123）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ask: Option<Ask>,
+    /// 提問被放行規則自動放行了（F-124）：照 `answer` 接著做。沒放行＝不出現這個鍵
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto: Option<crate::policy::AutoApproved>,
 }
 
 /// 對應 `agentapi.log_decision`：記一筆判斷（decision）。回傳 ref，之後可以用它引用這筆。
@@ -1807,6 +1804,23 @@ pub fn handoff_with_ask<S: AsRef<str>>(
     let mut toks = vec![format!("id:{eid}")];
     toks.extend(tokens_for(&s, w.repo_id()));
     let ev = append(spine_dir, "decision", source, &toks, &body)?;
+    // 帶提問的交接也走放行判定（F-124）：放行就緊接著留一筆指向這筆交接的放行（交接因此算已回答）。
+    // 交接已經寫了，放行這一步出錯不能讓整個呼叫失敗（agent 會重試、交接重複），當成沒放行。
+    let auto = match (&ask, ev.kv("repo")) {
+        (Some(a), Some(repo)) => {
+            match crate::policy::approve(
+                spine_dir,
+                repo,
+                a,
+                Some(&event_ref(&ev)),
+                Local::now().naive_local(),
+            ) {
+                Ok(crate::policy::Decision::Auto(x)) => Some(x),
+                _ => None,
+            }
+        }
+        _ => None,
+    };
     report_status(spine_dir, "done", &head, t)?;
     Ok(HandedOff {
         ok: true,
@@ -1814,7 +1828,19 @@ pub fn handoff_with_ask<S: AsRef<str>>(
         todos: Vec::new(),
         event: event_dict(&ev),
         ask,
+        auto,
     })
+}
+
+/// 寫入工具的範圍檢查＋這筆會記在哪個 repo（事件的 `repo:` token；範圍不是單一 repo＝None）。
+/// `request_decision`（F-124）用：跟其他寫入工具同一套跨組規則。
+pub fn write_repo(spine_dir: &Path, t: &Target, cross_scope_ok: bool) -> Result<Option<String>> {
+    let w = where_am_i(spine_dir, t.cwd.as_deref())?;
+    let s = scope_of(spine_dir, &w, t)?;
+    check_write_scope(spine_dir, &w, &s, cross_scope_ok)?;
+    Ok(tokens_for(&s, w.repo_id())
+        .into_iter()
+        .find_map(|t| t.strip_prefix("repo:").map(str::to_string)))
 }
 
 /// 對應 `agentapi.all_statuses`。

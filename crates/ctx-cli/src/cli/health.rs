@@ -21,6 +21,10 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
         ..Default::default()
     };
     v["for_you"] = Value::Array(ctx_core::agentapi::human_hints(&d, &here).unwrap_or_default());
+    // F-123／F-124：決策佇列與放行規則
+    let now = chrono::Local::now().naive_local();
+    v["decide"] = serde_json::to_value(ctx_core::decide::health_stats(&d, days, now)?)
+        .map_err(ctx_core::Error::from)?;
     ctx.emit(&v, |r| {
         let pct = |x: &Value| {
             x.as_f64()
@@ -62,6 +66,7 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
             s(l, "open_now"),
             s(l, "overdue")
         ));
+        out.extend(decide_lines(&r["decide"]));
         let p = &r["profiles"];
         let undescribed: Vec<&str> = arr(p, "undescribed")
             .iter()
@@ -238,6 +243,39 @@ fn after_span(min: i64, word: &str) -> String {
     } else {
         format!("{} 天{word}", one(m / (24.0 * 60.0)))
     }
+}
+
+/// 「決策」段（F-123／F-124）：沒資料的比例與時間寫「沒資料」，不印 0。
+fn decide_lines(d: &Value) -> Vec<String> {
+    let n = |k: &str| d[k].as_u64().unwrap_or(0);
+    let rate = match d["followed_rate"].as_f64() {
+        Some(f) => format!(
+            "照建議 {:.0}%（{}／{}）",
+            f * 100.0,
+            n("followed"),
+            n("with_recommend")
+        ),
+        None => "照建議比例沒資料（還沒有帶建議的回答）".into(),
+    };
+    let median = match d["median_hours"].as_f64() {
+        Some(h) if h < 24.0 => format!("{h:.1} 小時"),
+        Some(h) => format!("{:.1} 天", h / 24.0),
+        None => "沒資料".into(),
+    };
+    let mut out = vec![format!(
+        "- 決策：現在要你決定 {} 件（ctx decide list --all）；人回答 {} 次，{rate}；自動放行 {} 次、被推翻 {}；從交接到回答的中位時間 {median}",
+        n("waiting"),
+        n("answered"),
+        n("auto"),
+        n("overturned")
+    )];
+    for p in d["policy_problems"].as_array().into_iter().flatten() {
+        out.push(format!(
+            "  policy.yaml 有問題（這條不生效）：{}",
+            p.as_str().unwrap_or("")
+        ));
+    }
+    out
 }
 
 #[cfg(test)]

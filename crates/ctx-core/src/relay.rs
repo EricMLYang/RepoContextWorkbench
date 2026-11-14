@@ -176,6 +176,26 @@ pub struct PlanRow {
     /// 上次交接帶的提問（問題、選項、建議…；F-123）。沒有＝不出現這個鍵
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ask: Option<Ask>,
+    /// 這筆交接已經有人（或放行規則）回答了：回答留痕的 ref（F-123／F-124）。沒有＝不出現這個鍵
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub answered: Option<String>,
+}
+
+impl PlanRow {
+    /// 這列是不是一張「要你決定」的卡（`ctx decide list` 與 plan 的 `waiting_on_you` 同一個算法）：
+    /// 有交接、還沒回答、帶了提問或接力判斷在等你；路徑不存在、會話處理中的不算——
+    /// `include_blocked`＝這兩種也算（`decide answer` 用，好讓送達那一步說出為什麼送不出去）。
+    pub fn is_decision_card(&self, include_blocked: bool) -> bool {
+        let blocked = matches!(self.status, RelayStatus::Missing | RelayStatus::Busy);
+        if blocked && !include_blocked {
+            return false;
+        }
+        self.handoff_ref.is_some()
+            && self.answered.is_none()
+            && (self.ask.is_some()
+                || self.waits_on_you
+                || (blocked && self.next_step.as_deref().is_some_and(waits_on_you)))
+    }
 }
 
 /// 一種狀態有幾個。
@@ -198,7 +218,7 @@ pub struct Plan {
     pub counts: Vec<StatusCount>,
     /// 沒列的 repo 數（參考類、暫停、封存）
     pub skipped: usize,
-    /// 等你回覆的共幾件（`waits_on_you` 的列數）
+    /// 要你決定的共幾件（[`PlanRow::is_decision_card`] 的列數，跟 `ctx decide list` 一樣）
     pub waiting_on_you: usize,
 }
 
@@ -381,7 +401,7 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
     let (label, entries, skipped) = members(spine_dir, scope)?;
     let states = states_of(spine_dir, &entries);
     let events = spine::iter_events(spine_dir)?;
-    let history = crate::decide::history_of(&events);
+    let history = crate::decision_log::history_of(&events);
     let sessions = sessions_by_repo(spine_dir);
     let mut rows: Vec<PlanRow> = Vec::with_capacity(entries.len());
     for ((entry, group), st) in entries.iter().zip(&states) {
@@ -415,7 +435,7 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
         // 已經用 `ctx decide answer` 回答過的交接不再等你：任務帶著回答，可以接（F-123）
         let answered = h
             .as_ref()
-            .and_then(|h| crate::decide::answer_of(&history, &id, &h.reference, &h.at));
+            .and_then(|h| crate::decision_log::answer_of(&history, &id, &h.reference, &h.at));
         let waits =
             answered.is_none() && (ask.is_some() || next.as_deref().is_some_and(waits_on_you));
         let mut notes = Vec::new();
@@ -492,6 +512,7 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
                 _ => false,
             },
             ask,
+            answered: answered.map(|a| a.reference.clone()),
         });
     }
     rows.sort_by(|a, b| {
@@ -512,7 +533,7 @@ pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
     Ok(Plan {
         scope: label,
         at: now.format("%Y-%m-%d %H:%M").to_string(),
-        waiting_on_you: rows.iter().filter(|r| r.waits_on_you).count(),
+        waiting_on_you: rows.iter().filter(|r| r.is_decision_card(false)).count(),
         rows,
         counts,
         skipped,
@@ -652,7 +673,7 @@ pub fn report(spine_dir: &Path, scope: &RelayScope, since: &str) -> Result<Repor
     let (label, entries, skipped) = members(spine_dir, scope)?;
     let states = states_of(spine_dir, &entries);
     let events = spine::iter_events(spine_dir)?;
-    let history = crate::decide::history_of(&events);
+    let history = crate::decision_log::history_of(&events);
     let sessions = sessions_by_repo(spine_dir);
     let mut rows = Vec::with_capacity(entries.len());
     for ((entry, group), st) in entries.iter().zip(&states) {
@@ -665,7 +686,7 @@ pub fn report(spine_dir: &Path, scope: &RelayScope, since: &str) -> Result<Repor
             .map(|ev| {
                 let h = agentapi::parse_handoff(ev);
                 last_waits = (h.ask.is_some() || h.next_step.as_deref().is_some_and(waits_on_you))
-                    && crate::decide::answer_of(&history, &id, &h.reference, &h.at).is_none();
+                    && crate::decision_log::answer_of(&history, &id, &h.reference, &h.at).is_none();
                 HandoffBrief {
                     at: h.at,
                     reference: h.reference,

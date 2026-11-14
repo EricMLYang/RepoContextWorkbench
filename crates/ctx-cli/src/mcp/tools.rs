@@ -181,6 +181,14 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
             w_status,
         ),
         work(
+            "request_decision",
+            "做到一半需要使用者決定時先呼叫（不要直接停下來問）。使用者同意過這類自動放行時回 \
+             {decision:\"auto\", answer}：照 answer 接著做，不用停；否則回 {decision:\"wait\", reason}：\
+             能做的先做完，收尾 handoff 帶同一個 ask。",
+            s_(cat(vec![ask_props(), cwd_props(), cross_props()]), &["question"]),
+            w_request_decision,
+        ),
+        work(
             "handoff",
             "收尾交接（每次會話結束前必呼叫）：完成了什麼、下次從哪接。\
              下一個 agent 的開場與 context_for／next_work 會讀到它。remaining 只是交接裡的一行備註，\

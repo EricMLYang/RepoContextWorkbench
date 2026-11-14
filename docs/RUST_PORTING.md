@@ -259,11 +259,42 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
     帶 ask 的在前、同段交接新的在前；路徑不存在、會話處理中的不列。`ctx decide answer <repo> <編號｜一句話…> [--json]`——純數字且有選項＝那個選項，
     超出範圍 `bad_request` 列出選項；先跑 `relay::answer_with`（送不出去就停，**不留痕**），再留痕、回傳留痕＋送達方式。
   - **回答留痕**：`chosen [cli] id:<日>-q<N> repo:<id> ref:<交接 ref>`，body 第一行 `〔決定〕<repo>：<問題> → <回答>`（`spine::DECIDE_TAG`），
-    接著 `問題：`、`回答：`、`建議：`（有才寫），最後一行給程式讀：`decide kind:<kind|none> follow:<followed|differed|no_recommendation>`。
+    接著 `問題：`、`回答：`、`建議：`（有才寫），最後一行給程式讀：`decide kind:<kind|none> follow:<followed|differed|no_recommendation>`（第 2 輪起多 `by:`、`rev:`、`rule:`，見下一條）。
     類別與照不照建議放 body 而不是標頭 token：標頭的 token 文法是跟 Python 與舊版 `ctx` 共用的合約，多一種鍵會讓它們讀整份 spine 失敗。
     `decide::history` 讀回（`Answered`），第 2 輪從這裡算「同一個 repo＋類別連續幾次照建議」。「已回答」＝有留痕的 ref 指向那筆交接、而且時間不早於它
     （沒 id 的 ref 只有時間，不同天會撞）；新的交接自然蓋掉舊的。留痕不進 context_for 的最近事件與情境卡、開場注入、SessionEnd 的留痕計數
     （`context::is_bookkeeping`、`spine::is_decide_record`）；型別是 chosen，所以判斷回顧、工作摘要的上次進度、反芻、交接判定、收件匣本來就不收。
+- **放行規則**（2026-11-14，F-124 第 2 輪；Python 沒有）：
+  - **`policy.yaml`**（spine 根目錄，`policy.rs`）：`rules:` 清單，每筆 `{repo, kind, level: ask|auto, since: "YYYY-MM-DD HH:MM", paths?: [前綴…]}`；
+    同一個（repo、kind）一筆、沒有通配。檔不存在＝沒規則。整份讀不懂、level 看不懂、repo 沒登記、kind 看不懂、不能自動的 kind 寫成 auto、since 看不懂、
+    paths 不是相對路徑、同一對寫兩筆＝**那筆不生效**並進 `Policy::problems`（`decide rules`、`ctx health` 會列）。寫：持引擎鎖、`write_atomic`；
+    檔頭三行註解＋`serde_yaml` 輸出，同一份資料位元組相同；沒動到的條目（含寫壞的）原樣保留；整份讀不懂時 `trust`／`untrust` 拒寫（`failed`）。
+  - **放行判定** `policy::gate`（回 `Gate::Auto{answer, rule}` 或 `Gate::Wait(WaitReason)`），依序：類別可自動（`kind_not_automatable`）→ 可逆（`irreversible`）
+    → 有建議（`no_recommendation`）→ repo 有登記（`unknown_repo`）→ 有生效規則（`no_rule`，寫壞時訊息帶哪裡壞）→ 是 auto（`rule_is_ask`）
+    → 規則有 paths 時 `gitlog::dirty_files`（`git status --porcelain -z --untracked-files=all`，改名新舊都算）全在前綴底下（`repo_missing`／`git_unavailable`／`outside_paths`）
+    → 不是抽查：since 起這對（repo、kind）的放行＋人的回答算第 N 次，N 是 10 的倍數＝`spot_check`（決定性，沒人答之前一直是抽查）。`code` 字串是合約。
+  - **入口**：MCP 新工具 `request_decision`（參數＝ask 的六個欄位攤平＋cwd＋cross_scope_ok；`parity.py` 記為 Rust 才有的工具）與
+    `ctx decide request --ask … [ask 旗標同 handoff] [--cwd/--group/--repos] [--cross-scope-ok]`，回 `{decision:"auto", answer, rule, ref}` 或
+    `{decision:"wait", reason:{code, message}}`（`policy::Decision`），wait 不留痕；範圍檢查沿用寫入工具（`agentapi::write_repo`）。
+    帶 ask 的 `handoff` 寫完交接後跑同一個判定，放行就緊接著留放行痕指向那筆交接，`HandedOff` 多 `auto: {answer, rule, ref}`（沒放行不出現）；放行這一步出錯不讓交接失敗。
+  - **機器行新欄位**：`decide kind:<k|none> follow:<…> by:<human|rule> rev:<yes|no>[ rule:<repo>/<kind>]`。人的回答來源 `cli`，規則放行來源 `policy`
+    （第一行加「（自動放行：<repo>/<kind>）」，agent 做到一半問的沒有 `ref:`）；推翻是 `chosen [cli] … ref:<放行的 ref>`，第一行 `〔決定〕<repo>：推翻自動放行「…」`、
+    `理由：`、機器行 `decide overturn kind:<k> rule:<repo>/<kind>`。舊紀錄缺 `by:`＝人、缺 `rev:`＝不可逆（不算連續）。被推翻的放行不算回答（那筆交接回到佇列）。
+    讀寫都在 `decision_log.rs`（只依賴 spine、ask），`relay`、`agentapi`、`policy`、`decide` 共用、互不依賴。**合約變更**：第 1 輪的
+    `Answered.handoff_ref` 從 `String` 改成 `Option<String>`，並多 `by`、`reversible`、`rule`、`overturned_by`（第 1 輪還沒對外發佈）。
+  - **連續與升級建議**：人的回答、規則 since 之後（嚴格晚於；沒規則＝全部）、可逆且有建議的連續 `followed`，`differed` 歸零；≥ 3、類別可自動、不是 auto
+    → `TrustHint`（`decide answer` 的 `suggestion`、`decide list` 的 `suggestions`、`decide rules`），附 `ctx decide trust <repo> <kind>`。
+    時間只到分鐘：跟 since 同一分鐘的回答不算（寧可少算）。人回答時這對有 auto 規則、答案跟建議不同 → 降回 ask（`Decided.downgraded`，paths 保留）。
+  - **新的 decide 子命令**：`trust <repo> <kind> [--paths a,b]`（不能自動的 kind 拒絕；印這類過去照建議／不同幾次）、`untrust <repo> <kind>`、
+    `overturn <ref> [--why]`（留痕＋降級）、`rules [--json]`（每條規則＋since 之後放行與被推翻次數＋升級建議＋問題）、`list --auto [--since]`（近 7 天的放行，附推翻指令）。
+  - **使用者本人才做的指令**：`ctx decide trust` 與 `ctx decide answer` 在環境變數 `CLAUDECODE` 有值（Claude Code 的 Bash 工具會設）時拒絕，
+    新的 `RejectCode::HumanOnly`（`"human_only"`，exit 2，只加不改）；只擋在 CLI（`cli/decide.rs` 的 `refuse_agent_shell`，一個函式），App 的 IPC 直接呼叫引擎不受影響。
+    擋的是「順手就做」不是防惡意（unset 擋不住，但有留痕）；沒有繞過的旗標。`untrust`、`overturn`、`request`、`list`、`rules` 不擋。
+    `decide rules` 的文字：規則是 ask 時不印「since 之後放行 N」（since 只到分鐘，數到的是降級前那筆），被推翻過就印「被推翻 M 次後降回（自 since 起每次都問）」。
+  - **接力的件數**：`Plan.waiting_on_you` 改用 `PlanRow::is_decision_card`（`decide list` 同一個算法），文字「要你決定的共 N 件（卡片：ctx decide list）」；
+    `PlanRow` 多 `answered`（回答留痕的 ref，沒有不出現）。
+  - **`ctx health`** 多 `decide` 鍵（`decide::health_stats`）：要你決定幾件、期間人回答幾次、有建議幾次、照建議幾次與比例、自動放行與被推翻幾次、
+    交接到回答的中位小時（沒資料＝null，文字寫「沒資料」）、policy 的問題。
 - **`ctx todo list`**（2026-10-20；Python 沒有）：範圍內全部未結、逾期在前，`--json` 跟 `next_work` 的 todo 同一種物件；
   沒掛 MCP 的 agent（CLI 模式）之前只能靠 `ctx next` 的前 5 項。
 - **任務包 `ctx todo brief #N`**（2026-10-10，ideation F-42；Python 沒有）：把一項未結組成給全新會話的 markdown——

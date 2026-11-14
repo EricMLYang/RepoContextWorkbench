@@ -60,7 +60,7 @@ fn cwd_path(s: &Option<String>) -> Option<PathBuf> {
 }
 
 impl Scoped {
-    fn target(&self) -> Target {
+    pub(super) fn target(&self) -> Target {
         Target {
             cwd: cwd_path(&self.cwd),
             group: nz(&self.group).map(str::to_string),
@@ -983,7 +983,7 @@ pub struct HandoffAskArgs {
 }
 
 impl HandoffAskArgs {
-    fn input(&self) -> Option<ctx_core::ask::AskInput> {
+    pub(super) fn input(&self) -> Option<ctx_core::ask::AskInput> {
         let q = self.question.as_ref()?;
         Some(ctx_core::ask::AskInput {
             question: q.clone(),
@@ -1013,7 +1013,18 @@ pub fn cmd_handoff(ctx: &Ctx, a: &HandoffArgs) -> CmdResult {
                 a.w.source(),
             )
         },
-        h_written,
+        |r| {
+            let mut out = h_written(r);
+            if let Some(a) = r.get("auto").filter(|a| a.is_object()) {
+                out.push_str(&format!(
+                    "\n已自動放行（{}）：{}　推翻：ctx decide overturn {}",
+                    s(a, "rule"),
+                    s(a, "answer"),
+                    s(a, "ref")
+                ));
+            }
+            out
+        },
     )
 }
 
