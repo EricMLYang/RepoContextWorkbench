@@ -679,7 +679,8 @@ export function TerminalPanel(props: {
                     { label: "常用 prompt…", run: () => ui.openDetail(promptLibrarySpec()) },
                   ]
                 : []),
-              ...(info.claude_session && info.resume_cwd
+              // 分岔是 Claude Code 的旗標（--fork-session）；Codex 的會話不給
+              ...(info.claude_session && info.resume_cwd && info.agent_kind !== "codex"
                 ? [{ label: "岔出新會話（這場不動）", run: () => forkSession(info) }]
                 : []),
               ...(info.kind === "agent" && info.alive

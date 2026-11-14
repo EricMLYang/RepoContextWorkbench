@@ -14,6 +14,7 @@ pub mod auto_continue;
 pub mod backfill;
 pub mod brief;
 pub mod build;
+pub mod codex_sessions;
 pub mod collect;
 pub mod collide;
 pub mod config;

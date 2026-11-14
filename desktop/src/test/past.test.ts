@@ -1,23 +1,55 @@
 import { describe, expect, it } from "vitest";
 import { resumeCommand } from "../components/sessions/PastSessions";
+import { agentKindOf } from "../components/sessions/SessionDialogs";
 import { frameShown, frameTime } from "../components/sessions/Transcript";
 
 describe("過去的會話（F-72）", () => {
-  it("複製的接續指令：先進原目錄（路徑有空白也安全）再 claude --resume", () => {
-    const s = {
-      id: "02908d1e-7843",
-      repo: "a",
-      cwd: "/Users/me/My Repo",
-      title: "修登入",
-      prompt: null,
-      reply: null,
-      branch: null,
-      started: null,
-      updated: "2026-10-16 01:00",
-      live: false,
-      path: "/x.jsonl",
-    };
-    expect(resumeCommand(s)).toBe('cd "/Users/me/My Repo" && claude --resume 02908d1e-7843');
+  const base = {
+    repo: "a",
+    title: "修登入",
+    prompt: null,
+    reply: null,
+    branch: null,
+    started: null,
+    updated: "2026-10-16 01:00",
+    live: false,
+    path: "/x.jsonl",
+  };
+  it("複製的接續指令用引擎組好的那一行：Claude Code 是 claude --resume、Codex 是 codex resume", () => {
+    expect(
+      resumeCommand({
+        ...base,
+        id: "02908d1e-7843",
+        cwd: "/Users/me/My Repo",
+        agent: "claude",
+        resume: "cd '/Users/me/My Repo' && claude --resume 02908d1e-7843",
+      }),
+    ).toBe("cd '/Users/me/My Repo' && claude --resume 02908d1e-7843");
+    expect(
+      resumeCommand({
+        ...base,
+        id: "01a1da06-c73f",
+        cwd: "/r/app",
+        agent: "codex",
+        resume: "cd /r/app && codex resume 01a1da06-c73f",
+      }),
+    ).toBe("cd /r/app && codex resume 01a1da06-c73f");
+  });
+  it("舊引擎沒給接續指令時退回 claude --resume（路徑有空白也安全）", () => {
+    expect(
+      resumeCommand({
+        ...base,
+        id: "02908d1e-7843",
+        cwd: "/Users/me/My Repo",
+        agent: "claude",
+        resume: "",
+      }),
+    ).toBe('cd "/Users/me/My Repo" && claude --resume 02908d1e-7843');
+  });
+  it("agent 是哪一家以引擎給的為準；沒給就照名字認 Claude Code", () => {
+    expect(agentKindOf("cx", { cx: "codex" })).toBe("codex");
+    expect(agentKindOf("claude")).toBe("claude");
+    expect(agentKindOf("codex")).toBe("other");
   });
 });
 

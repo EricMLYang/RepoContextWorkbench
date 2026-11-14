@@ -116,11 +116,44 @@ impl AgentCli {
         }
     }
 
-    /// 開場 hook 那一項（`hooks[]` 裡的一個 handler）。Codex 預設把 hook 給的脈絡截到約 2500 token
+    /// 使用者層要掛哪些 hook：(事件名, `ctx hook <arg>` 的 arg)。
+    ///
+    /// 兩家都有開場／收尾。Codex 另外掛 App 會話狀態那幾個（做完／你送出／要你允許／工具開始與結束）：
+    /// Claude Code 的是 App 開會話時用 `--settings` 單獨帶（不動使用者設定），Codex 沒有每場會話各自的
+    /// hook 檔，而且新 hook 要使用者信任，只能掛在使用者層——不是 App 開的會話沒有那個環境變數，
+    /// 這幾個 hook 什麼都不做就結束。
+    pub fn hook_events(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            AgentCli::Claude => &[
+                ("SessionStart", "session-start"),
+                ("SessionEnd", "session-end"),
+            ],
+            AgentCli::Codex => &[
+                ("SessionStart", "session-start"),
+                ("SessionEnd", "session-end"),
+                ("Stop", "stop"),
+                ("UserPromptSubmit", "prompt"),
+                ("PermissionRequest", "permission-request"),
+                ("PreToolUse", "tool-start"),
+                ("PostToolUse", "tool-end"),
+            ],
+        }
+    }
+
+    /// 這一家的 hook 指令。Codex 多帶 `--agent codex`：收尾時才知道接回去要用 `codex resume`。
+    pub fn hook_command(self, exe: &Path, arg: &str) -> String {
+        let exe = exe.to_string_lossy();
+        match self {
+            AgentCli::Claude => cmdline(&[exe.as_ref(), "hook", arg]),
+            AgentCli::Codex => cmdline(&[exe.as_ref(), "hook", arg, "--agent", "codex"]),
+        }
+    }
+
+    /// 一個 hook handler（`hooks[]` 裡的一項）。Codex 預設把 hook 給的脈絡截到約 2500 token
     /// （超過只給頭尾＋暫存檔路徑），開場注入會被切掉；`additionalContextLimit: 0`＝照給
     /// （長度由我們自己的 [`crate::hooks::START_BUDGET`] 管）。
     fn hook_handler(self, exe: &Path, event: &str, arg: &str) -> Value {
-        let mut h = json!({"type": "command", "command": hook_command(exe, arg)});
+        let mut h = json!({"type": "command", "command": self.hook_command(exe, arg)});
         if self == AgentCli::Codex && event == "SessionStart" {
             h["additionalContextLimit"] = json!(0);
         }
@@ -329,10 +362,7 @@ pub fn install_hooks_for(cli: AgentCli, hooks_path: &Path, exe: &Path) -> Result
         .as_object_mut()
         .ok_or_else(|| Error::invalid(format!("{} 的 hooks 不是物件", p.display())))?;
     let mut added = Vec::new();
-    for (event, arg) in [
-        ("SessionStart", "session-start"),
-        ("SessionEnd", "session-end"),
-    ] {
+    for &(event, arg) in cli.hook_events() {
         let entries = hooks
             .entry(event)
             .or_insert_with(|| Value::Array(Vec::new()))
@@ -581,9 +611,14 @@ impl Step {
                 cmdline(&cli.mcp_add_command(&env.exe))
             ),
             Step::Hooks(cli) => format!(
-                "掛 hooks（SessionStart／SessionEnd）到 {}：{}",
+                "掛 hooks（{}）到 {}：{}",
+                cli.hook_events()
+                    .iter()
+                    .map(|(e, _)| *e)
+                    .collect::<Vec<_>>()
+                    .join("／"),
                 env.hooks_path(cli).display(),
-                hook_command(&env.exe, "session-start")
+                cli.hook_command(&env.exe, "session-start")
             ),
             Step::Skill(cli) => {
                 format!("安裝 skill 到 {}", cli.skill_file(env.home(cli)).display())

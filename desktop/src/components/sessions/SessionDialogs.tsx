@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { PermissionMode, TermInfo } from "../../api/types";
+import type { AgentKind, PermissionMode, TermInfo } from "../../api/types";
 import { DetailLayout, useAutoFocus, useDetail } from "../../dialogs/Modal";
 import { load, save } from "../../lib/storage";
 import { reportLine, sessionScopeLine } from "../../lib/view";
@@ -20,9 +20,17 @@ export const PERMISSION_MODES: { value: PermissionMode | ""; label: string }[] =
 /** 模型的常用別名（也可以打全名）。 */
 const MODEL_HINTS = ["fable", "opus", "sonnet", "haiku"];
 
-/** 這個 agent 是不是 Claude Code（config 的 key；只有它吃權限模式、模型、worktree）。 */
+/** 這個 agent 是不是 Claude Code（config 的 key；只有它吃權限模式、worktree）。 */
 export function isClaudeAgent(agent: string): boolean {
   return /^claude/i.test(agent);
+}
+
+/**
+ * 這個 agent 是哪一家：引擎給的 `agent_kinds` 為準（它看 config 的指令認）；
+ * 舊引擎沒給這個鍵時，照名字認 Claude Code，其餘當 other。
+ */
+export function agentKindOf(agent: string, kinds?: Record<string, AgentKind>): AgentKind {
+  return kinds?.[agent] ?? (isClaudeAgent(agent) ? "claude" : "other");
 }
 
 /** 開會話表單：選 Agent、寫任務；範圍在開啟時就固定。 */
@@ -47,9 +55,13 @@ export function SessionForm({
     const m = load<string>("permission_mode", "");
     return PERMISSION_MODES.find((x) => x.value === m)?.value ?? "";
   });
+  // 模型名各家不同（opus 給 Codex 會開不起來）：一家記一個
   const [model, setModel] = useState(() => load("model", ""));
+  const [codexModel, setCodexModel] = useState(() => load("model_codex", ""));
   const [worktree, setWorktree] = useState(false);
-  const claude = isClaudeAgent(agent);
+  const kind = agentKindOf(agent, state.agent_kinds);
+  const claude = kind === "claude";
+  const codex = kind === "codex";
   const steward = payload.steward === true;
   const single = !steward && typeof payload.repo === "string" && !!payload.repo;
   const taskRef = useRef<HTMLTextAreaElement>(null);
@@ -63,6 +75,7 @@ export function SessionForm({
             save("agent", agent);
             save("permission_mode", mode);
             save("model", model.trim());
+            save("model_codex", codexModel.trim());
             // 總管不屬於任何範圍：不帶 group／repos
             const base = steward ? { steward: true } : (payload as Record<string, unknown>);
             const r = await store.action("term_create", {
@@ -78,6 +91,7 @@ export function SessionForm({
                     ...(worktree && single ? { worktree: true } : {}),
                   }
                 : {}),
+              ...(codex && codexModel.trim() ? { model: codexModel.trim() } : {}),
             });
             close();
             await store.refreshState();
@@ -154,6 +168,22 @@ export function SessionForm({
               在隔離的 git worktree 裡做（不動你目前的工作目錄；做完要自己合併）
             </label>
           ) : null}
+        </div>
+      ) : null}
+      {codex ? (
+        <div className="launchopts">
+          <label className="field">
+            模型
+            <input
+              value={codexModel}
+              placeholder="照 Codex 的設定"
+              onChange={(e) => setCodexModel(e.target.value)}
+            />
+          </label>
+          <p className="sumsrc">
+            權限與沙箱照 Codex 自己的設定。開場脈絡、MCP 工具、會話狀態要先跑過 ctx setup
+            --codex，並在 Codex 的 /hooks 信任 ctx 的 hook。
+          </p>
         </div>
       ) : null}
       <label className="field">

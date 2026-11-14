@@ -523,10 +523,12 @@ pub fn api_state(
     let mut st = build_state(spine_dir, scope)?;
     let tv: Vec<Value> = terms.iter().map(term_value).collect();
     let annotated = annotate_terms(spine_dir, &tv)?;
-    let agents: Vec<String> = config::load(spine_dir)?
-        .agents()
-        .into_iter()
-        .map(|(k, _)| k)
+    let specs = config::load(spine_dir)?.agents();
+    let agents: Vec<&String> = specs.iter().map(|(k, _)| k).collect();
+    // Rust 才有（2026-11-14）：每個 agent 是哪一家（claude｜codex｜other）——開會話對話框據此決定給哪些選項
+    let agent_kinds: Map<String, Value> = specs
+        .iter()
+        .map(|(k, s)| (k.clone(), json!(s.kind().name())))
         .collect();
     if let Some(o) = st.as_object_mut() {
         // Rust 才有（F-80）：要你看的會話數——殼的選單列／Dock 徽章直接讀，不自己比狀態字串
@@ -536,6 +538,7 @@ pub fn api_state(
         );
         o.insert("terms".into(), json!(annotated));
         o.insert("agents".into(), json!(agents));
+        o.insert("agent_kinds".into(), Value::Object(agent_kinds));
         // Rust 才有（F-83）：額度餘光；沒收過 statusLine 就沒有這個鍵
         if let Some(u) = crate::usage::read(spine_dir) {
             o.insert("usage".into(), u);

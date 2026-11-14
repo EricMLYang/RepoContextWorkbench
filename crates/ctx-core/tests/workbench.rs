@@ -2629,33 +2629,98 @@ fn group_name_with_space_events_stay_in_scope_lane() {
     assert_eq!(rec["scope_label"], "PM Group", "{rec}");
 }
 
-/// F-96：不是 Claude Code 的 agent 帶權限模式等旗標＝在寫會話料、留痕之前就拒絕。
+/// F-96：這一家不支援的旗標＝在寫會話料、留痕之前就拒絕。2026-11-14：Codex 可以選模型（`--model=`），
+/// 權限模式、worktree 是 Claude Code 的旗標；不認得的 agent 什麼旗標都不收。
 #[test]
-fn launch_flags_on_a_non_claude_agent_are_rejected_before_anything_is_written() {
+fn launch_flags_an_agent_does_not_support_are_rejected_before_anything_is_written() {
     let (_t, d) = spine_with_repos();
     let cfg = d.join("config.yaml");
     let text = std::fs::read_to_string(&cfg).unwrap();
     std::fs::write(
         &cfg,
         format!(
-            "{text}\nagents:\n  codex:\n    cmd: [codex]\n    mcp: none\n    prompt_flag: []\n"
+            "{text}\nagents:\n  codex:\n    cmd: [codex]\n    mcp: none\n    prompt_flag: []\n  agy:\n    cmd: [agy]\n    mcp: none\n    prompt_flag: [-i]\n"
         ),
     )
     .unwrap();
     let terms = ArgvTerms(Default::default());
     let count = || walkdir_count(&d.join("groups"));
     let before = count();
-    let e = handle_action(
-        &d,
-        "term_create",
-        &json!({"kind": "agent", "agent": "codex", "repo": "repo-a", "model": "o3"}),
-        Some(&terms),
-    )
-    .unwrap_err()
-    .to_string();
-    assert!(e.contains("不是 Claude Code"), "{e}");
+    for (payload, why) in [
+        (
+            json!({"kind": "agent", "agent": "codex", "repo": "repo-a", "permission_mode": "plan"}),
+            "Codex 只能選模型",
+        ),
+        (
+            json!({"kind": "agent", "agent": "codex", "repo": "repo-a", "worktree": true}),
+            "Codex 只能選模型",
+        ),
+        (
+            json!({"kind": "agent", "agent": "agy", "repo": "repo-a", "model": "x"}),
+            "只有 Claude Code 支援",
+        ),
+    ] {
+        let e = handle_action(&d, "term_create", &payload, Some(&terms))
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains(why), "{e}");
+    }
     assert_eq!(count(), before, "被拒的不留會話料");
     assert!(terms.0.lock().unwrap().is_empty());
+    // Codex 選模型：旗標插在指令後面、任務之前；不帶 Claude Code 的 --settings／--mcp-config
+    handle_action(
+        &d,
+        "term_create",
+        &json!({"kind": "agent", "agent": "codex", "repo": "repo-a", "model": "gpt-6.1"}),
+        Some(&terms),
+    )
+    .unwrap();
+    let argv = terms.0.lock().unwrap()[0].clone();
+    assert_eq!(argv[..2], ["codex", "--model=gpt-6.1"], "{argv:?}");
+    assert_eq!(argv.len(), 3, "{argv:?}");
+    assert!(!argv.iter().any(|a| a.starts_with("--settings")));
+}
+
+/// 2026-11-14：接續 Codex 的舊會話＝`codex resume <id>`；`agent` 給哪一家（過去會話的欄位）就找註冊表裡
+/// 那一家的 agent；註冊表沒有 Codex 就說清楚要加什麼。
+#[test]
+fn resuming_a_codex_session_runs_codex_resume() {
+    let (_t, d) = spine_with_repos();
+    let ra = ctx_core::registry::get_repo(&d, "repo-a").unwrap().path();
+    let id = "01a1da06-c73f-79b3-bb63-a14cb2e0b2b6";
+    let payload = json!({"kind": "agent", "agent": "codex", "resume": id,
+        "cwd": ra.to_string_lossy(), "prompt": "請補交接", "model": "gpt-6.1"});
+    let terms = ArgvTerms(Default::default());
+    let e = handle_action(&d, "term_create", &payload, Some(&terms))
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("未知 agent: codex"), "{e}");
+    let cfg = d.join("config.yaml");
+    let text = std::fs::read_to_string(&cfg).unwrap();
+    // 註冊表裡叫別的名字也找得到（照指令認出是 Codex）
+    std::fs::write(
+        &cfg,
+        format!("{text}\nagents:\n  cx:\n    cmd: [npx, codex]\n    mcp: none\n"),
+    )
+    .unwrap();
+    handle_action(&d, "term_create", &payload, Some(&terms)).unwrap();
+    let argv = terms.0.lock().unwrap()[0].clone();
+    assert_eq!(
+        argv,
+        ["npx", "codex", "resume", "--model=gpt-6.1", id, "請補交接"],
+    );
+    // Claude Code 的照舊：`claude --settings=… --resume <id>`
+    handle_action(
+        &d,
+        "term_create",
+        &json!({"kind": "agent", "resume": "aaaaaaaa-1111", "cwd": ra.to_string_lossy()}),
+        Some(&terms),
+    )
+    .unwrap();
+    let argv = terms.0.lock().unwrap()[1].clone();
+    assert_eq!(argv[0], "claude");
+    assert!(argv[1].starts_with("--settings="), "{argv:?}");
+    assert_eq!(argv[2..], ["--resume", "aaaaaaaa-1111"]);
 }
 
 fn walkdir_count(p: &std::path::Path) -> usize {
@@ -3001,7 +3066,24 @@ fn missed_handoff_card_offers_resume_with_handoff_prompt() {
     );
     assert_eq!(
         ctx_core::hooks::resume_line(&body),
-        Some(("aaaaaaaa-1111".to_string(), ra.display().to_string()))
+        Some((
+            "aaaaaaaa-1111".to_string(),
+            ra.display().to_string(),
+            ctx_core::config::AgentKind::ClaudeCode
+        ))
+    );
+    // Codex 的會話：接回去是 `codex resume <id>`（2026-11-14）
+    assert_eq!(
+        ctx_core::hooks::resume_line("接續：codex resume 01a1da06-c73f（目錄 /a）"),
+        Some((
+            "01a1da06-c73f".to_string(),
+            "/a".to_string(),
+            ctx_core::config::AgentKind::Codex
+        ))
+    );
+    assert_eq!(
+        ctx_core::hooks::resume_line("接續：vim resume 01a1da06-c73f（目錄 /a）"),
+        None
     );
     assert_eq!(
         ctx_core::hooks::resume_line("接續：claude --resume x;rm（目錄 /a）"),

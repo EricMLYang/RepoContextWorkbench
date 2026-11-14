@@ -322,14 +322,20 @@
 
 | # | 操作 | 應該看到 | macOS | Windows |
 |---|---|---|---|---|
-| 8l-1 | 終端跑 `ctx setup --codex` | 四步：記住 spine、`codex mcp add repo-context …` 已註冊、`~/.codex/hooks.json` 加了 SessionStart／SessionEnd（原本 Orca 的 hook 還在、排在前面；旁邊多一份 `hooks.json.bak-ctx`）、skill 寫到 `~/.codex/skills/repo-context/SKILL.md`；最後提醒去 `/hooks` 信任。再跑一次三步都是「略過」 | [ ] | [ ] |
-| 8l-2 | 開 `codex`，輸入 `/hooks` | 列出 ctx 的 `hook session-start`、`hook session-end` 兩項待審；設為信任 | [ ] | [ ] |
+| 8l-1 | 終端跑 `ctx setup --codex` | 四步：記住 spine、`codex mcp add repo-context …` 已註冊、`~/.codex/hooks.json` 加了 7 個事件（SessionStart／SessionEnd 與會話狀態用的 Stop／UserPromptSubmit／PermissionRequest／PreToolUse／PostToolUse；原本 Orca 的 hook 還在、排在前面；旁邊多一份 `hooks.json.bak-ctx`）、skill 寫到 `~/.codex/skills/repo-context/SKILL.md`；最後提醒去 `/hooks` 信任。再跑一次三步都是「略過」 | [ ] | [ ] |
+| 8l-2 | 開 `codex`，輸入 `/hooks` | 列出 ctx 的 7 項（指令都是 `…/ctx hook <事件> --agent codex`）待審；都設為信任 | [ ] | [ ] |
 | 8l-3 | 在登記過的 repo 裡開新的 `codex`，問「你開場拿到什麼脈絡」 | 它講得出 repo-context 給的那段（你在哪個 repo、哪一組、上次交接、同組成員、工作約定），跟 Claude Code 開場看到的是同一份 | [ ] | [ ] |
 | 8l-4 | 在 spine 目錄開 `codex`，問「現在登記了幾個 repo」 | 開場是總管簡報；它用 repo-context 的工具或 `ctx registry list` 回答登記的數量，不是自己 `find .git` | [ ] | [ ] |
 | 8l-5 | 在 Codex 會話裡請它查「這個 repo 屬於哪一組、上次交接是什麼」 | 直接用 `where_am_i`／`context_for`／`repo_entry` 查到，不跳核准（這幾個是只讀工具） | [x] 2026-11-14（`codex exec`） | [ ] |
 | 8l-6 | 請它收尾交接（`handoff`） | Codex 跳一次核准（會留痕的工具不自動放行）；同意後 spine 多一筆交接，App 收件匣與 `ctx relay plan` 看得到 | [ ] | [ ] |
 | 8l-7 | 不交接直接結束 Codex 會話（期間有 commit 或沒提交的檔） | 收件匣多一筆「agent 會話結束但沒有交接」 | [ ] | [ ] |
 | 8l-8 | `ctx health` | 沒掛 Codex 時提醒「Codex 有裝但還沒掛 repo-context」；掛了就不講。重裝 App 後跑 `ctx setup --claude`，Codex 的 skill 也一起更新 | [ ] | [ ] |
+| 8l-9 | App 開會話對話框，Agent 選 codex（config.yaml 的 `agents` 要有 `codex: {cmd: [codex]}`） | 權限、worktree 的選項不見，只剩「模型」（預設「照 Codex 的設定」）與一行說明；模型欄跟 Claude 的分開記 | [ ] | [ ] |
+| 8l-10 | 用 codex 開一場 App 會話、交代一件要跑指令的事（已在 `/hooks` 信任 ctx 的 7 項） | 會話列跟 Claude 的一樣會變：處理中（帶正在跑的工具）→ 要你允許 →「這一輪做完了」＋最後回覆一行 | [ ] | [ ] |
+| 8l-11 | 那場 Codex 會話結束後（⌃D 或關掉），會話列按「接續」 | 在原目錄開 `codex resume <id>`，接回同一段對話；滑鼠移到按鈕上寫的是 codex resume | [ ] | [ ] |
+| 8l-12 | 「過去的會話」（或終端 `ctx sessions --repos <有用過 Codex 的 repo>`） | Codex 的互動會話跟 Claude 的排在同一份清單，標「Codex」；「複製指令」是 `cd … && codex resume <id>`；沒有「分岔」「逐字稿」；`codex exec` 跑的不列 | [x] 2026-11-14（終端，card_notes 兩場） | [ ] |
+| 8l-13 | Codex 會話沒交接就結束，收件匣那張卡按「接續補交接」 | 接回的是 Codex 那場（`codex resume`），第一句是請它補交接 | [ ] | [ ] |
+| 8l-14 | 在 Codex 會話裡交接並帶提問（`handoff` 的 `ask`），之後在收件匣回答、按「接回原會話接著做」 | 接回的是 Codex 那場，任務文字帶著你的回答 | [ ] | [ ] |
 
 ## 9. 要你決定
 

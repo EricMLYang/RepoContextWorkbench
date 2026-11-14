@@ -133,13 +133,13 @@ impl CardBuilder<'_> {
         }
         // F-77：沒交接就結束的會話——接回那場對話請它補交接（行動出口，不是只叫人下次記得）
         if ev.source == "hook" {
-            if let Some((id, dir)) = crate::hooks::resume_line(&ev.body) {
+            if let Some((id, dir, kind)) = crate::hooks::resume_line(&ev.body) {
                 actions.insert(
                     0,
                     act(
                         "接續補交接",
                         "session_resume",
-                        json!({"resume": id, "cwd": dir, "prompt": RESUME_HANDOFF_TASK, "task": "補交接"}),
+                        json!({"resume": id, "cwd": dir, "agent": kind.name(), "prompt": RESUME_HANDOFF_TASK, "task": "補交接"}),
                     ),
                 );
             }

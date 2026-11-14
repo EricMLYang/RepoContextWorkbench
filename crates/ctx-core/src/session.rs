@@ -15,6 +15,7 @@ use std::process::Command;
 use chrono::Local;
 use serde_json::json;
 
+use crate::config::AgentKind;
 use crate::context;
 use crate::exe::ctx_exe;
 use crate::pack::{self, RepoRef};
@@ -160,8 +161,9 @@ pub struct SessionPlan {
     pub cwd: PathBuf,
     pub cmd: Vec<String>,
     pub pack_path: PathBuf,
-    /// 這個 agent 是 Claude Code（config 的 `mcp: mcp-config`）：吃 `--settings`，App 據此掛會話狀態 hook。
-    pub claude_code: bool,
+    /// 這個 agent 是哪一家（[`AgentKind`]）：Claude Code 吃 `--settings`（App 據此掛會話狀態 hook）；
+    /// Codex 的狀態 hook 由 `ctx setup --codex` 掛在使用者層，靠環境變數認出是 App 開的會話。
+    pub kind: AgentKind,
     /// `cmd` 裡 agent 指令本身佔幾個元素（config 的 `cmd`，例 `["claude"]` 或 `["npx", "claude"]`）：
     /// 要另外加旗標就插在這個位置，不會插進包裝指令中間。
     pub flags_at: usize,
@@ -307,7 +309,7 @@ pub fn build_with(spine_dir: &Path, opts: SessionOpts<'_>, ctx: &Path) -> Result
         cwd,
         cmd,
         pack_path: out,
-        claude_code: spec.mcp == "mcp-config",
+        kind: spec.kind(),
         flags_at: spec.cmd.len(),
     })
 }
@@ -387,26 +389,20 @@ pub fn build_steward_with(
         cwd: spine_dir.to_path_buf(),
         cmd,
         pack_path: out,
-        claude_code: spec.mcp == "mcp-config",
+        kind: spec.kind(),
         flags_at: spec.cmd.len(),
     })
 }
 
-/// config 裡這個 agent 是不是 Claude Code（`mcp: mcp-config`：吃 `--settings`、`--permission-mode` 這些旗標）。
-/// 不認得的 agent 回錯。Rust 才有（F-96）。
-pub fn is_claude_code(spine_dir: &Path, agent: &str) -> Result<bool> {
-    let cfg = config::load(spine_dir)?;
-    let agents = cfg.agents();
-    agents
-        .iter()
-        .find(|(k, _)| k == agent)
-        .map(|(_, s)| s.mcp == "mcp-config")
-        .ok_or_else(|| Error::invalid(format!("未知 agent: {agent}")))
+/// config 裡這個 agent 是哪一家（[`AgentKind`]）。不認得的 agent 回錯。Rust 才有（F-96；2026-11-14 加 Codex）。
+pub fn agent_kind(spine_dir: &Path, agent: &str) -> Result<AgentKind> {
+    Ok(config::load(spine_dir)?.agent(agent)?.kind())
 }
 
-/// 接續一場過去的 Claude Code 會話（F-72，Rust 才有）：config 裡這個 agent 的指令＋`--resume <id>`。
-/// 回傳 (argv, flags_at)。只有 Claude Code（`mcp: mcp-config`）會接續；id 要先用
-/// [`crate::history::valid_session_id`] 驗過。不寫情境卡、不留 presented——是回到舊對話，不是開新工作。
+/// 接續一場過去的會話（F-72，Rust 才有；2026-11-14 加 Codex）：config 裡這個 agent 的指令＋那一家的接續參數
+/// （Claude Code `--resume <id>`、Codex `resume <id>`）。回傳 (argv, flags_at)——另外的旗標插在 `flags_at`
+/// （Codex 是子指令 `resume` 之後）。id 要先用 [`crate::history::valid_session_id`] 驗過。
+/// 不寫情境卡、不留 presented——是回到舊對話，不是開新工作。
 pub fn resume_argv(
     spine_dir: &Path,
     agent: &str,
@@ -416,25 +412,25 @@ pub fn resume_argv(
     if !crate::history::valid_session_id(id) {
         return Err(Error::invalid(format!("會話 id 不對：{id}")));
     }
-    let cfg = config::load(spine_dir)?;
-    let agents = cfg.agents();
-    let spec = agents
-        .iter()
-        .find(|(k, _)| k == agent)
-        .map(|(_, s)| s)
-        .ok_or_else(|| Error::invalid(format!("未知 agent: {agent}")))?;
-    if spec.mcp != "mcp-config" {
+    let spec = config::load(spine_dir)?.agent(agent)?;
+    let kind = spec.kind();
+    let Some(args) = kind.resume_args(id) else {
         return Err(Error::invalid(format!(
-            "{agent} 不是 Claude Code，不能接續舊會話"
+            "{agent} 不是 Claude Code 或 Codex，不能接續舊會話"
         )));
-    }
+    };
     let mut cmd = spec.cmd.clone();
-    cmd.extend(["--resume".to_string(), id.to_string()]);
-    // 接回時順便說第一句（例：請它補交接）；`claude --resume <id> "<話>"`
+    let flags_at = match kind {
+        // `codex resume [OPTIONS] <id>`：旗標放子指令後面
+        AgentKind::Codex => cmd.len() + 1,
+        _ => cmd.len(),
+    };
+    cmd.extend(args);
+    // 接回時順便說第一句（例：請它補交接）；`claude --resume <id> "<話>"`、`codex resume <id> "<話>"`
     if let Some(p) = prompt.map(str::trim).filter(|p| !p.is_empty()) {
         cmd.push(p.to_string());
     }
-    Ok((cmd, spec.cmd.len()))
+    Ok((cmd, flags_at))
 }
 
 /// Claude Code 的權限模式（F-96；`claude --permission-mode` 的選項，2.1.306）。
@@ -540,7 +536,27 @@ impl LaunchFlags {
         *self == LaunchFlags::default()
     }
 
-    /// 要插在 agent 指令後面的旗標。
+    /// 這一家的旗標（2026-11-14）：Claude Code 全部支援；Codex 只收模型（`--model=<名>`），
+    /// 權限模式、worktree、分岔是 Claude Code 的旗標，帶了就拒絕（不默默丟掉）；其他家什麼都不收。
+    pub fn argv_for(&self, kind: AgentKind) -> Result<Vec<String>> {
+        match kind {
+            AgentKind::ClaudeCode => Ok(self.argv()),
+            AgentKind::Codex => {
+                if self.permission_mode.is_some() || self.worktree.is_some() || self.fork {
+                    return Err(Error::invalid(
+                        "Codex 只能選模型：權限模式、worktree、分岔是 Claude Code 的旗標",
+                    ));
+                }
+                Ok(self.model.iter().map(|m| format!("--model={m}")).collect())
+            }
+            AgentKind::Other if self.is_empty() => Ok(Vec::new()),
+            AgentKind::Other => Err(Error::invalid(
+                "權限模式、模型、worktree 只有 Claude Code 支援（Codex 可以選模型）",
+            )),
+        }
+    }
+
+    /// 要插在 agent 指令後面的旗標（Claude Code 的寫法）。
     pub fn argv(&self) -> Vec<String> {
         let mut v = Vec::new();
         if let Some(m) = self.permission_mode {

@@ -818,10 +818,13 @@ pub const ANSWER_CHARS: usize = 800;
 pub enum Delivery {
     /// 這個 repo 有 App 會話開著（閒著或在等你）：在那場會話貼上任務文字。
     ExistingSession { sid: String, state: SessionNow },
-    /// 沒有開著的會話，但找得到留下這筆交接的 Claude Code 會話：`claude --resume` 接回去。
+    /// 沒有開著的會話，但找得到留下這筆交接的那場會話：`claude --resume`／`codex resume` 接回去。
+    /// `claude_session_id`＝那一家 CLI 自己的會話 id（Codex 的也放這個鍵，欄位名不改）；
+    /// `agent`＝哪一家（`claude`｜`codex`，2026-11-14）。
     Resume {
         claude_session_id: String,
         cwd: String,
+        agent: &'static str,
     },
     /// 開一場新的會話。
     NewSession { cwd: String },
@@ -880,7 +883,7 @@ fn answer_task(repo: &str, h: &Handoff, reply: &str) -> String {
     .join("\n")
 }
 
-/// 留下這筆交接的 Claude Code 會話：範圍是這個 repo 的過去會話裡，時間涵蓋交接時間（開始 ≤ 交接 ≤ 最後活動），
+/// 留下這筆交接的會話（Claude Code 或 Codex）：範圍是這個 repo 的過去會話裡，時間涵蓋交接時間（開始 ≤ 交接 ≤ 最後活動），
 /// 而且逐字稿裡真的有這筆交接的 ref（`handoff` 回傳的 `decision:<日>-dN`）。
 /// 交接沒有 id（ref 只是 `decision:HH:MM`，不唯一）就不猜；兩分鐘內還在寫的（可能還開著）也不接。
 fn resume_source(
@@ -888,7 +891,7 @@ fn resume_source(
     repo: &str,
     h: &Handoff,
     projects_root: Option<&Path>,
-) -> Option<(String, String)> {
+) -> Option<(String, String, &'static str)> {
     let has_id = h
         .reference
         .split_once(':')
@@ -917,7 +920,7 @@ fn resume_source(
                 b.windows(needle.len()).any(|w| w == needle)
             })
         })
-        .map(|ps| (ps.id, ps.cwd))
+        .map(|ps| (ps.id, ps.cwd, ps.agent))
 }
 
 /// 人回了一句，組出要送給這個 repo 的 agent 的任務與送達方式。純計算。
@@ -996,12 +999,16 @@ pub fn answer_with(
             Vec::new(),
         ),
         _ => match resume_source(spine_dir, &id, &h, projects_root) {
-            Some((cid, dir)) => {
-                let cmd = format!("cd {} && claude --resume {cid} {}", q(&dir), q(&task));
+            Some((cid, dir, agent)) => {
+                let resume = crate::config::AgentKind::parse(agent)
+                    .and_then(|k| k.resume_command(&cid))
+                    .unwrap_or_else(|| format!("claude --resume {cid}"));
+                let cmd = format!("cd {} && {resume} {}", q(&dir), q(&task));
                 (
                     Delivery::Resume {
                         claude_session_id: cid,
                         cwd: dir,
+                        agent,
                     },
                     vec![cmd],
                 )

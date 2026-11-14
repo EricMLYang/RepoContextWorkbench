@@ -22,7 +22,7 @@
 //! `title`＝Claude Code 自己取的對話標題（逐字稿的 `ai-title`，之後的事件沿用）、
 //! `reply`＝這一輪最後的回覆（一行、截 [`REPLY_MAX`] 字；`Stop` 才寫，你送出新訊息就清掉）。
 //! 都從 hook 給的 `transcript_path` 讀尾巴（只讀不寫）。
-//! F-78：另記 `claude_session`（Claude Code 自己的會話 id）與 `cwd`；程序結束時不刪檔，改寫成
+//! F-78：另記 `claude_session`（agent CLI 自己的會話 id；Codex 的也記在這個鍵，另有 `agent: "codex"`）與 `cwd`；程序結束時不刪檔，改寫成
 //! `status: "exited"`（[`retire`]）——已結束的會話列據此給「接續」（`claude --resume`）。
 
 use std::path::{Path, PathBuf};
@@ -422,6 +422,18 @@ pub fn record_hook(
     target: Option<&str>,
     now: Option<NaiveDateTime>,
 ) -> bool {
+    record_hook_for(event, stdin, target, now, None)
+}
+
+/// 同 [`record_hook`]，`agent`＝hook 指令帶的 `--agent`（哪一家的 CLI；None＝沒帶，沿用上一筆記的）。
+/// 記進狀態檔的 `agent`：程序結束後「接續」才知道要用 `claude --resume` 還是 `codex resume`。
+pub fn record_hook_for(
+    event: StatusHook,
+    stdin: &str,
+    target: Option<&str>,
+    now: Option<NaiveDateTime>,
+    agent: Option<crate::config::AgentKind>,
+) -> bool {
     let Some(target) = target.map(str::trim).filter(|t| !t.is_empty()) else {
         return false;
     };
@@ -504,6 +516,12 @@ pub fn record_hook(
     }
     if let Some(c) = pick("cwd", "cwd", |c| !c.is_empty()) {
         rec["cwd"] = json!(c);
+    }
+    let agent = agent
+        .map(|a| a.name().to_string())
+        .or_else(|| prev.as_ref()?.get("agent")?.as_str().map(str::to_string));
+    if let Some(a) = agent {
+        rec["agent"] = json!(a);
     }
     if let Some(t) = title {
         rec["title"] = json!(t);

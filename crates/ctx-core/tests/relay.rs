@@ -420,7 +420,9 @@ fn answer_delivery_kinds() {
         Delivery::Resume {
             claude_session_id,
             cwd,
+            agent,
         } => {
+            assert_eq!(*agent, "claude");
             assert_eq!(claude_session_id, "aaaaaaaa-1111-2222-3333-444444444444");
             assert_eq!(Path::new(cwd), res.as_path());
         }

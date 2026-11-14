@@ -567,3 +567,20 @@ CLI／MCP（ctx-cli）：
 - **MCP 只讀工具標 `annotations.readOnlyHint`**（2026-11-14；Python 沒有）：where_am_i、context_for、next_work、messages、
   search_knowledge、repo_entry、repo_status、what_user_sees。Codex 對沒標的工具每次都要核准（`codex exec` 直接拒絕），
   實測標了才查得到脈絡；會留痕的（log_decision、handoff、read_from 記引用、ask_repo 另開 agent）不標。對拍時拿掉這個鍵。
+- **agent 是哪一家：`config::AgentKind`**（2026-11-14；Python 沒有）：原本用 `mcp == "mcp-config"` 當「是不是 Claude Code」，
+  現在是型別（`ClaudeCode`｜`Codex`｜`Other`）：config 的 agent 可以明寫 `kind: claude｜codex｜other`，沒寫就推
+  （`mcp: mcp-config`＝Claude Code；指令裡有 `codex`＝Codex）。接續指令（`claude --resume <id>`／`codex resume <id>`）、
+  開會話的旗標（Codex 只收 `--model=`）、要不要帶 `--settings` 都從它查。`SessionPlan.claude_code` 改成 `kind`。
+  `api_state` 多 `agent_kinds`；會話列多 `agent_kind`。
+- **Codex 的會話也算數**（2026-11-14；Python 沒有）：
+  - hook 指令多一個選填 `--agent <claude|codex>`（`ctx setup --codex` 掛的會帶）。開場標記檔只有不是 Claude Code 時才多
+    `agent` 鍵（Claude Code 的標記檔跟 Python 一字不差）；沒交接就結束的那一行變成 `接續：codex resume <id>（目錄 …）`，
+    `hooks::resume_line` 兩種都認、回哪一家，收件匣的「接續補交接」帶 `agent`。
+  - `ctx setup --codex` 另外把 App 會話狀態的 hook（Stop、UserPromptSubmit、PermissionRequest、PreToolUse、PostToolUse）
+    掛在 `~/.codex/hooks.json`：Claude Code 的是每場會話用 `--settings` 單獨帶，Codex 沒有這種檔、新 hook 又要信任，
+    只能掛使用者層；不是 App 開的會話沒有 `REPO_CONTEXT_SESSION_STATUS`，這幾個 hook 直接結束。狀態檔多選填的 `agent`。
+  - 過去的會話（`history::past_sessions`）併入 Codex 的紀錄（`codex_sessions`：`$CODEX_HOME/sessions/**/rollout-*.jsonl`
+    第一行的 `cwd` 在範圍內才讀；`codex exec` 與子 agent 不列；標題讀 `session_index.jsonl`），每筆多 `agent`、`resume`。
+    `ctx sessions`、App「過去的會話」、`ctx relay answer`（接回留下交接的那場）都跟著有。
+  - 還沒做：Codex 會話的逐字稿檢視與 `ctx sessions --digest`、backfill、分岔；程式化呼叫（ask_repo、助手、碰撞判定）仍是 `claude -p`。
+

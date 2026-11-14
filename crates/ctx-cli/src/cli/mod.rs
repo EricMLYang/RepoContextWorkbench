@@ -208,8 +208,13 @@ pub enum Cmd {
     /// 跨 repo 參考：check（失效路徑＋上游變動＋建議 export）／drift／suggest／cite
     Refs(agent::RefsArgs),
     // ── setup ──
-    /// Claude Code hook 入口（stdin 讀 hook JSON；ctx setup --claude 會掛好）
-    Hook { event: setup::HookEvent },
+    /// agent CLI 的 hook 入口（stdin 讀 hook JSON；ctx setup --claude／--codex 會掛好）
+    Hook {
+        event: setup::HookEvent,
+        /// 哪一家的 CLI 叫的（claude｜codex；沒給＝claude）。`ctx setup --codex` 掛的 hook 會帶
+        #[arg(long)]
+        agent: Option<String>,
+    },
     /// 印出給 agent 的使用說明（可貼進 AGENTS.md）
     Instructions,
     /// 記住 spine 位置；--claude 另外掛 MCP（user scope）＋hooks＋skill
@@ -277,7 +282,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Ask(a) => agent::cmd_ask(ctx, a),
         Repo(a) => agent::cmd_repo(ctx, a),
         Refs(a) => agent::cmd_refs(ctx, a),
-        Hook { event } => setup::cmd_hook(ctx, *event),
+        Hook { event, agent } => setup::cmd_hook(ctx, *event, agent.as_deref()),
         Instructions => setup::cmd_instructions(),
         Setup(a) => setup::cmd_setup(ctx, a),
     }

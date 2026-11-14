@@ -184,9 +184,11 @@ export interface TermInfo {
   ai_title?: string | null;
   /** Rust 才有（F-71）：這一輪最後的回覆（一行預覽；你送出下一句就清掉）。 */
   last_reply?: string | null;
-  /** Rust 才有（F-78）：Claude Code 自己的會話 id 與目錄（程序結束後「接續」用）。 */
+  /** Rust 才有（F-78）：agent CLI 自己的會話 id 與目錄（程序結束後「接續」用；Codex 的 id 也在這個鍵）。 */
   claude_session?: string | null;
   resume_cwd?: string | null;
+  /** Rust 才有（2026-11-14）：哪一家的會話（Codex 的 hook 會記 "codex"；Claude Code 的不帶＝null）。 */
+  agent_kind?: AgentKind | null;
   /** Rust 才有（F-82）：處理中正在用的工具（PreToolUse 記的）；`stalled`＝超過 10 分鐘沒結束（可能卡住，也可能只是慢）。 */
   tool?: { label: string; minutes: number; stalled: boolean } | null;
   /** Rust 才有（F-101）：這場會話的 context 用量 %（statusLine 寫的）與模型。 */
@@ -209,9 +211,16 @@ export interface AutoContinue {
   count: number;
 }
 
-/** 過去的一場 Claude Code 會話（F-72，引擎 `history::PastSession`）。 */
+/** agent 是哪一家的 CLI（引擎 `config::AgentKind`）：能帶哪些旗標、怎麼接續，各家不同。 */
+export type AgentKind = "claude" | "codex" | "other";
+
+/** 過去的一場會話（F-72，引擎 `history::PastSession`）：Claude Code 或 Codex。 */
 export interface PastSession {
   id: string;
+  /** 哪一家的會話；接續時當 `term_create` 的 `agent`。 */
+  agent: AgentKind;
+  /** 在終端自己接續的指令（引擎組好的：`cd <目錄> && claude --resume <id>`／`codex resume <id>`）。 */
+  resume: string;
   repo: string;
   cwd: string;
   title: string;
@@ -571,6 +580,8 @@ export interface WorkbenchState {
   terms: TermInfo[];
   /** server 補的：config.yaml 的 agents 鍵。 */
   agents: string[];
+  /** Rust 才有（2026-11-14）：每個 agent 是哪一家——開會話對話框據此給選項。 */
+  agent_kinds?: Record<string, AgentKind>;
 }
 
 // ── 決策佇列（F-123～F-127，Rust 才有） ─────────────────────────────────
@@ -669,7 +680,7 @@ export interface DecideQueue {
 
 export type Delivery =
   | { kind: "existing_session"; sid: string; state: string }
-  | { kind: "resume"; claude_session_id: string; cwd: string }
+  | { kind: "resume"; claude_session_id: string; cwd: string; agent?: AgentKind }
   | { kind: "new_session"; cwd: string };
 
 export interface RelayAnswer {
@@ -1279,7 +1290,8 @@ export interface ActionMap {
       of?: string;
       /** 所屬牌組（只給畫面歸類）。 */
       home_group?: string;
-      /** Rust 才有（F-72）：接續這場 Claude Code 會話（`claude --resume`；cwd 是它原本的目錄）。 */
+      /** Rust 才有（F-72）：接續這場會話（`claude --resume`／`codex resume`；cwd 是它原本的目錄）。
+       *  Codex 的會話要另外帶 `agent`（註冊表的名字，或哪一家 "codex"）。 */
       resume?: string;
       /** Rust 才有（F-77）：接續時的第一句（例：請它補交接）。 */
       prompt?: string;

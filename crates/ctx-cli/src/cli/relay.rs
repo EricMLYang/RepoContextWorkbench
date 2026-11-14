@@ -46,7 +46,7 @@ pub enum RelayCmd {
         #[arg(long, conflicts_with_all = ["group", "all"])]
         repos: Option<String>,
     },
-    /// 回覆一個在等你的 repo：組出帶著上次交接與你這句回覆的任務，印出怎麼送（開著的會話／claude --resume／新會話）。只印，不開會話
+    /// 回覆一個在等你的 repo：組出帶著上次交接與你這句回覆的任務，印出怎麼送（開著的會話／claude --resume 或 codex resume／新會話）。只印，不開會話
     Answer {
         /// 登記的 repo id
         repo: String,
@@ -272,9 +272,13 @@ pub(super) fn render_answer(a: &Answer) -> String {
         Delivery::Resume {
             claude_session_id,
             cwd,
+            agent,
         } => {
+            let who = ctx_core::config::AgentKind::parse(agent)
+                .map(|k| k.label())
+                .unwrap_or("agent");
             out.push(format!(
-                "接回留下這筆 handoff 的 Claude Code 會話 {claude_session_id}（目錄 {cwd}）"
+                "接回留下這筆 handoff 的 {who} 會話 {claude_session_id}（目錄 {cwd}）"
             ));
         }
         Delivery::NewSession { cwd } => {

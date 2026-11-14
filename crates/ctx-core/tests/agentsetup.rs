@@ -200,13 +200,39 @@ fn codex_setup_appends_hooks_and_installs_skill() {
     assert_eq!(starts[0]["hooks"][0]["command"], "sh orca-hook.sh");
     assert_eq!(
         starts[1]["hooks"][0]["command"],
-        "/opt/ctx/bin/ctx hook session-start"
+        "/opt/ctx/bin/ctx hook session-start --agent codex"
     );
+    assert!(agentsetup::is_our_hook(
+        starts[1]["hooks"][0]["command"].as_str().unwrap()
+    ));
     assert_eq!(starts[1]["hooks"][0]["additionalContextLimit"], 0);
     let end = &hooks["hooks"]["SessionEnd"][0]["hooks"][0];
-    assert_eq!(end["command"], "/opt/ctx/bin/ctx hook session-end");
+    assert_eq!(
+        end["command"],
+        "/opt/ctx/bin/ctx hook session-end --agent codex"
+    );
     assert!(end.get("additionalContextLimit").is_none());
-    assert_eq!(hooks["hooks"]["Stop"].as_array().unwrap().len(), 1); // 別人的不動
+    // App 會話狀態的 hook 也掛在使用者層（Codex 沒有每場會話各自的 hook 檔）；別人的排在前面、不動
+    let stops = hooks["hooks"]["Stop"].as_array().unwrap();
+    assert_eq!(stops.len(), 2);
+    assert_eq!(stops[0]["hooks"][0]["command"], "sh orca-hook.sh");
+    assert_eq!(
+        stops[1]["hooks"][0]["command"],
+        "/opt/ctx/bin/ctx hook stop --agent codex"
+    );
+    for (event, arg) in [
+        ("UserPromptSubmit", "prompt"),
+        ("PermissionRequest", "permission-request"),
+        ("PreToolUse", "tool-start"),
+        ("PostToolUse", "tool-end"),
+    ] {
+        assert_eq!(
+            hooks["hooks"][event][0]["hooks"][0]["command"],
+            format!("/opt/ctx/bin/ctx hook {arg} --agent codex"),
+        );
+    }
+    // Claude Code 的使用者層還是只有開場／收尾
+    assert_eq!(CLAUDE.hook_events().len(), 2);
     assert!(env.codex_home.join("hooks.json.bak-ctx").exists());
     assert_eq!(
         Step::Hooks(CODEX).run(&env).unwrap().message,

@@ -40,6 +40,7 @@ async function deliver(ui: Ui, store: WorkbenchStore, d: Decided): Promise<strin
   if (r.delivery.kind === "resume") {
     const res = await store.action("term_create", {
       kind: "agent",
+      ...(r.delivery.agent ? { agent: r.delivery.agent } : {}),
       resume: r.delivery.claude_session_id,
       cwd: r.delivery.cwd,
       prompt: r.task,

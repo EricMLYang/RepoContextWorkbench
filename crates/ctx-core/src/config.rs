@@ -167,6 +167,66 @@ impl Programmatic {
     }
 }
 
+/// 這個 agent 是哪一家的 CLI（2026-11-14）：接續舊會話的指令、能帶哪些旗標、會話狀態 hook 怎麼掛，各家不同。
+/// 不認得的＝[`AgentKind::Other`]：只負責把它開起來、帶上任務。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentKind {
+    /// Claude Code（`claude`）
+    ClaudeCode,
+    /// OpenAI Codex CLI（`codex`）
+    Codex,
+    Other,
+}
+
+impl AgentKind {
+    /// 畫面與狀態檔用的名字（也是過去會話的 `agent` 欄位）。
+    pub fn name(self) -> &'static str {
+        match self {
+            AgentKind::ClaudeCode => "claude",
+            AgentKind::Codex => "codex",
+            AgentKind::Other => "other",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "claude" | "claude-code" => Some(AgentKind::ClaudeCode),
+            "codex" => Some(AgentKind::Codex),
+            "other" => Some(AgentKind::Other),
+            _ => None,
+        }
+    }
+
+    /// 給人看的名字。
+    pub fn label(self) -> &'static str {
+        match self {
+            AgentKind::ClaudeCode => "Claude Code",
+            AgentKind::Codex => "Codex",
+            AgentKind::Other => "這個 agent",
+        }
+    }
+
+    /// 接回一場舊會話要接在 agent 指令後面的參數（不含第一句話）；這一家不能接續＝None。
+    /// Claude Code：`claude --resume <id>`；Codex：`codex resume <id>`。
+    pub fn resume_args(self, id: &str) -> Option<Vec<String>> {
+        match self {
+            AgentKind::ClaudeCode => Some(vec!["--resume".into(), id.into()]),
+            AgentKind::Codex => Some(vec!["resume".into(), id.into()]),
+            AgentKind::Other => None,
+        }
+    }
+
+    /// 在終端自己接回的一行指令（事件內文、複製指令用；不含 `cd`）。
+    pub fn resume_command(self, id: &str) -> Option<String> {
+        let program = match self {
+            AgentKind::ClaudeCode => "claude",
+            AgentKind::Codex => "codex",
+            AgentKind::Other => return None,
+        };
+        Some(format!("{program} {}", self.resume_args(id)?.join(" ")))
+    }
+}
+
 /// `agents.<名>` 一項（P16 會話 agent 註冊表）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentSpec {
@@ -176,6 +236,34 @@ pub struct AgentSpec {
     pub prompt_flag: Vec<String>,
     /// 整項原始值（保留不認得的鍵）。
     pub raw: Value,
+}
+
+impl AgentSpec {
+    /// 哪一家：config 明寫 `kind: claude｜codex｜other` 就照它；沒寫就推——`mcp: mcp-config`＝Claude Code
+    /// （原本的認法）、指令裡有 `codex`（`[codex]`、`[npx, codex]`、絕對路徑都算）＝Codex。
+    pub fn kind(&self) -> AgentKind {
+        if let Some(k) = self
+            .raw
+            .get("kind")
+            .and_then(Value::as_str)
+            .and_then(AgentKind::parse)
+        {
+            return k;
+        }
+        if self.mcp == "mcp-config" {
+            return AgentKind::ClaudeCode;
+        }
+        let is_codex = self.cmd.iter().any(|c| {
+            std::path::Path::new(c)
+                .file_stem()
+                .is_some_and(|n| n.eq_ignore_ascii_case("codex"))
+        });
+        if is_codex {
+            AgentKind::Codex
+        } else {
+            AgentKind::Other
+        }
+    }
 }
 
 /// `schedule` 一項。
@@ -316,6 +404,33 @@ impl Config {
                 (k.clone(), spec)
             })
             .collect()
+    }
+
+    /// 註冊表裡的某個 agent（名字不認得＝錯）。
+    pub fn agent(&self, name: &str) -> Result<AgentSpec> {
+        let agents = self.agents();
+        agents
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, s)| s.clone())
+            .ok_or_else(|| {
+                crate::Error::invalid(format!(
+                    "未知 agent: {name}（config agents: 目前有 {}）",
+                    agents
+                        .iter()
+                        .map(|(k, _)| k.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+            })
+    }
+
+    /// 註冊表裡第一個這一家的 agent 叫什麼（接續一場 Codex 的舊會話要用哪個指令）。
+    pub fn agent_of_kind(&self, kind: AgentKind) -> Option<String> {
+        self.agents()
+            .into_iter()
+            .find(|(_, s)| s.kind() == kind)
+            .map(|(k, _)| k)
     }
 
     /// 對應 `cfg.get("schedule") or []`；不是 dict 的項略過。

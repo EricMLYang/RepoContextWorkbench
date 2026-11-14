@@ -111,6 +111,8 @@ pub(super) fn annotate_terms_with(
                     ("title", "ai_title"),
                     ("reply", "last_reply"),
                     ("claude_session", "claude_session"),
+                    // 哪一家的會話（claude｜codex；Claude Code 的 hook 不帶＝null，接續時當 claude）
+                    ("agent", "agent_kind"),
                     ("cwd", "resume_cwd"),
                 ] {
                     let v = own.as_ref().and_then(|s| s.get(from)).cloned();

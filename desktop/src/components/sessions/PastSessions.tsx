@@ -6,14 +6,15 @@ import { useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
 import { transcriptSpec } from "./Transcript";
 
-/** 在終端自己接續用的指令。 */
+/** 在終端自己接續用的指令（引擎組好的；Claude Code 是 `claude --resume`、Codex 是 `codex resume`）。 */
 export function resumeCommand(s: PastSession): string {
-  return `cd ${JSON.stringify(s.cwd)} && claude --resume ${s.id}`;
+  return s.resume || `cd ${JSON.stringify(s.cwd)} && claude --resume ${s.id}`;
 }
 
 /**
- * 過去的會話（F-72）：目前範圍內 repo 的 Claude Code 互動會話，最近的在前。
- * 「接續」在原目錄開 `claude --resume <id>` 的 App 會話；「複製指令」給想在外面終端接的人。
+ * 過去的會話（F-72）：目前範圍內 repo 的互動會話（Claude Code 與 Codex），最近的在前。
+ * 「接續」在原目錄開 `claude --resume <id>`／`codex resume <id>` 的 App 會話；「複製指令」給想在外面終端接的人。
+ * 分岔與逐字稿目前只有 Claude Code 的會話有。
  */
 export function PastSessions() {
   const store = useStore();
@@ -59,7 +60,9 @@ export function PastSessions() {
       {list === null && !error ? <p className="muted">讀取中…</p> : null}
       {list && !list.length ? (
         <p className="muted">
-          {query ? "找不到含「" + query + "」的會話。" : "這個範圍還沒有 Claude Code 的互動會話。"}
+          {query
+            ? "找不到含「" + query + "」的會話。"
+            : "這個範圍還沒有 Claude Code 或 Codex 的互動會話。"}
         </p>
       ) : null}
       <ul className="pastlist">
@@ -69,6 +72,7 @@ export function PastSessions() {
               <span className="pasttitle" title={s.prompt || s.title}>
                 {s.title}
               </span>
+              {s.agent === "codex" ? <span className="pill">Codex</span> : null}
               {s.live ? <span className="pill">可能還開著</span> : null}
             </div>
             <div className="small muted">
@@ -82,6 +86,7 @@ export function PastSessions() {
                 run={async () => {
                   const r = await store.action("term_create", {
                     kind: "agent",
+                    agent: s.agent,
                     resume: s.id,
                     cwd: s.cwd,
                     task: "接續：" + s.title,
@@ -93,24 +98,26 @@ export function PastSessions() {
               >
                 接續
               </AsyncButton>
-              <AsyncButton
-                className="ghost small"
-                title="帶著這場的前文開一場新的（新的會話 id），原本那場不動"
-                run={async () => {
-                  const r = await store.action("term_create", {
-                    kind: "agent",
-                    resume: s.id,
-                    cwd: s.cwd,
-                    fork: true,
-                    task: "分岔：" + s.title,
-                  });
-                  await store.refreshState();
-                  close();
-                  ui.selectTerm(r.sid);
-                }}
-              >
-                分岔
-              </AsyncButton>
+              {s.agent === "codex" ? null : (
+                <AsyncButton
+                  className="ghost small"
+                  title="帶著這場的前文開一場新的（新的會話 id），原本那場不動"
+                  run={async () => {
+                    const r = await store.action("term_create", {
+                      kind: "agent",
+                      resume: s.id,
+                      cwd: s.cwd,
+                      fork: true,
+                      task: "分岔：" + s.title,
+                    });
+                    await store.refreshState();
+                    close();
+                    ui.selectTerm(r.sid);
+                  }}
+                >
+                  分岔
+                </AsyncButton>
+              )}
               <AsyncButton
                 className="ghost small"
                 run={async () => {
@@ -120,13 +127,15 @@ export function PastSessions() {
               >
                 {copied === s.id ? "已複製" : "複製指令"}
               </AsyncButton>
-              <button
-                type="button"
-                className="ghost small"
-                onClick={() => ui.openDetail(transcriptSpec({ id: s.id, cwd: s.cwd }, s.title))}
-              >
-                逐字稿
-              </button>
+              {s.agent === "codex" ? null : (
+                <button
+                  type="button"
+                  className="ghost small"
+                  onClick={() => ui.openDetail(transcriptSpec({ id: s.id, cwd: s.cwd }, s.title))}
+                >
+                  逐字稿
+                </button>
+              )}
             </div>
           </li>
         ))}

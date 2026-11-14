@@ -1,4 +1,5 @@
 //! 過去的 agent 會話（2026-10-16，ideation F-72；Rust 才有）：範圍內 repo 的 Claude Code 逐字稿，一鍵接續。
+//! 2026-11-14：Codex 的會話紀錄也列進來（[`crate::codex_sessions`]），每筆帶 `agent` 與接續指令。
 //!
 //! App 關掉、終端關掉之後，跟 agent 談到一半的會話就只剩 `~/.claude/projects` 裡的逐字稿——
 //! 「回到會話」只回得到還開著的。這裡依範圍列出過去的互動會話（標題、時間、最後回覆），
@@ -14,6 +15,7 @@ use std::time::SystemTime;
 
 use serde::Serialize;
 
+use crate::config::AgentKind;
 use crate::registry;
 use crate::transcript;
 use crate::Result;
@@ -21,8 +23,12 @@ use crate::Result;
 /// 一場過去的會話。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PastSession {
-    /// Claude Code 的會話 id（`claude --resume <id>` 用）。
+    /// 那一家 CLI 自己的會話 id（`claude --resume <id>`／`codex resume <id>` 用）。
     pub id: String,
+    /// 哪一家的會話：`claude`｜`codex`（[`AgentKind::name`]；2026-11-14）。接續時當 `term_create` 的 `agent`。
+    pub agent: &'static str,
+    /// 在終端自己接續的指令（`cd <目錄> && claude --resume <id>`）；畫面的「複製指令」直接用。
+    pub resume: String,
     /// 屬於哪個 repo（範圍內）。
     pub repo: String,
     pub cwd: String,
@@ -61,8 +67,15 @@ fn local_minute(t: SystemTime) -> String {
         .to_string()
 }
 
-/// 範圍內 repo 過去的 Claude Code 互動會話，最近的在前，最多 `limit` 筆。
-/// `root` 預設 [`crate::backfill::projects_root`]（測試給暫存目錄）。
+/// 在終端自己接續的指令：`cd <目錄> && <那一家的接續指令>`。
+pub fn resume_shell_command(kind: AgentKind, id: &str, cwd: &str) -> String {
+    let cmd = kind.resume_command(id).unwrap_or_default();
+    format!("cd {} && {cmd}", crate::agentsetup::cmdline(&[cwd]))
+}
+
+/// 範圍內 repo 過去的互動會話（Claude Code 與 Codex），最近的在前，最多 `limit` 筆。
+/// `root`＝Claude Code 的專案資料夾根目錄；None＝預設 [`crate::backfill::projects_root`]，並且也讀
+/// Codex 的紀錄（`$CODEX_HOME`）。給了 `root`（測試給暫存目錄）就只讀那裡的 Claude Code 逐字稿。
 pub fn past_sessions(
     spine_dir: &Path,
     group: Option<&str>,
@@ -70,10 +83,23 @@ pub fn past_sessions(
     limit: usize,
     root: Option<&Path>,
 ) -> Result<Vec<PastSession>> {
-    let (_, entries) = registry::resolve_group(spine_dir, group, repos)?;
+    let codex = root.is_none().then(crate::codex_sessions::codex_home);
     let root = root
         .map(Path::to_path_buf)
         .unwrap_or_else(crate::backfill::projects_root);
+    past_sessions_in(spine_dir, group, repos, limit, &root, codex.as_deref())
+}
+
+/// 同 [`past_sessions`]，兩家的紀錄根目錄都由呼叫端給（`codex_home` None＝不讀 Codex 的）。
+pub fn past_sessions_in(
+    spine_dir: &Path,
+    group: Option<&str>,
+    repos: Option<&[String]>,
+    limit: usize,
+    root: &Path,
+    codex_home: Option<&Path>,
+) -> Result<Vec<PastSession>> {
+    let (_, entries) = registry::resolve_group(spine_dir, group, repos)?;
     // (repo id, repo 路徑, 資料夾名)；路徑長的先比（巢狀 repo 歸給最深的那個）
     let mut targets: Vec<(String, PathBuf, String)> = entries
         .iter()
@@ -86,7 +112,7 @@ pub fn past_sessions(
     targets.sort_by_key(|(_, p, _)| std::cmp::Reverse(p.as_os_str().len()));
     let now = SystemTime::now();
     let mut found: Vec<(SystemTime, PastSession)> = Vec::new();
-    for dir in std::fs::read_dir(&root).into_iter().flatten().flatten() {
+    for dir in std::fs::read_dir(root).into_iter().flatten().flatten() {
         let dname = dir.file_name().to_string_lossy().into_owned();
         let candidates: Vec<&(String, PathBuf, String)> = targets
             .iter()
@@ -137,7 +163,9 @@ pub fn past_sessions(
             found.push((
                 mtime,
                 PastSession {
+                    resume: resume_shell_command(AgentKind::ClaudeCode, &id, cwd),
                     id,
+                    agent: AgentKind::ClaudeCode.name(),
                     repo: repo.clone(),
                     cwd: cwd.to_string(),
                     title: t.title.clone().unwrap_or_else(|| prompt_line.clone()),
@@ -151,6 +179,41 @@ pub fn past_sessions(
                         .map(|d| d.as_secs() < 120)
                         .unwrap_or(true),
                     path: fp.to_string_lossy().into_owned(),
+                },
+            ));
+        }
+    }
+    // Codex 的紀錄不依專案分資料夾：每份看第一行的 cwd，在範圍內的 repo 底下才讀（巢狀 repo 歸最深的）
+    if let Some(home) = codex_home {
+        let repo_of = |cwd: &str| {
+            targets
+                .iter()
+                .find(|(_, p, _)| Path::new(cwd).starts_with(p))
+                .map(|(id, _, _)| id.clone())
+        };
+        for c in crate::codex_sessions::sessions_in(home, &|cwd| repo_of(cwd).is_some()) {
+            let Some(repo) = repo_of(&c.cwd) else {
+                continue;
+            };
+            found.push((
+                c.mtime,
+                PastSession {
+                    resume: resume_shell_command(AgentKind::Codex, &c.id, &c.cwd),
+                    id: c.id,
+                    agent: AgentKind::Codex.name(),
+                    repo,
+                    title: c.title.unwrap_or_else(|| c.prompt.clone()),
+                    prompt: Some(c.prompt),
+                    reply: c.reply,
+                    branch: c.branch,
+                    started: c.started,
+                    updated: local_minute(c.mtime),
+                    live: now
+                        .duration_since(c.mtime)
+                        .map(|d| d.as_secs() < 120)
+                        .unwrap_or(true),
+                    cwd: c.cwd,
+                    path: c.path.to_string_lossy().into_owned(),
                 },
             ));
         }

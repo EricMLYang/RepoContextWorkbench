@@ -21,6 +21,7 @@ use serde_json::{json, Value};
 use std::sync::LazyLock;
 
 use crate::agentapi::{self, ContextFor, Target};
+use crate::config::AgentKind;
 use crate::fsutil::expanduser;
 use crate::pyjson::dumps as py_dumps;
 use crate::pystr::py_str;
@@ -522,6 +523,12 @@ fn session_start_inner(
         "head": head,
         "group": ctx.value["scope"]["group"], "repos": ctx.value["scope"]["repos"],
     });
+    // 哪一家開的：只有不是 Claude Code 時才記（Claude Code 的標記檔跟 Python 版一字不差；沒這個鍵＝Claude Code）
+    let mut marker = marker;
+    let kind = agent_of(payload, AGENT_KEY);
+    if kind != AgentKind::ClaudeCode {
+        marker["agent"] = json!(kind.name());
+    }
     std::fs::write(
         d.join(format!("{}.json", safe(payload.get("session_id")))),
         py_dumps(&marker),
@@ -586,15 +593,36 @@ fn has_session_id(payload: &Value) -> bool {
 }
 
 /// 對應 `hooks.session_end`：會話結束——沒交接但有事發生 → suggestion [hook]。回傳寫入的事件 dict 或 None。
-/// 「沒交接就結束」事件裡接回那場會話的一行：`接續：claude --resume <id>（目錄 <cwd>）`。
+/// 「沒交接就結束」事件裡接回那場會話的一行：`接續：claude --resume <id>（目錄 <cwd>）`；
+/// Codex 的會話是 `接續：codex resume <id>（目錄 <cwd>）`（2026-11-14）。
 pub const RESUME_PREFIX: &str = "接續：claude --resume ";
+/// 那一行的開頭（後面接那一家的接續指令）。
+const RESUME_LINE: &str = "接續：";
 
-/// 從事件內文找回 (會話 id, 目錄)。格式見 [`RESUME_PREFIX`]；id 不合格＝None。
-pub fn resume_line(body: &str) -> Option<(String, String)> {
-    let rest = body.lines().find_map(|l| l.strip_prefix(RESUME_PREFIX))?;
-    let (id, dir) = rest.split_once("（目錄 ")?;
+/// hook 指令帶的 `--agent`（`ctx setup --codex` 掛的 hook 會帶）塞進 payload 的鍵：這場會話是哪一家開的。
+const AGENT_KEY: &str = "ctx_agent";
+
+/// payload／開場標記裡記的是哪一家；沒記（舊標記、Claude Code 的 hook 不帶）＝Claude Code。
+fn agent_of(v: &Value, key: &str) -> AgentKind {
+    v.get(key)
+        .and_then(Value::as_str)
+        .and_then(AgentKind::parse)
+        .unwrap_or(AgentKind::ClaudeCode)
+}
+
+/// 從事件內文找回 (會話 id, 目錄, 哪一家)。格式見 [`RESUME_PREFIX`]；id 不合格＝None。
+pub fn resume_line(body: &str) -> Option<(String, String, AgentKind)> {
+    let rest = body.lines().find_map(|l| l.strip_prefix(RESUME_LINE))?;
+    let (cmd, dir) = rest.split_once("（目錄 ")?;
     let dir = dir.strip_suffix('）')?;
-    crate::history::valid_session_id(id).then(|| (id.to_string(), dir.to_string()))
+    [AgentKind::ClaudeCode, AgentKind::Codex]
+        .into_iter()
+        .find_map(|kind| {
+            let id = cmd.rsplit(' ').next()?;
+            (crate::history::valid_session_id(id)
+                && kind.resume_command(id).as_deref() == Some(cmd))
+            .then(|| (id.to_string(), dir.to_string(), kind))
+        })
 }
 
 pub fn session_end(spine_dir: &Path, payload: &Value, now: Option<NaiveDateTime>) -> Option<Value> {
@@ -705,7 +733,9 @@ fn session_end_inner(
         .filter(|c| !c.is_empty())
         .unwrap_or(repo_path);
     if crate::history::valid_session_id(sid) && !dir.is_empty() {
-        body.push_str(&format!("\n{RESUME_PREFIX}{sid}（目錄 {dir}）"));
+        if let Some(cmd) = agent_of(&m, "agent").resume_command(sid) {
+            body.push_str(&format!("\n{RESUME_LINE}{cmd}（目錄 {dir}）"));
+        }
     }
     let ev = spine::append_event(spine_dir, "suggestion", "hook", &toks, &body, now)?;
     Ok(Some(agentapi::event_dict(&ev)))
@@ -714,12 +744,24 @@ fn session_end_inner(
 /// 對應 `ctx hook <event>` 的引擎部分（Python `cli/setup.cmd_hook`）：stdin 是 hook JSON（壞的或空的＝`{}`），
 /// event＝`session-start`｜`session-end`。回傳要印到 stdout 的字串（空＝不印）。永遠不失敗。
 pub fn run_hook(spine_dir: &Path, event: &str, stdin: &str) -> String {
-    let payload = parse_payload(stdin);
+    run_hook_for(spine_dir, event, stdin, None)
+}
+
+/// 同 [`run_hook`]，`agent`＝hook 指令帶的 `--agent`（哪一家的 CLI 叫的；None＝Claude Code）。
+pub fn run_hook_for(
+    spine_dir: &Path,
+    event: &str,
+    stdin: &str,
+    agent: Option<AgentKind>,
+) -> String {
+    let mut payload = parse_payload(stdin);
+    if let (Some(a), Some(m)) = (agent, payload.as_object_mut()) {
+        m.insert(AGENT_KEY.into(), json!(a.name()));
+    }
     if event == "session-start" {
         session_start(spine_dir, &payload, None)
     } else {
         session_end(spine_dir, &payload, None);
-        // Rust 才有（N-01）：App 沒開時 timer 的排程 commit 不會跑——會話結束順手補一次
         let _ = spine::autocommit(spine_dir, None);
         String::new()
     }

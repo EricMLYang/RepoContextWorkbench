@@ -187,7 +187,7 @@ Rust 端簽名建議：
 
 ## 型別摘要（細節見 `src/api/types.ts`）
 
-- `WorkbenchState`：`groups[{name, members, goal, goal_at}]`、`repos[]`、`tiers{}`、`tags{}`、`tag_vocab[]`、`relations[{from,to,kind,note?,exports?,in_scope,task}]`、`rel_kinds{kind:{forward,inverse,symmetric?}}`、`unread[]`、`loops[]`、`cards[]`、`recent[]`（事件＋`scope_kind/scope_label/scope_repos`＋`lane`，依事件時間新→舊，最多 200）、`stats{collisions, collisions_with_outcome, hit_rate, spawned, alive, survival_rate}`、`scope{group, repos, members, gone}`（這份 state 是照哪個範圍算的；`gone`＝範圍已不存在，Rust 才有）、`terms[]`、`agents[]`。
+- `WorkbenchState`：`groups[{name, members, goal, goal_at}]`、`repos[]`、`tiers{}`、`tags{}`、`tag_vocab[]`、`relations[{from,to,kind,note?,exports?,in_scope,task}]`、`rel_kinds{kind:{forward,inverse,symmetric?}}`、`unread[]`、`loops[]`、`cards[]`、`recent[]`（事件＋`scope_kind/scope_label/scope_repos`＋`lane`，依事件時間新→舊，最多 200）、`stats{collisions, collisions_with_outcome, hit_rate, spawned, alive, survival_rate}`、`scope{group, repos, members, gone}`（這份 state 是照哪個範圍算的；`gone`＝範圍已不存在，Rust 才有）、`terms[]`、`agents[]`、`agent_kinds{agent: "claude"|"codex"|"other"}`（Rust 才有，2026-11-14：每個 agent 是哪一家，開會話對話框據此給選項）。
 - 卡片 `cards[]`：共同欄位 `key, kind, title, lines, actions[{label, action, payload, primary?}]（`primary: true`＝主按鈕，一張卡最多一個，Rust 才有）, date, time, scope_kind, scope_label, scope_repos, lane`；`collision` 多 `cid, verdict, judgement{}`；`interrupt/event` 多 `etype, source`；`pending` 多 `cid`；`loop` 多 `num, due`。
 - `lane`（卡片與 `recent[]` 事件）：`scope`＝屬於目前範圍、`global`＝全域與未分類（卡片另含：範圍外的打斷）、`other`＝不顯示。前端照它分欄，不自己判斷範圍。
 - `attention{needs_you, finished_unseen, working}`（Rust 才有，F-80／F-86）：活著的 agent 會話裡「在等你」（waiting／blocked）與「做完沒看」（finished 且沒 `seen`、沒 `faded`）各幾個——殼的選單列與 Dock 徽章直接讀這個，不自己比狀態字串（分類只在引擎 `workbench::Attention`）。
@@ -195,7 +195,7 @@ Rust 端簽名建議：
 - `decide{count, all, auto_recent, key}`（Rust 才有，F-127）：目前範圍與全部範圍要你決定幾件、近 7 天自動放行幾筆、卡有沒有變的指紋（變了前端才重抓 `decide_queue`）。
   不跑 git（`relay::plan_light`），真資料副本上 `decide::summary` 約 7ms、這個鍵約 450 bytes。成了決策卡的交接，`cards[]` 裡那則交接的未讀、
   與同一個 repo 在交接之前的「agent 等你回應」收掉（同一件事只出現一次，`covered_by_decision`）。
-- `terms[]`：`sid, title, alive, kind, origin, scope, scope_repos, started, task, report{text,type,source,at}|null, report_basis`，agent 會話另有 `agent_status{status,text,at,…}|null`、`ai_title`、`last_reply`、`claude_session`、`resume_cwd`（F-71／F-78）。
+- `terms[]`：`sid, title, alive, kind, origin, scope, scope_repos, started, task, report{text,type,source,at}|null, report_basis`，agent 會話另有 `agent_status{status,text,at,…}|null`、`ai_title`、`last_reply`、`claude_session`、`resume_cwd`（F-71／F-78）、`agent_kind`（2026-11-14：Codex 的會話是 `"codex"`，Claude Code 的是 null；`claude_session` 放的是那一家 CLI 自己的會話 id，接續時把 `agent_kind` 當 `term_create` 的 `agent`）。
   Rust 才有（2026-10-14）：`agent_status` 也可能來自 Claude Code hook——`term_create` 開 Claude Code（config `mcp: mcp-config`）時多帶
   `--settings=<spine>/.state/session_hooks.json`（只掛 `Stop` → `ctx hook stop`、`UserPromptSubmit` → `prompt`、`Notification` 依 matcher：`permission_prompt`／`elicitation_dialog`／`elicitation_url_dialog`／`agent_needs_input` → `permission`、`idle_prompt` → `notification`，
   不動使用者的 `~/.claude/settings.json`）與環境變數 `REPO_CONTEXT_SESSION_STATUS=<spine>/.state/session_status/<sid>.json`；
@@ -228,3 +228,10 @@ Python `webui/state.py` 同步加了同樣欄位，兩邊 JSON 仍一致，`scri
 
 前端仍保留的只有顯示層：搜尋（`matchesSearch`，只比對看得到的文字）、類型篩選、分段標題與順序、範圍名稱（`scopeLabel`）、
 牌組卡的 commit 加總（`groupMeta`）；組員用 `state.scope.members`，只有剛換範圍、state 還沒回來時才先用本地推算頂著。
+- 過去的會話 `past_sessions` 回的每一筆（`history::PastSession`，2026-11-14 加兩欄）：`agent`（`"claude"`｜`"codex"`）、
+  `resume`（引擎組好的終端指令：`cd <目錄> && claude --resume <id>`／`codex resume <id>`）。接續＝`term_create`
+  帶 `agent`＋`resume`＋`cwd`；`agent` 可以是 config 註冊表的名字，或哪一家（引擎會找註冊表裡第一個那一家的）。
+  分岔（`fork`）與逐字稿只有 Claude Code 的會話有。
+- 回答後的送達方式 `Delivery` 的 `resume` 多一欄 `agent`（哪一家；`claude_session_id` 欄位名不變，Codex 的 id 也放這裡）。
+- `term_create` 的旗標依哪一家驗（`LaunchFlags::argv_for`）：Claude Code 全收；Codex 只收 `model`（`--model=`），
+  帶 `permission_mode`／`worktree`／`fork` 會被拒；其他家什麼都不收。

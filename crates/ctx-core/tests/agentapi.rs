@@ -1707,7 +1707,26 @@ fn session_end_records_how_to_resume_when_the_id_is_valid() {
     let body = ev["body"].as_str().unwrap();
     assert_eq!(
         hooks::resume_line(body),
-        Some((id.to_string(), w.impl_.to_string_lossy().into_owned()))
+        Some((
+            id.to_string(),
+            w.impl_.to_string_lossy().into_owned(),
+            ctx_core::config::AgentKind::ClaudeCode
+        ))
+    );
+    // Codex 掛的 hook 帶 `--agent codex`：開場標記記下哪一家，收尾那一行就是 `codex resume`（2026-11-14）
+    let cid = "01a1da06-c73f-79b3-bb63-a14cb2e0b2b6";
+    let payload =
+        json!({"session_id": cid, "cwd": w.impl_.to_string_lossy(), "ctx_agent": "codex"});
+    hooks::session_start(&w.sp, &payload, Some(start));
+    let ev = hooks::session_end(&w.sp, &payload, None).unwrap();
+    let body = ev["body"].as_str().unwrap();
+    assert!(
+        body.contains(&format!("接續：codex resume {cid}（目錄 ")),
+        "{body}"
+    );
+    assert_eq!(
+        hooks::resume_line(body).map(|(i, _, k)| (i, k)),
+        Some((cid.to_string(), ctx_core::config::AgentKind::Codex))
     );
 }
 

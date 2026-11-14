@@ -538,19 +538,20 @@ fn h_sessions(r: &Value) -> String {
             ""
         };
         out.push(format!(
-            "- {}  {} · {}{live}",
+            "- {}  {}{} · {}{live}",
             s(it, "updated"),
             s(it, "repo"),
+            // 哪一家的會話：Claude Code 是多數，只標不是它的
+            match s(it, "agent").as_str() {
+                "" | "claude" => String::new(),
+                a => format!("（{a}）"),
+            },
             s(it, "title")
         ));
         if has(it, "reply") {
             out.push(format!("  最後回覆：{}", s(it, "reply")));
         }
-        out.push(format!(
-            "  接續：cd {} && claude --resume {}",
-            s(it, "cwd"),
-            s(it, "id")
-        ));
+        out.push(format!("  接續：{}", s(it, "resume")));
     }
     out.join("\n")
 }

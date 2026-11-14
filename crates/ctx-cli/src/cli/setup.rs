@@ -66,8 +66,10 @@ impl HookEvent {
     }
 }
 
-/// Claude Code hook 入口：stdin 是 hook JSON。永遠 exit 0——hook 壞掉不能擋住開 agent。
-pub fn cmd_hook(ctx: &Ctx, event: HookEvent) -> CmdResult {
+/// agent CLI（Claude Code／Codex）的 hook 入口：stdin 是 hook JSON。永遠 exit 0——hook 壞掉不能擋住開 agent。
+pub fn cmd_hook(ctx: &Ctx, event: HookEvent, agent: Option<&str>) -> CmdResult {
+    // 不認得的名字當沒給（hook 不能因為參數擋住開 agent）
+    let agent = agent.and_then(ctx_core::config::AgentKind::parse);
     let mut buf = Vec::new();
     let _ = std::io::stdin().read_to_end(&mut buf);
     let stdin = String::from_utf8_lossy(&buf);
@@ -81,7 +83,13 @@ pub fn cmd_hook(ctx: &Ctx, event: HookEvent) -> CmdResult {
             }
             // 會話狀態（做完／等你／處理中／要你允許）
             h => {
-                ctx_core::session_status::record_hook(h, &stdin, target.as_deref(), None);
+                ctx_core::session_status::record_hook_for(
+                    h,
+                    &stdin,
+                    target.as_deref(),
+                    None,
+                    agent,
+                );
                 // F-121 對講：用完工具／你送出訊息時，把別的 repo 的 agent 傳來的話塞進這場會話的脈絡
                 let name = match h {
                     StatusHook::ToolEnd => Some("PostToolUse"),
@@ -106,7 +114,7 @@ pub fn cmd_hook(ctx: &Ctx, event: HookEvent) -> CmdResult {
     let Some(d) = config::find_spine(ctx.spine.as_deref()) else {
         return Ok(());
     };
-    let out = hooks::run_hook(&d, event.as_str(), &stdin);
+    let out = hooks::run_hook_for(&d, event.as_str(), &stdin, agent);
     if !out.is_empty() {
         println!("{out}");
     }

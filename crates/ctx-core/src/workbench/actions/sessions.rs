@@ -2,6 +2,7 @@
 //! 2026-10-16 從 `mod.rs` 拆出來（檔案超過 800 行依職責拆，見 `docs/DEVELOPMENT.md` §2）；行為不變。
 
 use super::*;
+use crate::config::AgentKind;
 
 pub(super) fn a_session_draft(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Result<Value> {
     let sid = raw(p, "sid").unwrap_or_default();
@@ -43,16 +44,21 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
     let resume = s(p, "resume");
     let flags = launch_flags(p, resume.is_some())?;
     let (sid, title) = if let (true, Some(id)) = (kind == "agent", resume) {
-        // F-72：接續過去的 Claude Code 會話——在它原本的目錄跑 `claude --resume <id>`（目錄要在登記的 repo 底下）
-        let agent = s(p, "agent").unwrap_or_else(|| "claude".into());
+        // F-72：接續過去的會話——在它原本的目錄跑 `claude --resume <id>`／`codex resume <id>`（目錄要在登記的 repo 底下）。
+        // `agent` 可以是註冊表的名字，或哪一家（過去會話的 `agent` 欄位：claude｜codex）
+        let agent = resume_agent(d, s(p, "agent"))?;
+        let kind = session::agent_kind(d, &agent)?;
+        let extra = flags.argv_for(kind)?;
         let (rid, cwd) = crate::history::resume_target(d, &id, &s(p, "cwd").unwrap_or_default())?;
         let (mut argv, at) = session::resume_argv(d, &agent, &id, s(p, "prompt").as_deref())?;
-        let file =
-            crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
-        if let Ok(f) = file {
-            argv.insert(at, format!("--settings={}", f.display()));
+        if kind == AgentKind::ClaudeCode {
+            let file =
+                crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
+            if let Ok(f) = file {
+                argv.insert(at, format!("--settings={}", f.display()));
+            }
         }
-        argv.splice(at..at, flags.argv());
+        argv.splice(at..at, extra);
         let home = home_group_for(d, s(p, "home_group"), Some(&rid))?;
         terms.create_agent(AgentLaunch {
             agent,
@@ -70,11 +76,7 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
         // F-127：總管會話——工作目錄＝spine，不屬於任何 repo（session::SessionScope::Steward）
         let task = s(p, "task");
         let agent = s(p, "agent").unwrap_or_else(|| "claude".into());
-        if !flags.is_empty() && !session::is_claude_code(d, &agent)? {
-            return Err(Error::invalid(format!(
-                "{agent} 不是 Claude Code：權限模式、模型只有 Claude Code 支援"
-            )));
-        }
+        let extra = flags.argv_for(session::agent_kind(d, &agent)?)?;
         if flags.worktree.is_some() {
             return Err(Error::invalid(
                 "總管會話不在任何 repo 裡，不能用隔離的 worktree",
@@ -87,15 +89,7 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
                 agent: Some(&agent),
             },
         )?;
-        let mut argv = plan.cmd;
-        if plan.claude_code && plan.flags_at <= argv.len() {
-            argv.splice(plan.flags_at..plan.flags_at, flags.argv());
-            let file =
-                crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
-            if let Ok(f) = file {
-                argv.insert(plan.flags_at, format!("--settings={}", f.display()));
-            }
-        }
+        let argv = with_flags(d, plan.cmd, plan.kind, plan.flags_at, extra);
         terms.create_agent(AgentLaunch {
             agent,
             argv,
@@ -116,11 +110,7 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
         let agent = s(p, "agent").unwrap_or_else(|| "claude".into());
         let home = home_group_for(d, s(p, "home_group"), repo.as_deref())?;
         // 旗標不合就在寫會話料、留痕之前拒絕
-        if !flags.is_empty() && !session::is_claude_code(d, &agent)? {
-            return Err(Error::invalid(format!(
-                "{agent} 不是 Claude Code：權限模式、模型、worktree 只有 Claude Code 支援"
-            )));
-        }
+        let extra = flags.argv_for(session::agent_kind(d, &agent)?)?;
         if flags.worktree.is_some() && repo.is_none() {
             return Err(Error::invalid(
                 "隔離的 worktree 只能對單一 repo 開（組的會話跑在 spine 目錄）",
@@ -137,18 +127,7 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
                 home_group: home.as_deref(),
             },
         )?;
-        // 會話狀態（Rust 才有）：Claude Code 多帶一份只有三個 hook 的設定（做完／要你允許／你送出），
-        // 不動使用者的 ~/.claude/settings.json；寫不出設定檔就照舊開（只是看不到「等你」）
-        let mut argv = plan.cmd;
-        if plan.claude_code && plan.flags_at <= argv.len() {
-            argv.splice(plan.flags_at..plan.flags_at, flags.argv());
-            let file =
-                crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
-            if let Ok(f) = file {
-                // 插在 agent 指令之後（config 可能是 ["npx", "claude"] 這種包裝）
-                argv.insert(plan.flags_at, format!("--settings={}", f.display()));
-            }
-        }
+        let argv = with_flags(d, plan.cmd, plan.kind, plan.flags_at, extra);
         terms.create_agent(AgentLaunch {
             agent,
             argv,
@@ -175,6 +154,49 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
 }
 
 /// F-96／F-97／F-108：開會話的選填旗標。`worktree: true`＝自動取名 `ctx-月日-時分秒`（同一分鐘開兩個也不撞）；`fork` 只對接續有效。
+/// 把另外的旗標插到 agent 指令後面（config 可能是 `["npx", "claude"]` 這種包裝，所以用 `at`）。
+/// 會話狀態（Rust 才有）：Claude Code 多帶一份只掛狀態 hook 的設定（做完／要你允許／你送出），
+/// 不動使用者的 ~/.claude/settings.json；寫不出設定檔就照舊開（只是看不到「等你」）。
+/// Codex 沒有每場會話各自的設定檔：狀態 hook 由 `ctx setup --codex` 掛在 `~/.codex/hooks.json`，
+/// 靠 App 給的環境變數（[`crate::session_status::ENV`]）認出是哪一場，這裡不用多帶。
+fn with_flags(
+    d: &Path,
+    mut argv: Vec<String>,
+    kind: AgentKind,
+    at: usize,
+    extra: Vec<String>,
+) -> Vec<String> {
+    if at > argv.len() {
+        return argv;
+    }
+    argv.splice(at..at, extra);
+    if kind == AgentKind::ClaudeCode {
+        let file =
+            crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
+        if let Ok(f) = file {
+            argv.insert(at, format!("--settings={}", f.display()));
+        }
+    }
+    argv
+}
+
+/// 接續時用哪個 agent：沒給＝claude；給的是註冊表的名字就用它；給的是哪一家（`codex`、`claude`）
+/// 而註冊表裡叫別的名字，就找第一個那一家的。
+fn resume_agent(d: &Path, given: Option<String>) -> Result<String> {
+    let name = given.unwrap_or_else(|| "claude".into());
+    let cfg = crate::config::load(d)?;
+    if cfg.agent(&name).is_ok() {
+        return Ok(name);
+    }
+    AgentKind::parse(&name)
+        .and_then(|k| cfg.agent_of_kind(k))
+        .ok_or_else(|| {
+            Error::invalid(format!(
+                "未知 agent: {name}（config.yaml 的 agents 裡沒有這一家；Codex 要加 `codex: {{cmd: [codex]}}`）"
+            ))
+        })
+}
+
 fn launch_flags(p: &Value, resuming: bool) -> Result<session::LaunchFlags> {
     let worktree = match p.get("worktree") {
         Some(Value::Bool(true)) => Some(format!(

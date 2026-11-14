@@ -194,14 +194,19 @@ export function SessionRow({ s, inGroup = false }: { s: TermInfo; inGroup?: bool
       ) : null}
       {canReply && replying ? <ReplyBox s={s} onDone={() => setReplying(false)} /> : null}
       {!s.alive && s.claude_session && s.resume_cwd ? (
-        // F-78：程序結束了但 Claude Code 的對話還在——在原目錄接回去（像 Orca 的 Restart）
+        // F-78：程序結束了但 agent CLI 的對話還在——在原目錄接回去（像 Orca 的 Restart）
         <AsyncButton
           className="ghost small sessionresume"
-          title="在原目錄執行 claude --resume，接回這段對話"
+          title={
+            s.agent_kind === "codex"
+              ? "在原目錄執行 codex resume，接回這段對話"
+              : "在原目錄執行 claude --resume，接回這段對話"
+          }
           onError={(m) => store.toast(m)}
           run={async () => {
             const r = await store.action("term_create", {
               kind: "agent",
+              ...(s.agent_kind ? { agent: s.agent_kind } : {}),
               resume: s.claude_session!,
               cwd: s.resume_cwd!,
               task: "接續：" + sessionHeadline(s),
