@@ -43,6 +43,33 @@ const INDEX_VERSION: i64 = 2;
 const HEAD_WEIGHT: f64 = 2.0;
 const RECENT_DAYS: f64 = 30.0;
 const RECENT_BOOST: f64 = 1.1;
+/// 在封存路徑（[`in_archive`]）的檔分數乘這個（Rust 才有，2026-11-14 F-126）。
+pub const ARCHIVE_FACTOR: f64 = 0.3;
+/// 「標題命中」：查詢詞（去重後）至少這個比例出現在標題索引（標題、檔名）才標（Rust 才有，F-126；分數算法不變）。
+pub const TITLE_HIT_RATIO: f64 = 0.5;
+/// 封存資料夾的名字（整段，或底線／連字號切開後的一節，例 `01_inbox_retired_20261104`）。
+const ARCHIVE_WORDS: [&str; 4] = ["archive", "archived", "retired", "deprecated"];
+
+/// 這份檔是不是在封存路徑：repo 內相對路徑的**資料夾**（不含檔名）任一段是封存的名字，
+/// 或底線／連字號切開後有一節是（`_archive`、`archive-2024`、`01_inbox_retired_20261104`）。
+/// 只看資料夾：`plans/workspace-archive-sort.md` 這種檔名不算。
+pub fn in_archive(rel: &str) -> bool {
+    let segs: Vec<&str> = rel.split(['/', '\\']).collect();
+    segs[..segs.len().saturating_sub(1)].iter().any(|seg| {
+        let low = seg.to_lowercase();
+        low.split(['_', '-'])
+            .any(|part| ARCHIVE_WORDS.contains(&part))
+    })
+}
+
+/// 查詢詞（去重）有幾成出現在這份檔的標題索引。
+fn title_coverage(qcount: &[(String, u64)], d: &Doc) -> f64 {
+    if qcount.is_empty() {
+        return 0.0;
+    }
+    let hit = qcount.iter().filter(|(t, _)| d.htf.contains_key(t)).count();
+    hit as f64 / qcount.len() as f64
+}
 const STOP: &[&str] = &[
     "the", "and", "for", "with", "that", "this", "are", "is", "of", "to", "in", "on", "md", "a",
     "an", "or", "be", "it", "as", "by", "at",
@@ -461,6 +488,10 @@ fn boost(d: &Doc, boosts: &Boosts, now: f64) -> (f64, Vec<String>) {
         factor *= RECENT_BOOST;
         why.push(format!("{} 天內改過", RECENT_DAYS as i64));
     }
+    if in_archive(&d.rel) {
+        factor *= ARCHIVE_FACTOR;
+        why.push("在封存路徑".into());
+    }
     (factor, why)
 }
 
@@ -481,6 +512,13 @@ pub struct RepoHit {
     pub repo: String,
     pub score: f64,
     pub matching_files: usize,
+    /// 這個 repo 分數最高的那份檔（不序列化：JSON 跟 Python 一樣；精簡模式用，F-126）
+    #[serde(skip)]
+    pub best_score: f64,
+    #[serde(skip)]
+    pub best_file: String,
+    #[serde(skip)]
+    pub best_path: String,
 }
 
 /// 對應 `knowledge.search` 回傳的 dict（鍵名同 Python；`note` 與 `indexed_files` 擇一出現）。
@@ -545,7 +583,8 @@ pub fn search(
             continue;
         }
         let (factor, mut why) = boost(d, boosts, now);
-        if sh > 0.0 {
+        // Rust 才有（F-126）：以前只要有一個詞碰到標題就標，幾乎每筆都有；改成查詢詞過半出現在標題才標
+        if sh > 0.0 && title_coverage(&qcount, d) >= TITLE_HIT_RATIO {
             why.insert(0, "標題命中".into());
         }
         scored.push((s * factor, d, why));
@@ -564,23 +603,27 @@ pub fn search(
         })
         .collect();
     // Counter.most_common：依分數降冪，同分照首次出現順序
-    let mut per_repo: Vec<(String, f64, usize)> = Vec::new();
+    // 第一次碰到的就是那個 repo 分數最高的檔（scored 已排序）
+    let mut per_repo: Vec<(String, f64, usize, f64, &Doc)> = Vec::new();
     for (s, d, _) in scored.iter().take(50) {
         match per_repo.iter_mut().find(|r| r.0 == d.repo) {
             Some(r) => {
                 r.1 += s;
                 r.2 += 1;
             }
-            None => per_repo.push((d.repo.clone(), *s, 1)),
+            None => per_repo.push((d.repo.clone(), *s, 1, *s, d)),
         }
     }
     per_repo.sort_by(|a, b| b.1.total_cmp(&a.1));
     let repos = per_repo
         .into_iter()
-        .map(|(repo, v, n)| RepoHit {
+        .map(|(repo, v, n, best, d)| RepoHit {
             repo,
             score: round2(v),
             matching_files: n,
+            best_score: best,
+            best_file: d.rel.clone(),
+            best_path: d.path.clone(),
         })
         .collect();
     SearchResult {
@@ -589,5 +632,21 @@ pub fn search(
         repos,
         note: None,
         indexed_files: Some(docs.len()),
+    }
+}
+
+#[cfg(test)]
+mod archive_tests {
+    use super::*;
+
+    #[test]
+    fn archive_paths() {
+        assert!(in_archive("archive/x.md"));
+        assert!(in_archive("docs/_archive/x.md"));
+        assert!(in_archive("notes/01_inbox_retired_20261104/a.md"));
+        assert!(in_archive("Deprecated-2024/a.md"));
+        assert!(!in_archive("plans/workspace-archive-sort.md"), "檔名不算");
+        assert!(!in_archive("archives/x.md"));
+        assert!(!in_archive("README.md"));
     }
 }

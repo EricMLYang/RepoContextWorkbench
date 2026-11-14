@@ -291,13 +291,16 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
         ),
         work(
             "search_knowledge",
-            "找其他 repo 的相關內容（跨 repo 參考的第一步）：給一段文字（問題、想法、卡片內容），\
-             回傳 files（md，附行號片段、why、可直接給 read_from 的 ref）、code（git grep 命中的程式碼）\
-             與 repo 排名。跟你所在 repo 有關係的 repo、以及它們宣告的 exports 會加分。預設搜全部已登記 repo。",
+            "要別的 repo 的資訊先問誰有：最該去的 repo、起點、判斷、下一步。",
             s_(
                 cat(vec![
                     vec![
                         ("query", d_(str_t(), "要比對的文字")),
+                        ("detail", {
+                            let mut v = d_(str_t(), "預設 brief");
+                            v["enum"] = json!(["brief", "full"]);
+                            v
+                        }),
                         (
                             "everywhere",
                             d_(bool_t(), "true（預設）＝搜全部 repo；false＝只搜主場範圍"),
@@ -313,10 +316,15 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
             w_search,
         ),
         work(
+            "repo_entry",
+            "repo 入口卡：是什麼、從哪讀起、最近判斷與交接、現況。之後自己讀。",
+            s_(vec![("repo", str_t())], &["repo"]),
+            w_repo_entry,
+        ),
+        work(
             "read_from",
-            "讀別的 repo 的檔案或目錄。ref 用名字不用路徑：`<repo>:<export>/子路徑`（export 見開場的鄰居地圖）、\
-             `<repo>:<相對路徑>`，或 search_knowledge 回傳的 ref。回傳內容＋commit；目錄回清單。\
-             讀了會記一筆引用（之後上游改了會提醒）。讀組外 repo 不用先問，寫入才要。",
+            "讀別的 repo 的檔或目錄並留引用（上游改了會提醒）：ref＝`<repo>:<export>/子路徑`、`<repo>:<相對路徑>` \
+             或 search_knowledge 給的。回內容＋commit。",
             s_(
                 cat(vec![
                     vec![
@@ -337,9 +345,7 @@ pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
         ),
         work(
             "ask_repo",
-            "在另一個 repo 開一個唯讀 agent 回答問題（它會照那個 repo 自己的 AGENTS.md 慣例找資料），\
-             只回結論＋引用，不把檔案塞進你的 context。慢（幾十秒）而且花錢——需要整理歸納時才用；\
-             找單一檔案用 search_knowledge＋read_from。",
+            "在另一個 repo 開唯讀 agent 回答問題（照它的 AGENTS.md 找資料），只回結論＋引用。慢又花錢：要整理歸納才用。",
             s_(
                 cat(vec![
                     vec![

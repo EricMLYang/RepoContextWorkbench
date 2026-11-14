@@ -323,9 +323,46 @@ pub fn write_answer(spine_dir: &Path, a: &NewAnswer, now: NaiveDateTime) -> Resu
     answered_of(&ev).ok_or_else(|| crate::Error::invalid("回答留痕寫入後讀不回來"))
 }
 
-/// 總管在卡上留的建議（F-125）：不是回答、不算連續、不算抽查，只給人回答時參考。
+/// 卡上的建議是誰留的（F-125／F-126）：總管會話（cwd 在 spine），或某個登記 repo 的 agent（對別的 repo 的卡）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct StewardNote {
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AdviceFrom {
+    Steward,
+    Repo { repo: String },
+}
+
+impl AdviceFrom {
+    /// 人看的名稱：「總管」／「<repo> 的 agent」。
+    pub fn label(&self) -> String {
+        match self {
+            AdviceFrom::Steward => "總管".into(),
+            AdviceFrom::Repo { repo } => format!("{repo} 的 agent"),
+        }
+    }
+    /// 「總管建議」／「<repo> 的 agent 建議」。
+    pub fn advice_label(&self) -> String {
+        match self {
+            AdviceFrom::Steward => "總管建議".into(),
+            AdviceFrom::Repo { repo } => format!("{repo} 的 agent 建議"),
+        }
+    }
+    fn token(&self) -> String {
+        match self {
+            AdviceFrom::Steward => "from:steward".into(),
+            AdviceFrom::Repo { repo } => format!("from:repo:{}", spine::token_value(repo)),
+        }
+    }
+    fn source(&self) -> &'static str {
+        match self {
+            AdviceFrom::Steward => SOURCE_STEWARD,
+            AdviceFrom::Repo { .. } => "agent",
+        }
+    }
+}
+
+/// 卡上留的建議：不是回答、不算連續、不算抽查，只給人回答時參考。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Advice {
     /// 留痕的 ref
     #[serde(rename = "ref")]
     pub reference: String,
@@ -333,6 +370,8 @@ pub struct StewardNote {
     pub repo: String,
     /// 指向哪筆交接
     pub handoff_ref: String,
+    /// 誰留的
+    pub from: AdviceFrom,
     /// 建議的答案（選項編號已換成選項文字）
     pub text: String,
     /// 建議的是第幾個選項
@@ -340,11 +379,11 @@ pub struct StewardNote {
     pub why: Option<String>,
 }
 
-/// 來源：總管會話（agent）留的。
+/// 總管會話留的建議的事件來源。
 pub const SOURCE_STEWARD: &str = "steward";
 
-/// 全部總管建議（舊到新）。
-pub fn steward_notes_of(events: &[Event]) -> Vec<StewardNote> {
+/// 全部建議（舊到新）。機器行缺 `from:`（第 3 輪的舊紀錄）＝總管。
+pub fn advice_of(events: &[Event]) -> Vec<Advice> {
     events
         .iter()
         .filter(|e| spine::is_decide_record(e))
@@ -353,11 +392,21 @@ pub fn steward_notes_of(events: &[Event]) -> Vec<StewardNote> {
             if !is_suggest(&m) {
                 return None;
             }
-            Some(StewardNote {
+            let from = match tok(&m, "from:") {
+                Some(x) => match x.strip_prefix("repo:") {
+                    Some(r) if !r.is_empty() => AdviceFrom::Repo {
+                        repo: r.to_string(),
+                    },
+                    _ => AdviceFrom::Steward,
+                },
+                None => AdviceFrom::Steward,
+            };
+            Some(Advice {
                 reference: e.reference(),
                 at: e.stamp(),
                 repo: e.kv("repo").unwrap_or("").to_string(),
                 handoff_ref: e.kv("ref").filter(|r| !r.is_empty())?.to_string(),
+                from,
                 text: line_value(e, "建議：").unwrap_or("").to_string(),
                 option: tok(&m, "option:").and_then(|n| n.parse().ok()),
                 why: line_value(e, "理由：")
@@ -368,25 +417,27 @@ pub fn steward_notes_of(events: &[Event]) -> Vec<StewardNote> {
         .collect()
 }
 
-/// 這筆交接最新的總管建議（時間不早於交接）。
-pub fn steward_note_for<'a>(
-    notes: &'a [StewardNote],
+/// 這筆交接最新的建議（時間不早於交接）。
+pub fn advice_for<'a>(
+    all: &'a [Advice],
     repo: &str,
     handoff_ref: &str,
     handoff_at: &str,
-) -> Option<&'a StewardNote> {
-    notes.iter().rfind(|n| {
+) -> Option<&'a Advice> {
+    all.iter().rfind(|n| {
         spine::same_token(&n.repo, repo)
             && n.handoff_ref == handoff_ref
             && n.at.as_str() >= handoff_at
     })
 }
 
-/// 寫一筆總管建議（指向交接）。
-pub fn write_steward_note(
+/// 寫一筆建議（指向交接）。回傳留痕的 ref。
+#[allow(clippy::too_many_arguments)]
+pub fn write_advice(
     spine_dir: &Path,
     repo: &str,
     handoff_ref: &str,
+    from: &AdviceFrom,
     text: &str,
     option: Option<usize>,
     why: Option<&str>,
@@ -394,19 +445,23 @@ pub fn write_steward_note(
 ) -> Result<String> {
     let text = one_line(text);
     let mut body = vec![
-        format!("{DECIDE_TAG}{repo}：總管建議「{}」", clip(&text)),
+        format!(
+            "{DECIDE_TAG}{repo}：{}「{}」",
+            from.advice_label(),
+            clip(&text)
+        ),
         format!("建議：{text}"),
     ];
     if let Some(w) = why.map(one_line).filter(|w| !w.is_empty()) {
         body.push(format!("理由：{w}"));
     }
-    let mut m = format!("{MACHINE_HEAD} suggest");
+    let mut m = format!("{MACHINE_HEAD} suggest {}", from.token());
     if let Some(n) = option {
         m.push_str(&format!(" option:{n}"));
     }
     body.push(m);
     let tokens = vec![format!("repo:{repo}"), format!("ref:{handoff_ref}")];
-    Ok(append(spine_dir, SOURCE_STEWARD, tokens, &body.join("\n"), now)?.reference())
+    Ok(append(spine_dir, from.source(), tokens, &body.join("\n"), now)?.reference())
 }
 
 /// 推翻一筆規則放行的留痕（指向那筆放行）。回傳推翻那筆的 ref。

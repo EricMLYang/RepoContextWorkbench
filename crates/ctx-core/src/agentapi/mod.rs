@@ -967,70 +967,30 @@ impl Default for SearchOpts {
 
 /// 對應 `agentapi.search_knowledge`：知識 ↔ repo 相關度（L1 定位）。預設搜全部已登記 repo；
 /// everywhere=false 只搜主場。md 走 BM25，程式碼走 git grep（code=false 可關）。結果都附 ref。
+/// 精簡版（先回答「誰有」）見 [`search_brief`]；兩個用同一份搜尋（`search_parts`）。
 pub fn search_knowledge(
     spine_dir: &Path,
     query: &str,
     t: &Target,
     opts: &SearchOpts,
 ) -> Result<Value> {
-    if query.trim().is_empty() {
-        return Err(agent_error(
-            crate::RejectCode::BadRequest,
-            "query 不能是空的",
-            Some("給一段文字、一個想法或一段卡片內容。"),
-        ));
-    }
-    let w = where_am_i(spine_dir, t.cwd.as_deref())?;
-    let explicit = t.group.as_deref().is_some_and(|g| !g.is_empty())
-        || t.repos.as_ref().is_some_and(|r| !r.is_empty());
-    let (label, entries) = if opts.everywhere && !explicit {
-        ("全部".to_string(), registry::load(spine_dir)?.repos)
-    } else {
-        let s = scope_of(spine_dir, &w, t)?;
-        let e = entries_of(spine_dir, &s)?;
-        (s.label, e)
-    };
-    let refs: Vec<RepoRef> = entries.iter().map(RepoRef::from).collect();
-    let boosts = crossref::search_boosts(spine_dir, w.repo_id())?;
-    // 程式碼搜尋跟知識搜尋互不相干：平行跑（Rust 才有，2026-10-14；真資料約 395ms＋220ms → 約 400ms）
-    let (res, code_hits) = std::thread::scope(|sc| {
-        let code = opts.code.then(|| {
-            sc.spawn(|| crossref::code_search(&entries, query, (opts.limit / 2).max(3), 40))
-        });
-        let res = knowledge::search(
-            &refs,
-            query,
-            opts.limit,
-            Some(spine_dir),
-            &opts.exclude_paths,
-            &boosts,
-        );
-        // code_search 不會 panic；萬一有，就在這裡重跑一次（跟原本循序時一樣把 panic 帶上來）
-        let code_hits = code.map(|h| {
-            h.join().unwrap_or_else(|_| {
-                crossref::code_search(&entries, query, (opts.limit / 2).max(3), 40)
-            })
-        });
-        (res, code_hits)
-    });
+    let p = search_parts(spine_dir, query, t, opts)?;
     let mut out = Map::new();
     out.insert("ok".into(), Value::Bool(true));
-    out.insert("scope".into(), Value::String(label));
-    if let Value::Object(m) = serde_json::to_value(&res)? {
+    out.insert("scope".into(), Value::String(p.label));
+    if let Value::Object(m) = serde_json::to_value(&p.res)? {
         out.extend(m);
     }
     add_refs(out.get_mut("files"));
     // Rust 才有（2026-10-13）：先回答「是哪個 repo」——依名片（介紹／角色／關鍵字／tag／名稱）排；沒有命中就不放這個鍵
-    let by_profile = profile_hits(&entries, query);
-    if !by_profile.is_empty() {
-        out.insert("repo_profiles".into(), serde_json::to_value(&by_profile)?);
+    if !p.profiles.is_empty() {
+        out.insert("repo_profiles".into(), serde_json::to_value(&p.profiles)?);
     }
     // Rust 才有（F-22）：過去的判斷也搜得到（留痕了要找得回來）；沒有命中就不放這個鍵
-    let decisions = search_decisions(spine_dir, query, &w, t, opts.everywhere && !explicit, 5)?;
-    if !decisions.is_empty() {
-        out.insert("decisions".into(), Value::Array(decisions));
+    if !p.decisions.is_empty() {
+        out.insert("decisions".into(), Value::Array(p.decisions));
     }
-    if let Some(hits) = code_hits {
+    if let Some(hits) = p.code {
         let mut v = serde_json::to_value(hits)?;
         add_refs(Some(&mut v));
         out.insert("code".into(), v);
@@ -1939,4 +1899,8 @@ mod profile;
 pub use profile::*;
 mod apply;
 pub use apply::*;
+mod search_brief;
+pub use search_brief::*;
+mod repo_entry;
+pub use repo_entry::*;
 pub mod mailbox;

@@ -248,6 +248,15 @@ pub(super) fn w_search(d: &Path, a: &Args, here: &Path) -> Result<Value> {
     if let Some(l) = arg_int(a, "limit") {
         opts.limit = l.max(0) as usize;
     }
+    // F-126：MCP 預設精簡（CLI 預設完整、是對拍合約）
+    if nz(a, "detail").as_deref() != Some("full") {
+        return json(agentapi::search_brief(
+            d,
+            &arg_s(a, "query").unwrap_or_default(),
+            &target(a, here),
+            &opts,
+        ));
+    }
     agentapi::search_knowledge(
         d,
         &arg_s(a, "query").unwrap_or_default(),
@@ -316,4 +325,13 @@ pub(super) fn w_apply(d: &Path, a: &Args, here: &Path) -> Result<Value> {
         arg_flag(a, "cross_scope_ok"),
         "agent",
     )
+}
+
+/// F-126：入口卡。
+pub(super) fn w_repo_entry(d: &Path, a: &Args, _here: &Path) -> Result<Value> {
+    need("repo_entry", a, &["repo"])?;
+    json(agentapi::repo_entry(
+        d,
+        &arg_s(a, "repo").unwrap_or_default(),
+    ))
 }

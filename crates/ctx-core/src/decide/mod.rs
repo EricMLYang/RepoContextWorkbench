@@ -30,7 +30,7 @@ use crate::relay::{self, PlanRow, RelayScope, RelayStatus};
 use crate::{spine, Error, RejectCode, Result};
 
 pub use crate::decision_log::{
-    answer_of, history, history_of, Answered, AnsweredBy, FollowRec, StewardNote,
+    answer_of, history, history_of, Advice, AdviceFrom, Answered, AnsweredBy, FollowRec,
 };
 
 mod rules;
@@ -91,8 +91,8 @@ pub struct Card {
     pub relay_status: RelayStatus,
     /// 接力的備註（會話開著、交接是幾天前、沒 commit 的檔…）
     pub notes: Vec<String>,
-    /// 總管在這張卡上留的最新建議（F-125；沒有＝None）
-    pub steward: Option<StewardNote>,
+    /// 這張卡上最新的建議（總管或別的 repo 的 agent 留的，`from` 標出是誰；沒有＝None）
+    pub advice: Option<Advice>,
 }
 
 /// `list` 的結果。
@@ -125,9 +125,9 @@ pub struct Decided {
     /// 答完這次，這類連續照建議夠多次了：可以升級
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggestion: Option<TrustHint>,
-    /// 總管建議的跟你答的不同時，總管建議的是什麼（相同或沒建議＝不出現這個鍵）
+    /// 卡上的建議跟你答的不同時，那筆建議（`from` 是誰；相同或沒建議＝不出現這個鍵）
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub steward_differs: Option<String>,
+    pub advice_differs: Option<Advice>,
 }
 
 // ---------------------------------------------------------------- list
@@ -167,7 +167,7 @@ fn card_of(
     spine_dir: &Path,
     row: &PlanRow,
     data: &RegistryData,
-    notes_all: &[StewardNote],
+    notes_all: &[Advice],
     now: NaiveDateTime,
     include_blocked: bool,
 ) -> Option<Card> {
@@ -203,7 +203,7 @@ fn card_of(
         evidence: Vec::new(),
         relay_status: row.status,
         notes,
-        steward: log::steward_note_for(notes_all, &row.repo, handoff_ref, handoff_at).cloned(),
+        advice: log::advice_for(notes_all, &row.repo, handoff_ref, handoff_at).cloned(),
     };
     if let Some(a) = &row.ask {
         let rec = a.recommend_index();
@@ -245,7 +245,7 @@ pub fn list_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
 /// 同 [`list_at`]，從已經算好的接力 plan 出卡（總管簡報用：plan 會跑各 repo 的 git，只跑一次）。
 pub fn queue_of(spine_dir: &Path, plan: &relay::Plan, now: NaiveDateTime) -> Result<Queue> {
     let data = registry::load(spine_dir)?;
-    let notes = log::steward_notes_of(&spine::iter_events(spine_dir)?);
+    let notes = log::advice_of(&spine::iter_events(spine_dir)?);
     let mut cards: Vec<Card> = plan
         .rows
         .iter()
@@ -329,7 +329,7 @@ pub fn answer_with(
     let id = entry.id();
     let now = Local::now().naive_local();
     let plan = relay::plan_at(spine_dir, &RelayScope::Repos(vec![id.clone()]), now)?;
-    let notes = log::steward_notes_of(&spine::iter_events(spine_dir)?);
+    let notes = log::advice_of(&spine::iter_events(spine_dir)?);
     let Some(card) = plan
         .rows
         .iter()
@@ -382,18 +382,17 @@ pub fn answer_with(
         let h = history(spine_dir).ok()?;
         suggestion_for(&h, &policy::load(spine_dir), &id, k)
     });
-    let steward_differs = card
-        .steward
-        .as_ref()
-        .filter(|n| n.text.trim() != answered.answer.trim())
-        .map(|n| n.text.clone());
+    let advice_differs = card
+        .advice
+        .clone()
+        .filter(|n| n.text.trim() != answered.answer.trim());
     Ok(Decided {
         answered,
         option,
         relay: relayed,
         downgraded,
         suggestion,
-        steward_differs,
+        advice_differs,
     })
 }
 

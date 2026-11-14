@@ -160,17 +160,20 @@ pub fn cmd_decide(ctx: &Ctx, cmd: &DecideCmd) -> CmdResult {
             ctx.emit(&r, render_overturned);
         }
         DecideCmd::Suggest { repo, text, why } => {
-            let r =
-                decide::suggest(&d, repo, &text.join(" "), why.as_deref()).map_err(agent_err)?;
+            let cwd = std::env::current_dir().ok();
+            let r = decide::suggest(&d, repo, &text.join(" "), why.as_deref(), cwd.as_deref())
+                .map_err(agent_err)?;
             ctx.emit(&r, |r| {
+                let a = &r.advice;
                 let mut line = format!(
-                    "已在 {} 的卡上留總管建議：{}{}　{}",
-                    r.note.repo,
-                    r.note.option.map(|n| format!("{n}) ")).unwrap_or_default(),
-                    r.note.text,
-                    r.note.reference
+                    "已在 {} 的卡上留{}：{}{}　{}",
+                    a.repo,
+                    a.from.advice_label(),
+                    a.option.map(|n| format!("{n}) ")).unwrap_or_default(),
+                    a.text,
+                    a.reference
                 );
-                if let Some(w) = &r.note.why {
+                if let Some(w) = &a.why {
                     line.push_str(&format!("\n理由：{w}"));
                 }
                 line
@@ -266,9 +269,10 @@ fn card_lines(n: usize, c: &Card) -> Vec<String> {
             .collect();
         out.push(format!("   證據：{}", ev.join("、")));
     }
-    if let Some(n) = &c.steward {
+    if let Some(n) = &c.advice {
         let mut line = format!(
-            "   總管建議：{}{}",
+            "   {}：{}{}",
+            n.from.advice_label(),
             n.option.map(|k| format!("{k}) ")).unwrap_or_default(),
             n.text
         );
@@ -327,8 +331,13 @@ fn render_decided(r: &Decided) -> String {
         ),
         String::new(),
     ];
-    if let Some(sug) = &r.steward_differs {
-        out.push(format!("總管建議的是「{sug}」，你選的是「{}」", a.answer));
+    if let Some(adv) = &r.advice_differs {
+        out.push(format!(
+            "{}的是「{}」，你選的是「{}」",
+            adv.from.advice_label(),
+            adv.text,
+            a.answer
+        ));
         out.push(String::new());
     }
     if let Some(rule) = &r.downgraded {

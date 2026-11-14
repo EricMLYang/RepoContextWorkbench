@@ -82,6 +82,7 @@ def _lean_opening(obj):
         # OPENING_TOOLS_WHY：工具名單那行換成只講沒掛 MCP 的退路（兩邊都換成同一個樣子）
         ac = re.sub(r"\n- 工具（MCP repo-context）：[^\n]*", "\n- <沒掛 MCP 的退路>", ac)
         ac = re.sub(r"\n- 沒掛 MCP repo-context 時[^\n]*", "\n- <沒掛 MCP 的退路>", ac)
+        ac = re.sub(r"\n- 要別的 repo 的資料：[^\n]*", "\n- <跨 repo 取資料的流程>", ac)  # OPENING_SEARCH_WHY
         hso["additionalContext"] = ac
     return obj
 
@@ -161,8 +162,16 @@ MCP_EXTRA_PARAMS = [
     ("log_decision", "reopen_when", "log_decision 多了選填 supersedes／reopen_when（F-07 判斷取代＋何時重看，Rust 才有）"),
     ("log_decision", "outcome_of", "log_decision 多了選填 outcome_of（F-23 判斷回顧：記結果，Rust 才有）"),
     ("handoff", "ask", "handoff 多了選填 ask（F-123 提問欄位：要使用者決定的問題、選項、建議，Rust 才有）"),
+    ("search_knowledge", "detail", "search_knowledge 多了選填 detail（F-126：MCP 預設 brief 精簡模式，full＝跟 Python 一樣的完整結果）"),
 ]
 
+
+SEARCH_BRIEF_WHY = ("漸進揭露（F-126，2026-11-14，Rust 才改）：search_knowledge 的 MCP 預設改成精簡模式（detail=brief），"
+                    "說明改成一句「先問誰有」，read_from／ask_repo 的說明縮短（新增 repo_entry 後 tools/list 總字數不增加）；"
+                    "對拍劇本帶 detail=full 比完整結果（Python 不認 detail、照樣回完整），這三個工具的說明文字兩邊都不比")
+
+OPENING_SEARCH_WHY = ("開場工作約定的跨 repo 那一行（F-126，Rust 才改）：改成「search_knowledge 問誰有 → repo_entry 看從哪讀起 → 自己讀」，"
+                      "字數沒變多；比對時兩邊都換成同一個樣子")
 
 MAILBOX_REASON = "對講 send_message／messages（F-121，2026-11-04，Rust 才有：不同 repo 的 agent 互傳訊息；開場與 MCP 說明各多一句）"
 
@@ -173,6 +182,7 @@ MCP_EXTRA_TOOLS = {
     "registry_class": "repo 類別 registry_class（2026-10-18，Rust 才有，docs/REPO_CLASSES.md）",
     "what_user_sees": "使用者畫面 what_user_sees（2026-10-24，Rust 才有：App 回報主區在看什麼，agent 被問才讀）",
     "tidy_todos": "未結清理 tidy_todos（2026-11-10，Rust 才有：分類＋一次關一批）",
+    "repo_entry": "入口卡 repo_entry（F-126，2026-11-14，Rust 才有：是什麼、從哪讀起、最近判斷、最後交接、現況）",
     "request_decision": "放行規則 request_decision（F-124，2026-11-14，Rust 才有：做到一半要人決定時先問，規則允許就自動放行）",
     "send_message": MAILBOX_REASON,
     "messages": MAILBOX_REASON,
@@ -196,6 +206,9 @@ def drop_mcp_extras(resp, allowed):
             tools.remove(t)
             allowed.add(MCP_EXTRA_TOOLS[t["name"]])
     for t in ((resp.get("result") or {}).get("tools") or []):
+        if t.get("name") in ("search_knowledge", "read_from", "ask_repo") and "description" in t:  # SEARCH_BRIEF_WHY
+            t["description"] = ""
+            allowed.add(SEARCH_BRIEF_WHY)
         if t.get("name") in ("add_todo", "handoff") and "description" in t:  # TODO_SOURCE_WHY
             t["description"] = ""
             allowed.add(TODO_SOURCE_WHY)
@@ -639,7 +652,7 @@ def mcp_compare(name, sides, msgs, admin, results, cwd="repos/impl"):
                 allowed.add(SLIM_CONTEXT_WHY)
     for x in la:  # next_work 的說明：Rust 改了排序（NEXT_ORDER_WHY），兩邊都不比這段文字
         for t in ((x.get("result") or {}).get("tools") or []):
-            if t.get("name") in ("next_work", "add_todo", "handoff"):
+            if t.get("name") in ("next_work", "add_todo", "handoff", "search_knowledge", "read_from", "ask_repo"):
                 t["description"] = ""
                 rem = ((t.get("inputSchema") or {}).get("properties") or {}).get("remaining")
                 if isinstance(rem, dict):
@@ -693,7 +706,7 @@ def main():
 
     # ── 讀（初始狀態）──
     C("instructions", ["instructions"], spine=False,
-      stdout_fix=lambda s: re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作|要使用者決定時)（Rust 版）\n.*?(?=\n## )", "", re.sub(r"`remaining` [^。]*。", "", re.sub(r"\n## 反芻推薦（別人替你先找好的）\n.*?(?=\n## )", "", re.sub(r"\n1\. \*\*開工\*\*.*?(?=\n2\. )", "", s, flags=re.S), flags=re.S)), flags=re.S))  # 收尾那句見 TODO_SOURCE_WHY；反芻那節見 FRESH_WHY；開工那步見 SLIM_CONTEXT_WHY
+      stdout_fix=lambda s: re.sub(r"\n## 跨 repo 參考.*?(?=\n規則：)", "", re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作|要使用者決定時)（Rust 版）\n.*?(?=\n## )", "", re.sub(r"`remaining` [^。]*。", "", re.sub(r"\n## 反芻推薦（別人替你先找好的）\n.*?(?=\n## )", "", re.sub(r"\n1\. \*\*開工\*\*.*?(?=\n2\. )", "", s, flags=re.S), flags=re.S)), flags=re.S), flags=re.S))  # 跨 repo 那節見 SEARCH_BRIEF_WHY；收尾那句見 TODO_SOURCE_WHY；反芻那節見 FRESH_WHY；開工那步見 SLIM_CONTEXT_WHY
     C("registry list", ["registry", "list"])
     C("registry list --json", ["registry", "list", "--json"])
     C("registry relations", ["registry", "relations"])
@@ -892,7 +905,7 @@ def main():
         tool(17, "report_status", status="blocked", text="卡住"),
         tool(18, "report_status", status="nope"),
         tool(19, "handoff", done="MCP 收尾", next_step="下一步"),
-        tool(20, "search_knowledge", query="快取 LRU", limit=3),
+        tool(20, "search_knowledge", query="快取 LRU", limit=3, detail="full"),  # SEARCH_BRIEF_WHY：Python 不認 detail、照樣回完整
         tool(21, "read_from", ref="notes:書摘/ch01.md"),
         tool(22, "repo_status", repo="notes"),
         tool(23, "ask_repo", repo="notes", question="LRU？", provider="mock"),

@@ -427,7 +427,8 @@ fn render_start_with(c: &ContextFor, trim: Trim) -> String {
         // supersedes／outcome_of／workbench_apply 這些用法寫在各工具的說明裡，不在每場開場重講
         "- 沒掛 MCP repo-context 時，同名功能用 `ctx <where|context|next|log|todo|status|handoff|search> --json`。".into(),
         "- 做了判斷→log_decision；發現待辦→add_todo；等使用者或卡住→report_status。".into(),
-        "- 要別的 repo 的資料：search_knowledge 找 → read_from 讀（會記引用）；要對方整理歸納才用 ask_repo（慢、花錢）。"
+        // F-126 漸進揭露：先問誰有、再看入口卡、之後自己讀（字數不比原本多）
+        "- 要別的 repo 的資料：search_knowledge 問誰有 → repo_entry 看從哪讀起 → 自己讀；要歸納才 ask_repo（慢）。"
             .into(),
         // F-121 對講（Rust 才有）
         "- 要同組另一個 repo 的 agent 做事、或告訴它你改了它會用到的東西→send_message（它在跑就直接送到，回覆會送回你）；收到〔對講〕就處理並帶 re 回覆；messages 看往來與誰在跑。".into(),

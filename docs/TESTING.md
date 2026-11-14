@@ -280,6 +280,17 @@
 | 8i-7 | 結束總管會話（不交接） | 收件匣與 `ctx relay plan` 都沒有多一筆「會話結束但沒有交接」 | [ ] | [ ] |
 | 8i-8 | 再開一次總管會話 | registry 變更段只列上次總管開場之後的 | [ ] | [ ] |
 
+## 8j. 漸進揭露（F-126，2026-11-14）——**引擎測試與 spine 副本題組已過；真 agent 會不會去用還沒人看過**
+
+| # | 操作 | 應該看到 | macOS | Windows |
+|---|---|---|---|---|
+| 8j-1 | 在某個 repo 的 agent 會話裡問它要另一個 repo 的資料（例「draftagent 的 verifier 高程規則是什麼」） | agent 先 `search_knowledge`（回最該去的 repo＋幾個起點），再 `repo_entry`，之後自己在那個路徑讀檔；不會一次吞 11 KB | [ ] | [ ] |
+| 8j-2 | `ctx search --brief "排水縱斷面圖 verifier 高程"` | 第一行「最該去：draftagent（路徑）——介紹」，幾個起點 ref、相關判斷、下一步 | [ ] | [ ] |
+| 8j-3 | `ctx repo entry draftagent` | 不超過 1000 字：是什麼、從哪讀起（AGENTS.md、README、docs 索引、exports）、最近判斷、最後交接、現在有沒有會話與幾個檔沒 commit | [ ] | [ ] |
+| 8j-4 | `ctx repo entry <路徑不存在的 repo>` | 被拒（not_found），提示怎麼補救 | [ ] | [ ] |
+| 8j-5 | `ctx search "<某個在 archive／retired 資料夾裡也有的詞>"` | 封存資料夾的檔排在後面，why 有「在封存路徑」 | [ ] | [ ] |
+| 8j-6 | 在一個 repo 的目錄下 `ctx decide suggest <別的 repo> 1` | 卡上顯示「<這個 repo> 的 agent 建議：…」；對自己 repo 的卡被拒 | [ ] | [ ] |
+
 ## 9. 要你決定
 
 - [ ] **#76**：App 助手、碰撞判定、`ask_repo`、backfill 都用 `claude -p`（程式化呼叫；BAT 引 2026-06-15 政策說它走另計的額度，

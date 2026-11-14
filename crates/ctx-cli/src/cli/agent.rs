@@ -1042,6 +1042,9 @@ pub struct SearchArgs {
     pub no_code: bool,
     #[arg(long, default_value_t = 8)]
     pub limit: i64,
+    /// 精簡模式：先回答「誰有、為什麼」——最該去的 repo、最多 3 個起點、2 筆判斷、下一步（≤ 1500 字；不搜程式碼）
+    #[arg(long)]
+    pub brief: bool,
     #[command(flatten)]
     pub scope: Scoped,
 }
@@ -1061,11 +1064,65 @@ pub fn cmd_search(ctx: &Ctx, a: &SearchArgs) -> CmdResult {
         exclude_paths: nz(&a.file).map(PathBuf::from).into_iter().collect(),
         code: !a.no_code,
     };
+    if a.brief {
+        return agent_call(
+            ctx,
+            |d| agentapi::search_brief(d, &query, &t, &opts),
+            h_search_brief,
+        );
+    }
     agent_call(
         ctx,
         |d| agentapi::search_knowledge(d, &query, &t, &opts),
         h_search_full,
     )
+}
+
+/// 精簡模式的人話。
+fn h_search_brief(r: &Value) -> String {
+    let mut out = Vec::new();
+    match r.get("answer_repo").filter(|a| a.is_object()) {
+        Some(a) => {
+            let mut head = format!("最該去：{}（{}）", s(a, "repo"), s(a, "path"));
+            if has(a, "about") {
+                head.push_str(&format!("——{}", s(a, "about")));
+            }
+            out.push(head);
+            for w in arr(a, "why") {
+                out.push(format!("  · {}", pystr::py_str(w)));
+            }
+        }
+        None => out.push(s(r, "note")),
+    }
+    let also: Vec<String> = arr(r, "also")
+        .iter()
+        .map(|x| format!("{}（{}）", s(x, "repo"), s(x, "why")))
+        .collect();
+    if !also.is_empty() {
+        out.push(format!("其次：{}", also.join("、")));
+    }
+    for x in arr(r, "refs") {
+        let line = x["line"]
+            .as_u64()
+            .map(|l| format!(" L{l}"))
+            .unwrap_or_default();
+        out.push(format!("- {}{line}：{}", s(x, "ref"), s(x, "text")));
+    }
+    for x in arr(r, "decisions") {
+        let about = if has(x, "about_repo") {
+            format!("（講的是 {}）", s(x, "about_repo"))
+        } else {
+            String::new()
+        };
+        out.push(format!(
+            "- 判斷 {} {}：{}{about}",
+            s(x, "ref"),
+            s(x, "at"),
+            s(x, "text")
+        ));
+    }
+    out.push(format!("下一步：{}", s(r, "next")));
+    out.join("\n")
 }
 
 #[derive(Args, Debug)]
@@ -1405,8 +1462,11 @@ pub fn cmd_ask(ctx: &Ctx, a: &AskArgs) -> CmdResult {
 
 #[derive(Args, Debug)]
 pub struct RepoArgs {
-    /// repo id（省略＝目前目錄所在 repo）
+    /// repo id（省略＝目前目錄所在 repo）；`entry <id>`＝入口卡（是什麼、從哪讀起、最近判斷、最後交接、現在怎樣）
     pub id: Option<String>,
+    /// 配 `entry`：要看入口卡的 repo id
+    #[arg(value_name = "ENTRY_ID")]
+    pub entry_id: Option<String>,
     /// 7d／30d／commit hash；省略＝你上次看過之後
     #[arg(long)]
     pub since: Option<String>,
@@ -1420,6 +1480,19 @@ pub struct RepoArgs {
 /// 狀態卡。人看（不帶 --peek、不是 --json）才推已讀水位線。
 pub fn cmd_repo(ctx: &Ctx, a: &RepoArgs) -> CmdResult {
     let d = ctx.spine_dir()?;
+    // F-126：`ctx repo entry <id>`＝入口卡（狀態卡是 `ctx repo <id>`，兩張卡分開）
+    if let (Some("entry"), Some(target)) = (nz(&a.id), nz(&a.entry_id)) {
+        let target = target.to_string();
+        return agent_call(ctx, |d| agentapi::repo_entry(d, &target), h_repo_entry);
+    }
+    if let Some(extra) = nz(&a.entry_id) {
+        return Err(fail(
+            "bad_request",
+            format!("看不懂第二個參數「{extra}」"),
+            Some("入口卡：ctx repo entry <id>；狀態卡：ctx repo [<id>]".into()),
+            EXIT_REJECTED,
+        ));
+    }
     let rid = match nz(&a.id) {
         Some(r) => r.to_string(),
         None => {
@@ -1866,4 +1939,43 @@ pub fn cmd_msg(ctx: &Ctx, cmd: &MsgCmd) -> CmdResult {
             )
         }
     }
+}
+
+/// 入口卡的人話（F-126）。
+fn h_repo_entry(r: &Value) -> String {
+    let mut head = format!("# {}（{}）", s(r, "repo"), s(r, "path"));
+    let bits: Vec<String> = ["about", "role", "class"]
+        .iter()
+        .filter(|k| has(r, k))
+        .map(|k| s(r, k))
+        .collect();
+    if !bits.is_empty() {
+        head.push_str(&format!("\n{}", bits.join("｜")));
+    }
+    let mut out = vec![head];
+    if !arr(r, "read_first").is_empty() {
+        out.push("從哪讀起：".into());
+        for f in arr(r, "read_first") {
+            out.push(format!("- {}：{}", s(f, "path"), s(f, "title")));
+        }
+    }
+    for x in arr(r, "decisions") {
+        out.push(format!(
+            "最近判斷 {} {}：{}",
+            s(x, "ref"),
+            s(x, "at"),
+            s(x, "text")
+        ));
+    }
+    if let Some(h) = r.get("last_handoff").filter(|h| h.is_object()) {
+        out.push(format!("最後交接 {}：{}", s(h, "at"), s(h, "done")));
+    }
+    let n = &r["now"];
+    let dirty = n["dirty"]
+        .as_u64()
+        .map(|x| format!("、{x} 個檔沒 commit"))
+        .unwrap_or_default();
+    out.push(format!("現在：{}{dirty}", s(n, "session")));
+    out.push(s(r, "next"));
+    out.join("\n")
 }

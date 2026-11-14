@@ -494,20 +494,27 @@ pub fn health_stats(spine_dir: &Path, days: i64, now: NaiveDateTime) -> Result<D
     })
 }
 
-// ---------------------------------------------------------------- suggest（總管建議，F-125）
+// ---------------------------------------------------------------- suggest（卡上的建議，F-125／F-126）
 
 /// `decide suggest` 的結果。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Suggested {
     #[serde(flatten)]
-    pub note: StewardNote,
+    pub advice: Advice,
     /// 卡上的問題
     pub question: String,
 }
 
-/// 總管在一張卡上留建議（選項編號或一句話＋理由）。不是回答：不算連續、不算抽查、不讓卡消失；
-/// 人回答時看得到。沒有這張卡（沒在等、已回答）＝`not_found`。agent 可以下。
-pub fn suggest(spine_dir: &Path, repo: &str, text: &str, why: Option<&str>) -> Result<Suggested> {
+/// 在一張卡上留建議（選項編號或一句話＋理由）。誰留的看 `cwd`：在 spine（總管會話）＝總管；在某個登記的 repo
+/// ＝那個 repo 的 agent（對自己 repo 的卡不行——它已經有 recommend）；都不是＝拒絕。
+/// 不是回答：不算連續、不算抽查、不讓卡消失；人回答時看得到。沒有這張卡（沒在等、已回答）＝`not_found`。
+pub fn suggest(
+    spine_dir: &Path,
+    repo: &str,
+    text: &str,
+    why: Option<&str>,
+    cwd: Option<&Path>,
+) -> Result<Suggested> {
     let text = one_line(text);
     if text.is_empty() {
         return Err(rejected(
@@ -517,15 +524,37 @@ pub fn suggest(spine_dir: &Path, repo: &str, text: &str, why: Option<&str>) -> R
         ));
     }
     let id = registered(spine_dir, repo)?;
+    let w = agentapi::where_am_i(spine_dir, cwd)?;
+    let from = match (&w.repo, w.in_spine) {
+        (Some(r), _) if spine::same_token(&r.id, &id) => {
+            return Err(rejected(
+                RejectCode::BadRequest,
+                format!("這是你自己 repo（{id}）的卡：你的建議寫在交接的 ask.recommend 就好"),
+                "要改建議就重新 handoff 帶新的 ask；對別的 repo 的卡才用 decide suggest".into(),
+            ))
+        }
+        (Some(r), _) => AdviceFrom::Repo { repo: r.id.clone() },
+        (None, true) => AdviceFrom::Steward,
+        (None, false) => {
+            return Err(rejected(
+                RejectCode::BadRequest,
+                format!(
+                    "不知道這個建議是誰留的：{} 不在 spine、也不在任何登記的 repo",
+                    w.cwd
+                ),
+                "在總管會話（ctx session --steward）或某個登記 repo 的目錄裡下".into(),
+            ))
+        }
+    };
     let now = Local::now().naive_local();
     let plan = relay::plan_at(spine_dir, &RelayScope::Repos(vec![id.clone()]), now)?;
     let data = registry::load(spine_dir)?;
-    let notes = log::steward_notes_of(&spine::iter_events(spine_dir)?);
+    let all = log::advice_of(&spine::iter_events(spine_dir)?);
     let Some(card) = plan
         .rows
         .iter()
         .find(|r| r.repo == id)
-        .and_then(|r| card_of(spine_dir, r, &data, &notes, now, true))
+        .and_then(|r| card_of(spine_dir, r, &data, &all, now, true))
     else {
         return Err(rejected(
             RejectCode::NotFound,
@@ -536,13 +565,22 @@ pub fn suggest(spine_dir: &Path, repo: &str, text: &str, why: Option<&str>) -> R
         ));
     };
     let (answer, option) = resolve_reply(&card, &text)?;
-    let r = log::write_steward_note(spine_dir, &id, &card.handoff_ref, &answer, option, why, now)?;
-    let note = log::steward_notes_of(&spine::iter_events(spine_dir)?)
+    let r = log::write_advice(
+        spine_dir,
+        &id,
+        &card.handoff_ref,
+        &from,
+        &answer,
+        option,
+        why,
+        now,
+    )?;
+    let advice = log::advice_of(&spine::iter_events(spine_dir)?)
         .into_iter()
         .find(|n| n.reference == r)
-        .ok_or_else(|| Error::invalid("總管建議寫入後讀不回來"))?;
+        .ok_or_else(|| Error::invalid("建議寫入後讀不回來"))?;
     Ok(Suggested {
-        note,
+        advice,
         question: card.question,
     })
 }

@@ -20,16 +20,13 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 3. **收尾（一定要做）**：`handoff` —— `done` 完成了什麼、`next_step` 下次從哪接、
    `remaining` 沒做完的事（只是交接裡的備註）。沒交接就結束的會話會被 hook 記成「未交接」。
 
-## 跨 repo 參考（由便宜到貴，前一步夠用就停）
+## 跨 repo 參考（前一步夠用就停）
 
-1. **看地圖**：開場注入的「鄰居 repo」列出有關係的 repo 提供什麼（exports），
-   例 `notes:書摘`→books/。知道在哪就直接跳第 3 步。
-2. **找**：`search_knowledge "問題或關鍵字"` —— md 結果附行號片段與 why（標題命中、跟你有關係、
-   在某 export 內…），程式碼結果來自 git grep；每筆都有可直接用的 `ref`。
-3. **讀**：`read_from ref` —— `<repo>:<export>/子路徑`、`<repo>:<相對路徑>`，或第 2 步給的 ref。
-   只給 repo 或目錄會回清單。回傳附 commit；讀了會記一筆引用，之後上游改了會提醒下游。
-4. **問**：`ask_repo repo "問題"` —— 在對方 repo 開唯讀 agent，照它自己的慣例找資料，
-   只回結論＋引用。慢（幾十秒）又花錢：要整理歸納、跨很多檔的問題才用。
+1. **問誰有**：`search_knowledge "問題或關鍵字"` —— 最該去的 repo（為什麼）、幾個起點 ref、相關判斷。
+   開場「鄰居 repo」已經寫了在哪就跳過。
+2. **看入口**：`repo_entry <repo>` —— 是什麼、從哪幾份讀起、最近判斷、最後交接、現在有沒有人在動。
+3. **自己讀**：在那個路徑用你的工具 grep／讀檔；要寫進結論或複製才 `read_from <ref>`（附 commit、留引用）。
+- 要整理歸納、跨很多檔才 `ask_repo`（唯讀 agent，慢又花錢）；要對方動手才 `send_message`。
 
 規則：
 - **用名字，不要寫死路徑**。不要在文件或程式裡寫 `../其他repo/…`；寫 `<repo>:<export>`，
@@ -65,7 +62,6 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
   名冊每列也標類別（「參考：只讀」）：讀別的 repo 前看一眼。使用者要改類別時用 `workbench_apply` 的
   `set_class`（先預覽、同意才執行）；不要自己決定改。
 - 開場的「組筆記（N 則…）」＝使用者在 App 隨手記的組層級的事（MCP `context_for` 的 `notes`，最新 5 則）；跟手上的事有關就讀全文。
-- `search_knowledge` 的 `repo_profiles` 段先回答「是哪個 repo」（依介紹／角色／關鍵字／tag／名稱排），再看 `files`。
 - `read_from` 讀到 md 時附的 `linked_from`＝那個 repo 裡連到這份的其他 md（前 5 則）：周邊脈絡多半在那裡，需要再讀。
 - 名片缺了或標「推測自 README」：手上的事做完，用 `describe_repo` 補一句介紹與角色（`role` 是一個短詞，
   例 知識庫、規格來源、實作；`keywords` 給搜尋用，別跟 tags 重複）。名片存在 spine，**不寫進任何 repo**；
@@ -82,7 +78,7 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 - **改掉舊判斷**：`log_decision` 帶 `supersedes=<舊的 ref>`（舊的之後不再出現在最近事件，沿革仍查得到）；
   寫得出「什麼情況要重看」就帶 `reopen_when`（寫日期，到期時 `ctx health` 會提醒使用者「該重看」）。
 - **判斷後來怎樣**：`log_decision` 帶 `outcome_of=<判斷的 ref>` 記一筆結果。
-- **找過去的判斷**：`search_knowledge` 的 `decisions` 段（被取代的標出取代者、帶結果）。做新判斷前先查有沒有前例。
+- **找過去的判斷**：`search_knowledge`（`detail=full` 的 `decisions` 帶取代者與結果）。做新判斷前先查有沒有前例。
 - **看全部未結**：`ctx todo list --json`——該先處理的在前，逾期超過 14 天的（擱置）排最後；`ctx next` 只給前 5 項。
 - **未結的紀律——未結清單是使用者的，不是你的筆記**：`add_todo` 只開「有人真的要回來做、說得出完成條件」的事；
   有真實期限才給 `due`，沒給就沒有期限（不會自動補）。`handoff` 的 `remaining` 不會開未結，只是交接裡的一行備註；

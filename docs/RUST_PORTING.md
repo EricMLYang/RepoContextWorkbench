@@ -316,6 +316,28 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
     `build_steward`：cwd＝spine，`pack_path`＝`.state/steward-brief.md`（簡報＋規則，給沒有 hook 的 agent 讀），MCP 照一般規則掛，沒任務不帶 prompt；跟 `--group／--repos／--repo` 互斥。
     既有的 `SessionOpts`／`build` 不動。
   - `ctx decide list` 卡片 ≥ 5 張時頁尾一句「讓總管先整理：ctx session --steward」。`relay::is_no_handoff` 改成 pub。
+- **漸進揭露**（2026-11-14，F-126 第 4 輪；Python 沒有）：
+  - **`search_knowledge` 精簡模式**（`agentapi::search_brief` → `SearchBrief`，序列化後 ≤ `BRIEF_MAX_CHARS` 1500 字元）：
+    `{ok, query, scope, answer_repo?{repo, path, about?, role?, why[]}, note?, also[{repo, why}], refs[{ref, line, text, why}]（≤3，保證含 answer_repo 的）,
+    decisions[{ref, at, repo, text, reopen_when?, about_repo?}]（≤2，沒有歸屬疑慮的優先）, next}`。不跑程式碼搜尋。
+    answer_repo＝四個訊號各除以最大值後加總：命中檔分數加總（`repos`）＋最高分那份檔（`RepoHit::best_score`，不序列化）＋0.5×名片命中＋0.3×相關判斷
+    （判斷算給它講的那個 repo）；全部都沒有＝None、`note`「沒找到明顯相關的 repo」。超過上限依序砍判斷、非 answer_repo 的起點、其他候選、再縮字句。
+    **MCP 預設 `detail=brief`**（`full`＝原本的完整結果）、說明改一句；**CLI `ctx search` 預設照舊（完整，對拍合約）**，`--brief` 才是精簡。
+    `parity.py`：MCP 那一呼叫帶 `detail=full`（Python 不認 detail，照樣回完整），說明不比（`SEARCH_BRIEF_WHY`）。
+    為了加 `repo_entry` 後 tools/list 總字數不增加（12407 → 12391），`read_from`／`ask_repo` 的說明也縮短，parity 同樣不比這兩段說明。
+  - **排序修正（完整與精簡都生效）**：repo 內路徑的**資料夾**任一段是 `archive`／`archived`／`retired`／`deprecated`，或底線／連字號切開後有一節是
+    （`_archive`、`01_inbox_retired_20261104`）→ 分數 ×`ARCHIVE_FACTOR`（0.3），why「在封存路徑」（檔名不算，`workspace-archive-sort.md` 不受影響）。
+    「標題命中」改成查詢詞（去重）至少 `TITLE_HIT_RATIO`（一半）出現在標題索引才標，分數算法不變。fixture 沒踩到，parity 照過。
+  - **判斷的歸屬**：`decisions` 每筆多 `about_repo`——第一行（去掉「交接：」與〔…〕）明確以某個登記 repo 的 id 開頭、id 後接邊界字元，且不是記錄它的 repo 時才標。
+    限定範圍搜尋時這些排到後面。
+  - **入口卡 `repo_entry`**（MCP 新工具；CLI `ctx repo entry <id>`——第一個位置參數是 `entry` 而且有第二個參數才是入口卡，否則照舊是狀態卡；
+    `RepoEntry` 序列化後 ≤ `ENTRY_MAX_CHARS` 1000 字元）：`{ok, repo, path, about?, role?, class?, read_first[{path, title}]（AGENTS.md／CLAUDE.md／README.md／docs 的索引一份／exports，≤5）,
+    decisions[{ref, at, text}]（最近 2 筆，非交接、非〔…〕工具留痕）, last_handoff?{ref, at, done}, now{session, dirty}, next}`。片段過憑證遮蔽。路徑不存在、沒登記＝`not_found` 附補救。
+  - **開場工作約定**的跨 repo 那一行改成「search_knowledge 問誰有 → repo_entry 看從哪讀起 → 自己讀；要歸納才 ask_repo（慢）」（字數 79→78）。
+    SKILL.md 的「跨 repo 參考」改成三步（parity 的 instructions 比對拿掉那一節）。
+  - **卡上的建議照來源標示**（修第 3 輪）：`decide suggest` 看 cwd——在 spine＝總管（來源 `steward`）、在某個登記 repo＝那個 repo 的 agent（來源 `agent`）；
+    對自己 repo 的卡、兩者都不是＝`bad_request`。機器行 `decide suggest from:steward|from:repo:<id>[ option:N]`（缺 `from:`＝總管）。
+    **第 3 輪的合約改名**：`Card.steward` → `Card.advice`（`Advice{…, from: {kind: steward}|{kind: repo, repo}}`）、`Decided.steward_differs` → `advice_differs`（整筆建議）。
 - **`ctx todo list`**（2026-10-20；Python 沒有）：範圍內全部未結、逾期在前，`--json` 跟 `next_work` 的 todo 同一種物件；
   沒掛 MCP 的 agent（CLI 模式）之前只能靠 `ctx next` 的前 5 項。
 - **任務包 `ctx todo brief #N`**（2026-10-10，ideation F-42；Python 沒有）：把一項未結組成給全新會話的 markdown——

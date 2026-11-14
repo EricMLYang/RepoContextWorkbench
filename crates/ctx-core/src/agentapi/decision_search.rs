@@ -80,6 +80,20 @@ pub(super) fn search_decisions(
     // 只留跟最佳結果同一個量級的（分數 < 最高分 30% 的多半只是碰到一兩個常見詞）
     let top = ranked.first().map(|x| x.0).unwrap_or(0.0);
     ranked.retain(|(sc, _)| *sc >= top * 0.3);
+    // F-126：內容主要在講別的 repo 的判斷（第一行以那個 repo 的 id 開頭）——限定範圍搜尋時排到後面
+    let ids: Vec<String> = registry::load(spine_dir)?
+        .repos
+        .iter()
+        .map(Repo::id)
+        .collect();
+    let about = |ev: &Event| -> Option<String> {
+        let a = about_repo(&first(ev), &ids)?;
+        let own = ev.kv("repo").unwrap_or("");
+        (!spine::same_token(own, &a)).then_some(a)
+    };
+    if !everywhere {
+        ranked.sort_by_key(|(_, ev)| about(ev).is_some());
+    }
     Ok(ranked
         .into_iter()
         .take(limit)
@@ -119,10 +133,73 @@ pub(super) fn search_decisions(
             if let Some(cond) = reopen_when(ev) {
                 v["reopen_when"] = json!(cond);
             }
+            if let Some(a) = about(ev) {
+                v["about_repo"] = json!(a);
+            }
             if !outcomes.is_empty() {
                 v["outcomes"] = Value::Array(outcomes);
             }
             v
         })
         .collect())
+}
+
+/// 判斷的第一行明確以某個登記 repo 的 id 開頭（去掉「交接：」與〔…〕前綴後；id 之後要接空白、全形冒號、「的」、
+/// 括號或標點）＝這筆主要在講那個 repo。保守：不在開頭的不算，最長的 id 優先。
+pub(crate) fn about_repo(first_line: &str, ids: &[String]) -> Option<String> {
+    let mut t = first_line.trim();
+    if let Some(rest) = t.strip_prefix("交接：") {
+        t = rest.trim_start();
+    }
+    if t.starts_with('〔') {
+        t = t.split_once('〕').map_or(t, |(_, r)| r.trim_start());
+    }
+    let mut best: Option<&String> = None;
+    for id in ids {
+        if let Some(rest) = t.strip_prefix(id.as_str()) {
+            let boundary = rest
+                .chars()
+                .next()
+                .is_none_or(|c| c.is_whitespace() || "：:的（(，,、。；;／/".contains(c));
+            if boundary && best.is_none_or(|b| id.len() > b.len()) {
+                best = Some(id);
+            }
+        }
+    }
+    best.cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn about_repo_is_conservative() {
+        let ids: Vec<String> = ["RepoContextWorkbench", "Repo", "draftagent"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(
+            about_repo("交接：RepoContextWorkbench 的接力第 2 輪", &ids).as_deref(),
+            Some("RepoContextWorkbench")
+        );
+        assert_eq!(
+            about_repo("draftagent：改 verifier", &ids).as_deref(),
+            Some("draftagent")
+        );
+        assert_eq!(
+            about_repo("改 draftagent 的 verifier", &ids),
+            None,
+            "不在開頭不算"
+        );
+        assert_eq!(
+            about_repo("draftagents 的事", &ids),
+            None,
+            "id 後面要有邊界"
+        );
+        assert_eq!(
+            about_repo("〔registry〕draftagent 名片：…", &ids).as_deref(),
+            Some("draftagent")
+        );
+    }
 }

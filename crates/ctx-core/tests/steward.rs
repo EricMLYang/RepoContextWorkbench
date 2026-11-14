@@ -273,7 +273,7 @@ fn suggest_is_not_an_answer() {
     register(&d, t, "quiet");
     add_group(&d, "g", &["repo-a", "quiet"]).unwrap();
     // 沒有卡：拒絕
-    match decide::suggest(&d, "quiet", "1", None).unwrap_err() {
+    match decide::suggest(&d, "quiet", "1", None, Some(&d)).unwrap_err() {
         Error::Rejected { code, .. } => assert_eq!(code.as_str(), "not_found"),
         other => panic!("{other:?}"),
     }
@@ -289,8 +289,8 @@ fn suggest_is_not_an_answer() {
     )
     .unwrap();
     let h0 = decide::history(&d).unwrap().len();
-    let s = decide::suggest(&d, "repo-a", "2", Some("測試還沒跑完")).unwrap();
-    assert_eq!((s.note.text.as_str(), s.note.option), ("不要", Some(2)));
+    let s = decide::suggest(&d, "repo-a", "2", Some("測試還沒跑完"), Some(&d)).unwrap();
+    assert_eq!((s.advice.text.as_str(), s.advice.option), ("不要", Some(2)));
     let ev = sp::iter_events(&d).unwrap().pop().unwrap();
     assert_eq!(ev.source, "steward");
     assert!(sp::is_decide_record(&ev));
@@ -298,7 +298,8 @@ fn suggest_is_not_an_answer() {
     assert_eq!(decide::history(&d).unwrap().len(), h0);
     let q = decide::list(&d, &RelayScope::All).unwrap();
     assert_eq!(q.cards.len(), 1);
-    let note = q.cards[0].steward.as_ref().expect("卡上帶總管建議");
+    let note = q.cards[0].advice.as_ref().expect("卡上帶總管建議");
+    assert_eq!(note.from, decide::AdviceFrom::Steward);
     assert_eq!(
         (note.text.as_str(), note.why.as_deref()),
         ("不要", Some("測試還沒跑完"))
@@ -310,7 +311,10 @@ fn suggest_is_not_an_answer() {
         .contains("總管建議"));
     // 人答得跟總管不同：輸出說一句；一樣就不說
     let r = decide::answer_with(&d, "repo-a", "1", Some(&t.join("cp"))).unwrap();
-    assert_eq!(r.steward_differs.as_deref(), Some("不要"));
+    assert_eq!(
+        r.advice_differs.as_ref().map(|a| a.text.as_str()),
+        Some("不要")
+    );
     assert_eq!(r.answered.by, AnsweredBy::Human);
     // 新的交接：舊建議失效
     api::handoff_with_ask(
@@ -325,10 +329,87 @@ fn suggest_is_not_an_answer() {
     )
     .unwrap();
     let q = decide::list(&d, &RelayScope::All).unwrap();
-    assert!(q.cards[0].steward.is_none());
-    decide::suggest(&d, "repo-a", "要", None).unwrap();
+    assert!(q.cards[0].advice.is_none());
+    decide::suggest(&d, "repo-a", "要", None, Some(&d)).unwrap();
     let r = decide::answer_with(&d, "repo-a", "1", Some(&t.join("cp"))).unwrap();
-    assert!(r.steward_differs.is_none());
+    assert!(r.advice_differs.is_none());
     // 已回答：不能再留
-    assert!(decide::suggest(&d, "repo-a", "要", None).is_err());
+    assert!(decide::suggest(&d, "repo-a", "要", None, Some(&d)).is_err());
+}
+
+/// F-126 第 0 項：建議照來源標示——spine＝總管、某個 repo＝那個 repo 的 agent；對自己 repo 的卡、不在 spine 也不在 repo＝拒絕。
+#[test]
+fn advice_source_follows_cwd() {
+    let (tmp, d) = spine();
+    let t = tmp.path();
+    let a = register(&d, t, "repo-a");
+    let b = register(&d, t, "repo-b");
+    api::handoff_with_ask(
+        &d,
+        "寫完",
+        "等使用者決定",
+        &[] as &[&str],
+        Some(&ask_input()),
+        &Target::at(&a),
+        false,
+        "agent",
+    )
+    .unwrap();
+    let bad = |cwd: &Path| match decide::suggest(&d, "repo-a", "1", None, Some(cwd)).unwrap_err() {
+        Error::Rejected { code, message, .. } => (code.as_str(), message),
+        other => panic!("{other:?}"),
+    };
+    let (c, m) = bad(&a);
+    assert_eq!(c, "bad_request");
+    assert!(m.contains("自己 repo"), "{m}");
+    let (c, m) = bad(t);
+    assert_eq!(c, "bad_request");
+    assert!(m.contains("不在 spine"), "{m}");
+    let s = decide::suggest(&d, "repo-a", "2", Some("b 那邊的介面還沒好"), Some(&b)).unwrap();
+    assert_eq!(
+        s.advice.from,
+        decide::AdviceFrom::Repo {
+            repo: "repo-b".into()
+        }
+    );
+    assert_eq!(s.advice.from.label(), "repo-b 的 agent");
+    let ev = sp::iter_events(&d).unwrap().pop().unwrap();
+    assert_eq!(ev.source, "agent");
+    assert!(
+        ev.body
+            .lines()
+            .any(|l| l == "decide suggest from:repo:repo-b option:2"),
+        "{}",
+        ev.body
+    );
+    let q = decide::list(&d, &RelayScope::All).unwrap();
+    assert_eq!(
+        q.cards[0].advice.as_ref().unwrap().from.label(),
+        "repo-b 的 agent"
+    );
+    // 總管後來也留：卡上帶最新的那筆
+    decide::suggest(&d, "repo-a", "1", None, Some(&d)).unwrap();
+    let q = decide::list(&d, &RelayScope::All).unwrap();
+    assert_eq!(
+        q.cards[0].advice.as_ref().unwrap().from,
+        decide::AdviceFrom::Steward
+    );
+    // 第 3 輪的舊紀錄（機器行沒有 from:）＝總管
+    sp::append_event(
+        &d,
+        "chosen",
+        "steward",
+        &[
+            "repo:repo-a".to_string(),
+            format!("ref:{}", q.cards[0].handoff_ref),
+        ],
+        &format!(
+            "{}repo-a：總管建議「要」\n建議：要\ndecide suggest option:1",
+            sp::DECIDE_TAG
+        ),
+        None,
+    )
+    .unwrap();
+    let all = ctx_core::decision_log::advice_of(&sp::iter_events(&d).unwrap());
+    assert_eq!(all.last().unwrap().from, decide::AdviceFrom::Steward);
 }

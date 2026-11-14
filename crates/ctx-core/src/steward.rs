@@ -155,7 +155,10 @@ pub fn brief(spine_dir: &Path, now: NaiveDateTime) -> Result<Brief> {
             kind: c.kind.map(|k| k.label().to_string()),
             days: c.days,
             hours: c.hours,
-            steward: c.steward.is_some(),
+            steward: c
+                .advice
+                .as_ref()
+                .is_some_and(|a| a.from == decide::AdviceFrom::Steward),
         })
         .collect();
 

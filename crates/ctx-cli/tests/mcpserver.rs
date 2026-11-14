@@ -295,3 +295,43 @@ fn test_request_decision_tool() {
     assert_eq!(v["rule"], "repo-a/commit");
     assert!(v["ref"].as_str().unwrap().starts_with("chosen:"));
 }
+
+/// F-126：search_knowledge 預設精簡（answer_repo、refs、next，≤ 1500 字）、detail=full 拿完整；repo_entry 入口卡。
+#[test]
+fn test_search_brief_default_and_repo_entry() {
+    let (tmp, d) = spine_with_repos();
+    let cwd = tmp.path().join("repo-a").to_string_lossy().to_string();
+    let v: Value = serde_json::from_str(&text(&tool(
+        &d,
+        "search_knowledge",
+        json!({"cwd": cwd, "query": "快取 LRU"}),
+    )))
+    .unwrap();
+    assert!(
+        v.get("answer_repo").is_some() && v.get("files").is_none(),
+        "{v}"
+    );
+    assert!(serde_json::to_string(&v).unwrap().chars().count() <= 1500);
+    assert!(v["next"].as_str().unwrap().contains("repo_entry"));
+    let f: Value = serde_json::from_str(&text(&tool(
+        &d,
+        "search_knowledge",
+        json!({"cwd": cwd, "query": "快取 LRU", "detail": "full"}),
+    )))
+    .unwrap();
+    assert!(
+        f.get("files").is_some() && f.get("answer_repo").is_none(),
+        "{f}"
+    );
+    let e: Value =
+        serde_json::from_str(&text(&tool(&d, "repo_entry", json!({"repo": "repo-a"})))).unwrap();
+    assert_eq!(e["repo"], "repo-a");
+    assert!(e["read_first"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|x| x["path"] == "README.md"));
+    let missing: Value =
+        serde_json::from_str(&text(&tool(&d, "repo_entry", json!({"repo": "nope"})))).unwrap();
+    assert_eq!(missing["error"], "not_found");
+}
