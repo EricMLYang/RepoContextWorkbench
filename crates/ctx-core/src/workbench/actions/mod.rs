@@ -358,11 +358,18 @@ fn a_search_content(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value
     crate::agentapi::search_knowledge(d, &query, &t, &opts)
 }
 
-/// 把 agent 讀的 skill 換成這版內建的（`ctx setup --claude` 的那一步；hook 與 MCP 指的是固定路徑，重裝不必動）。
+/// 把 agent 讀的 skill 換成這版內建的（`ctx setup --claude`／`--codex` 的那一步，掛過的每一家都換；
+/// hook 與 MCP 指的是固定路徑，重裝不必動）。
 fn a_update_skill(_d: &Path, _p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let home = crate::agentsetup::claude_home();
-    let r = crate::agentsetup::install_skill(&home)?;
-    Ok(json!({"ok": true, "message": r.message, "skill": crate::agentsetup::skill_status(&home)}))
+    let done = crate::agentsetup::update_installed_skills()?;
+    let message = done
+        .iter()
+        .map(|(c, r)| format!("{}：{}", c.label(), r.message))
+        .collect::<Vec<_>>()
+        .join("；");
+    Ok(
+        json!({"ok": true, "message": message, "skill": crate::agentsetup::skill_status_installed()}),
+    )
 }
 
 /// 把 payload 解析成型別化參數。**新 action 一律用這個**（缺欄位、型別不對都在這裡擋下）；

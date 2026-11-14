@@ -26,7 +26,8 @@
   你的 repo 內容、git 歷史、`.gitignore` 不會因為這個工具多一行。
 - spine 本身是 git repo：會話結束自動 commit，判斷與交接都有歷史可查；要換電腦就把它 clone 過去。
 - 建法二選一：桌面 App 第一次打開時按「建立新的 spine」（只會建在新路徑或空資料夾），
-  或在終端機跑 `ctx init ~/repo-spine`。接著 `ctx setup --claude` 記住位置、掛上 agent 的 MCP 與 hooks。
+  或在終端機跑 `ctx init ~/repo-spine`。接著 `ctx setup --claude` 記住位置、掛上 agent 的 MCP 與 hooks；
+  用 Codex 就再加 `--codex`（兩家可以一起掛，拿到同一份脈絡、留痕進同一份 spine）。
 - spine 等於程式碼（見下方「信任模型」）：不要直接拿別人的 spine 來用。
 
 ## 架構

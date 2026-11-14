@@ -294,7 +294,7 @@ fn info_with(since: Option<&str>, record: &Path) -> Value {
         "since": since,
         "install": install_status(),
         // 重裝之後 agent 讀的 skill 常常還是舊版（setup 沒重跑）：current／stale／missing
-        "skill": crate::agentsetup::skill_status(&crate::agentsetup::claude_home()),
+        "skill": crate::agentsetup::skill_status_installed(),
         // 「可以驗收的」點了開哪份（相對原始碼根目錄）
         "testing": TESTING_MD,
     })

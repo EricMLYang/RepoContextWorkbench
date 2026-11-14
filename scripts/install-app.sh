@@ -171,8 +171,8 @@ if [ "$DRY" = 0 ]; then
     && say "  ~/.local/bin/ctx 指向新版" \
     || say "  注意：~/.local/bin/ctx 沒有指向 ${DEST}（終端機裡的 ctx 可能是別支）"
 fi
-say "完成。接著跑 ctx setup --claude（skill 與 hook 指令換成這版；ctx health 沒更新會一直提醒）。"
-say "開新的 Claude 會話才會用新版 MCP；用幾天後跑 ctx health 跟 docs/VISION.md §6 的使用前基準比。"
+say "完成。接著跑 ctx setup --claude（skill 與 hook 指令換成這版；ctx health 沒更新會一直提醒；掛過 Codex 的話它的 skill 會一起更新）。"
+say "開新的 Claude／Codex 會話才會用新版 MCP；用幾天後跑 ctx health 跟 docs/VISION.md §6 的使用前基準比。"
 status done
 # 裝了哪版、換掉的是哪版（App 的「已更新」在沒有「上次看過」時用 previous）
 RECORD=${CTX_INSTALL_RECORD:-"$HOME/.cache/repo-context/installed.json"}

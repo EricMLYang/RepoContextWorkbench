@@ -25,6 +25,21 @@ pub(super) fn admin(
     }
 }
 
+/// 只讀不寫的工具（2026-11-14）：tools/list 標 `annotations.readOnlyHint`（MCP 標準欄位）。
+/// Codex 對沒標的工具每次都要使用者核准（`codex exec` 沒人可問，直接拒絕）；標了才會直接放行，
+/// 查脈絡不必一直按同意。會留痕的（log_decision、handoff…）、會記引用的（read_from）、
+/// 會另開 agent 花額度的（ask_repo）都不算只讀。
+pub const READ_ONLY_TOOLS: [&str; 8] = [
+    "where_am_i",
+    "context_for",
+    "next_work",
+    "messages",
+    "search_knowledge",
+    "repo_entry",
+    "repo_status",
+    "what_user_sees",
+];
+
 /// 對應 `WORK_TOOLS`（宣告順序＝tools/list 順序）。
 pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
     vec![

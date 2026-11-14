@@ -11,10 +11,21 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
     let d = ctx.spine_dir()?;
     let mut v = ctx_core::health::health(&d, days, None)?;
     // F-74：agent 讀到的 skill 是不是這版的（讀 ~/.claude，所以不放在引擎的 health 裡）
-    let skill = ctx_core::agentsetup::skill_status(&ctx_core::agentsetup::claude_home());
+    let skill = ctx_core::agentsetup::skill_status_installed();
+    // 2026-11-14：各家 agent CLI 掛了沒（Codex 沒掛＝它的 agent 不知道有工作台，只能自己掃檔案）
+    let clis: Vec<serde_json::Value> = ctx_core::agentsetup::AgentCli::ALL
+        .into_iter()
+        .map(|c| {
+            serde_json::json!({
+                "cli": c.program(), "label": c.label(),
+                "found": ctx_core::agentsetup::which(c.program()).is_some(),
+                "skill": ctx_core::agentsetup::skill_status(&c.home()),
+            })
+        })
+        .collect();
     // 2026-10-21：App 開會話用的 .mcp.json 指到的 ctx 還在不在（10-18 重裝後指到被刪的 bundle，兩天沒人發現）
     let mcp_json = ctx_core::session::mcp_json_status(&d);
-    v["setup"] = serde_json::json!({"skill": skill, "mcp_json": mcp_json});
+    v["setup"] = serde_json::json!({"skill": skill, "mcp_json": mcp_json, "clis": clis});
     // 2026-11-10：要人判斷的提醒（未結體檢、判斷回顧、關係建議、何時重看）搬來這裡——以前塞在每場 agent 會話的開場
     let here = ctx_core::agentapi::Target {
         cwd: std::env::current_dir().ok(),
@@ -198,15 +209,42 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                 ));
             }
         }
-        // 無事不報：skill 是最新的就不講
+        // 無事不報：skill 是最新的就不講。哪一家舊了就叫它重跑那一家的 setup
+        let clis = arr(&r["setup"], "clis");
+        let flags = |want: &str| -> String {
+            let v: Vec<String> = clis
+                .iter()
+                .filter(|c| c["skill"] == want)
+                .map(|c| format!("--{}", s(c, "cli")))
+                .collect();
+            if v.is_empty() {
+                "--claude".into()
+            } else {
+                v.join(" ")
+            }
+        };
         match r["setup"]["skill"].as_str() {
-            Some("stale") => out.push(
-                "- skill 不是這版的（重裝 App 後還沒重跑）：agent 讀到舊說明——跑 `ctx setup --claude` 更新".into(),
-            ),
+            Some("stale") => out.push(format!(
+                "- skill 不是這版的（重裝 App 後還沒重跑）：agent 讀到舊說明——跑 `ctx setup {}` 更新",
+                flags("stale")
+            )),
             Some("missing") => out.push(
                 "- 沒裝 repo-context skill：agent 不知道何時該用工具——跑 `ctx setup --claude`".into(),
             ),
             _ => {}
+        }
+        // 2026-11-14：這台有裝、但還沒掛 repo-context 的 agent CLI——它的 agent 不知道有工作台，只會自己掃檔案
+        if r["setup"]["skill"] != "missing" {
+            for c in clis
+                .iter()
+                .filter(|c| c["found"] == true && c["skill"] == "missing")
+            {
+                out.push(format!(
+                    "- {} 有裝但還沒掛 repo-context（它的 agent 拿不到脈絡、不會留痕）：跑 `ctx setup --{}`",
+                    s(c, "label"),
+                    s(c, "cli")
+                ));
+            }
         }
         if r["setup"]["mcp_json"]["status"] == "command_missing" {
             out.push(format!(

@@ -132,7 +132,14 @@ pub fn handle_message(
     if method == "tools/list" {
         let tools: Vec<Value> = table
             .iter()
-            .map(|t| json!({"name": t.name, "description": t.description, "inputSchema": t.schema}))
+            .map(|t| {
+                let mut v =
+                    json!({"name": t.name, "description": t.description, "inputSchema": t.schema});
+                if tools::READ_ONLY_TOOLS.contains(&t.name.as_str()) {
+                    v["annotations"] = json!({"readOnlyHint": true});
+                }
+                v
+            })
             .collect();
         return Some(ok(json!({ "tools": tools })));
     }

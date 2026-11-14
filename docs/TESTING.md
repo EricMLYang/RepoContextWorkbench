@@ -318,6 +318,19 @@
 | 8k-21 | 卡離開畫面後，從「⋯ → 回答、放行與規則…」或 ⌘K「回答、放行與規則」撤回最近的一筆回答 | 那筆變「已撤回」，提示「卡回到要你決定；已經送給 agent 的，要另外跟它說」；卡回到上面 | [ ] | [ ] |
 | 8k-22 | 看「設為自動」「推翻」「降回每次都問」「撤回」「之後再送」 | 都有邊框、看得出是按鈕；同一列只有一個亮色主要按鈕 | [ ] | [ ] |
 
+## 8l. Codex 也走同一個介面（2026-11-14）——**引擎測試已過；真 Codex（0.169）實測過 MCP 與 skill（隔離的 CODEX_HOME、`codex exec`）；hook 要你信任後才會跑，還沒人看過**
+
+| # | 操作 | 應該看到 | macOS | Windows |
+|---|---|---|---|---|
+| 8l-1 | 終端跑 `ctx setup --codex` | 四步：記住 spine、`codex mcp add repo-context …` 已註冊、`~/.codex/hooks.json` 加了 SessionStart／SessionEnd（原本 Orca 的 hook 還在、排在前面；旁邊多一份 `hooks.json.bak-ctx`）、skill 寫到 `~/.codex/skills/repo-context/SKILL.md`；最後提醒去 `/hooks` 信任。再跑一次三步都是「略過」 | [ ] | [ ] |
+| 8l-2 | 開 `codex`，輸入 `/hooks` | 列出 ctx 的 `hook session-start`、`hook session-end` 兩項待審；設為信任 | [ ] | [ ] |
+| 8l-3 | 在登記過的 repo 裡開新的 `codex`，問「你開場拿到什麼脈絡」 | 它講得出 repo-context 給的那段（你在哪個 repo、哪一組、上次交接、同組成員、工作約定），跟 Claude Code 開場看到的是同一份 | [ ] | [ ] |
+| 8l-4 | 在 spine 目錄開 `codex`，問「現在登記了幾個 repo」 | 開場是總管簡報；它用 repo-context 的工具或 `ctx registry list` 回答登記的數量，不是自己 `find .git` | [ ] | [ ] |
+| 8l-5 | 在 Codex 會話裡請它查「這個 repo 屬於哪一組、上次交接是什麼」 | 直接用 `where_am_i`／`context_for`／`repo_entry` 查到，不跳核准（這幾個是只讀工具） | [x] 2026-11-14（`codex exec`） | [ ] |
+| 8l-6 | 請它收尾交接（`handoff`） | Codex 跳一次核准（會留痕的工具不自動放行）；同意後 spine 多一筆交接，App 收件匣與 `ctx relay plan` 看得到 | [ ] | [ ] |
+| 8l-7 | 不交接直接結束 Codex 會話（期間有 commit 或沒提交的檔） | 收件匣多一筆「agent 會話結束但沒有交接」 | [ ] | [ ] |
+| 8l-8 | `ctx health` | 沒掛 Codex 時提醒「Codex 有裝但還沒掛 repo-context」；掛了就不講。重裝 App 後跑 `ctx setup --claude`，Codex 的 skill 也一起更新 | [ ] | [ ] |
+
 ## 9. 要你決定
 
 - [ ] **#76**：App 助手、碰撞判定、`ask_repo`、backfill 都用 `claude -p`（程式化呼叫；BAT 引 2026-06-15 政策說它走另計的額度，

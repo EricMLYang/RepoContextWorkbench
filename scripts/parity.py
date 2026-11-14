@@ -175,6 +175,9 @@ OPENING_SEARCH_WHY = ("開場工作約定的跨 repo 那一行（F-126，Rust �
 
 MAILBOX_REASON = "對講 send_message／messages（F-121，2026-11-04，Rust 才有：不同 repo 的 agent 互傳訊息；開場與 MCP 說明各多一句）"
 
+READ_ONLY_HINT_WHY = ("只讀工具標 annotations.readOnlyHint（2026-11-14，Rust 才有：Codex 對沒標的 MCP 工具每次都要核准，"
+                      "`codex exec` 直接拒絕；標了查脈絡才不用一直按同意）。比對時從 Rust 那邊拿掉")
+
 MCP_EXTRA_TOOLS = {
     "describe_repo": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
     "registry_describe": "repo 名片工具 describe_repo／registry_describe（2026-10-13，Rust 才有）",
@@ -206,6 +209,8 @@ def drop_mcp_extras(resp, allowed):
             tools.remove(t)
             allowed.add(MCP_EXTRA_TOOLS[t["name"]])
     for t in ((resp.get("result") or {}).get("tools") or []):
+        if t.pop("annotations", None) is not None:
+            allowed.add(READ_ONLY_HINT_WHY)
         if t.get("name") in ("search_knowledge", "read_from", "ask_repo") and "description" in t:  # SEARCH_BRIEF_WHY
             t["description"] = ""
             allowed.add(SEARCH_BRIEF_WHY)

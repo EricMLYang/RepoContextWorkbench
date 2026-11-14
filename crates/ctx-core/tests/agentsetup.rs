@@ -8,7 +8,10 @@
 
 use std::path::{Path, PathBuf};
 
-use ctx_core::agentsetup::{self, CmdOutput, SetupEnv, Step};
+use ctx_core::agentsetup::{self, AgentCli, CmdOutput, SetupEnv, Step};
+
+const CLAUDE: AgentCli = AgentCli::Claude;
+const CODEX: AgentCli = AgentCli::Codex;
 use ctx_core::testkit::spine;
 use serde_json::Value;
 
@@ -17,6 +20,7 @@ fn env_in(tmp: &Path, spine_dir: &Path) -> SetupEnv {
         spine_dir: spine_dir.to_path_buf(),
         exe: PathBuf::from("/opt/ctx/bin/ctx"),
         claude_home: tmp.join("home/.claude"),
+        codex_home: tmp.join("home/.codex"),
         user_config: tmp.join("home/.config/repo-context/config.json"),
     }
 }
@@ -40,15 +44,20 @@ fn test_setup_remembers_spine_and_installs_claude_bits() {
         r#"{"model": "x", "hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}}"#,
     )
     .unwrap();
-    let steps = agentsetup::plan(true);
+    let steps = agentsetup::plan(&[CLAUDE]);
     assert_eq!(
         steps,
-        vec![Step::SaveSpine, Step::Mcp, Step::Hooks, Step::Skill]
+        vec![
+            Step::SaveSpine,
+            Step::Mcp(CLAUDE),
+            Step::Hooks(CLAUDE),
+            Step::Skill(CLAUDE)
+        ]
     );
     // 沒 claude：印手動指令不失敗
     let mcp = agentsetup::install_mcp_with(&env.exe, false, &mut no_claude);
     assert!(mcp.ok && mcp.message.contains("找不到 claude 指令"));
-    for st in [Step::SaveSpine, Step::Hooks, Step::Skill] {
+    for st in [Step::SaveSpine, Step::Hooks(CLAUDE), Step::Skill(CLAUDE)] {
         assert!(st.run(&env).unwrap().ok);
     }
     let settings = read_json(&env.settings_path());
@@ -65,7 +74,7 @@ fn test_setup_remembers_spine_and_installs_claude_bits() {
         .join("skills/repo-context/SKILL.md")
         .exists());
     // 冪等
-    for st in [Step::SaveSpine, Step::Hooks, Step::Skill] {
+    for st in [Step::SaveSpine, Step::Hooks(CLAUDE), Step::Skill(CLAUDE)] {
         st.run(&env).unwrap();
     }
     let settings = read_json(&env.settings_path());
@@ -73,9 +82,12 @@ fn test_setup_remembers_spine_and_installs_claude_bits() {
         settings["hooks"]["SessionStart"].as_array().unwrap().len(),
         2
     );
-    assert_eq!(Step::Hooks.run(&env).unwrap().message, "hooks 已存在，略過");
     assert_eq!(
-        Step::Skill.run(&env).unwrap().message,
+        Step::Hooks(CLAUDE).run(&env).unwrap().message,
+        "hooks 已存在，略過"
+    );
+    assert_eq!(
+        Step::Skill(CLAUDE).run(&env).unwrap().message,
         "skill 已是最新，略過"
     );
     // 記住 spine
@@ -159,4 +171,87 @@ fn skill_status_tells_missing_stale_and_current() {
     let p = t.path().join("skills/repo-context/SKILL.md");
     std::fs::write(&p, "舊版說明").unwrap();
     assert_eq!(skill_status(t.path()), "stale");
+}
+
+/// `--codex`（2026-11-14）：hooks.json 既有的 hook（例：Orca 掛的）不動、排在前面（Codex 的信任紀錄
+/// 用「事件:第幾組:第幾個」當鍵，插到前面會讓別人的信任失效）；開場 hook 不讓 Codex 截脈絡；冪等。
+#[test]
+fn codex_setup_appends_hooks_and_installs_skill() {
+    let (t, sp) = spine();
+    let env = env_in(t.path(), &sp);
+    std::fs::create_dir_all(&env.codex_home).unwrap();
+    let hooks_path = env.hooks_path(CODEX);
+    assert!(hooks_path.ends_with(".codex/hooks.json"));
+    std::fs::write(
+        &hooks_path,
+        r#"{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "sh orca-hook.sh", "timeout": 10}]}],
+                      "Stop": [{"hooks": [{"type": "command", "command": "sh orca-hook.sh"}]}]}}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        agentsetup::plan(&[CLAUDE, CODEX])[4..],
+        [Step::Mcp(CODEX), Step::Hooks(CODEX), Step::Skill(CODEX)]
+    );
+    let r = Step::Hooks(CODEX).run(&env).unwrap();
+    assert!(r.ok && r.message.contains("/hooks"), "{}", r.message);
+    let hooks = read_json(&hooks_path);
+    let starts = hooks["hooks"]["SessionStart"].as_array().unwrap();
+    assert_eq!(starts.len(), 2);
+    assert_eq!(starts[0]["hooks"][0]["command"], "sh orca-hook.sh");
+    assert_eq!(
+        starts[1]["hooks"][0]["command"],
+        "/opt/ctx/bin/ctx hook session-start"
+    );
+    assert_eq!(starts[1]["hooks"][0]["additionalContextLimit"], 0);
+    let end = &hooks["hooks"]["SessionEnd"][0]["hooks"][0];
+    assert_eq!(end["command"], "/opt/ctx/bin/ctx hook session-end");
+    assert!(end.get("additionalContextLimit").is_none());
+    assert_eq!(hooks["hooks"]["Stop"].as_array().unwrap().len(), 1); // 別人的不動
+    assert!(env.codex_home.join("hooks.json.bak-ctx").exists());
+    assert_eq!(
+        Step::Hooks(CODEX).run(&env).unwrap().message,
+        "hooks 已存在，略過"
+    );
+    assert!(Step::Skill(CODEX).run(&env).unwrap().ok);
+    assert_eq!(
+        std::fs::read_to_string(env.codex_home.join("skills/repo-context/SKILL.md")).unwrap(),
+        agentsetup::skill_text(true)
+    );
+    // Claude 那邊沒被動到
+    assert!(!env.claude_home.exists());
+}
+
+/// Codex 的 MCP 註冊：`codex mcp get` 沒有才 `codex mcp add repo-context -- <ctx> mcp`；沒裝 codex 印手動指令。
+#[test]
+fn codex_mcp_registers_with_codex_cli() {
+    let exe = Path::new("/opt/ctx/bin/ctx");
+    let r = agentsetup::install_mcp_cli_with(CODEX, exe, false, &mut no_claude);
+    assert!(r.ok && r.message.contains("找不到 codex 指令"));
+    assert!(r
+        .message
+        .contains("codex mcp add repo-context -- /opt/ctx/bin/ctx mcp"));
+    let mut calls: Vec<Vec<String>> = Vec::new();
+    let mut fake = |argv: &[String]| -> std::io::Result<CmdOutput> {
+        calls.push(argv.to_vec());
+        Ok(CmdOutput {
+            success: argv[2] == "add",
+            stdout: String::new(),
+            stderr: String::new(),
+        })
+    };
+    let r = agentsetup::install_mcp_cli_with(CODEX, exe, true, &mut fake);
+    assert!(r.ok && r.message.contains("config.toml"));
+    assert_eq!(calls[0], ["codex", "mcp", "get", "repo-context"]);
+    assert_eq!(
+        calls[1],
+        [
+            "codex",
+            "mcp",
+            "add",
+            "repo-context",
+            "--",
+            "/opt/ctx/bin/ctx",
+            "mcp"
+        ]
+    );
 }

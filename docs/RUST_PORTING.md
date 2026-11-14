@@ -557,3 +557,13 @@ CLI／MCP（ctx-cli）：
   不然每次呼叫都被記成「agent 會話結束但沒有交接」灌進收件匣。
 - **`read_from` 附 `linked_from`**（2026-10-15，F-69；Python 沒有）：讀到 md 時附上那個 repo 裡連到這份的 md（前 5 則、
   超過另給 `linked_from_total`）；沒有就不加鍵。對拍時拿掉（`strip_rust_only`）。
+- **`ctx setup --codex`**（2026-11-14；Python 沒有）：Codex CLI 也掛同一套——`codex mcp add repo-context -- <ctx> mcp`
+  （寫進 `~/.codex/config.toml`）、`~/.codex/hooks.json` 加 SessionStart／SessionEnd（形狀跟 Claude Code 的 `hooks` 一樣，
+  加在既有項目後面：Codex 的信任紀錄以「事件:第幾組:第幾個」為鍵，插到前面會讓別人的 hook 失去信任）、
+  `~/.codex/skills/repo-context/SKILL.md`。各家不同的地方收在 `agentsetup::AgentCli`。
+  Codex 的新 hook 要使用者在 `/hooks` 信任後才會跑，setup 不代簽、只提醒；開場 hook 帶 `additionalContextLimit: 0`
+  （Codex 預設把 hook 脈絡截到約 2500 token）。`ctx setup` 會順手更新其他已掛過那幾家的 skill；
+  `ctx health` 的 `setup.clis` 列各家掛了沒，有裝沒掛會提醒。`--claude` 的輸出與對拍不變。
+- **MCP 只讀工具標 `annotations.readOnlyHint`**（2026-11-14；Python 沒有）：where_am_i、context_for、next_work、messages、
+  search_knowledge、repo_entry、repo_status、what_user_sees。Codex 對沒標的工具每次都要核准（`codex exec` 直接拒絕），
+  實測標了才查得到脈絡；會留痕的（log_decision、handoff、read_from 記引用、ask_repo 另開 agent）不標。對拍時拿掉這個鍵。

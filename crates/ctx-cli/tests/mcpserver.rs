@@ -335,3 +335,31 @@ fn test_search_brief_default_and_repo_entry() {
         serde_json::from_str(&text(&tool(&d, "repo_entry", json!({"repo": "nope"})))).unwrap();
     assert_eq!(missing["error"], "not_found");
 }
+
+/// 只讀工具標 `readOnlyHint`（Codex 才不會每次查脈絡都要核准）；會留痕的不標。
+#[test]
+fn read_only_tools_are_annotated() {
+    let (_t, d) = spine();
+    let r = call(&d, "tools/list", json!({}));
+    let tools = r["result"]["tools"].as_array().unwrap();
+    let hint = |n: &str| {
+        tools.iter().find(|t| t["name"] == n).unwrap()["annotations"]["readOnlyHint"].clone()
+    };
+    for n in [
+        "where_am_i",
+        "context_for",
+        "search_knowledge",
+        "repo_entry",
+    ] {
+        assert_eq!(hint(n), true, "{n}");
+    }
+    for n in [
+        "log_decision",
+        "handoff",
+        "read_from",
+        "ask_repo",
+        "send_message",
+    ] {
+        assert!(hint(n).is_null(), "{n}");
+    }
+}

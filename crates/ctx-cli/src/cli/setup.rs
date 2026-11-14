@@ -3,7 +3,7 @@
 use std::io::Read;
 
 use clap::{Args, ValueEnum};
-use ctx_core::agentsetup::{self, SetupEnv};
+use ctx_core::agentsetup::{self, AgentCli, SetupEnv};
 use ctx_core::session_status::StatusHook;
 use ctx_core::{config, fsutil, hooks};
 
@@ -127,6 +127,9 @@ pub struct SetupArgs {
     /// 註冊 Claude Code：MCP server、SessionStart/SessionEnd hooks、skill
     #[arg(long)]
     pub claude: bool,
+    /// 註冊 Codex CLI：MCP server（~/.codex/config.toml）、hooks（~/.codex/hooks.json，要在 codex 的 /hooks 信任）、skill
+    #[arg(long)]
+    pub codex: bool,
     /// 只列出會做什麼
     #[arg(long)]
     pub dry_run: bool,
@@ -159,7 +162,19 @@ pub fn cmd_setup(ctx: &Ctx, a: &SetupArgs) -> CmdResult {
     };
     let env = SetupEnv::detect(&d)?;
     let mut failed = false;
-    for st in agentsetup::plan(a.claude) {
+    let clis: Vec<AgentCli> = [(a.claude, AgentCli::Claude), (a.codex, AgentCli::Codex)]
+        .into_iter()
+        .filter_map(|(on, cli)| on.then_some(cli))
+        .collect();
+    let mut steps = agentsetup::plan(&clis);
+    // 這次沒點名、但之前掛過的那幾家：skill 順手換成這版（重裝後只跑 `--claude`，Codex 讀到的不會留在舊版）
+    steps.extend(
+        agentsetup::installed_clis()
+            .into_iter()
+            .filter(|c| !clis.contains(c))
+            .map(agentsetup::Step::Skill),
+    );
+    for st in steps {
         println!(
             "{}{}",
             if a.dry_run { "（試跑）" } else { "" },
