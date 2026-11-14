@@ -4,6 +4,7 @@
 #
 # 用法：
 #   bash scripts/preview-shots.sh [輸出目錄（預設 $TMPDIR/ctx-preview-shots）] [寬,高（預設 1440,900）] [場景…]
+#   檔名是 <場景>-<寬>x<高>.png
 #
 # 不碰使用者的瀏覽器：--headless=new、獨立的 --user-data-dir（暫存）、不開視窗、不送全域按鍵。
 # 找不到 Chrome 就設 CHROME=<執行檔路徑>。
@@ -15,7 +16,7 @@ SIZE=${2:-1440,900}
 shift $(( $# > 2 ? 2 : $# ))
 SCENES=("$@")
 if [ ${#SCENES[@]} -eq 0 ]; then
-  SCENES=(workspace editor code md-view assist assist-empty palette composer tree-new rename panel-info term-menu tablist edit-find no-session past-sessions diff-notes ended-session reply-box retro-form tab-notes tab-repos tab-files tab-activity tab-relations transcript commands prompts auto-continue launch-opts panel-extras commits csv gauges trash binary build-updated palette-content tree-menu)
+  SCENES=(workspace editor code md-view assist assist-empty palette composer tree-new rename panel-info term-menu tablist edit-find no-session past-sessions diff-notes ended-session reply-box retro-form tab-notes tab-repos tab-files tab-activity tab-relations transcript commands prompts auto-continue launch-opts panel-extras commits csv gauges trash binary build-updated palette-content tree-menu decide decide-answered decide-empty decide-many auto-list steward-dialog decide-irreversible decide-legacy)
 fi
 CHROME=${CHROME:-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}
 [ -x "$CHROME" ] || { echo "找不到 Chrome：$CHROME（設 CHROME=…）"; exit 2; }
@@ -36,7 +37,7 @@ done
 
 fail=0
 for sc in "${SCENES[@]}"; do
-  png="$OUT/$sc.png"
+  png="$OUT/$sc-${SIZE/,/x}.png"  # 檔名帶尺寸：同一個場景寬窄各截一張不會互蓋
   "$CHROME" --headless=new --disable-gpu --no-first-run --user-data-dir="$PROFILE" \
     --hide-scrollbars --window-size="$SIZE" --virtual-time-budget=6000 \
     --screenshot="$png" "http://localhost:$PORT/dev/preview.html?scene=$sc" > /dev/null 2>&1

@@ -1390,6 +1390,11 @@ dialog::backdrop {
     flex-direction: column;
     gap: 16px;
   }
+  /* 直排時 flex-basis 會變成高度（標題區被撐成 260px 高、按鈕掉到很下面）：直排就照內容高 */
+  .workspacehead > div:first-child {
+    flex: none;
+    min-width: 0;
+  }
   .toolbar {
     flex-wrap: wrap;
     gap: 8px;
@@ -1433,7 +1438,7 @@ dialog::backdrop {
   .head-actions {
     flex-wrap: wrap;
   }
-  .toolbar > button {
+  .toolbar > button:not(#inboxmore) {
     display: none;
   }
   #side {
@@ -3404,4 +3409,289 @@ body.withpicks #main {
 }
 .ghtitle {
   font-size: 12px;
+}
+
+/* ── F-127：要你決定（收件匣最上面）── */
+.faint {
+  color: #8893a5;
+}
+.notice {
+  color: var(--amber);
+}
+.decide {
+  margin: 4px 0 18px;
+}
+.decidehead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.decidehead h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.decidecard {
+  background: #1f2633;
+  border: 1px solid #44526b;
+  border-left: 3px solid var(--blue);
+  border-radius: 10px;
+  padding: 16px 20px 14px;
+}
+.decidecard.answered {
+  border-left-color: var(--green);
+}
+.decidewho {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.decidewho .decidrepo {
+  font-weight: 650;
+  font-size: 13px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.decidewho .decidrepo:hover {
+  text-decoration: underline;
+}
+.decideabout {
+  color: var(--ink2);
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.decideq {
+  font-size: 18px;
+  line-height: 1.5;
+  font-weight: 600;
+  margin: 10px 0 12px;
+  overflow-wrap: anywhere;
+}
+.decideopts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.decideopts button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: normal;
+  text-align: left;
+  max-width: 100%;
+  min-height: 36px;
+}
+.decideopts .optkey {
+  font-size: 11px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 5px;
+  opacity: 0.75;
+}
+.decideopts .opttag {
+  font-size: 11px;
+  font-weight: 700;
+  background: #101e3622;
+  border-radius: 4px;
+  padding: 0 5px;
+}
+.decideopts button.marked {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+.decidefree {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0 8px;
+}
+.decidefree input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+}
+.decidemeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--sub);
+  margin: 6px 0 2px;
+}
+.pill.red {
+  color: #ffd1d4;
+  background: #5a2a30;
+  border-color: #8a3d45;
+  font-weight: 650;
+}
+.decideev {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 6px 0 0;
+  align-items: baseline;
+}
+.decideadvice {
+  margin: 8px 0 0;
+  color: var(--violet);
+}
+.decidefull {
+  margin-top: 8px;
+}
+.decidefull summary {
+  cursor: pointer;
+  color: var(--sub);
+}
+.decidefull dl {
+  margin: 6px 0 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+}
+.decidefull dt {
+  color: var(--sub);
+}
+.decidefull dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.decidedone {
+  margin: 0 0 10px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.decideacts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.decideacts .spacer {
+  flex: 1;
+}
+/* 做了收不回來：問題下方一條醒目的紅帶（選項沒有預設的主要按鈕） */
+.decidewarn {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 2px 0 10px;
+  padding: 7px 10px;
+  border: 1px solid #8a3d45;
+  border-left-width: 4px;
+  border-radius: 6px;
+  background: #3a1f24;
+  color: #ffd1d4;
+  font-size: 13px;
+}
+.decidewarn strong {
+  color: #ffb3b9;
+  font-weight: 700;
+}
+.decidetrust {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.decidetrust p {
+  margin: 0 0 6px;
+}
+.decidelist {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.decidelist button {
+  display: grid;
+  grid-template-columns: minmax(80px, 180px) minmax(0, 1fr) auto;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  min-height: 30px;
+  padding: 3px 10px;
+  border-color: transparent;
+}
+.decidelist .dlrepo {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.decidelist .dlq {
+  color: var(--ink2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.decidelist .dlage {
+  color: var(--sub);
+  font-size: 12px;
+}
+details.othercards > summary {
+  cursor: pointer;
+  list-style: revert;
+}
+/* 總管：站在所有組上面（不是組，樣子跟牌組區塊分開） */
+.steward {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 2px 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+}
+.steward .stewardsel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  background: none;
+  border-color: transparent;
+  text-align: left;
+}
+.steward.on .stewardsel {
+  border-color: #5a78a8;
+}
+.stewardname {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.stewardn {
+  font-size: 11px;
+  color: #101e36;
+  background: var(--amber);
+  border-radius: 9px;
+  padding: 0 7px;
+  font-weight: 700;
+}
+.autolist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+.autolist li {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+.autolist li > button {
+  justify-self: start;
+  margin-top: 4px;
+}
+h3.dsect {
+  font-size: 13px;
+  margin: 12px 0 6px;
+}
+p.detailmeta.scopeline {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
 }

@@ -14,6 +14,9 @@
 //! ```
 //! 人回答：來源 `cli`、`ref:` 指向交接；規則放行：來源 `policy`、`ref:` 指向交接（agent 做到一半問的、還沒交接＝沒有 `ref:`）。
 //! 推翻：來源 `cli`、`ref:` 指向那筆放行，第一行 `〔決定〕<repo>：推翻自動放行…`，機器行 `decide overturn kind:<kind> rule:<repo>/<kind>`。
+//! 撤回（F-127）：同一套推翻留痕，`ref:` 指向那筆**人的**回答，第一行 `〔決定〕<repo>：撤回回答…`，
+//! 機器行 `decide overturn of:human kind:<kind>`（`of:human`＝撤回人的回答；沒有＝推翻放行，舊紀錄都是這種）。
+//! 撤回的回答不算數：不算回答（卡回到佇列）、不算連續、不算抽查、不算 health。
 //!
 //! 讀回寬鬆而保守：缺 `by:`＝人（第 1 輪只寫過人的回答）、缺 `rev:`＝不可逆（不算進連續照建議）、
 //! 缺 `follow:`＝沒有建議、看不懂的類別＝None。
@@ -129,8 +132,15 @@ pub struct Answered {
     pub question: String,
     pub answer: String,
     pub recommend: Option<String>,
-    /// 被推翻了（推翻那筆留痕的 ref）
+    /// 被推翻了（推翻那筆留痕的 ref）；人的回答＝被撤回了
     pub overturned_by: Option<String>,
+}
+
+impl Answered {
+    /// 人撤回了自己的回答：之後這筆不算數（連續、抽查、health 都不算；推翻的規則放行仍照原本算）。
+    pub fn withdrawn(&self) -> bool {
+        self.by == AnsweredBy::Human && self.overturned_by.is_some()
+    }
 }
 
 /// 要寫的一筆回答。
@@ -259,12 +269,13 @@ pub fn answer_of<'a>(
     })
 }
 
-/// 同一個（repo、類別）最近連續照建議的次數：只看**人的**回答、`since` 之後（嚴格晚於；None＝全部歷史）；
+/// 同一個（repo、類別）最近連續照建議的次數：只看**人的**、沒撤回的回答、`since` 之後（嚴格晚於；None＝全部歷史）；
 /// 只算可逆且有建議的；遇到跟建議不同就歸零。時間只到分鐘：跟 `since` 同一分鐘的不算（寧可少算）。
 pub fn streak(history: &[Answered], repo: &str, kind: AskKind, since: Option<&str>) -> usize {
     let mut n = 0;
     for a in history.iter().filter(|a| {
         a.by == AnsweredBy::Human
+            && !a.withdrawn()
             && a.kind == Some(kind)
             && spine::same_token(&a.repo, repo)
             && since.is_none_or(|s| a.at.as_str() > s)
@@ -491,6 +502,33 @@ pub fn write_overturn(
     let tokens = vec![
         format!("repo:{}", approval.repo),
         format!("ref:{}", approval.reference),
+    ];
+    Ok(append(spine_dir, SOURCE_HUMAN, tokens, &body.join("\n"), now)?.reference())
+}
+
+/// 撤回一筆人的回答（同推翻的留痕，機器行帶 `of:human`）。回傳撤回那筆的 ref。
+pub fn write_withdraw(
+    spine_dir: &Path,
+    answer: &Answered,
+    why: Option<&str>,
+    now: NaiveDateTime,
+) -> Result<String> {
+    let mut body = vec![format!(
+        "{DECIDE_TAG}{}：撤回回答「{} → {}」",
+        answer.repo,
+        clip(&answer.question),
+        clip(&answer.answer)
+    )];
+    if let Some(w) = why.map(one_line).filter(|w| !w.is_empty()) {
+        body.push(format!("理由：{w}"));
+    }
+    body.push(format!(
+        "{MACHINE_HEAD} overturn of:human kind:{}",
+        answer.kind.map_or("none", AskKind::as_str)
+    ));
+    let tokens = vec![
+        format!("repo:{}", answer.repo),
+        format!("ref:{}", answer.reference),
     ];
     Ok(append(spine_dir, SOURCE_HUMAN, tokens, &body.join("\n"), now)?.reference())
 }

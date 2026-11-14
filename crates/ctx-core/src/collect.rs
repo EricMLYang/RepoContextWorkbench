@@ -78,7 +78,7 @@ pub struct CommitInfo {
 }
 
 /// 對應 `collect_repo` 回傳的狀態 dict（序列化鍵名與順序同 Python）。
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct RepoState {
     pub id: String,
     #[serde(rename = "type")]

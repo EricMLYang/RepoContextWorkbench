@@ -399,8 +399,38 @@ pub fn plan(spine_dir: &Path, scope: &RelayScope) -> Result<Plan> {
 
 /// 同 [`plan`]，指定「現在」（測試用）。
 pub fn plan_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Result<Plan> {
+    plan_with(spine_dir, scope, now, true)
+}
+
+/// 同 [`plan_at`]，但不跑 git（F-127：App 常駐的件數與決策佇列）——路徑在不在只看資料夾、沒 commit 的檔數一律當 0，
+/// 所以備註裡不會有「N 個檔沒 commit」；狀態（等你、會話在跑、太舊…）跟完整的一樣。
+pub fn plan_light(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Result<Plan> {
+    plan_with(spine_dir, scope, now, false)
+}
+
+fn plan_with(
+    spine_dir: &Path,
+    scope: &RelayScope,
+    now: NaiveDateTime,
+    with_git: bool,
+) -> Result<Plan> {
     let (label, entries, skipped) = members(spine_dir, scope)?;
-    let states = states_of(spine_dir, &entries);
+    let states: Vec<RepoState> = if with_git {
+        states_of(spine_dir, &entries)
+    } else {
+        entries
+            .iter()
+            .map(|(r, _)| {
+                let path = crate::fsutil::expanduser(r.path());
+                RepoState {
+                    id: r.id(),
+                    path: path.to_string_lossy().into_owned(),
+                    exists: path.is_dir(),
+                    ..Default::default()
+                }
+            })
+            .collect()
+    };
     let events = spine::iter_events(spine_dir)?;
     let history = crate::decision_log::history_of(&events);
     let sessions = sessions_by_repo(spine_dir);

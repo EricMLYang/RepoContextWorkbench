@@ -475,6 +475,39 @@ fn test_handoff_ask_and_decide_cli() {
     // 答過了就沒有卡（回覆多個字不用加引號）
     let r = c.run(&["decide", "answer", "impl", "好", "的", "--json"]);
     assert!(r.code == 2 && r.json()["error"] == "not_found");
+
+    // F-127：撤回人的回答——agent 的 shell 也可以（收緊方向）；卡回來；不能撤兩次
+    let r = c.run(&["decide", "list", "--mine", "--json"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let answer_ref = r.json()["items"][0]["ref"].as_str().unwrap().to_string();
+    let r = c.run(&["decide", "list", "--mine"]);
+    assert!(
+        r.stdout
+            .contains(&format!("→ 撤回：ctx decide overturn {answer_ref}")),
+        "{}",
+        r.stdout
+    );
+    let agent = c.clone().env("CLAUDECODE", "1");
+    let r = agent.run(&["decide", "overturn", &answer_ref]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    for want in [
+        "已撤回：impl「首頁排序用哪個？」→ 依修改時間",
+        "放行規則沒有動",
+        "如果已經把回答送給 agent，要另外跟它說",
+    ] {
+        assert!(r.stdout.contains(want), "缺「{want}」：\n{}", r.stdout);
+    }
+    assert!(!r.stdout.contains("已推翻"), "{}", r.stdout);
+    let r = c.run(&["decide", "list", "--all"]);
+    assert!(r.stdout.contains("問：首頁排序用哪個？"), "{}", r.stdout);
+    let r = c.run(&["decide", "overturn", &answer_ref, "--json"]);
+    assert!(
+        r.code == 2 && r.json()["error"] == "bad_request",
+        "{}",
+        r.stdout
+    );
+    let r = c.run(&["decide", "list", "--mine"]);
+    assert!(r.stdout.contains("已撤回"), "{}", r.stdout);
 }
 
 /// F-124：在 agent 的 shell（CLAUDECODE=1）裡，decide trust／answer 被拒（human_only、exit 2），policy.yaml 與 spine 都沒寫；

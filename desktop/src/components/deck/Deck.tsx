@@ -217,8 +217,38 @@ export function Deck() {
       {...extra}
     />
   );
+  const allScope = scope.group === null && !Array.isArray(scope.repos);
+  const stewardN = state.decide?.all ?? 0;
   return (
     <div id="deck" className="deck">
+      {/* F-127：總管不是組——站在所有組上面：看全部範圍要你決定的、開總管會話 */}
+      <div className={"steward" + (allScope ? " on" : "")}>
+        <button
+          type="button"
+          className="stewardsel"
+          aria-label={"總管：看所有 repo 要你決定的" + (stewardN ? "（" + stewardN + " 件）" : "")}
+          title="切到所有 repo 的收件匣：要你決定的事一次看完"
+          onClick={() => {
+            store.setScope({ group: null, repos: null });
+            ui.showTab("inbox");
+          }}
+        >
+          <span className="stewardname">總管</span>
+          {stewardN ? (
+            <span className="stewardn" title={"所有 repo 要你決定 " + stewardN + " 件"}>
+              {stewardN}
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          className="ghost small"
+          title="開一場總管會話：看全部 repo、只讀與留建議，不改檔"
+          onClick={() => ui.openSession({ steward: true, origin: "steward" })}
+        >
+          開總管會話
+        </button>
+      </div>
       {card(
         { name: null, members: state.repos },
         { onReorder: reorder("repos"), hotkey: MOD + "0" },

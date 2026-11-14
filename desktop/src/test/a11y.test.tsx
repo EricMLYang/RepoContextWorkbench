@@ -3,7 +3,16 @@ import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { WorkbenchStore } from "../store/store";
-import { interruptCard, loopCard, makeScan, makeState, mockBackend } from "./fixtures";
+import {
+  decideCard,
+  decideQueue,
+  decided,
+  interruptCard,
+  loopCard,
+  makeScan,
+  makeState,
+  mockBackend,
+} from "./fixtures";
 
 /**
  * 無障礙稽核（#12 的自動化部分）：把 App 用假資料掛起來，跑 axe-core，serious／critical 的違規要是 0。
@@ -17,6 +26,8 @@ async function violations(
     getState: vi.fn(async () =>
       makeState({
         cards: [interruptCard, loopCard],
+        // F-127：要你決定的卡（每個場景都帶，順便稽核）
+        decide: { count: 2, all: 3, auto_recent: 1, key: "k" },
         terms: [
           {
             sid: "t1",
@@ -97,6 +108,60 @@ async function violations(
       }),
     ),
     action: vi.fn(async (name: string, p?: { path?: string }) => {
+      if (name === "decide_queue")
+        return decideQueue([
+          decideCard(),
+          decideCard({
+            repo: "b",
+            handoff_ref: "decision:x",
+            question: "push 到 origin？",
+            kind: "push",
+            reversible: false,
+            options: [
+              { n: 1, text: "push", recommended: true },
+              { n: 2, text: "先不要", recommended: false },
+            ],
+            recommend: null,
+            advice: null,
+          }),
+        ]);
+      if (name === "decide_answer")
+        return decided({
+          suggestion: {
+            repo: "a",
+            kind: "commit",
+            streak: 3,
+            command: "ctx decide trust a commit",
+          },
+        });
+      if (name === "decide_mine")
+        return {
+          since: "2026-11-07 12:00",
+          items: [{ ...decided(), command: "ctx decide overturn chosen:2026-11-14-q10" }],
+        };
+      if (name === "decide_auto")
+        return {
+          since: "2026-11-07 12:00",
+          items: [{ ...decided(), by: "rule", rule: "a/commit", ref: "chosen:p1", command: "x" }],
+        };
+      if (name === "decide_rules")
+        return {
+          file: "/s/policy.yaml",
+          exists: true,
+          rules: [
+            {
+              repo: "a",
+              kind: "commit",
+              level: "auto",
+              since: "2026-11-14 10:00",
+              paths: [],
+              approvals: 1,
+              overturned: 0,
+            },
+          ],
+          suggestions: [],
+          problems: ["第 2 條：level「x」看不懂"],
+        };
       if (name === "repo_tree")
         return {
           ok: true,
@@ -319,6 +384,42 @@ describe("無障礙稽核（axe-core）", () => {
       );
     });
     expect(found, found.join("\n")).toEqual([]);
+  });
+  it("F-127：收件匣有決策卡、回答後的下一步、自動放行面板、總管的開會話對話框都沒有違規", async () => {
+    const wait = () => act(async () => new Promise((r) => setTimeout(r, 0)));
+    let found = await violations({ group: null, repos: null }, wait);
+    expect(document.getElementById("decide")).not.toBeNull();
+    expect(found, "有決策卡：\n" + found.join("\n")).toEqual([]);
+    cleanup();
+    found = await violations({ group: null, repos: null }, async () => {
+      await wait();
+      await act(async () => fireEvent.keyDown(window, { key: "ArrowDown" }));
+    });
+    expect(document.querySelector(".decidewarn")).not.toBeNull();
+    expect(found, "不可逆的卡：\n" + found.join("\n")).toEqual([]);
+    cleanup();
+    found = await violations({ group: null, repos: null }, async () => {
+      await wait();
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: /要，commit/ })));
+      await wait();
+    });
+    expect(document.querySelector(".decidecard.answered")).not.toBeNull();
+    expect(found, "回答後：\n" + found.join("\n")).toEqual([]);
+    cleanup();
+    found = await violations({ group: null, repos: null }, async () => {
+      await wait();
+      await act(async () =>
+        fireEvent.click(screen.getByRole("button", { name: "回答與放行 · 自動 1" })),
+      );
+      await wait();
+    });
+    expect(screen.getByRole("dialog").textContent).toContain("你最近的回答");
+    expect(found, "回答、放行與規則面板：\n" + found.join("\n")).toEqual([]);
+    cleanup();
+    found = await violations({ group: null, repos: null }, async () => {
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "開總管會話" })));
+    });
+    expect(found, "總管對話框：\n" + found.join("\n")).toEqual([]);
   });
   it("⌘K 開著時沒有違規", async () => {
     const found = await violations({ group: "產品開發", repos: null }, async () => {

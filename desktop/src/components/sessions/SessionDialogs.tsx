@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PermissionMode, TermInfo } from "../../api/types";
 import { DetailLayout, useAutoFocus, useDetail } from "../../dialogs/Modal";
 import { load, save } from "../../lib/storage";
-import { reportLine, sessionTarget } from "../../lib/view";
+import { reportLine, sessionScopeLine } from "../../lib/view";
 import { useSnapshot, useStore, useUi } from "../../store/context";
 import { AsyncButton } from "../AsyncButton";
 
@@ -50,7 +50,8 @@ export function SessionForm({
   const [model, setModel] = useState(() => load("model", ""));
   const [worktree, setWorktree] = useState(false);
   const claude = isClaudeAgent(agent);
-  const single = typeof payload.repo === "string" && !!payload.repo;
+  const steward = payload.steward === true;
+  const single = !steward && typeof payload.repo === "string" && !!payload.repo;
   const taskRef = useRef<HTMLTextAreaElement>(null);
   return (
     <DetailLayout
@@ -62,12 +63,14 @@ export function SessionForm({
             save("agent", agent);
             save("permission_mode", mode);
             save("model", model.trim());
+            // 總管不屬於任何範圍：不帶 group／repos
+            const base = steward ? { steward: true } : (payload as Record<string, unknown>);
             const r = await store.action("term_create", {
-              ...payload,
+              ...base,
               kind: "agent",
               agent,
               task: task.trim(),
-              origin: (payload.origin as string) || "scope",
+              origin: steward ? "steward" : (payload.origin as string) || "scope",
               ...(claude
                 ? {
                     ...(mode ? { permission_mode: mode } : {}),
@@ -86,15 +89,25 @@ export function SessionForm({
         </AsyncButton>
       }
     >
-      <p className="detailmeta">{"工作範圍：" + sessionTarget(payload)}</p>
-      <p className="sumsrc">
-        Agent
-        開場會拿到：組情境卡（成員與關係、脈動、未結、最近事件）＋文件地圖，並被要求先說明拿到什麼、預計產出什麼、哪些動作要你確認。
-      </p>
-      <p className="sumsrc">
-        工作範圍是行為約定，不是工具層的權限限制——Agent
-        手上的工具碰得到組外檔案，所以它被要求越界前先問你。
-      </p>
+      <p className="detailmeta scopeline">{sessionScopeLine(payload, state)}</p>
+      {steward ? (
+        <p className="sumsrc">
+          開場會拿到總管簡報（要你決定的前幾件、自動放行、registry
+          變更、各組現況）與作業規則：讀全部 repo、在卡上留建議；不代你回答、不升級規則、不改任何
+          repo 的檔。工作目錄是 spine。
+        </p>
+      ) : (
+        <>
+          <p className="sumsrc">
+            Agent
+            開場會拿到：組情境卡（成員與關係、脈動、未結、最近事件）＋文件地圖，並被要求先說明拿到什麼、預計產出什麼、哪些動作要你確認。
+          </p>
+          <p className="sumsrc">
+            工作範圍是行為約定，不是工具層的權限限制——Agent
+            手上的工具碰得到組外檔案，所以它被要求越界前先問你。
+          </p>
+        </>
+      )}
       <label className="field">
         使用的 Agent
         <select value={agent} onChange={(e) => setAgent(e.target.value)}>
@@ -149,26 +162,32 @@ export function SessionForm({
           ref={taskRef}
           rows={4}
           value={task}
-          placeholder="留空時，Agent 會先整理這組 repo 的現況。"
+          placeholder={
+            steward
+              ? "留空也可以：開場簡報已經夠總管開始整理要你決定的事。"
+              : "留空時，Agent 會先整理這組 repo 的現況。"
+          }
           onChange={(e) => setTask(e.target.value)}
         />
       </label>
-      <div className="taskhints">
-        <span className="small muted">有情境的起手：</span>
-        {(scan.session_tasks || []).map(({ label, text }) => (
-          <button
-            key={label}
-            type="button"
-            className="chip"
-            onClick={() => {
-              setTask(text);
-              taskRef.current?.focus();
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {steward ? null : (
+        <div className="taskhints">
+          <span className="small muted">有情境的起手：</span>
+          {(scan.session_tasks || []).map(({ label, text }) => (
+            <button
+              key={label}
+              type="button"
+              className="chip"
+              onClick={() => {
+                setTask(text);
+                taskRef.current?.focus();
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
     </DetailLayout>
   );
 }

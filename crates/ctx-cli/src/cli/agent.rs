@@ -1968,7 +1968,21 @@ fn h_repo_entry(r: &Value) -> String {
         ));
     }
     if let Some(h) = r.get("last_handoff").filter(|h| h.is_object()) {
-        out.push(format!("最後交接 {}：{}", s(h, "at"), s(h, "done")));
+        out.push(format!("最後交接 {}（{}）", s(h, "at"), s(h, "ref")));
+        if has(h, "next_step") {
+            out.push(format!("  下一步：{}", s(h, "next_step")));
+        }
+        if let Some(a) = h.get("ask").filter(|a| a.is_object()) {
+            match a.get("answer").and_then(Value::as_str) {
+                Some(ans) => out.push(format!("  使用者已決定「{}」：{ans}", s(a, "question"))),
+                None => out.push(format!("  在等使用者決定：{}", s(a, "question"))),
+            }
+        } else if h["waits_on_you"] == true {
+            out.push("  看起來在等使用者".into());
+        }
+        if has(h, "done") {
+            out.push(format!("  完成：{}", s(h, "done")));
+        }
     }
     let n = &r["now"];
     let dirty = n["dirty"]

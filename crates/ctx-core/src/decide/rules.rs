@@ -68,7 +68,10 @@ pub fn suggestion_for(
 /// 所有該出的升級建議（照 repo、類別排）。
 pub fn suggestions(history: &[Answered], pol: &Policy) -> Vec<TrustHint> {
     let mut pairs: Vec<(String, AskKind)> = Vec::new();
-    for a in history.iter().filter(|a| a.by == AnsweredBy::Human) {
+    for a in history
+        .iter()
+        .filter(|a| a.by == AnsweredBy::Human && !a.withdrawn())
+    {
         if let Some(k) = a.kind {
             if !pairs
                 .iter()
@@ -123,7 +126,10 @@ fn past(history: &[Answered], pol: &Policy, repo: &str, kind: AskKind) -> PastAn
     let mine: Vec<&Answered> = history
         .iter()
         .filter(|a| {
-            a.by == AnsweredBy::Human && a.kind == Some(kind) && spine::same_token(&a.repo, repo)
+            a.by == AnsweredBy::Human
+                && !a.withdrawn()
+                && a.kind == Some(kind)
+                && spine::same_token(&a.repo, repo)
         })
         .collect();
     PastAnswers {
@@ -249,13 +255,24 @@ pub fn untrust(spine_dir: &Path, repo: &str, kind: &str) -> Result<LevelChanged>
 
 // ---------------------------------------------------------------- overturn
 
-/// 推翻的結果。
+/// 收回的是哪一種。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Undo {
+    /// 推翻一筆規則放行（規則降回 ask）
+    Overturn,
+    /// 撤回一筆人的回答（規則不動）
+    Withdraw,
+}
+
+/// 推翻／撤回的結果。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Overturned {
-    /// 推翻這筆留痕的 ref
+    /// 推翻（撤回）這筆留痕的 ref
     #[serde(rename = "ref")]
     pub reference: String,
-    /// 被推翻的那筆放行
+    pub what: Undo,
+    /// 被推翻的那筆放行；撤回時是那筆人的回答
     pub approval: Answered,
     /// 降回 ask 的規則（規則檔讀不懂、沒降成＝None，看 `note`）
     pub rule: Option<Rule>,
@@ -263,30 +280,44 @@ pub struct Overturned {
 }
 
 /// 推翻一筆自動放行：留一筆痕指向它、把那條規則降回 ask。那筆放行之後不算回答（交接的卡會回到佇列）。
+/// 指向人的回答＝撤回（F-127）：留痕、那筆之後不算數（卡回到佇列、不算連續／抽查／health），規則等級不動。
+/// 已推翻／撤回過的不能再來一次；撤回後又有新交接，照新交接走（舊交接的回答本來就不會用在新交接上）。
 pub fn overturn(spine_dir: &Path, reference: &str, why: Option<&str>) -> Result<Overturned> {
     let h = history(spine_dir)?;
     let Some(a) = h.iter().find(|a| a.reference == reference.trim()) else {
         return Err(Error::rejected(
             RejectCode::NotFound,
-            format!("找不到這筆放行：{reference}"),
-            Some("用 ctx decide list --auto 看最近的自動放行與它們的 ref".into()),
+            format!("找不到這筆回答或放行：{reference}"),
+            Some(
+                "用 ctx decide list --mine 看你最近的回答、--auto 看最近的自動放行與它們的 ref"
+                    .into(),
+            ),
         ));
     };
-    if a.by != AnsweredBy::Rule {
-        return Err(Error::rejected(
-            RejectCode::BadRequest,
-            format!("{reference} 是人回答的，不是自動放行"),
-            Some("要改答案就再交接一次、或直接跟那個 repo 的 agent 說".into()),
-        ));
-    }
     if let Some(by) = &a.overturned_by {
+        let word = match a.by {
+            AnsweredBy::Human => "撤回",
+            AnsweredBy::Rule => "推翻",
+        };
         return Err(Error::rejected(
             RejectCode::BadRequest,
-            format!("{reference} 已經被推翻過了（{by}）"),
+            format!("{reference} 已經被{word}過了（{by}）"),
             None,
         ));
     }
     let now = Local::now().naive_local();
+    if a.by == AnsweredBy::Human {
+        let r = log::write_withdraw(spine_dir, a, why, now)?;
+        let mut answer = a.clone();
+        answer.overturned_by = Some(r.clone());
+        return Ok(Overturned {
+            reference: r,
+            what: Undo::Withdraw,
+            approval: answer,
+            rule: None,
+            note: None,
+        });
+    }
     let r = log::write_overturn(spine_dir, a, why, now)?;
     let (rule, note) = match a.kind {
         None => (None, Some("這筆沒有類別，沒有規則可降".to_string())),
@@ -299,6 +330,7 @@ pub fn overturn(spine_dir: &Path, reference: &str, why: Option<&str>) -> Result<
     approval.overturned_by = Some(r.clone());
     Ok(Overturned {
         reference: r,
+        what: Undo::Overturn,
         approval,
         rule,
         note,
@@ -413,6 +445,39 @@ pub fn auto_list(spine_dir: &Path, since: Option<&str>) -> Result<AutoList> {
     Ok(AutoList { since, items })
 }
 
+/// `decide list --mine` 的結果：人最近的回答（撤回用）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MyAnswers {
+    /// `YYYY-MM-DD HH:MM`
+    pub since: String,
+    /// 新的在前，最多 [`MY_ANSWERS_LIMIT`] 筆；已撤回的也列（`overturned_by` 有值），不帶指令
+    pub items: Vec<AutoItem>,
+}
+
+/// 「你最近的回答」最多幾筆。
+pub const MY_ANSWERS_LIMIT: usize = 10;
+
+/// 人近 [`AUTO_LIST_DAYS`] 天的回答（新的在前，最多 [`MY_ANSWERS_LIMIT`] 筆）。
+pub fn my_answers(spine_dir: &Path, now: NaiveDateTime) -> Result<MyAnswers> {
+    let since = (now - chrono::Duration::days(AUTO_LIST_DAYS))
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    let items = history(spine_dir)?
+        .into_iter()
+        .rev()
+        .filter(|a| a.by == AnsweredBy::Human && a.at >= since)
+        .take(MY_ANSWERS_LIMIT)
+        .map(|a| AutoItem {
+            command: a
+                .overturned_by
+                .is_none()
+                .then(|| format!("ctx decide overturn {}", a.reference)),
+            approval: a,
+        })
+        .collect();
+    Ok(MyAnswers { since, items })
+}
+
 // ---------------------------------------------------------------- health
 
 /// `ctx health` 的「決策」段。比例與時間沒資料＝None（不要印 0）。
@@ -446,7 +511,7 @@ pub fn health_stats(spine_dir: &Path, days: i64, now: NaiveDateTime) -> Result<D
     let recent: Vec<&Answered> = h.iter().filter(|a| a.at >= since).collect();
     let human: Vec<&&Answered> = recent
         .iter()
-        .filter(|a| a.by == AnsweredBy::Human)
+        .filter(|a| a.by == AnsweredBy::Human && !a.withdrawn())
         .collect();
     let with_rec = human
         .iter()

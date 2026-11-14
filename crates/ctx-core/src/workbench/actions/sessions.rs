@@ -66,6 +66,48 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
             origin: Some(format!("resume:{id}")),
             home_group: home,
         })?
+    } else if kind == "agent" && p.get("steward").and_then(Value::as_bool) == Some(true) {
+        // F-127：總管會話——工作目錄＝spine，不屬於任何 repo（session::SessionScope::Steward）
+        let task = s(p, "task");
+        let agent = s(p, "agent").unwrap_or_else(|| "claude".into());
+        if !flags.is_empty() && !session::is_claude_code(d, &agent)? {
+            return Err(Error::invalid(format!(
+                "{agent} 不是 Claude Code：權限模式、模型只有 Claude Code 支援"
+            )));
+        }
+        if flags.worktree.is_some() {
+            return Err(Error::invalid(
+                "總管會話不在任何 repo 裡，不能用隔離的 worktree",
+            ));
+        }
+        let plan = session::plan(
+            d,
+            session::SessionScope::Steward {
+                task: task.as_deref(),
+                agent: Some(&agent),
+            },
+        )?;
+        let mut argv = plan.cmd;
+        if plan.claude_code && plan.flags_at <= argv.len() {
+            argv.splice(plan.flags_at..plan.flags_at, flags.argv());
+            let file =
+                crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));
+            if let Ok(f) = file {
+                argv.insert(plan.flags_at, format!("--settings={}", f.display()));
+            }
+        }
+        terms.create_agent(AgentLaunch {
+            agent,
+            argv,
+            cwd: plan.cwd,
+            env: Vec::new(),
+            group: None,
+            repos: None,
+            repo: None,
+            task,
+            origin: Some(crate::term::STEWARD_ORIGIN.into()),
+            home_group: None,
+        })?
     } else if kind == "agent" {
         let group = s(p, "group");
         let repos = list(p, "repos");

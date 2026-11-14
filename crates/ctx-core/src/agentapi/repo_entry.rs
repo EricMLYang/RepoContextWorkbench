@@ -47,7 +47,23 @@ pub struct EntryHandoff {
     #[serde(rename = "ref")]
     pub reference: String,
     pub at: String,
+    /// 下次從這裡接（最重要：裁切時最後才動它）
+    pub next_step: Option<String>,
+    /// 交接帶了提問：在等使用者決定什麼、回答了沒
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ask: Option<EntryAsk>,
+    /// 沒帶提問，但接力判斷下一步看起來在等使用者（`relay::waits_on_you`）
+    pub waits_on_you: bool,
+    /// 完成了什麼（短；裁切時最先砍）
     pub done: String,
+}
+
+/// 交接帶的提問。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct EntryAsk {
+    pub question: String,
+    /// 已回答（人或放行規則）＝答案；還在等＝None
+    pub answer: Option<String>,
 }
 
 /// 現在。
@@ -180,6 +196,8 @@ pub fn repo_entry(spine_dir: &Path, repo: &str) -> Result<RepoEntry> {
             text: clip(&first(e), 70),
         })
         .collect();
+    // 「現在在等什麼」沿用接力與回答留痕的判斷（relay::waits_on_you、decision_log::answer_of）
+    let history = crate::decision_log::history_of(&events);
     let last_handoff = events
         .iter()
         .rev()
@@ -187,10 +205,23 @@ pub fn repo_entry(spine_dir: &Path, repo: &str) -> Result<RepoEntry> {
         .find(|e| is_handoff(e))
         .map(|e| {
             let h = parse_handoff(e);
+            let next = h
+                .next_step
+                .clone()
+                .filter(|n| !n.trim().is_empty() && n.trim() != "無");
+            let ask = h.ask.as_ref().map(|a| EntryAsk {
+                question: clip(&a.question, 120),
+                answer: crate::decision_log::answer_of(&history, &id, &h.reference, &h.at)
+                    .map(|x| clip(&x.answer, 80)),
+            });
             EntryHandoff {
+                waits_on_you: ask.is_none()
+                    && next.as_deref().is_some_and(crate::relay::waits_on_you),
+                ask,
+                next_step: next.map(|n| clip(&n, 200)),
+                done: clip(h.done.as_deref().unwrap_or(&h.summary), 60),
                 reference: h.reference,
                 at: h.at,
-                done: clip(h.done.as_deref().unwrap_or(&h.summary), 90),
             }
         });
     let status = crate::relay::plan(spine_dir, &RelayScope::Repos(vec![id.clone()]))
@@ -219,23 +250,41 @@ pub fn repo_entry(spine_dir: &Path, repo: &str) -> Result<RepoEntry> {
         last_handoff,
         now: EntryNow { session, dirty },
     };
-    // 上限：先砍判斷、再砍從哪讀起的後面幾份、最後縮短字句
+    // 上限的裁切優先序（最先砍的在前）：完成摘要 → 最近判斷 → 從哪讀起 → 介紹與標題縮短 →（最後才）下一步。
+    // 現在的狀態（會話、沒 commit、在等什麼）與下一步最有價值：只讀檔的 agent 拿不到、會回過期的狀態
+    let shrink = |s: &mut String| *s = crate::pystr::clip(s, s.chars().count() / 2);
     while chars(&e) > ENTRY_MAX_CHARS {
+        if let Some(h) = e.last_handoff.as_mut().filter(|h| !h.done.is_empty()) {
+            if h.done.chars().count() > 20 {
+                shrink(&mut h.done);
+            } else {
+                h.done.clear();
+            }
+            continue;
+        }
         if e.decisions.pop().is_some() {
             continue;
         }
-        if e.read_first.len() > 2 {
+        if e.read_first.len() > 1 {
             e.read_first.pop();
             continue;
         }
         let before = chars(&e);
-        let shrink = |s: &mut String| *s = crate::pystr::clip(s, s.chars().count() / 2);
         e.read_first.iter_mut().for_each(|f| shrink(&mut f.title));
-        if let Some(h) = e.last_handoff.as_mut() {
-            shrink(&mut h.done);
-        }
         if let Some(a) = e.about.as_mut() {
             shrink(a);
+        }
+        if chars(&e) < before {
+            continue;
+        }
+        // 都砍完了還超過：才縮下一步與提問
+        if let Some(h) = e.last_handoff.as_mut() {
+            if let Some(n) = h.next_step.as_mut() {
+                shrink(n);
+            }
+            if let Some(a) = h.ask.as_mut() {
+                shrink(&mut a.question);
+            }
         }
         if chars(&e) >= before {
             break;

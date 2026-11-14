@@ -10,6 +10,9 @@
  * R37：transcript（逐字稿）、commands（插入 /指令）、prompts（常用 prompt）、auto-continue（自動繼續）、
  *       launch-opts（開會話的權限／模型／worktree）、panel-extras（右欄 Worktree＋GitHub）、commits（最近的 commit＋差異）、
  *       csv（表格預覽）、gauges（會話列小量表與出錯中斷）
+ * F-127：decide（要你決定，3 張）、decide-answered（回答後＋升級建議）、decide-empty（沒有卡）、decide-many（12 張）、
+ *       auto-list（回答、放行與規則面板）、steward-dialog（開總管會話）、
+ *       decide-irreversible（聚焦不可逆的 push 卡）、decide-legacy（聚焦沒有選項的舊交接卡，交接全文展開）
  */
 import { createRoot } from "react-dom/client";
 import "../src/styles.css";
@@ -311,6 +314,347 @@ const stream: TermStream = {
   close() {},
   connected: false,
 };
+// ── F-127：要你決定的場景（decide／decide-answered／decide-empty／decide-many／auto-list／steward-dialog） ──
+const dcard = (over: Record<string, unknown>) => ({
+  repo: "character-play-studio",
+  group: "MyFamily",
+  about: "字字樂園：給孩子的識字影片產線＋播放器，在本機跑；家長看過、聽過的回饋決定下一批動畫",
+  role: "個人專案",
+  path: "/Users/me/character-play-studio",
+  handoff_ref: "decision:2026-11-14-d5",
+  handoff_at: "2026-11-14 13:55",
+  days: 0,
+  hours: 3,
+  structured: true,
+  question: "主角館的牆在 iPad 拉不到最上面：先修版面再加新角色，還是兩件一起做？",
+  kind: "choose",
+  options: [
+    { n: 1, text: "先修版面，下一輪再加新角色", recommended: true },
+    { n: 2, text: "兩件一起做（多半天）", recommended: false },
+    { n: 3, text: "先加新角色，版面之後再說", recommended: false },
+  ],
+  recommend: "先修版面，下一輪再加新角色",
+  reversible: true,
+  evidence: [
+    {
+      ref: "src/pages/names/NamesWall.tsx",
+      path: "/x",
+      exists: true,
+      repo: "character-play-studio",
+      rel: "src/pages/names/NamesWall.tsx",
+    },
+    {
+      ref: "docs/ipad_layout_notes.md",
+      path: "/y",
+      exists: false,
+      repo: "character-play-studio",
+      rel: "docs/ipad_layout_notes.md",
+    },
+  ],
+  relay_status: "needs_you",
+  notes: [],
+  advice: {
+    ref: "chosen:2026-11-14-q1",
+    at: "2026-11-14 16:40",
+    repo: "character-play-studio",
+    handoff_ref: "decision:2026-11-14-d5",
+    from: { kind: "steward" },
+    text: "先修版面，下一輪再加新角色",
+    option: 1,
+    why: "版面問題會擋住小孩點到上排的字，新角色不急",
+  },
+  class: "程式",
+  done: "主角館（44 個名字、44 支動畫）、字庫 380 字已 commit＋push（2852543，main）",
+  remaining: null,
+  next_step: "請使用者在 5199 確認主角館的牆拉得到最上面（iPad、手機都看）",
+  ...over,
+});
+const DECIDE_CARDS = [
+  dcard({}),
+  dcard({
+    repo: "card_notes",
+    group: "Knowledge",
+    about:
+      "個人第二大腦（BASB＋Zettelkasten）：書摘、論文、課程素材整理成卡片與文章；其他 repo 找背景知識來這裡",
+    role: "知識庫",
+    handoff_ref: "decision:2026-11-13-d6",
+    handoff_at: "2026-11-13 23:25",
+    hours: 17,
+    question: "發佈檔看過了嗎？要 push 到 main 讓 GitHub Pages 上線嗎？",
+    kind: "push",
+    reversible: false,
+    options: [
+      { n: 1, text: "push", recommended: false },
+      { n: 2, text: "先不要，我還要改", recommended: false },
+    ],
+    recommend: null,
+    evidence: [],
+    advice: null,
+  }),
+  dcard({
+    repo: "PM_Head",
+    group: "MI3.0",
+    about: null,
+    role: null,
+    class: "文件・PM",
+    handoff_ref: "decision:2026-11-13-d4",
+    handoff_at: "2026-11-13 00:20",
+    days: 1,
+    hours: 39,
+    structured: false,
+    question:
+      "等使用者口頭補各段續辦事項（md 內 HTML 註解已列）後改正文，再決定是否 commit 與產 PPT；11/19 前 11/10 定位主軸需入帳 PM_MI 07_decisions.md。",
+    kind: null,
+    options: [],
+    recommend: null,
+    reversible: null,
+    evidence: [],
+    advice: null,
+  }),
+];
+const MANY = Array.from({ length: 12 }, (_, i) =>
+  dcard({
+    repo: [
+      "character-play-studio",
+      "card_notes",
+      "PM_Head",
+      "databricks_coding",
+      "AWS_StudyGroup",
+      "AgentStudyGroup",
+      "iso-ai-audit",
+      "language-learning",
+      "draftagent",
+      "AgentCodingPM",
+      "MI3Agents",
+      "better-agent-terminal",
+    ][i],
+    handoff_ref: "decision:m" + i,
+    days: i,
+    question:
+      i === 0
+        ? DECIDE_CARDS[0].question
+        : [
+            "週會 Forecast 參考頁提案要放進 11/17 的稿嗎？這一頁需要業務那邊的數字，還沒拿到",
+            "SAP-C02 第 3 週的題目改用新版題庫？",
+            "verifier 的高程容許誤差放寬到 5 公分？",
+            "ISO 42001 起始會議腳本給講師看過了嗎？",
+          ][i % 4],
+  }),
+);
+// 不可逆：push 卡排第一、帶建議（看建議在不可逆時是不是仍沒有主要按鈕）
+const IRREVERSIBLE = [
+  {
+    ...DECIDE_CARDS[1],
+    question: "發佈檔看過了：要 push 到 main 讓 GitHub Pages 上線嗎？上線後讀者馬上看得到",
+    options: [
+      { n: 1, text: "push，上線", recommended: true },
+      { n: 2, text: "先不要，我還要改", recommended: false },
+    ],
+    recommend: "push，上線",
+    evidence: [
+      {
+        ref: "dist/index.html",
+        path: "/z",
+        exists: true,
+        repo: "card_notes",
+        rel: "dist/index.html",
+      },
+    ],
+    done: "04_writing_rules 依上次的手改更新；發佈檔重產（dist/，42 篇）；本機預覽過首頁與 3 篇長文",
+    next_step: "等使用者確認發佈檔後 push 到 main（GitHub Pages 會自動上線）",
+  },
+  DECIDE_CARDS[0],
+  DECIDE_CARDS[2],
+];
+// 舊交接：沒有選項，交接全文有完成／剩下／下一步
+const LEGACY = [
+  {
+    ...DECIDE_CARDS[2],
+    done: "11/10 定位主軸的段落改寫完；各段續辦事項以 HTML 註解列在 md 裡（共 7 處）；PPT 大綱 12 頁草稿在 drafts/",
+    remaining: "各段續辦事項等使用者口頭補；PM_MI 07_decisions.md 還沒入帳；PPT 未產",
+    // 舊交接的問題就是「下次從這裡接」
+    next_step: DECIDE_CARDS[2].question,
+  },
+  DECIDE_CARDS[0],
+  DECIDE_CARDS[1],
+];
+const decideOn = scene.startsWith("decide") || scene === "auto-list";
+const queue =
+  scene === "decide-many"
+    ? MANY
+    : scene === "decide-empty"
+      ? []
+      : scene === "decide-irreversible"
+        ? IRREVERSIBLE
+        : scene === "decide-legacy"
+          ? LEGACY
+          : DECIDE_CARDS;
+if (decideOn || scene === "steward-dialog")
+  (state as Record<string, unknown>).decide = {
+    count: decideOn ? queue.length : 3,
+    all: decideOn ? queue.length + 4 : 7,
+    auto_recent: scene === "decide-empty" ? 0 : 2,
+    key: scene,
+  };
+if (decideOn) {
+  (state as { scope: unknown }).scope = { group: null, repos: null, members: ["repo-a", "repo-b"] };
+}
+const decideAction = (name: string): unknown => {
+  if (name === "decide_queue")
+    return { scope: "全部", at: "2026-11-14 17:00", cards: queue, structured: 2, suggestions: [] };
+  if (name === "decide_answer")
+    return {
+      ref: "chosen:2026-11-14-q9",
+      at: "2026-11-14 17:01",
+      repo: "character-play-studio",
+      handoff_ref: "decision:2026-11-14-d5",
+      kind: "choose",
+      follow: "followed",
+      by: "human",
+      reversible: true,
+      rule: null,
+      question: DECIDE_CARDS[0].question,
+      answer: "先修版面，下一輪再加新角色",
+      recommend: "先修版面，下一輪再加新角色",
+      overturned_by: null,
+      option: 1,
+      relay: {
+        repo: "character-play-studio",
+        path: "/Users/me/character-play-studio",
+        handoff_at: "2026-11-14 13:55",
+        handoff_ref: "decision:2026-11-14-d5",
+        next_step: "",
+        task: "接續…",
+        delivery: {
+          kind: "resume",
+          claude_session_id: "8d11",
+          cwd: "/Users/me/character-play-studio",
+        },
+        commands: [],
+        redacted: 0,
+      },
+      suggestion: {
+        repo: "character-play-studio",
+        kind: "choose",
+        streak: 3,
+        command: "ctx decide trust character-play-studio choose",
+      },
+    };
+  if (name === "decide_mine")
+    return {
+      since: "2026-11-07 17:00",
+      items: [
+        {
+          ref: "chosen:2026-11-14-q8",
+          at: "2026-11-14 16:58",
+          repo: "databricks_coding",
+          handoff_ref: "decision:2026-11-08-d5",
+          kind: "choose",
+          follow: "differed",
+          by: "human",
+          reversible: true,
+          rule: null,
+          question: "新分類代碼先用爬蟲端的暫定名稱做 #284，還是等定案？",
+          answer: "等定案，先做 #285",
+          recommend: "先用暫定名稱",
+          overturned_by: null,
+          command: "ctx decide overturn chosen:2026-11-14-q8",
+        },
+        {
+          ref: "chosen:2026-11-14-q6",
+          at: "2026-11-14 11:30",
+          repo: "AWS_StudyGroup",
+          handoff_ref: "decision:2026-11-04-d10",
+          kind: null,
+          follow: "no_recommendation",
+          by: "human",
+          reversible: false,
+          rule: null,
+          question: "在 Keynote 打開 opening.pptx 目視檢查版面",
+          answer: "先不做，下週再說",
+          recommend: null,
+          overturned_by: "chosen:2026-11-14-q7",
+          command: null,
+        },
+      ],
+    };
+  if (name === "decide_auto")
+    return {
+      since: "2026-11-07 17:00",
+      items: [
+        {
+          ref: "chosen:2026-11-14-p2",
+          at: "2026-11-14 15:20",
+          repo: "draftagent",
+          handoff_ref: null,
+          kind: "commit",
+          follow: "followed",
+          by: "rule",
+          reversible: true,
+          rule: "draftagent/commit",
+          question: "verifier 的測試補完了，要 commit 嗎？",
+          answer: "要，commit",
+          recommend: "要，commit",
+          overturned_by: null,
+          command: "ctx decide overturn chosen:2026-11-14-p2",
+        },
+        {
+          ref: "chosen:2026-11-13-p1",
+          at: "2026-11-13 22:05",
+          repo: "AgentCodingPM",
+          handoff_ref: "decision:2026-11-13-d2",
+          kind: "content_review",
+          follow: "followed",
+          by: "rule",
+          reversible: true,
+          rule: "AgentCodingPM/content_review",
+          question: "速讀版第 2 段改好了，照這版給組長們看？",
+          answer: "照這版",
+          recommend: "照這版",
+          overturned_by: null,
+          command: "x",
+        },
+      ],
+    };
+  if (name === "decide_rules")
+    return {
+      file: "/Users/me/repo-spine/policy.yaml",
+      exists: true,
+      rules: [
+        {
+          repo: "draftagent",
+          kind: "commit",
+          level: "auto",
+          since: "2026-11-12 10:00",
+          paths: [],
+          approvals: 6,
+          overturned: 0,
+        },
+        {
+          repo: "AgentCodingPM",
+          kind: "content_review",
+          level: "auto",
+          since: "2026-11-10 09:00",
+          paths: [],
+          approvals: 2,
+          overturned: 0,
+        },
+        {
+          repo: "PM_Head",
+          kind: "commit",
+          level: "ask",
+          since: "2026-11-13 21:00",
+          paths: [],
+          approvals: 0,
+          overturned: 1,
+        },
+      ],
+      suggestions: [],
+      problems: ["第 4 條：draftagent/push 寫成 auto，但「push」類永遠要人回答（這條不生效）"],
+    };
+  return undefined;
+};
+
 // no-session：沒有會話、所有 repo 範圍
 if (scene === "no-session") {
   (state as { terms: unknown[] }).terms = [];
@@ -322,6 +666,8 @@ const backend: Backend = {
   getScan: async () => scan as never,
   openTerminal: () => stream,
   action: (async (name: string, p: Record<string, unknown>) => {
+    const dec = decideAction(name);
+    if (dec !== undefined) return dec;
     if (name === "repo_tree")
       return {
         ok: true,
@@ -756,7 +1102,9 @@ const backend: Backend = {
 
 put(
   "scope",
-  scene === "no-session" ? { group: null, repos: null } : { group: "產品開發", repos: null },
+  scene === "no-session" || decideOn
+    ? { group: null, repos: null }
+    : { group: "產品開發", repos: null },
 );
 if (scene === "workspace" || scene === "panel-info") {
   put("panelRepo", "repo-a");
@@ -802,7 +1150,9 @@ if (scene === "code") {
 
 const store = new WorkbenchStore(
   backend,
-  scene === "no-session" ? { group: null, repos: null } : { group: "產品開發", repos: null },
+  scene === "no-session" || decideOn
+    ? { group: null, repos: null }
+    : { group: "產品開發", repos: null },
 );
 createRoot(document.getElementById("root")!).render(<App store={store} />);
 
@@ -974,3 +1324,25 @@ if (scene === "commits")
     later(400, () => click(".commitrow"));
   });
 if (scene === "gauges") later(700, () => click(`button[aria-label="展開產品開發"]`));
+
+// F-127
+if (scene === "decide-answered") later(900, () => click("#decide .decideopts button.primary"));
+if (scene === "auto-list")
+  later(900, () => {
+    const b = [...document.querySelectorAll<HTMLButtonElement>("#decide .decidehead button")].find(
+      (x) => x.textContent?.startsWith("回答與放行"),
+    );
+    b?.click();
+  });
+if (scene === "decide-legacy")
+  later(900, () => {
+    const d = document.querySelector<HTMLDetailsElement>("#decide .decidefull");
+    if (d) d.open = true;
+  });
+if (scene === "steward-dialog")
+  later(700, () => {
+    const b = [...document.querySelectorAll<HTMLButtonElement>(".steward button")].find(
+      (x) => x.textContent === "開總管會話",
+    );
+    b?.click();
+  });

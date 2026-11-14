@@ -3694,10 +3694,11 @@ describe("這組標為已讀（N-37）", () => {
     await act(async () => {
       await store.refreshAll();
     });
-    const btn = screen.getByRole("button", { name: "這組標為已讀" }) as HTMLButtonElement;
+    // F-127：收進收件匣工具列的「⋯」
+    fireEvent.click(screen.getByRole("button", { name: "收件匣的其他動作" }));
+    const item = screen.getByRole("menuitem", { name: /這組標為已讀/ });
     expect(document.getElementById("worksummary")!.textContent).toContain("未讀 1");
-    expect(btn.disabled).toBe(false);
-    await act(async () => fireEvent.click(btn));
+    await act(async () => fireEvent.click(item));
     expect(backend.action).toHaveBeenCalledWith("ack_scope", { group: "產品開發" });
   });
 });

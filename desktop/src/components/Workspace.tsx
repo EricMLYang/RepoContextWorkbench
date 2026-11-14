@@ -15,6 +15,7 @@ import {
 import { useSnapshot, useStore, useUi, type Tab } from "../store/context";
 import { AsyncButton } from "./AsyncButton";
 import { ContextMenu } from "./ContextMenu";
+import { autoListSpec } from "./inbox/DecideRules";
 import { Composer } from "./Composer";
 import { ActivityPane } from "./deep/ActivityPane";
 import { FilesPane } from "./deep/FilesPane";
@@ -61,7 +62,10 @@ export function Workspace(props: {
   const local = scopedCards(state, scan);
   // 數字分開講（UX-04）：未讀不是待辦——待跟進／要你判斷的才算「要處理」
   const counts = cardCounts(local);
-  const todo = counts.loop + counts.decide;
+  // F-127：要你決定（決策佇列）＋原本的待跟進與要你判斷
+  const decideN = state.decide?.count ?? 0;
+  const todo = decideN + counts.loop + counts.decide;
+  const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
   const err = stateError || scanError;
   const live = scopeSessions(state.terms, scope);
   const [pickMenu, setPickMenu] = useState<{ x: number; y: number } | null>(null);
@@ -80,6 +84,7 @@ export function Workspace(props: {
               ? [
                   repos.length + " 個 repo",
                   // 是 0 的不講（省一行，也不把「沒事」講成一個數字）
+                  decideN ? "要你決定 " + decideN : "",
                   counts.loop ? "待跟進 " + counts.loop : "",
                   counts.decide ? "要你判斷 " + counts.decide : "",
                   counts.unread ? "未讀 " + counts.unread : "",
@@ -207,7 +212,18 @@ export function Workspace(props: {
                 <span
                   id="inboxcount"
                   className="tabcount"
-                  title={"要處理 " + todo + "（待跟進＋要你判斷）；另有未讀 " + counts.unread}
+                  title={
+                    "要處理 " +
+                    todo +
+                    "＝要你決定 " +
+                    decideN +
+                    "＋待跟進 " +
+                    counts.loop +
+                    "＋要你判斷 " +
+                    counts.decide +
+                    "；另有未讀 " +
+                    counts.unread
+                  }
                 >
                   {stateReady ? todo : "—"}
                 </span>
@@ -249,54 +265,86 @@ export function Workspace(props: {
           <option value="pending">處理中</option>
         </select>
         <span className="spacer" />
-        <AsyncButton
-          id="briefbtn"
-          hidden={tab !== "inbox"}
-          className="ghost small"
-          disabled={noScope}
-          onError={(m) => store.toast(m)}
-          run={async () => {
-            const r = await store.action("brief", store.scopePayload);
-            ui.openDetail(fullTextSpec("今日簡報已儲存", r.text, r.file));
-            await store.refreshState();
-          }}
-        >
-          存成今日簡報
-        </AsyncButton>
-        {scope.group || Array.isArray(scope.repos) ? (
-          <AsyncButton
-            id="ackscopebtn"
-            className="ghost small"
-            hidden={tab !== "inbox"}
-            title="只把這個範圍的未讀標為已讀；待跟進、要你判斷的照舊，別組不受影響"
-            disabled={!stateReady || !counts.unread}
-            onError={(m) => store.toast(m)}
-            run={async () => {
-              await store.action("ack_scope", store.scopePayload);
-              await store.refreshState();
-              store.toast("「" + scopeLabel(scope) + "」的未讀已標為已讀");
-            }}
-          >
-            這組標為已讀
-          </AsyncButton>
-        ) : null}
+        {/* F-127：不常用的三個收進「⋯」（跟終端列一樣）；所有組標為已讀仍要確認 */}
         <button
           type="button"
-          id="ackbtn"
+          id="inboxmore"
           className="ghost small"
           hidden={tab !== "inbox"}
-          title="影響所有組的未讀事件；不會完成待跟進或處理中任務"
-          disabled={!stateReady || !state.unread?.length}
-          onClick={() =>
-            ui.openDetail({
-              title: "將所有組的事件標為已讀？",
-              eyebrow: "ALL WORKSPACES",
-              content: <AckConfirm />,
-            })
-          }
+          disabled={noScope && !state.unread?.length}
+          aria-label="收件匣的其他動作"
+          aria-haspopup="menu"
+          aria-expanded={!!moreMenu}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setMoreMenu(moreMenu ? null : { x: r.right - 220, y: r.bottom + 4 });
+          }}
         >
-          所有組標為已讀…
+          ⋯
         </button>
+        {moreMenu ? (
+          <ContextMenu
+            id="inboxmenu"
+            title="收件匣的其他動作"
+            x={moreMenu.x}
+            y={moreMenu.y}
+            onClose={() => setMoreMenu(null)}
+            items={[
+              ...(noScope
+                ? []
+                : [
+                    {
+                      label: "存成今日簡報",
+                      run: async () => {
+                        try {
+                          const r = await store.action("brief", store.scopePayload);
+                          ui.openDetail(fullTextSpec("今日簡報已儲存", r.text, r.file));
+                          await store.refreshState();
+                        } catch (e) {
+                          store.toast((e as Error).message);
+                        }
+                      },
+                    },
+                  ]),
+              ...((scope.group || Array.isArray(scope.repos)) && stateReady && counts.unread
+                ? [
+                    {
+                      label: "這組標為已讀",
+                      hint: "只動這個範圍的未讀",
+                      run: async () => {
+                        try {
+                          await store.action("ack_scope", store.scopePayload);
+                          await store.refreshState();
+                          store.toast("「" + scopeLabel(scope) + "」的未讀已標為已讀");
+                        } catch (e) {
+                          store.toast((e as Error).message);
+                        }
+                      },
+                    },
+                  ]
+                : []),
+              {
+                label: "回答、放行與規則…",
+                hint: "你最近的回答可以撤回",
+                run: () => ui.openDetail(autoListSpec()),
+              },
+              ...(stateReady && state.unread?.length
+                ? [
+                    {
+                      label: "所有組標為已讀…",
+                      sep: true,
+                      run: () =>
+                        ui.openDetail({
+                          title: "將所有組的事件標為已讀？",
+                          eyebrow: "ALL WORKSPACES",
+                          content: <AckConfirm />,
+                        }),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        ) : null}
       </div>
       <InboxPane query={q} filter={filter} active={tab === "inbox"} />
       <NotesPane query={q} active={tab === "notes"} focusSeq={props.notesFocusSeq ?? 0} />

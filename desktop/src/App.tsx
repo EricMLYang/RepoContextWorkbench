@@ -239,8 +239,8 @@ export function App({ store, autoStart = true }: { store: WorkbenchStore; autoSt
         if (typeof payload.repo === "string" && !payload.group && scope.group)
           payload.home_group = scope.group;
         openDetail({
-          title: "開啟 Agent 會話",
-          eyebrow: "NEW SESSION",
+          title: extra.steward ? "開總管會話" : "開啟 Agent 會話",
+          eyebrow: extra.steward ? "STEWARD" : "NEW SESSION",
           content: <SessionForm payload={payload} task={String(extra.task ?? "")} />,
         });
       },

@@ -490,7 +490,7 @@ pub fn gate(spine_dir: &Path, repo: &str, ask: &Ask) -> Gate {
             }
         }
     }
-    // 抽查：自 since 起這條規則的放行＋人的回答（含被抽查到、人答掉的那次）算第幾次；決定性，不用亂數
+    // 抽查：自 since 起這條規則的放行＋人的回答（含被抽查到、人答掉的那次；撤回的不算）算第幾次；決定性，不用亂數
     let history = match decision_log::history(spine_dir) {
         Ok(h) => h,
         Err(e) => return wait(WaitReason::SpineUnreadable(e.to_string())),
@@ -498,7 +498,8 @@ pub fn gate(spine_dir: &Path, repo: &str, ask: &Ask) -> Gate {
     let done = history
         .iter()
         .filter(|a| {
-            a.kind == Some(ask.kind)
+            !a.withdrawn()
+                && a.kind == Some(ask.kind)
                 && spine::same_token(&a.repo, repo)
                 && a.at.as_str() >= rule.since.as_str()
         })

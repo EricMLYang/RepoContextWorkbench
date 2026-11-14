@@ -58,6 +58,9 @@ pub struct Evidence {
     pub path: Option<String>,
     /// 檔案（或目錄）在不在
     pub exists: bool,
+    /// 解出來的 repo 與 repo 內相對路徑（App 在檢視器打開用；解不出＝None）
+    pub repo: Option<String>,
+    pub rel: Option<String>,
 }
 
 /// 一張要你決定的卡。
@@ -93,6 +96,13 @@ pub struct Card {
     pub notes: Vec<String>,
     /// 這張卡上最新的建議（總管或別的 repo 的 agent 留的，`from` 標出是誰；沒有＝None）
     pub advice: Option<Advice>,
+    /// 名片的類別（人話；沒分類＝None）
+    pub class: Option<String>,
+    /// 交接全文的「完成」「剩下」（App 收合著給人展開看；F-127）
+    pub done: Option<String>,
+    pub remaining: Option<String>,
+    /// 交接的「下次從這裡接」原文（帶提問時 `question` 是提問，這裡仍是下一步）
+    pub next_step: Option<String>,
 }
 
 /// `list` 的結果。
@@ -145,14 +155,16 @@ fn evidence_of(spine_dir: &Path, data: &RegistryData, repo: &str, raw: &str) -> 
         Some((r, _)) if data.repo(r).is_some() => bare.to_string(),
         _ => format!("{repo}:{bare}"),
     };
-    let (path, exists) = match crate::crossref::resolve(spine_dir, &reference) {
-        Ok(r) => (Some(r.path), r.exists),
-        Err(_) => (None, false),
+    let (path, exists, repo, rel) = match crate::crossref::resolve(spine_dir, &reference) {
+        Ok(r) => (Some(r.path), r.exists, Some(r.repo), Some(r.rel)),
+        Err(_) => (None, false, None, None),
     };
     Evidence {
         reference: raw.to_string(),
         path,
         exists,
+        repo,
+        rel,
     }
 }
 
@@ -204,6 +216,10 @@ fn card_of(
         relay_status: row.status,
         notes,
         advice: log::advice_for(notes_all, &row.repo, handoff_ref, handoff_at).cloned(),
+        class: entry.and_then(|e| e.class()).map(|c| c.label().to_string()),
+        done: None,
+        remaining: None,
+        next_step: row.next_step.clone(),
     };
     if let Some(a) = &row.ask {
         let rec = a.recommend_index();
@@ -245,12 +261,25 @@ pub fn list_at(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Resu
 /// 同 [`list_at`]，從已經算好的接力 plan 出卡（總管簡報用：plan 會跑各 repo 的 git，只跑一次）。
 pub fn queue_of(spine_dir: &Path, plan: &relay::Plan, now: NaiveDateTime) -> Result<Queue> {
     let data = registry::load(spine_dir)?;
-    let notes = log::advice_of(&spine::iter_events(spine_dir)?);
+    let events = spine::iter_events(spine_dir)?;
+    let notes = log::advice_of(&events);
     let mut cards: Vec<Card> = plan
         .rows
         .iter()
         .filter_map(|r| card_of(spine_dir, r, &data, &notes, now, false))
         .collect();
+    // 交接全文的「完成」「剩下」（卡片收合著給人展開看）
+    for c in &mut cards {
+        if let Some(h) = events
+            .iter()
+            .rev()
+            .find(|e| crate::agentapi::is_handoff(e) && e.reference() == c.handoff_ref)
+            .map(crate::agentapi::parse_handoff)
+        {
+            c.done = h.done;
+            c.remaining = h.remaining.filter(|r| r != "無");
+        }
+    }
     cards.sort_by(|a, b| {
         b.structured
             .cmp(&a.structured)
@@ -263,6 +292,79 @@ pub fn queue_of(spine_dir: &Path, plan: &relay::Plan, now: NaiveDateTime) -> Res
         structured: cards.iter().filter(|c| c.structured).count(),
         cards,
         suggestions: suggestions(&history(spine_dir)?, &policy::load(spine_dir)),
+    })
+}
+
+/// 同 [`list`]，但不跑 git（App 常駐用；見 [`relay::plan_light`]）：卡片備註不會有「N 個檔沒 commit」。
+pub fn list_light(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Result<Queue> {
+    let plan = relay::plan_light(spine_dir, scope, now)?;
+    queue_of(spine_dir, &plan, now)
+}
+
+/// App 畫面常駐的小數字（`get_state` 的 `decide`；F-127）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DecideSummary {
+    /// 目前範圍要你決定幾件
+    pub count: usize,
+    /// 全部範圍要你決定幾件（總管那一列）
+    pub all: usize,
+    /// 近 7 天自動放行幾筆
+    pub auto_recent: usize,
+    /// 目前範圍的卡有沒有變（交接 ref＋建議的指紋）：變了前端才重抓 `decide_queue`
+    pub key: String,
+    /// 全部範圍裡成了卡的交接（repo、交接時間）：收件匣據此把同一件事的未讀卡收掉（不序列化）
+    #[serde(skip)]
+    pub pending: Vec<(String, String)>,
+}
+
+/// 小數字：不跑 git（[`relay::plan_light`]）。
+pub fn summary(spine_dir: &Path, scope: &RelayScope, now: NaiveDateTime) -> Result<DecideSummary> {
+    let rows = |sc: &RelayScope| -> Result<Vec<PlanRow>> {
+        Ok(relay::plan_light(spine_dir, sc, now)?
+            .rows
+            .into_iter()
+            .filter(|r| r.is_decision_card(false))
+            .collect())
+    };
+    let mine = rows(scope)?;
+    let all_rows = if *scope == RelayScope::All {
+        mine.clone()
+    } else {
+        rows(&RelayScope::All)?
+    };
+    let all = all_rows.len();
+    let pending = all_rows
+        .iter()
+        .filter_map(|r| Some((r.repo.clone(), r.handoff_at.clone()?)))
+        .collect();
+    let events = spine::iter_events(spine_dir)?;
+    let advice = log::advice_of(&events);
+    let mut key: Vec<String> = mine
+        .iter()
+        .map(|r| {
+            let h = r.handoff_ref.clone().unwrap_or_default();
+            let a = advice
+                .iter()
+                .rfind(|a| a.handoff_ref == h)
+                .map(|a| a.reference.clone())
+                .unwrap_or_default();
+            format!("{}={h}+{a}", r.repo)
+        })
+        .collect();
+    key.sort();
+    let since = (now - chrono::Duration::days(AUTO_LIST_DAYS))
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
+    let auto_recent = log::history_of(&events)
+        .iter()
+        .filter(|a| a.by == AnsweredBy::Rule && a.at >= since)
+        .count();
+    Ok(DecideSummary {
+        count: mine.len(),
+        all,
+        auto_recent,
+        key: key.join(";"),
+        pending,
     })
 }
 

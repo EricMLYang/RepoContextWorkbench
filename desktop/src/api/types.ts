@@ -558,6 +558,8 @@ export interface WorkbenchState {
   attention?: { needs_you: number; finished_unseen: number; working: number };
   /** 碰到目前範圍、還沒設的關係建議；沒有建議時引擎不給這個鍵。 */
   relation_suggestions?: RelationSuggestion[];
+  /** Rust 才有（F-127）：要你決定的小數字（不跑 git）；舊版引擎沒有這個鍵。 */
+  decide?: DecideSummary;
   unread: (SpineEvent & { interrupt?: boolean })[];
   loops: SpineEvent[];
   cards: StateCard[];
@@ -569,6 +571,180 @@ export interface WorkbenchState {
   terms: TermInfo[];
   /** server 補的：config.yaml 的 agents 鍵。 */
   agents: string[];
+}
+
+// ── 決策佇列（F-123～F-127，Rust 才有） ─────────────────────────────────
+
+export type AskKind =
+  | "commit"
+  | "content_review"
+  | "config_change"
+  | "choose"
+  | "visual_check"
+  | "manual_test"
+  | "push"
+  | "publish"
+  | "delete"
+  | "send_external"
+  | "other";
+
+export interface DecideSummary {
+  /** 目前範圍要你決定幾件 */
+  count: number;
+  /** 全部範圍要你決定幾件（總管那一列） */
+  all: number;
+  /** 近 7 天自動放行幾筆 */
+  auto_recent: number;
+  /** 卡有沒有變的指紋：變了才重抓 decide_queue */
+  key: string;
+}
+
+export interface DecideOption {
+  n: number;
+  text: string;
+  recommended: boolean;
+}
+
+export interface DecideEvidence {
+  ref: string;
+  path: string | null;
+  exists: boolean;
+  repo: string | null;
+  rel: string | null;
+}
+
+export type AdviceFrom = { kind: "steward" } | { kind: "repo"; repo: string };
+
+export interface Advice {
+  ref: string;
+  at: string;
+  repo: string;
+  handoff_ref: string;
+  from: AdviceFrom;
+  text: string;
+  option: number | null;
+  why: string | null;
+}
+
+export interface DecideCard {
+  repo: string;
+  group: string | null;
+  about: string | null;
+  role: string | null;
+  path: string;
+  handoff_ref: string;
+  handoff_at: string;
+  days: number;
+  hours: number;
+  structured: boolean;
+  question: string;
+  kind: AskKind | null;
+  options: DecideOption[];
+  recommend: string | null;
+  reversible: boolean | null;
+  evidence: DecideEvidence[];
+  relay_status: string;
+  notes: string[];
+  advice: Advice | null;
+  class: string | null;
+  done: string | null;
+  remaining: string | null;
+  next_step: string | null;
+}
+
+export interface TrustHint {
+  repo: string;
+  kind: AskKind;
+  streak: number;
+  command: string;
+}
+
+export interface DecideQueue {
+  scope: string;
+  at: string;
+  cards: DecideCard[];
+  structured: number;
+  suggestions: TrustHint[];
+}
+
+export type Delivery =
+  | { kind: "existing_session"; sid: string; state: string }
+  | { kind: "resume"; claude_session_id: string; cwd: string }
+  | { kind: "new_session"; cwd: string };
+
+export interface RelayAnswer {
+  repo: string;
+  path: string;
+  handoff_at: string;
+  handoff_ref: string;
+  next_step: string | null;
+  task: string;
+  delivery: Delivery;
+  commands: string[];
+  redacted: number;
+}
+
+export interface Answered {
+  ref: string;
+  at: string;
+  repo: string;
+  handoff_ref: string | null;
+  kind: AskKind | null;
+  follow: "followed" | "differed" | "no_recommendation";
+  by: "human" | "rule";
+  reversible: boolean;
+  rule: string | null;
+  question: string;
+  answer: string;
+  recommend: string | null;
+  overturned_by: string | null;
+}
+
+export interface PolicyRule {
+  repo: string;
+  kind: AskKind;
+  level: "ask" | "auto";
+  since: string;
+  paths: string[];
+}
+
+export interface Decided extends Answered {
+  option: number | null;
+  relay: RelayAnswer;
+  downgraded?: PolicyRule;
+  suggestion?: TrustHint;
+  advice_differs?: Advice;
+}
+
+export interface AutoList {
+  since: string;
+  items: (Answered & { command: string | null })[];
+}
+
+/** F-127：人最近的回答（近 7 天、最多 10 筆；已撤回的 `overturned_by` 有值、`command` 為 null）。 */
+export type MyAnswers = AutoList;
+
+/** 推翻（規則放行）或撤回（人的回答）的結果。 */
+export interface Overturned {
+  ref: string;
+  what: "overturn" | "withdraw";
+  approval: Answered;
+  rule: PolicyRule | null;
+  note: string | null;
+}
+
+export interface RulesReport {
+  file: string;
+  exists: boolean;
+  rules: (PolicyRule & { approvals: number; overturned: number })[];
+  suggestions: TrustHint[];
+  problems: string[];
+}
+
+export interface LevelChanged {
+  rule: PolicyRule;
+  previous: "ask" | "auto" | null;
+  past: { answers: number; followed: number; differed: number; streak: number };
 }
 
 // ── /api/scan ───────────────────────────────────────────────────────
@@ -1002,6 +1178,34 @@ export interface ActionMap {
     result: BuildInfo;
   };
   /** Rust 才有（R38）：把 agent 讀的 skill 換成這版內建的（ctx setup --claude 的那一步）。 */
+  /** F-127：要你決定的卡（不跑 git）。 */
+  decide_queue: {
+    payload: { group?: string | null; repos?: string[] | null };
+    result: DecideQueue;
+  };
+  /** F-127：回答一張卡（留痕＋送達方式；不開會話）。 */
+  decide_answer: { payload: { repo: string; reply: string }; result: Decided };
+  /** F-127：最近的自動放行（預設近 7 天）。 */
+  decide_auto: { payload: { since?: string }; result: AutoList };
+  /** F-127：放行規則一覽＋升級建議＋policy.yaml 的問題。 */
+  decide_rules: { payload: Record<string, never>; result: RulesReport };
+  /** F-127：設為自動（只從回答後的升級建議進來）。 */
+  decide_trust: { payload: { repo: string; kind: AskKind }; result: LevelChanged };
+  /** F-127：降回每次都問。 */
+  decide_untrust: { payload: { repo: string; kind: AskKind }; result: LevelChanged };
+  /** F-127：推翻一筆自動放行。 */
+  /** 推翻一筆自動放行；給人的回答的 ref＝撤回（規則不動，卡回到佇列）。 */
+  decide_overturn: {
+    payload: { ref: string; why?: string };
+    result: Overturned;
+  };
+  /** F-127：人最近的回答（撤回用）。 */
+  decide_mine: { payload: Record<string, never>; result: MyAnswers };
+  /** F-127：總管簡報（≤ 2000 字）。 */
+  steward_brief: {
+    payload: Record<string, never>;
+    result: { at: string; text: string; waiting: number };
+  };
   update_skill: {
     payload: Record<string, never>;
     result: { ok: true; message: string; skill: "current" | "stale" | "missing" };
@@ -1087,6 +1291,8 @@ export interface ActionMap {
       worktree?: boolean | string;
       /** Rust 才有（F-97）：接續時岔出新會話（`--fork-session`），原會話不動。 */
       fork?: boolean;
+      /** Rust 才有（F-127）：總管會話——工作目錄＝spine，不屬於任何 repo（origin 固定 `steward`）。 */
+      steward?: boolean;
     } & ScopePayload;
     result: { ok: true; sid: string; title: string };
   };

@@ -4,8 +4,8 @@
 
 use clap::Subcommand;
 use ctx_core::decide::{
-    self, AutoList, Card, Decided, FollowRec, LevelChanged, Overturned, PastAnswers, Queue,
-    RulesReport, TrustHint,
+    self, AutoList, Card, Decided, FollowRec, LevelChanged, MyAnswers, Overturned, PastAnswers,
+    Queue, RulesReport, TrustHint, Undo,
 };
 use ctx_core::policy::{Decision, Level};
 use ctx_core::pystr::clip;
@@ -30,6 +30,9 @@ pub enum DecideCmd {
         /// 改列最近的自動放行（全部 repo；每筆附推翻指令）
         #[arg(long = "auto", conflicts_with = "group")]
         auto: bool,
+        /// 改列你最近的回答（近 7 天、最多 10 筆；每筆附撤回指令）
+        #[arg(long = "mine", conflicts_with_all = ["group", "auto"])]
+        mine: bool,
         /// 跟 --auto 一起用：從什麼時候算起（"YYYY-MM-DD HH:MM"；預設近 7 天）
         #[arg(long, requires = "auto")]
         since: Option<String>,
@@ -61,9 +64,9 @@ pub enum DecideCmd {
     },
     /// 降回每次都問
     Untrust { repo: String, kind: String },
-    /// 推翻一筆自動放行：留痕、規則降回每次都問，那筆交接回到佇列
+    /// 推翻一筆自動放行（留痕、規則降回每次都問）；給人的回答的 ref＝撤回那筆回答（規則不動）。那筆交接回到佇列
     Overturn {
-        /// 放行的 ref（ctx decide list --auto 看得到）
+        /// 放行或回答的 ref（ctx decide list --auto／--mine 看得到）
         #[arg(value_name = "REF")]
         reference: String,
         /// 為什麼推翻（一句話）
@@ -116,6 +119,11 @@ pub fn cmd_decide(ctx: &Ctx, cmd: &DecideCmd) -> CmdResult {
     }
     let d = ctx.spine_dir()?;
     match cmd {
+        DecideCmd::List { mine: true, .. } => {
+            let l =
+                decide::my_answers(&d, chrono::Local::now().naive_local()).map_err(agent_err)?;
+            ctx.emit(&l, render_mine);
+        }
         DecideCmd::List {
             auto: true, since, ..
         } => {
@@ -329,6 +337,7 @@ fn render_decided(r: &Decided) -> String {
             a.answer,
             a.reference
         ),
+        format!("答錯了要撤回：ctx decide overturn {}", a.reference),
         String::new(),
     ];
     if let Some(adv) = &r.advice_differs {
@@ -407,6 +416,22 @@ fn render_level(what: &str, x: &LevelChanged) -> String {
 
 fn render_overturned(o: &Overturned) -> String {
     let a = &o.approval;
+    if o.what == Undo::Withdraw {
+        let mut out = vec![format!(
+            "已撤回：{}「{}」→ {}（{}）　留痕 {}",
+            a.repo,
+            clip(&a.question, 80),
+            a.answer,
+            a.reference,
+            o.reference
+        )];
+        out.push("這筆回答不再算數（不算連續照建議、不算抽查）；放行規則沒有動".into());
+        if a.handoff_ref.is_some() {
+            out.push("那張卡回到 ctx decide list，可以重新回答".into());
+        }
+        out.push("如果已經把回答送給 agent，要另外跟它說".into());
+        return out.join("\n");
+    }
     let mut out = vec![format!(
         "已推翻：{}「{}」→ {}（{}，{}）　留痕 {}",
         a.repo,
@@ -480,6 +505,38 @@ fn render_rules(r: &RulesReport) -> String {
         out.push(String::new());
         out.push("## policy.yaml 的問題（這些條目不生效＝照樣問人）".into());
         out.extend(r.problems.iter().map(|p| format!("- {p}")));
+    }
+    out.join("\n")
+}
+
+fn render_mine(l: &MyAnswers) -> String {
+    if l.items.is_empty() {
+        return format!("{} 之後你沒有回答過卡。", l.since);
+    }
+    let mut out = vec![format!(
+        "# 你最近的回答（{} 之後，{} 筆）",
+        l.since,
+        l.items.len()
+    )];
+    for it in &l.items {
+        let a = &it.approval;
+        out.push(String::new());
+        out.push(format!(
+            "- {} {}（{}）{}",
+            a.at,
+            a.repo,
+            a.follow.label(),
+            if a.overturned_by.is_some() {
+                "　已撤回"
+            } else {
+                ""
+            }
+        ));
+        out.push(format!("  問：{}", clip(&a.question, QUESTION_CHARS)));
+        out.push(format!("  答：{}", a.answer));
+        if let Some(c) = &it.command {
+            out.push(format!("  → 撤回：{c}"));
+        }
     }
     out.join("\n")
 }

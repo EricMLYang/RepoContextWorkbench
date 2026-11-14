@@ -338,6 +338,24 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   - **卡上的建議照來源標示**（修第 3 輪）：`decide suggest` 看 cwd——在 spine＝總管（來源 `steward`）、在某個登記 repo＝那個 repo 的 agent（來源 `agent`）；
     對自己 repo 的卡、兩者都不是＝`bad_request`。機器行 `decide suggest from:steward|from:repo:<id>[ option:N]`（缺 `from:`＝總管）。
     **第 3 輪的合約改名**：`Card.steward` → `Card.advice`（`Advice{…, from: {kind: steward}|{kind: repo, repo}}`）、`Decided.steward_differs` → `advice_differs`（整筆建議）。
+- **入口卡的「現在在等什麼」**（2026-11-14，F-126 補件）：`RepoEntry.last_handoff` 改成 `{ref, at, next_step, ask?{question, answer?}, waits_on_you, done}`——
+  `next_step` 是「下次從這裡接」；交接帶提問就有 `ask`（`answer`＝已回答的答案，`decision_log::answer_of`），沒提問但 `relay::waits_on_you` 判斷在等人＝`waits_on_you: true`。
+  上限仍 1000 字元，裁切優先序（最先砍的在前）：完成摘要 → 最近判斷 → 從哪讀起 → 介紹與標題縮短 → 最後才縮下一步與提問。`ctx repo entry` 的文字同步。
+- **桌面畫面：要你決定、總管入口**（2026-11-14，F-127 第 5 輪；Python 沒有）：
+  - `get_state` 多 `decide{count, all, auto_recent, key}`（`decide::summary`，用不跑 git 的 `relay::plan_light`）；`cards[]` 收掉已成為決策卡的那則交接未讀、
+    與同一個 repo 在交接之前的「agent 等你回應」。`parity_state.py` 不在 check.sh 裡；它比的 Python state 沒有 `decide`。
+  - 新 action：`decide_queue`（`decide::list_light`）、`decide_answer`、`decide_auto`、`decide_rules`、`decide_trust`、`decide_untrust`、`decide_overturn`、`steward_brief`
+    （唯讀的列進 `READ_ONLY`）；`term_create` 帶 `steward: true` 開總管會話（`session::SessionScope::Steward`，origin `steward`，`term::STEWARD_ORIGIN`，標題的範圍是「總管」）。
+    App 呼叫引擎不經過 CLI 的 `CLAUDECODE` 檢查（使用者本人在按）。
+  - `Card` 多 `class`、`done`、`remaining`、`next_step`；`Evidence` 多 `repo`、`rel`。`collect::RepoState` 加 `Default`。
+  - **撤回人的回答**（第 5 輪補件）：`decide::overturn` 給人的回答的 ref＝撤回——沿用推翻的留痕（`chosen`、來源 `cli`、`ref:` 指向那筆回答），
+    第一行 `〔決定〕<repo>：撤回回答「…」`，機器行 `decide overturn of:human kind:<kind>`（推翻放行的機器行沒有 `of:`，舊紀錄照讀）。
+    撤回的回答（`Answered::withdrawn()`）不算數：`answer_of` 不認（卡回到佇列）、`streak`／升級建議／`past`、抽查次數、`health` 的人回答統計都不算；
+    規則等級不動（回答時若因「跟建議不同」降過級，撤回不會升回去）。已撤回的不能再撤；撤回後有新交接照新交接走。
+    `Overturned` 多 `what: overturn|withdraw`。CLI：`ctx decide overturn` 對人的回答印「已撤回」＋「如果已經把回答送給 agent，要另外跟它說」，
+    agent 的 shell 不擋（收緊方向）；`ctx decide answer` 多一行撤回指令；新 `ctx decide list --mine`（近 7 天、最多 10 筆）與 action `decide_mine`。
+  - 不可逆的卡沒有預設的主要按鈕（建議只標籤）；「設為自動」「推翻」「降回每次都問」「撤回」「之後再送」用有邊框的次要按鈕；
+    「自動放行」面板改名「回答、放行與規則」，最上面一段「你最近的回答」（每筆一鍵撤回），也從待處理的「⋯」與 ⌘K 進得去。
 - **`ctx todo list`**（2026-10-20；Python 沒有）：範圍內全部未結、逾期在前，`--json` 跟 `next_work` 的 todo 同一種物件；
   沒掛 MCP 的 agent（CLI 模式）之前只能靠 `ctx next` 的前 5 項。
 - **任務包 `ctx todo brief #N`**（2026-10-10，ideation F-42；Python 沒有）：把一項未結組成給全新會話的 markdown——

@@ -14,6 +14,7 @@ import type {
   ScanResult,
   TermInfo,
   WorkbenchState,
+  AskKind,
 } from "../api/types";
 
 export interface Scope {
@@ -757,4 +758,56 @@ export function anchorNotes(notes: DiffNote[], lines: string[], refs: (string | 
 export function scopeMemoryKey(scope: Scope): string {
   if (Array.isArray(scope.repos)) return "adhoc";
   return scope.group ? "g:" + scope.group : "*";
+}
+
+// ── 決策佇列（F-127） ──
+
+/** 類別的人話（引擎的 `AskKind::label`，同一份字）。 */
+export const KIND_LABEL: Record<AskKind, string> = {
+  commit: "commit",
+  content_review: "看內容",
+  config_change: "改設定",
+  choose: "選方案",
+  visual_check: "目視檢查",
+  manual_test: "手動測試",
+  push: "push",
+  publish: "發佈",
+  delete: "刪除",
+  send_external: "對外送出",
+  other: "其他",
+};
+
+/** 放了多久。 */
+export function decideAge(c: { days: number; hours: number }): string {
+  if (c.days > 0) return c.days + " 天";
+  if (c.hours > 0) return c.hours + " 小時";
+  return "剛交接";
+}
+
+/** 開會話對話框第一行：這場會話的範圍（F-127）。 */
+export function sessionScopeLine(
+  payload: Record<string, unknown>,
+  state: Pick<WorkbenchState, "repos" | "groups">,
+): string {
+  if (payload.steward) return `總管：看全部 ${state.repos.length} 個 repo，只讀與留建議，不改檔`;
+  if (typeof payload.repo === "string" && payload.repo) {
+    const home = payload.home_group as string | undefined;
+    return `repo〈${home ? home + " › " : ""}${payload.repo}〉`;
+  }
+  if (typeof payload.group === "string" && payload.group) {
+    const g = state.groups.find((x) => x.name === payload.group);
+    return `組〈${payload.group}〉：${g ? g.members.length : 0} 個 repo`;
+  }
+  const repos = payload.repos as string[] | null | undefined;
+  if (Array.isArray(repos))
+    return repos.length === 1 ? `repo〈${repos[0]}〉` : `臨時組合：${repos.length} 個 repo`;
+  return `所有 repo：${state.repos.length} 個`;
+}
+
+/** 撤回一筆人的回答之後的提示（F-127；引擎與 CLI 同一個意思）。`delivered`＝可能已經送給 agent 了。 */
+export function withdrawnText(repo: string, delivered: boolean): string {
+  return (
+    `已撤回 ${repo} 的回答，卡回到「要你決定」` +
+    (delivered ? "；已經送給 agent 的，要另外跟它說" : "")
+  );
 }

@@ -7,6 +7,8 @@ import { Card } from "./Card";
 import { cardDetailSpec, useRunAction } from "./cardActions";
 import { tidyTodosSpec } from "../todos/TidyTodos";
 import { Summary } from "./Summary";
+import { DecidePane } from "./DecidePane";
+import { load, save } from "../../lib/storage";
 
 /** 每段一次畫幾張卡（N-25）。 */
 export const PAGE = 50;
@@ -95,23 +97,47 @@ export function InboxPane({
     scanError,
     filtered: !!query || filter !== "all",
   });
-  const showEmpty = !sections.some((s) => !["global", "unclassified"].includes(s.key));
+
   const onAction = useCallback((c: InboxCard, a: CardAction) => void run(c, a, "card"), [run]);
   const onDetail = useCallback((c: InboxCard) => ui.openDetail(cardDetailSpec(c)), [ui]);
+  // F-127：有要你決定的卡時，其他類型收在「其他（N）」底下（預設摺起來、記住展開與否）；沒有就照舊
+  const deciding = !!snap.decide?.cards.length;
+  const showEmpty = !deciding && !sections.some((s) => !["global", "unclassified"].includes(s.key));
+  const [otherOpen, setOtherOpen] = useState(() => load<boolean>("inbox:otherOpen", false));
+  const otherN = sections.reduce((n, s) => n + s.cards.length, 0);
+  const list = sections.map((s) => (
+    <Section
+      key={s.key}
+      section={s}
+      busy={busy}
+      errors={cardErrors}
+      onAction={onAction}
+      onDetail={onDetail}
+    />
+  ));
   return (
     <section id="tab-inbox" className={"tabpane" + (active ? " on" : "")} aria-label="收件匣">
+      <DecidePane active={active} />
       <Summary />
       <div id="cards">
-        {sections.map((s) => (
-          <Section
-            key={s.key}
-            section={s}
-            busy={busy}
-            errors={cardErrors}
-            onAction={onAction}
-            onDetail={onDetail}
-          />
-        ))}
+        {deciding && otherN ? (
+          <details
+            className="othercards"
+            open={otherOpen}
+            onToggle={(e) => {
+              const open = (e.currentTarget as HTMLDetailsElement).open;
+              setOtherOpen(open);
+              save("inbox:otherOpen", open);
+            }}
+          >
+            <summary className="secttl">
+              <h2>{"其他（" + otherN + "）"}</h2>
+            </summary>
+            {list}
+          </details>
+        ) : (
+          list
+        )}
       </div>
       <div id="allclear" className="emptystate" hidden={!showEmpty}>
         <Icon name="check" />

@@ -436,11 +436,12 @@ fn overturn_downgrades_and_resets() {
     let rr = decide::rules_report(&d).unwrap();
     assert!(rr.suggestions.is_empty());
     assert_eq!(rr.rules[0].overturned, 1);
-    // 推翻兩次、推翻人的回答都拒絕
-    assert!(decide::overturn(&d, &r, None).is_err());
-    let human = decide::history(&d).unwrap()[0].reference.clone();
-    match decide::overturn(&d, &human, None).unwrap_err() {
-        Error::Rejected { code, .. } => assert_eq!(code.as_str(), "bad_request"),
+    // 推翻兩次拒絕
+    match decide::overturn(&d, &r, None).unwrap_err() {
+        Error::Rejected { code, message, .. } => {
+            assert_eq!(code.as_str(), "bad_request");
+            assert!(message.contains("推翻過"), "{message}");
+        }
         other => panic!("{other:?}"),
     }
     match decide::overturn(&d, "chosen:nope", None).unwrap_err() {
@@ -450,6 +451,109 @@ fn overturn_downgrades_and_resets() {
     // 推翻也是工具留痕：不是人的回答
     let h = decide::history(&d).unwrap();
     assert_eq!(h.iter().filter(|x| x.by == AnsweredBy::Human).count(), 3);
+}
+
+/// F-127：人的回答可以撤回——卡回到佇列、不算連續／抽查／health、規則不動、不能撤兩次、新交接照新交接走。
+#[test]
+fn withdraw_human_answer() {
+    let (tmp, d) = spine();
+    let t = tmp.path();
+    register(&d, t, "repo-a", 0);
+    let rs = answer_n(&d, t, "repo-a", &["1", "1", "1"]);
+    assert!(rs[2].suggestion.is_some(), "第 3 次照建議出升級建議");
+    let last = rs[2].answered.reference.clone();
+    let before = decide::health_stats(&d, 7, now()).unwrap();
+    assert_eq!(before.answered, 3);
+    assert!(decide::list(&d, &RelayScope::All).unwrap().cards.is_empty());
+
+    let w = decide::overturn(&d, &last, Some("點錯了")).unwrap();
+    assert_eq!(w.what, decide::Undo::Withdraw);
+    assert!(w.rule.is_none(), "撤回不動規則");
+    assert_eq!(
+        w.approval.overturned_by.as_deref(),
+        Some(w.reference.as_str())
+    );
+    // 機器行分得出是撤回
+    let ev = spine::iter_events(&d)
+        .unwrap()
+        .into_iter()
+        .find(|e| e.reference() == w.reference)
+        .unwrap();
+    assert!(ev.body.contains("撤回回答"), "{}", ev.body);
+    assert!(
+        ev.body.contains("decide overturn of:human kind:commit"),
+        "{}",
+        ev.body
+    );
+
+    // 卡回到佇列、連續剩 2、升級建議消失、health 不算
+    let q = decide::list(&d, &RelayScope::All).unwrap();
+    assert_eq!(q.cards.len(), 1);
+    assert_eq!(
+        q.cards[0].handoff_ref,
+        rs[2].answered.handoff_ref.clone().unwrap()
+    );
+    assert!(q.suggestions.is_empty());
+    let h = decide::history(&d).unwrap();
+    assert_eq!(
+        ctx_core::decision_log::streak(&h, "repo-a", AskKind::Commit, None),
+        2
+    );
+    let after = decide::health_stats(&d, 7, now()).unwrap();
+    assert_eq!((after.answered, after.followed), (2, 2));
+    // 你最近的回答：撤回的也列，但不帶指令
+    let mine = decide::my_answers(&d, now()).unwrap();
+    assert_eq!(mine.items.len(), 3);
+    assert_eq!(mine.items[0].approval.reference, last);
+    assert!(mine.items[0].command.is_none());
+    assert!(mine.items[1]
+        .command
+        .as_deref()
+        .unwrap()
+        .starts_with("ctx decide overturn chosen:"));
+
+    // 不能撤兩次
+    match decide::overturn(&d, &last, None).unwrap_err() {
+        Error::Rejected { code, message, .. } => {
+            assert_eq!(code.as_str(), "bad_request");
+            assert!(message.contains("撤回過"), "{message}");
+        }
+        other => panic!("{other:?}"),
+    }
+    // 重新回答那張卡：又是第 3 次照建議
+    let again = decide::answer_with(&d, "repo-a", "1", Some(&root(t))).unwrap();
+    assert!(again.suggestion.is_some());
+
+    // 撤回後又有新交接：照新交接走
+    handoff_at(&d, "repo-a", now(), "2026-01-02-dnew", &ask("commit"));
+    let q = decide::list(&d, &RelayScope::All).unwrap();
+    assert_eq!(q.cards.len(), 1);
+    assert_eq!(q.cards[0].handoff_ref, "decision:2026-01-02-dnew");
+}
+
+/// 撤回人的回答不動規則等級，也不算進抽查次數。
+#[test]
+fn withdraw_keeps_rule_and_spot_check_count() {
+    let (tmp, d) = spine();
+    let t = tmp.path();
+    let a = register(&d, t, "repo-a", 0);
+    decide::trust(&d, "repo-a", "commit", None).unwrap();
+    for _ in 0..8 {
+        auto_ref(&request(&d, &a, &ask("commit")));
+    }
+    // 第 9 次是人答的（交接沒經過放行判定），然後撤回
+    let rs = answer_n(&d, t, "repo-a", &["1"]);
+    let w = decide::overturn(&d, &rs[0].answered.reference, None).unwrap();
+    assert_eq!(w.what, decide::Undo::Withdraw);
+    let pol = policy::load(&d);
+    assert_eq!(
+        pol.rule("repo-a", AskKind::Commit).unwrap().level,
+        Level::Auto,
+        "撤回不降規則"
+    );
+    // 撤回的不算：這次是第 9 次（放行），下一次才是第 10 次抽查
+    auto_ref(&request(&d, &a, &ask("commit")));
+    assert_eq!(wait_code(&request(&d, &a, &ask("commit"))), "spot_check");
 }
 
 #[test]

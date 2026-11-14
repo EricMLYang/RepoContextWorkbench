@@ -331,3 +331,110 @@ fn repo_entry_sections_and_limits() {
         }
     }
 }
+
+/// 第 4 輪補件：入口卡的最後交接帶下一步、在等使用者什麼、回答了沒；內容很長時下一步仍在。
+#[test]
+fn repo_entry_says_what_it_is_waiting_for() {
+    let (tmp, d) = spine();
+    let t = tmp.path();
+    let a = register(&d, t, "alpha");
+    let ask = ctx_core::ask::AskInput {
+        question: "首頁排序用哪個？".into(),
+        kind: Some("choose".into()),
+        options: vec!["依時間".into(), "依名稱".into()],
+        recommend: Some("1".into()),
+        reversible: None,
+        evidence: vec![],
+    };
+    api::handoff_with_ask(
+        &d,
+        "寫完排序",
+        "等使用者挑排序方式",
+        &[] as &[&str],
+        Some(&ask),
+        &Target::at(&a),
+        false,
+        "agent",
+    )
+    .unwrap();
+    let h = api::repo_entry(&d, "alpha").unwrap().last_handoff.unwrap();
+    assert_eq!(h.next_step.as_deref(), Some("等使用者挑排序方式"));
+    let q = h.ask.as_ref().unwrap();
+    assert_eq!(
+        (q.question.as_str(), q.answer.as_deref()),
+        ("首頁排序用哪個？", None)
+    );
+    assert!(!h.waits_on_you, "有提問就看 ask，不另標");
+    // 回答之後帶答案
+    ctx_core::decide::answer_with(&d, "alpha", "2", Some(&t.join("cp"))).unwrap();
+    let h = api::repo_entry(&d, "alpha").unwrap().last_handoff.unwrap();
+    assert_eq!(h.ask.unwrap().answer.as_deref(), Some("依名稱"));
+    // 沒提問、但下一步看起來在等人
+    api::handoff(
+        &d,
+        "草稿",
+        "等使用者決定要不要 push",
+        &[] as &[&str],
+        &Target::at(&a),
+        false,
+        "agent",
+    )
+    .unwrap();
+    let h = api::repo_entry(&d, "alpha").unwrap().last_handoff.unwrap();
+    assert!(h.ask.is_none() && h.waits_on_you);
+    api::handoff(
+        &d,
+        "草稿",
+        "補測試",
+        &[] as &[&str],
+        &Target::at(&a),
+        false,
+        "agent",
+    )
+    .unwrap();
+    assert!(
+        !api::repo_entry(&d, "alpha")
+            .unwrap()
+            .last_handoff
+            .unwrap()
+            .waits_on_you
+    );
+    // 很長：下一步仍在、不超過上限
+    for f in ["AGENTS.md", "README.md", "docs/index.md"] {
+        write(&a, f, &format!("# {}\n", "很長的標題".repeat(40)));
+    }
+    set_field(
+        &d,
+        "alpha",
+        "description",
+        "很長的介紹".repeat(100).as_str(),
+    )
+    .unwrap();
+    for i in 0..3 {
+        api::log_decision(
+            &d,
+            &format!("判斷 {i} {}", "很長".repeat(100)),
+            &Target::at(&a),
+            None,
+            false,
+            "agent",
+        )
+        .unwrap();
+    }
+    let long_next = format!("下一步：{}", "先跑測試再整理".repeat(20));
+    api::handoff(
+        &d,
+        &"做完很多事".repeat(100),
+        &long_next,
+        &[] as &[&str],
+        &Target::at(&a),
+        false,
+        "agent",
+    )
+    .unwrap();
+    let e = api::repo_entry(&d, "alpha").unwrap();
+    assert!(serde_json::to_string(&e).unwrap().chars().count() <= api::ENTRY_MAX_CHARS);
+    let n = e.last_handoff.unwrap().next_step.unwrap();
+    assert!(n.starts_with("下一步：先跑測試再整理"), "{n}");
+    assert!(n.chars().count() > 60, "下一步最後才縮：{n}");
+}

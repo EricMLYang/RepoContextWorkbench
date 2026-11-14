@@ -469,10 +469,49 @@ pub fn build_state(spine_dir: impl AsRef<Path>, scope: &StateScope) -> Result<Va
     if let Ok(h) = crate::health::health(spine_dir, 14, None) {
         out["health"] = h;
     }
+    // Rust 才有（F-127）：要你決定的小數字（不跑 git）；清單打開才用 `decide_queue` 取
+    let rs = match (&scope.repos, &scope.group) {
+        (Some(r), _) => crate::relay::RelayScope::Repos(r.clone()),
+        (None, Some(g)) => crate::relay::RelayScope::Group(g.clone()),
+        (None, None) => crate::relay::RelayScope::All,
+    };
+    if let Ok(sum) = crate::decide::summary(spine_dir, &rs, chrono::Local::now().naive_local()) {
+        // 同一件事只出現一次：成了決策卡的交接，本身那則未讀與之前的「agent 等你回應」收掉
+        if let Some(Value::Array(cards)) = out.get_mut("cards") {
+            cards.retain(|c| !covered_by_decision(c, &sum.pending));
+        }
+        out["decide"] = serde_json::to_value(&sum)?;
+    }
     Ok(out)
 }
 
 pub(crate) use crate::pystr::truthy;
+
+/// 這張未讀卡講的事已經是一張決策卡了（F-127）：那筆交接本身，或同一個 repo 在交接之前回報的「agent 等你回應」。
+fn covered_by_decision(c: &Value, pending: &[(String, String)]) -> bool {
+    if !matches!(c["kind"].as_str(), Some("event" | "interrupt")) {
+        return false;
+    }
+    let at = format!(
+        "{} {}",
+        c["date"].as_str().unwrap_or(""),
+        c["time"].as_str().unwrap_or("")
+    );
+    let title = c["title"].as_str().unwrap_or("");
+    let repos: Vec<&str> = c["scope_repos"]
+        .as_array()
+        .map(|a| a.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    pending.iter().any(|(repo, h_at)| {
+        repos.len() == 1
+            && spine::same_token(repos[0], repo)
+            && ((c["etype"] == "decision" && title.starts_with("交接") && at == *h_at)
+                || (c["etype"] == "suggestion"
+                    && c["source"] == "agent"
+                    && title.starts_with("agent 等你回應")
+                    && at.as_str() <= h_at.as_str()))
+    })
+}
 
 /// 對應 `GET /api/state`（`server.py`）：[`build_state`] ＋ `terms`（會話清冊＋回報）＋ `agents`（config `agents` 的鍵）。
 pub fn api_state(

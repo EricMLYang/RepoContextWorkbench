@@ -116,6 +116,7 @@ RUST_ONLY_ACTIONS = {"brief_session"}
 def drop_rust_only(v):
     if isinstance(v, dict):
         v.pop("health", None)  # F-50：App 活動分頁的健康指標（Rust 才有）
+        v.pop("decide", None)  # F-127：要你決定的小數字（Rust 才有）
         if isinstance(v.get("actions"), list):
             v["actions"] = [a for a in v["actions"]
                             if not (isinstance(a, dict) and a.get("action") in RUST_ONLY_ACTIONS)]

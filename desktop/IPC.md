@@ -127,12 +127,21 @@ Rust 端簽名建議：
 | `group_notes`（Rust 才有） | `{group}`（已儲存的牌組） | `group`, `path`（`<spine>/groups/<組>/notes.md`）, `notes: [{at, text}]`（新的在前） |
 | `note_add`（Rust 才有） | `{group, text}` | 同 `group_notes` |
 | `note_remove`（Rust 才有） | `{group, at, text}`（兩個都要對得上，檔案被改過就拒絕） | 同 `group_notes` |
+| `decide_queue`（Rust 才有，唯讀；F-127） | `{group?, repos?}`（畫面範圍；都沒有＝全部） | 同 `ctx decide list --json`（`scope, at, cards[], structured, suggestions[]`），但不跑 git（`relay::plan_light`：備註不會有「N 個檔沒 commit」）。卡片多 `class`（名片類別）、`done`／`remaining`／`next_step`（交接全文）、證據多 `repo`／`rel`（在檢視器打開用）、`advice`（建議，`from: {kind: steward}\|{kind: repo, repo}`） |
+| `decide_answer`（Rust 才有；F-127） | `{repo, reply}`（選項編號或一句話） | 同 `ctx decide answer --json`（攤平的回答留痕＋`option`、`relay{task, delivery{kind: existing_session\|resume\|new_session, …}}`、`downgraded?`、`suggestion?`、`advice_differs?`）。**不開會話**：前端依 `delivery` 給一個按鈕（貼進開著的會話／`term_create` 帶 `resume`＋`prompt`／開會話對話框預填任務），要人按。送不出去（busy、路徑不在）＝錯誤、不留痕。使用者本人在按，不經過 CLI 的 `CLAUDECODE` 檢查 |
+| `decide_auto`（Rust 才有，唯讀；F-127） | `{since?}`（預設近 7 天） | 同 `ctx decide list --auto --json` |
+| `decide_mine`（Rust 才有，唯讀；F-127） | `{}` | 同 `ctx decide list --mine --json`（`since, items[]`）：人近 7 天的回答，新的在前、最多 10 筆；已撤回的 `overturned_by` 有值、`command` 為 null |
+| `decide_rules`（Rust 才有，唯讀；F-127） | `{}` | 同 `ctx decide rules --json` |
+| `decide_trust`／`decide_untrust`（Rust 才有；F-127） | `{repo, kind}` | 同 `ctx decide trust／untrust --json`（`rule, previous, past`）。前端只從回答後的升級建議進來（`trust` 要按兩次），不提供 paths |
+| `decide_overturn`（Rust 才有；F-127） | `{ref, why?}` | 同 `ctx decide overturn --json`（`ref, what, approval, rule, note`）。`what: "overturn"`＝推翻規則放行（規則降回 ask；前端按兩次才送）；`ref` 指向**人的回答**＝`what: "withdraw"` 撤回（`rule` 為 null、規則不動，那筆不算數、卡回到佇列；前端按一次就送）。已推翻／撤回過＝錯誤 |
+| `steward_brief`（Rust 才有，唯讀；F-127） | `{}` | 同 `ctx steward --json`（不記「總管看過了」） |
 
 未知 name → `Err("未知 action: <name>")`。
 
 **Rust 殼**（`src-tauri/src/workbench.rs`）：`get_state`／`get_scan`／`run_action` 全部接到 `ctx_core::workbench`
 （`api_state`／`build_scan`／`handle_action`，會話清冊以 `Terms` trait 傳入 `TermManager`）。
-`term_create` 的 agent 分支：`session::build` 組好 cwd＋指令 → `TermManager::create_agent`；
+`term_create` 的 agent 分支：`session::build` 組好 cwd＋指令 → `TermManager::create_agent`；帶 `steward: true`＝總管會話（F-127：`session::SessionScope::Steward`，cwd＝spine，
+不帶 group／repos，origin＝`steward`，會話標題與 `scope` 是「總管」）；
 `session_draft`／`session_result` 從 `terms.get(sid).info()` 拿會話資料。
 `collide`／`collide_rerun` 的背景判定：找得到 `ctx`（`ctx_core::exe::ctx_exe`：自己→同目錄→PATH）就起 detached 進程（同 Python，關 App 也跑得完），
 沒有就在 App 行程裡開執行緒跑（App 結束前沒跑完 → lint 會報「碰撞無回程」，可按〔重跑判定〕）。
@@ -183,6 +192,9 @@ Rust 端簽名建議：
 - `lane`（卡片與 `recent[]` 事件）：`scope`＝屬於目前範圍、`global`＝全域與未分類（卡片另含：範圍外的打斷）、`other`＝不顯示。前端照它分欄，不自己判斷範圍。
 - `attention{needs_you, finished_unseen, working}`（Rust 才有，F-80／F-86）：活著的 agent 會話裡「在等你」（waiting／blocked）與「做完沒看」（finished 且沒 `seen`、沒 `faded`）各幾個——殼的選單列與 Dock 徽章直接讀這個，不自己比狀態字串（分類只在引擎 `workbench::Attention`）。
 - `usage{at, five_hour{used,resets}|null, seven_day{…}|null, context|null, model|null, warn}|（沒收過就沒有這個鍵）`（Rust 才有，F-83）：Claude Code 額度餘光，從 App 會話的 statusLine 來（`ctx hook statusline` → `.state/usage.json`）。
+- `decide{count, all, auto_recent, key}`（Rust 才有，F-127）：目前範圍與全部範圍要你決定幾件、近 7 天自動放行幾筆、卡有沒有變的指紋（變了前端才重抓 `decide_queue`）。
+  不跑 git（`relay::plan_light`），真資料副本上 `decide::summary` 約 7ms、這個鍵約 450 bytes。成了決策卡的交接，`cards[]` 裡那則交接的未讀、
+  與同一個 repo 在交接之前的「agent 等你回應」收掉（同一件事只出現一次，`covered_by_decision`）。
 - `terms[]`：`sid, title, alive, kind, origin, scope, scope_repos, started, task, report{text,type,source,at}|null, report_basis`，agent 會話另有 `agent_status{status,text,at,…}|null`、`ai_title`、`last_reply`、`claude_session`、`resume_cwd`（F-71／F-78）。
   Rust 才有（2026-10-14）：`agent_status` 也可能來自 Claude Code hook——`term_create` 開 Claude Code（config `mcp: mcp-config`）時多帶
   `--settings=<spine>/.state/session_hooks.json`（只掛 `Stop` → `ctx hook stop`、`UserPromptSubmit` → `prompt`、`Notification` 依 matcher：`permission_prompt`／`elicitation_dialog`／`elicitation_url_dialog`／`agent_needs_input` → `permission`、`idle_prompt` → `notification`，

@@ -22,6 +22,7 @@ use crate::{brief, collide, registry, route};
 use crate::{Error, Result};
 
 mod briefs;
+mod decide;
 mod files;
 mod finder;
 mod namecard;
@@ -182,6 +183,16 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("install_update", a_install_update),
     ("search_content", a_search_content),
     ("update_skill", a_update_skill),
+    // F-127：決策佇列與放行規則
+    ("decide_queue", decide::a_decide_queue),
+    ("decide_answer", decide::a_decide_answer),
+    ("decide_auto", decide::a_decide_auto),
+    ("decide_mine", decide::a_decide_mine),
+    ("decide_rules", decide::a_decide_rules),
+    ("decide_trust", decide::a_decide_trust),
+    ("decide_untrust", decide::a_decide_untrust),
+    ("decide_overturn", decide::a_decide_overturn),
+    ("steward_brief", decide::a_steward_brief),
 ];
 
 /// 不寫入任何東西的 action：殼不發 `workbench://changed`（否則展開資料夾、開檔都會讓前端重抓整份 state）。
@@ -225,6 +236,12 @@ const READ_ONLY: &[&str] = &[
     "search_content",
     // 只寫 ~/.claude/skills 裡的說明檔
     "update_skill",
+    // F-127：只讀
+    "decide_queue",
+    "decide_auto",
+    "decide_mine",
+    "decide_rules",
+    "steward_brief",
 ];
 
 /// 這個 action 只讀（不改 spine、registry、會話清冊）。未知名稱＝false。

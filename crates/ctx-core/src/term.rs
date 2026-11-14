@@ -479,6 +479,9 @@ impl TermSession {
     }
 }
 
+/// 總管會話的 origin（F-127）：標題與範圍標成「總管」，會話列認得出來。
+pub const STEWARD_ORIGIN: &str = "steward";
+
 /// 對應 `term.agent_title`：會話標題＝任務摘要（2026-09-02 檢討 F5：會話要有主，開三個分得出誰是誰）。
 /// 沒任務才退回 `agent · scope`。`limit` 以字元計。
 pub fn agent_title(agent: &str, scope: &str, task: Option<&str>, limit: usize) -> String {
@@ -635,9 +638,11 @@ impl TermManager {
     /// 對應 `TermManager.create_agent`（指令組裝那段在呼叫端）：登入 shell 包裝→PTY spawn→agentmark 標記。
     pub fn create_agent(&self, launch: AgentLaunch) -> Result<Arc<TermSession>> {
         let sid = self.next_sid();
+        let steward = launch.origin.as_deref() == Some(STEWARD_ORIGIN);
         let scope = launch
             .repo
             .clone()
+            .or_else(|| steward.then(|| "總管".to_string()))
             .or_else(|| launch.group.clone())
             .unwrap_or_else(|| {
                 if launch.repos.is_some() {

@@ -15,6 +15,7 @@ import { agentCommandsSpec } from "./sessions/AgentCommands";
 import { promptLibrarySpec } from "./sessions/PromptLibrary";
 import { transcriptSpec } from "./sessions/Transcript";
 import { tidyTodosSpec } from "./todos/TidyTodos";
+import { autoListSpec } from "./inbox/DecideRules";
 
 /** 打字後多久才問引擎（毫秒）——邊打邊找，不必每個字都問。 */
 const DEBOUNCE_MS = 120;
@@ -270,6 +271,27 @@ export function Palette({ onClose, initial = "" }: { onClose: () => void; initia
       label: "開這個範圍的 Agent 會話",
       keys: "agent session claude 會話",
       run: () => ui.openSession({ origin: "palette" }),
+    },
+    {
+      id: "steward",
+      label: "開總管會話（看全部 repo，只讀與留建議）",
+      keys: "steward 總管 decide 要你決定",
+      run: () => ui.openSession({ steward: true, origin: "steward" }),
+    },
+    {
+      id: "decide",
+      label: "看要你決定的（所有 repo）",
+      keys: "decide 要你決定 決策",
+      run: () => {
+        store.setScope({ group: null, repos: null });
+        ui.showTab("inbox");
+      },
+    },
+    {
+      id: "decisions",
+      label: "回答、放行與規則（撤回你最近的回答）",
+      keys: "decide 撤回 推翻 放行 規則 withdraw overturn policy",
+      run: () => ui.openDetail(autoListSpec()),
     },
     {
       id: "shell",

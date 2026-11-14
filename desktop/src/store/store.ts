@@ -9,6 +9,7 @@ import type {
   ActionName,
   ActionPayload,
   ActionResult,
+  DecideQueue,
   RepoState,
   ScanResult,
   WorkbenchState,
@@ -69,6 +70,9 @@ export interface Snapshot {
   /** 卡片上就地顯示的動作錯誤（卡片 key → 訊息）。 */
   cardErrors: Readonly<Record<string, string>>;
   toast: { text: string; seq: number };
+  /** F-127：目前範圍要你決定的卡（上次成功取得的；失敗保留）。null＝還沒取過或引擎沒有這個功能。 */
+  decide: DecideQueue | null;
+  decideError: string;
 }
 
 export const STATE_POLL_MS = 5000;
@@ -84,6 +88,9 @@ export class WorkbenchStore {
   /** 各範圍上次成功的採集結果（只放記憶體）：切回去先顯示這份，背景再重抓——不用每次從空白等起。 */
   private scanCache = new Map<string, { scan: ScanResult; at: string }>();
   private unsubscribeChanged: (() => void) | null = null;
+  /** 上次取決策卡時的（範圍＋引擎給的指紋）：一樣就不重抓。 */
+  private decideKey = "";
+  private decideVersion = 0;
   readonly backend: Backend;
 
   constructor(backend: Backend, initialScope?: Scope) {
@@ -106,6 +113,8 @@ export class WorkbenchStore {
       busy: new Set(),
       cardErrors: {},
       toast: { text: "", seq: 0 },
+      decide: null,
+      decideError: "",
     };
   }
 
@@ -177,6 +186,14 @@ export class WorkbenchStore {
         // 範圍還在不在由引擎判斷；只信這次問的就是目前範圍的回答
         const gone = !!next.scope?.gone && asked === JSON.stringify(this.stateScope());
         this.set({ state: next, stateReady: true, stateError: "" });
+        // F-127：卡有變（引擎的指紋）或換了範圍才重抓決策卡；舊版引擎沒有 decide 就不抓
+        if (next.decide && !gone) {
+          const key = asked + "|" + next.decide.key;
+          if (key !== this.decideKey) {
+            this.decideKey = key;
+            void this.refreshDecide();
+          }
+        }
         if (gone) {
           save("scope", ALL_SCOPE);
           this.scanVersion++;
@@ -196,6 +213,17 @@ export class WorkbenchStore {
       }
     })();
     return this.stateFlight;
+  };
+
+  /** 決策卡（F-127）：失敗保留上次的卡、把錯誤放 decideError；舊回應不蓋新範圍。 */
+  refreshDecide = async (): Promise<void> => {
+    const version = ++this.decideVersion;
+    try {
+      const q = await this.backend.action("decide_queue", this.stateScope());
+      if (version === this.decideVersion) this.set({ decide: q, decideError: "" });
+    } catch (e) {
+      if (version === this.decideVersion) this.set({ decideError: (e as Error).message });
+    }
   };
 
   rescan = async (): Promise<void> => {
@@ -250,7 +278,7 @@ export class WorkbenchStore {
     this.scopeListeners.forEach((fn) => fn(prev, next));
     save("scope", next);
     this.scanVersion++;
-    this.set({ scope: next, scanError: "" });
+    this.set({ scope: next, scanError: "", decide: null, decideError: "" });
     const cached = this.scanCache.get(this.scopeKey());
     this.set(
       cached
