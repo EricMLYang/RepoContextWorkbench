@@ -9,8 +9,8 @@
 
 | 名稱 | 類型 | 把 repo 當成什麼 | 可抄 | 不抄／差異 | 狀態 | 查證 | 最後查證 | 發現途徑 | 連結 |
 |---|---|---|---|---|---|---|---|---|---|
-| Orca | 平行執行台 | 工作區（每任務一個 worktree） | 同一題分給多個 agent 比較、合併；Agent Dashboard（會話名稱＋最後訊息、Needs You 染色）、Agent Session History（掃逐字稿、Resume）、Dock 徽章、Annotate AI Diff 整批送回、混合式 skill（stub＋版本相符指南）；R34：agent 狀態 working／waiting／done／blocked 與 30 分衰減、Needs You 看板、statusLine 零成本拿額度、worker 合約（做完只回報一次、卡住用 ask）、awake service；R33／R34 讀原始碼 | 不管跨 repo 脈絡、不留判斷；終端機不跟它拼 → F-28、F-31、F-71～F-76、F-80～F-86、N-41 | 標竿 | 🔗 | 2026-10-16（R34） | 使用者點名；R33 讀 `reference_repo/orca` | [onorca.dev](https://onorca.dev/) |
-| Better Agent Terminal | 終端聚合器（Tauri＋Rust，跟我們同棧） | 資料夾＝工作區 | 轉交前遮蔽秘密（transfer-redaction）、Rust crate 拆分（不依賴 Tauri）、IPC 只加不改、互動 CLI＋讀逐字稿（避開 `-p` 程式化計費）；R34：三條串 Claude 的路共用一個訊息合約、「需要我」清單（亮綠＝做完沒看、鈴鐺紅＞綠＞灰）、harness 雜訊過濾、計費路徑標示、觀測 hook 立刻回 | 內建 SDK 面板、auto-continue、遠端 QR 不抄 → N-39、F-72、F-80、F-81、F-84、N-40、N-42 | 參考 | 🔗 | 2026-10-16（R34） | 使用者點名；R33 讀 `reference_repo/better-agent-terminal` | [GitHub](https://github.com/tony1223/better-agent-terminal) |
+| Orca | 平行執行台 | 工作區（每任務一個 worktree） | 同一題分給多個 agent 比較、合併；Agent Dashboard（會話名稱＋最後訊息、Needs You 染色）、Agent Session History（掃逐字稿、Resume）、Dock 徽章、Annotate AI Diff 整批送回、混合式 skill（stub＋版本相符指南）；R34：agent 狀態 working／waiting／done／blocked 與 30 分衰減、Needs You 看板、statusLine 零成本拿額度、worker 合約（做完只回報一次、卡住用 ask）、awake service；R33／R34 讀原始碼；R41：一個月 7,450 個 commit；README 主打原生 Chat（與 CLI 互轉）、orchestration、雲端 VM、手機 App、Linear、plugin、automations（10 月就有，當時沒記），正在變平台；commit 主旨裡找不到跨 repo 記憶或判斷留痕 | 不管跨 repo 脈絡、不留判斷；終端機不跟它拼 → F-28、F-31、F-71～F-76、F-80～F-86、N-41 | 標竿 | ✅ | 2026-11-15（R41） | 使用者點名；R33 讀 `reference_repo/orca` | [onorca.dev](https://onorca.dev/) |
+| Better Agent Terminal | 終端聚合器（Tauri＋Rust，跟我們同棧） | 資料夾＝工作區 | 轉交前遮蔽秘密（transfer-redaction）、Rust crate 拆分（不依賴 Tauri）、IPC 只加不改、互動 CLI＋讀逐字稿（避開 `-p` 程式化計費）；R34：三條串 Claude 的路共用一個訊息合約、「需要我」清單（亮綠＝做完沒看、鈴鐺紅＞綠＞灰）、harness 雜訊過濾、計費路徑標示、觀測 hook 立刻回；R41：3.0 起只剩 Tauri、手機 App、cx 語意導覽、Codex 會話索引、用量上限重置後自動接續；一個月 27 個 commit | 內建 SDK 面板、auto-continue、遠端 QR 不抄 → N-39、F-72、F-80、F-81、F-84、N-40、N-42 | 參考 | ✅ | 2026-11-15（R41） | 使用者點名；R33 讀 `reference_repo/better-agent-terminal` | [GitHub](https://github.com/tony1223/better-agent-terminal) |
 | Conductor | 平行執行台 | 工作區（macOS、worktree） | diff／PR 審查流程、串 Linear／GitHub | 同上 → F-30 | 參考 | 🔗 | 2026-10-09 | R01 平行 agent 比較文 | [nimbalyst 比較](https://nimbalyst.com/compare/nimbalyst-vs-conductor-vs-vibe-kanban/) |
 | Vibe Kanban | 平行執行台 | issue 看板＋工作區 | 看板形狀的規劃與審查 | bloop 2026-04 關門，改社群維護 | 觀察 | 🔗 | 2026-10-09 | 同上 | [aq.dev](https://aq.dev/alternatives/vibe-kanban/) |
 | Sculptor | 平行執行台 | Docker 容器 | 隔離本機 repo，核准後才把改動搬進來 | — | 觀察 | 🔗 | 2026-10-09 | 同上 | [augmentcode 整理](https://www.augmentcode.com/tools/open-source-agent-orchestrators) |
@@ -78,7 +78,7 @@
 | Stepsailor AI Command Bar | 元件（SaaS） | — | 自然語言 → 確定性動作，人留在迴圈裡 | 只看到產品介紹；ctx 自己做白名單＋驗證放引擎 → F-63 | 觀察 | 🔗 | 2026-10-15 | 同上 | [hunted.space](https://hunted.space/product/ai-command-bar) |
 | HackMD／HedgeDoc／MarkText | md 編輯器 | 文件（雲端或本機檔） | 左寫右看分割預覽、工具列；MarkText 本機檔即時預覽 | 要協作／雲端才用 HackMD；ctx 只做 repo 裡檔案的輕量編輯，不做協作 → F-64 | 參考 | 🔗 | 2026-10-15 | 使用者點名 HackMD；R30 查詢 | [比較](https://unmarkdown.com/blog/stackedit-vs-hedgedoc-vs-hackmd) |
 | Clearly | md 編輯器（開源、Mac） | 本機 md 資料夾 | wiki-link 自動完成、backlinks（含未連結的提及）、標題大綱、全文搜尋排序；**自帶 MCP server** | 不管 repo 與 agent 會話；ctx 抄 backlinks（F-69），MCP 已有 | 參考 | 🔗 | 2026-10-15 | R32 查詢「local markdown editor … backlinks」 | [介紹](https://notes.nicolasdeville.com/apps/clearly/) |
-| Herdr | 終端 runtime（Apache-2.0、無 GUI） | 終端會話 | 斷線後 agent 會話照樣活著（會話生命週期獨立於前端，跟 AGENTS.md「關視窗不殺 agent」同一個原則） | 沒有 GUI、diff 審查、排程 | 觀察 | 🔗 | 2026-10-18（R35） | R35 `Orca agent terminal alternatives 2026`（Superset 比較頁，偏袒 Superset） | [superset.sh 比較](https://superset.sh/compare/herdr-alternative) |
+| Herdr | 終端 server（herdr-core）＋原生 App（GPUI）；另有原版 TUI；Apache-2.0 | space＝某台機器上的一個 repo | 會話跑在獨立 server，關 App／更新／當掉都不斷（→ F-128）；狀態只收 agent 自報的 OSC 7501（→ F-130）；`hc run／send／wait` 讓 agent 叫 agent、draft wait（→ F-131）；OpenRPC 可自己做 client；版面與功能是設定目錄裡的檔案，附 AGENTS.md 讓 agent 改 | 不管跨 repo 脈絡、不留判斷；沒有內建 diff 審查；mod 市集、手機直連不抄 | 參考 | ✅ | 2026-11-15（R41） | R35 搜尋；R41 使用者點名，clone 到 `reference_repo/herdr-app`、`herdr-core`、`herdr` | [herdr.dev](https://herdr.dev/) |
 
 ## 待查對標（下一輪處理）
 
@@ -159,6 +159,7 @@
 
 - R35：`Orca agent terminal alternatives 2026`（延伸法；結果多是 Superset 自家比較頁：Superset、Emdash、Conductor、Herdr、super.engineering）
 - R35：`agent memory recommendation relevance stale todo backlog pruning beads compaction`（沒找到「自動判斷待辦過時」的現成做法；bv 用 PageRank 排優先）
+- R41：沒有搜尋；讀 herdr.dev、三個 herdr repo 的 README 與 docs、Orca 與 BAT 的最新 README
 
 ### 下一輪查詢
 1. `beads bv triage PageRank betweenness agent task priority`（R35：未結 81 項、開 78 關 11，排序與清理的做法）
