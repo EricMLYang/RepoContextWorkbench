@@ -140,6 +140,9 @@ pub struct Config {
     root: Value,
 }
 
+/// config `thresholds.program_status_takeover_seconds` 沒設時的預設（F-130）：hook 靜默 2 分鐘才讓給程式回報。
+pub const PROGRAM_STATUS_TAKEOVER_SECONDS: i64 = 120;
+
 /// `thresholds` 段。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Thresholds {
@@ -344,6 +347,25 @@ impl Config {
             upstream_kinds: self.str_list("thresholds.upstream.kinds"),
             upstream_prerelease: self.bool("thresholds.upstream.prerelease").unwrap_or(false),
         }
+    }
+
+    /// `session.program_status`（F-130，Rust 才有）：App 開的會話要不要讀 agent 自己在終端報的狀態（OSC 7501）、
+    /// 回應它的探詢。預設開；`false` 或 `"off"`（YAML 裸 `off` 也是 false）＝整個關掉（不解析、不回應）。
+    pub fn program_status(&self) -> bool {
+        match self.get("session.program_status") {
+            Some(Value::Bool(false)) => false,
+            Some(Value::String(s)) => !s.trim().eq_ignore_ascii_case("off"),
+            _ => true,
+        }
+    }
+
+    /// `thresholds.program_status_takeover_seconds`（F-130，Rust 才有）：hook 靜默多久、程式回報又說已經離開那個狀態，
+    /// 就改用程式回報。沒設＝[`PROGRAM_STATUS_TAKEOVER_SECONDS`]；負數當 0。
+    pub fn program_status_takeover(&self) -> std::time::Duration {
+        let secs = self
+            .i64("thresholds.program_status_takeover_seconds")
+            .unwrap_or(PROGRAM_STATUS_TAKEOVER_SECONDS);
+        std::time::Duration::from_secs(u64::try_from(secs).unwrap_or(0))
     }
 
     /// `provider.programmatic`（F-84，Rust 才有）：引擎能不能自己叫 `claude -p`（另計額度）。
@@ -576,6 +598,27 @@ mod tests {
         assert_eq!(c.str("session.role_prompt"), Some("x"));
         assert_eq!(c.pack_token_budget(), 60000);
         assert_eq!(c.provider_model("collide"), Some("strong"));
+    }
+
+    #[test]
+    fn program_status_switch_and_takeover_threshold() {
+        use std::time::Duration;
+        let d = Config::from_value(&json!({}));
+        assert!(d.program_status());
+        assert_eq!(d.program_status_takeover(), Duration::from_secs(120));
+        for off in [json!(false), json!("off"), json!(" OFF ")] {
+            let c = Config::from_value(&json!({"session": {"program_status": off}}));
+            assert!(!c.program_status());
+        }
+        let c = Config::from_value(&json!({
+            "session": {"program_status": true},
+            "thresholds": {"program_status_takeover_seconds": 30},
+        }));
+        assert!(c.program_status());
+        assert_eq!(c.program_status_takeover(), Duration::from_secs(30));
+        let neg =
+            Config::from_value(&json!({"thresholds": {"program_status_takeover_seconds": -5}}));
+        assert_eq!(neg.program_status_takeover(), Duration::ZERO);
     }
 
     #[test]

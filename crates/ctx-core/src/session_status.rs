@@ -24,12 +24,21 @@
 //! 都從 hook 給的 `transcript_path` 讀尾巴（只讀不寫）。
 //! F-78：另記 `claude_session`（agent CLI 自己的會話 id；Codex 的也記在這個鍵，另有 `agent: "codex"`）與 `cwd`；程序結束時不刪檔，改寫成
 //! `status: "exited"`（[`retire`]）——已結束的會話列據此給「接續」（`claude --resume`）。
+//!
+//! F-130（2026-11-18）狀態雙通道：除了 hook，agent 也可能自己在終端輸出裡報狀態（OSC 7501，見
+//! [`crate::program_status`]）。App 的 PTY 讀到就寫**並排的另一個檔** `<sid>.program.json`（[`ProgramRecorder`]）——
+//! hook 是另一個行程、每次重寫整份 `<sid>.json`，兩個來源寫同一個檔會互蓋，分開就各寫各的。
+//! 程式回報的檔跟 hook 檔同形（`status`／`text`／`at`／`event`，讀端不必分兩套），多 `source: "program"`、
+//! `ts`（毫秒）與 `program`（原始回報：state、kind、app、msg、progress、title）。hook 檔也多兩個欄位：
+//! `source: "hook"`、`ts`（毫秒，比 `at` 精確，優先規則用）；舊檔沒有這兩個欄位照樣讀（`ts` 退回檔案修改時間）。
+//! 哪一個算數由 [`pick_source`] 決定，讀端用 [`read_resolved`]。
 
 use std::path::{Path, PathBuf};
 
 use chrono::{Local, NaiveDateTime};
 use serde_json::{json, Value};
 
+use crate::program_status::{BlockedKind, ProgramReport, ProgramState};
 use crate::status::AgentStatus;
 use crate::Result;
 
@@ -118,6 +127,7 @@ pub fn clear(spine_dir: &Path, sid: &str) {
 /// 狀態檔旁邊的兩樣東西：用量檔與子 agent 標記資料夾（程序結束就沒意義了）。
 fn drop_extras(status: &Path) {
     let _ = std::fs::remove_file(meter_path(status));
+    remove_program(status);
     let _ = std::fs::remove_dir_all(subagents_dir(status));
 }
 
@@ -221,15 +231,28 @@ pub fn retire(spine_dir: &Path, sid: &str) {
 
 /// 你看過這個會話了（F-80）：狀態檔記 `seen: true`。沒有狀態檔＝沒事可記（回 false）；已經記過＝不重寫。
 /// 之後任何 hook 事件都會重寫整份、`seen` 跟著消失——下一輪做完又是「沒看」。
+/// F-130：程式回報的檔也記（沒有 hook 的 Codex 會話，「做完沒看」才消得掉）；兩個檔有一個改了就回 true。
 pub fn mark_seen(spine_dir: &Path, sid: &str) -> bool {
-    let Some(mut v) = read(spine_dir, sid) else {
-        return false;
+    let status = path_for(spine_dir, sid);
+    let hook = match read(spine_dir, sid) {
+        Some(mut v) if v.get("seen") != Some(&Value::Bool(true)) => {
+            v["seen"] = json!(true);
+            crate::fsutil::write_atomic(&status, v.to_string().as_bytes()).is_ok()
+        }
+        _ => false,
     };
-    if v.get("seen") == Some(&Value::Bool(true)) {
-        return false;
-    }
-    v["seen"] = json!(true);
-    crate::fsutil::write_atomic(&path_for(spine_dir, sid), v.to_string().as_bytes()).is_ok()
+    let program = {
+        let _g = program_lock();
+        let p = program_path(&status);
+        match read_json(&p) {
+            Some(mut v) if v.get("seen") != Some(&Value::Bool(true)) => {
+                v["seen"] = json!(true);
+                crate::fsutil::write_atomic(&p, v.to_string().as_bytes()).is_ok()
+            }
+            _ => false,
+        }
+    };
+    hook || program
 }
 
 /// App 重開：前一次的會話都不在了（sid 會重新從頭編），全部清掉，只刪 `*.json`。
@@ -472,7 +495,8 @@ pub fn record_hook_for(
         }
         _ => text,
     };
-    let mut rec = json!({"status": status.as_str(), "text": text, "at": at, "event": event.arg()});
+    let mut rec = json!({"status": status.as_str(), "text": text, "at": at, "event": event.arg(),
+                         "source": StatusSource::Hook.as_str(), "ts": millis_of(now)});
     // F-82：正在用哪個工具、從幾點幾分幾秒開始（讀端算分鐘數與「可能卡住」）；工具結束或任何別的事件就沒有這個鍵
     if event == StatusHook::ToolStart {
         rec["tool"] = json!({
@@ -573,6 +597,273 @@ fn transcript_bits(
         _ => prev_of("reply"),
     };
     (title, reply)
+}
+
+// ── F-130：程式回報（OSC 7501）與優先規則 ──────────────────────────────────
+
+/// 會話狀態從哪裡來。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StatusSource {
+    /// agent CLI 的 hook（`ctx hook …`，另一個行程寫 `<sid>.json`）
+    Hook,
+    /// agent 自己在終端輸出裡報的（OSC 7501，App 的 PTY 讀到後寫 `<sid>.program.json`）
+    Program,
+}
+
+impl StatusSource {
+    /// 狀態檔與 IPC 的 `source` 欄位。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            StatusSource::Hook => "hook",
+            StatusSource::Program => "program",
+        }
+    }
+}
+
+/// 程式回報的檔：`<sid>.program.json`（跟 hook 寫的 `<sid>.json` 並排，不互蓋）。
+pub fn program_path(status: &Path) -> PathBuf {
+    status.with_extension("program.json")
+}
+
+/// 目錄裡這個檔名是不是 hook 的會話狀態檔（`<sid>.json`；用量檔、程式回報檔不算）。
+pub fn is_status_file_name(name: &str) -> bool {
+    name.ends_with(".json") && !name.ends_with(".meter.json") && !name.ends_with(".program.json")
+}
+
+/// 同一個行程裡寫程式回報檔的有兩處（PTY 讀取執行緒、App 的「看過了」），讀改寫要排隊。
+/// 只有 App 這個行程會寫這個檔（hook 不碰它），所以行程內的鎖就夠。
+static PROGRAM_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn program_lock() -> std::sync::MutexGuard<'static, ()> {
+    PROGRAM_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn remove_program(status: &Path) {
+    let _g = program_lock();
+    let _ = std::fs::remove_file(program_path(status));
+}
+
+fn read_json(p: &Path) -> Option<Value> {
+    let s = std::fs::read_to_string(p).ok()?;
+    serde_json::from_str::<Value>(&s)
+        .ok()
+        .filter(|v| v.get("status").and_then(Value::as_str).is_some())
+}
+
+/// 這個會話的程式回報（沒有或壞掉＝None）。
+pub fn read_program(spine_dir: &Path, sid: &str) -> Option<Value> {
+    read_json(&program_path(&path_for(spine_dir, sid)))
+}
+
+/// `now`（測試給的本地時間）→ 毫秒；沒給就是現在。
+fn millis_of(now: Option<NaiveDateTime>) -> i64 {
+    now.and_then(|n| n.and_local_timezone(Local).earliest())
+        .map(|d| d.timestamp_millis())
+        .unwrap_or_else(|| Local::now().timestamp_millis())
+}
+
+/// 程式回報 → App 既有的階段、`event`、文字。`event` 沿用 hook 的字（讀端已經認得：
+/// `permission`＝要你在終端允許、`stop-failure`＝這一輪出錯），一般的進度用 `program`。
+/// idle／clear 不是顯示狀態＝None（見 [`ProgramRecorder::record`]）。
+pub fn program_view(r: &ProgramReport) -> Option<(AgentStatus, &'static str, String)> {
+    let msg = |fallback: &str| {
+        let m = r.msg.as_deref().map(str::trim).filter(|m| !m.is_empty());
+        crate::pystr::take_chars(m.unwrap_or(fallback), TEXT_MAX).to_string()
+    };
+    Some(match (r.state, r.kind) {
+        (ProgramState::Working, _) => (AgentStatus::Working, "program", msg("處理中")),
+        (ProgramState::Done, _) => (AgentStatus::Finished, "program", msg("這一輪做完了")),
+        (ProgramState::Blocked, Some(BlockedKind::Permission)) => (
+            AgentStatus::Blocked,
+            StatusHook::Permission.arg(),
+            msg("要你允許"),
+        ),
+        // 要你回答、要你登入、沒說原因：都是「等你」
+        (ProgramState::Blocked, _) => (
+            AgentStatus::Waiting,
+            StatusHook::Notification.arg(),
+            msg("等你回應"),
+        ),
+        (ProgramState::Error, _) => (
+            AgentStatus::Waiting,
+            StatusHook::StopFailure.arg(),
+            match r.msg.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
+                Some(m) => {
+                    crate::pystr::take_chars(&format!("這一輪出錯中斷：{m}"), TEXT_MAX).to_string()
+                }
+                None => "這一輪出錯中斷".to_string(),
+            },
+        ),
+        (ProgramState::Idle | ProgramState::Clear, _) => return None,
+    })
+}
+
+#[derive(serde::Serialize)]
+struct ProgramRecord<'a> {
+    status: &'static str,
+    text: String,
+    at: String,
+    event: &'static str,
+    source: StatusSource,
+    ts: i64,
+    program: ProgramFields<'a>,
+}
+
+/// 原始回報（只留根紀錄要的欄位；沒有的不輸出）。
+#[derive(serde::Serialize)]
+struct ProgramFields<'a> {
+    state: ProgramState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind: Option<BlockedKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    app: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    msg: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    progress: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    title: Option<&'a str>,
+}
+
+/// 一個會話的程式回報寫入器（PTY 讀取執行緒持有）。記得上一次寫了什麼：沒變就不寫檔（節流）。
+#[derive(Debug)]
+pub struct ProgramRecorder {
+    status: PathBuf,
+    last: Option<ProgramReport>,
+}
+
+impl ProgramRecorder {
+    /// `status`＝這個會話 hook 用的狀態檔路徑（[`path_for`]）；程式回報寫在它旁邊。
+    pub fn new(status: PathBuf) -> Self {
+        ProgramRecorder { status, last: None }
+    }
+
+    /// 記一筆回報，回傳檔案有沒有變。只記根紀錄（子紀錄＝子 agent，hook 那邊另有計數）。
+    /// - 跟上一筆一樣：不寫
+    /// - `clear`：撤掉紀錄（刪檔）
+    /// - `idle`：上一筆是做完／出錯就留著（你還沒看結果）；否則撤掉——閒著不是一個要顯示的狀態
+    ///   （剛開的 Codex 一開始就送 idle，不該亮「等你」）
+    pub fn record(&mut self, report: ProgramReport, now: Option<NaiveDateTime>) -> bool {
+        if report.id.is_some() || self.last.as_ref() == Some(&report) {
+            return false;
+        }
+        let prev = self.last.replace(report.clone()).map(|r| r.state);
+        let Some((status, event, text)) = program_view(&report) else {
+            let keep = report.state == ProgramState::Idle
+                && matches!(prev, Some(ProgramState::Done | ProgramState::Error));
+            if keep {
+                return false;
+            }
+            let _g = program_lock();
+            return std::fs::remove_file(program_path(&self.status)).is_ok();
+        };
+        let at = now
+            .unwrap_or_else(|| Local::now().naive_local())
+            .format("%Y-%m-%d %H:%M")
+            .to_string();
+        let rec = ProgramRecord {
+            status: status.as_str(),
+            text,
+            at,
+            event,
+            source: StatusSource::Program,
+            ts: millis_of(now),
+            program: ProgramFields {
+                state: report.state,
+                kind: report.kind,
+                app: report.app.as_deref(),
+                msg: report.msg.as_deref(),
+                progress: report.progress,
+                title: report.title.as_deref(),
+            },
+        };
+        let Ok(bytes) = serde_json::to_vec(&rec) else {
+            return false;
+        };
+        let p = program_path(&self.status);
+        if let Some(parent) = p.parent() {
+            if std::fs::create_dir_all(parent).is_err() {
+                return false;
+            }
+        }
+        let _g = program_lock();
+        crate::fsutil::write_atomic(&p, &bytes).is_ok()
+    }
+}
+
+/// 一個來源最後一次說了什麼、什麼時候（毫秒）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Observed {
+    pub status: AgentStatus,
+    pub at_ms: i64,
+}
+
+/// 優先規則（F-130，照 Orca `hook-precedence` 的想法）：
+/// - 只有一邊有紀錄就用那一邊；都沒有＝None
+/// - 都有：hook 優先。例外是 hook 已經靜默超過 `takeover_ms`、而程式回報**在那之後**換到了不同的階段——
+///   hook 漏了事件（例：沒等到 Stop），程式自己說已經離開那個狀態了，就信程式的
+/// - 下一個 hook 事件一來（時間比程式回報新）就還給 hook
+/// - hook 記的是 `exited`（程序已結束、留給「接續」）一律用 hook
+pub fn pick_source(
+    hook: Option<Observed>,
+    program: Option<Observed>,
+    now_ms: i64,
+    takeover_ms: i64,
+) -> Option<StatusSource> {
+    match (hook, program) {
+        (None, None) => None,
+        (Some(_), None) => Some(StatusSource::Hook),
+        (None, Some(_)) => Some(StatusSource::Program),
+        (Some(h), Some(p)) => {
+            let yields = h.status != AgentStatus::Exited
+                && p.status != h.status
+                && p.at_ms > h.at_ms
+                && now_ms - h.at_ms >= takeover_ms;
+            Some(if yields {
+                StatusSource::Program
+            } else {
+                StatusSource::Hook
+            })
+        }
+    }
+}
+
+/// 狀態檔的時間：`ts`（毫秒）；舊檔沒有就用檔案修改時間。
+fn observed(v: &Value, p: &Path) -> Option<Observed> {
+    let status = v
+        .get("status")
+        .and_then(Value::as_str)
+        .and_then(AgentStatus::parse)?;
+    let at_ms = v.get("ts").and_then(Value::as_i64).or_else(|| {
+        let t = std::fs::metadata(p).and_then(|m| m.modified()).ok()?;
+        let d = t.duration_since(std::time::UNIX_EPOCH).ok()?;
+        i64::try_from(d.as_millis()).ok()
+    })?;
+    Some(Observed { status, at_ms })
+}
+
+/// 這個會話現在算數的狀態（hook 或程式回報，依 [`pick_source`]），多一個 `source` 欄位。
+/// `takeover`＝hook 靜默多久之後讓給程式回報（config `thresholds.program_status_takeover_seconds`）。
+pub fn read_resolved(spine_dir: &Path, sid: &str, takeover: std::time::Duration) -> Option<Value> {
+    let hp = path_for(spine_dir, sid);
+    let pp = program_path(&hp);
+    let hook = read_json(&hp);
+    let program = read_json(&pp);
+    let source = pick_source(
+        hook.as_ref().and_then(|v| observed(v, &hp)),
+        program.as_ref().and_then(|v| observed(v, &pp)),
+        Local::now().timestamp_millis(),
+        i64::try_from(takeover.as_millis()).unwrap_or(i64::MAX),
+    )
+    // 狀態字串認不得（壞檔）：照舊用 hook 那份
+    .or_else(|| hook.is_some().then_some(StatusSource::Hook))?;
+    let mut v = match source {
+        StatusSource::Hook => hook?,
+        StatusSource::Program => program?,
+    };
+    v["source"] = json!(source.as_str());
+    Some(v)
 }
 
 #[cfg(test)]
@@ -938,5 +1229,223 @@ mod tests {
             sl.contains("/opt/ctx") && sl.ends_with("hook statusline"),
             "{sl}"
         );
+    }
+
+    // ── F-130 ──
+
+    fn obs(status: AgentStatus, at_ms: i64) -> Option<Observed> {
+        Some(Observed { status, at_ms })
+    }
+
+    #[test]
+    fn hook_wins_unless_it_went_silent_on_a_state_the_program_has_left() {
+        use AgentStatus::*;
+        let two_min = 120_000;
+        // 四種組合
+        assert_eq!(pick_source(None, None, 0, two_min), None);
+        assert_eq!(
+            pick_source(obs(Working, 0), None, 999_999, two_min),
+            Some(StatusSource::Hook)
+        );
+        assert_eq!(
+            pick_source(None, obs(Working, 0), 0, two_min),
+            Some(StatusSource::Program)
+        );
+        assert_eq!(
+            pick_source(obs(Working, 0), obs(Finished, 1_000), 1_000, two_min),
+            Some(StatusSource::Hook)
+        );
+        // hook 停在處理中超過 2 分鐘、程式之後說做完了 → 程式
+        assert_eq!(
+            pick_source(obs(Working, 0), obs(Finished, 1_000), two_min, two_min),
+            Some(StatusSource::Program)
+        );
+        // 還沒滿門檻：仍是 hook
+        assert_eq!(
+            pick_source(obs(Working, 0), obs(Finished, 1_000), two_min - 1, two_min),
+            Some(StatusSource::Hook)
+        );
+        // 程式說的跟 hook 一樣、或程式的回報比 hook 舊：不讓
+        assert_eq!(
+            pick_source(obs(Working, 0), obs(Working, 1_000), 9 * two_min, two_min),
+            Some(StatusSource::Hook)
+        );
+        assert_eq!(
+            pick_source(
+                obs(Working, 5_000),
+                obs(Finished, 1_000),
+                9 * two_min,
+                two_min
+            ),
+            Some(StatusSource::Hook)
+        );
+        // 下一個 hook 事件來了（比程式回報新）→ 還給 hook
+        assert_eq!(
+            pick_source(
+                obs(Waiting, 2_000),
+                obs(Finished, 1_000),
+                9 * two_min,
+                two_min
+            ),
+            Some(StatusSource::Hook)
+        );
+        // 程序結束留給「接續」的那筆一律用 hook
+        assert_eq!(
+            pick_source(obs(Exited, 0), obs(Working, 1_000), 9 * two_min, two_min),
+            Some(StatusSource::Hook)
+        );
+    }
+
+    fn report(state: ProgramState, kind: Option<BlockedKind>) -> ProgramReport {
+        ProgramReport {
+            id: None,
+            state,
+            kind,
+            progress: None,
+            app: Some("codex".into()),
+            msg: None,
+            title: None,
+        }
+    }
+
+    #[test]
+    fn program_reports_go_to_their_own_file_and_unchanged_ones_are_not_rewritten() {
+        let t = tempfile::tempdir().unwrap();
+        let sp = t.path();
+        let mut rec = ProgramRecorder::new(path_for(sp, "t1"));
+        // 剛開的 Codex 先送 idle：不是要顯示的狀態，不寫
+        assert!(!rec.record(report(ProgramState::Idle, None), None));
+        assert!(read_program(sp, "t1").is_none());
+        assert!(rec.record(report(ProgramState::Working, None), None));
+        let pp = program_path(&path_for(sp, "t1"));
+        let first = std::fs::read_to_string(&pp).unwrap();
+        let v: Value = serde_json::from_str(&first).unwrap();
+        assert_eq!(
+            (
+                v["status"].as_str(),
+                v["source"].as_str(),
+                v["event"].as_str()
+            ),
+            (Some("working"), Some("program"), Some("program"))
+        );
+        assert_eq!(v["program"]["app"], "codex");
+        assert!(v["ts"].as_i64().is_some());
+        // 一樣的回報：不重寫（內容、時間都不動）
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        assert!(!rec.record(report(ProgramState::Working, None), None));
+        assert_eq!(std::fs::read_to_string(&pp).unwrap(), first);
+        // hook 的檔沒被碰
+        assert!(read(sp, "t1").is_none());
+        // 沒有 hook：讀端用程式回報
+        assert_eq!(
+            read_resolved(sp, "t1", std::time::Duration::from_secs(120)).unwrap()["source"],
+            "program"
+        );
+        // 子紀錄不記
+        let mut child = report(ProgramState::Blocked, None);
+        child.id = Some("sub/a1".into());
+        assert!(!rec.record(child, None));
+        // 做完 → 看過了 → 接著的 idle 不把結果洗掉
+        assert!(rec.record(report(ProgramState::Done, None), None));
+        assert_eq!(read_program(sp, "t1").unwrap()["status"], "finished");
+        assert!(mark_seen(sp, "t1"));
+        assert!(!mark_seen(sp, "t1"));
+        assert!(!rec.record(report(ProgramState::Idle, None), None));
+        assert_eq!(read_program(sp, "t1").unwrap()["seen"], true);
+        // clear：撤掉
+        assert!(rec.record(report(ProgramState::Clear, None), None));
+        assert!(read_program(sp, "t1").is_none());
+        // 程序結束一起清；App 重開也清
+        assert!(rec.record(report(ProgramState::Working, None), None));
+        retire(sp, "t1");
+        assert!(read_program(sp, "t1").is_none());
+        assert!(rec.record(report(ProgramState::Done, None), None));
+        clear_all(sp);
+        assert!(read_program(sp, "t1").is_none());
+        // 程式回報檔不算 hook 的狀態檔（目錄列舉用）
+        assert!(is_status_file_name("t1.json"));
+        assert!(!is_status_file_name("t1.program.json"));
+        assert!(!is_status_file_name("t1.meter.json"));
+    }
+
+    #[test]
+    fn program_states_map_onto_the_existing_ones() {
+        let view = |s, k| program_view(&report(s, k)).map(|(st, ev, _)| (st, ev));
+        assert_eq!(
+            view(ProgramState::Working, None),
+            Some((AgentStatus::Working, "program"))
+        );
+        assert_eq!(
+            view(ProgramState::Done, None),
+            Some((AgentStatus::Finished, "program"))
+        );
+        assert_eq!(
+            view(ProgramState::Blocked, Some(BlockedKind::Permission)),
+            Some((AgentStatus::Blocked, "permission"))
+        );
+        for k in [Some(BlockedKind::Question), Some(BlockedKind::Auth), None] {
+            assert_eq!(
+                view(ProgramState::Blocked, k),
+                Some((AgentStatus::Waiting, "notification"))
+            );
+        }
+        assert_eq!(
+            view(ProgramState::Error, None),
+            Some((AgentStatus::Waiting, "stop-failure"))
+        );
+        assert_eq!(view(ProgramState::Idle, None), None);
+        let mut r = report(ProgramState::Blocked, Some(BlockedKind::Permission));
+        r.msg = Some("approve Write: a.rs".into());
+        assert_eq!(program_view(&r).unwrap().2, "approve Write: a.rs");
+    }
+
+    #[test]
+    fn old_hook_files_without_source_or_ts_still_read_and_win() {
+        let t = tempfile::tempdir().unwrap();
+        let sp = t.path();
+        std::fs::create_dir_all(dir(sp)).unwrap();
+        // 2026-10 的格式：沒有 source、沒有 ts
+        std::fs::write(
+            path_for(sp, "t1"),
+            r#"{"status":"working","text":"處理中","at":"2026-10-14 01:02","event":"prompt"}"#,
+        )
+        .unwrap();
+        let v = read_resolved(sp, "t1", std::time::Duration::from_secs(120)).unwrap();
+        assert_eq!(
+            (v["status"].as_str(), v["source"].as_str()),
+            (Some("working"), Some("hook"))
+        );
+        assert_eq!(read(sp, "t1").unwrap()["event"], "prompt");
+        // 新寫的 hook 紀錄多 source、ts
+        assert!(record_hook(
+            StatusHook::Stop,
+            "{}",
+            path_for(sp, "t1").to_str(),
+            None
+        ));
+        let v = read(sp, "t1").unwrap();
+        assert_eq!(v["source"], "hook");
+        assert!(v["ts"].as_i64().is_some());
+        // 程式回報較新、但 hook 剛寫：仍是 hook；門檻 0 秒＝立刻讓
+        let mut rec = ProgramRecorder::new(path_for(sp, "t1"));
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        assert!(rec.record(report(ProgramState::Working, None), None));
+        let long = std::time::Duration::from_secs(120);
+        assert_eq!(read_resolved(sp, "t1", long).unwrap()["source"], "hook");
+        let now = std::time::Duration::ZERO;
+        let v = read_resolved(sp, "t1", now).unwrap();
+        assert_eq!(
+            (v["status"].as_str(), v["source"].as_str()),
+            (Some("working"), Some("program"))
+        );
+        // 下一個 hook 事件：收回
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        assert!(record_hook(
+            StatusHook::Stop,
+            "{}",
+            path_for(sp, "t1").to_str(),
+            None
+        ));
+        assert_eq!(read_resolved(sp, "t1", now).unwrap()["source"], "hook");
     }
 }

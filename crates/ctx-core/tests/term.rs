@@ -204,3 +204,93 @@ fn test_agent_home_group_for_display() {
         .is_none());
     m.kill_all();
 }
+
+/// F-130：agent 自己在終端報的狀態（OSC 7501）。真的 PTY：會話印出 `ESC ] 7501 ; state=working … ST`，
+/// 引擎記進 `<sid>.program.json`，會話清冊的 `agent_status` 標 `source: program`；輸出照常到前端。
+/// config `session.program_status: off` 就不記。
+#[test]
+fn program_status_from_the_pty_is_recorded_and_shown() {
+    use ctx_core::session_status::read_program;
+    use ctx_core::workbench::{annotate_terms, term_value};
+    std::env::set_var("SHELL", "/bin/sh");
+    let (_tmp, d) = spine_with_repos();
+    let m = TermManager::new(&d);
+    let printf = r"printf 'before\033]7501;state=working:app=fake\033\\after'; sleep 5";
+    let launch = || AgentLaunch {
+        agent: "fake".into(),
+        argv: vec!["/bin/sh".into(), "-c".into(), printf.into()],
+        cwd: d.clone(),
+        ..Default::default()
+    };
+    let s = m.create_agent(launch()).unwrap();
+    assert!(wait_until(15, || read_program(&d, s.sid()).is_some()));
+    let v = read_program(&d, s.sid()).unwrap();
+    assert_eq!(
+        (
+            v["status"].as_str(),
+            v["source"].as_str(),
+            v["program"]["app"].as_str()
+        ),
+        (Some("working"), Some("program"), Some("fake"))
+    );
+    // 輸出沒被吃掉：序列原樣在 replay 裡
+    let replay = s.replay();
+    assert_eq!(
+        count(
+            &replay,
+            b"before\x1b]7501;state=working:app=fake\x1b\\after"
+        ),
+        1
+    );
+    let row = &annotate_terms(&d, &[term_value(&s.info())]).unwrap()[0];
+    assert_eq!(row["agent_status"]["status"], "working");
+    assert_eq!(row["agent_status"]["source"], "program");
+    // 程序結束：程式回報一起清掉
+    let sid = s.sid().to_string();
+    m.kill(&sid);
+    assert!(wait_until(10, || read_program(&d, &sid).is_none()));
+
+    // 關掉：不解析
+    std::fs::write(d.join("config.yaml"), "session:\n  program_status: off\n").unwrap();
+    let s = m.create_agent(launch()).unwrap();
+    assert!(wait_until(15, || count(&s.replay(), b"after") >= 1));
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(read_program(&d, s.sid()).is_none());
+    m.kill_all();
+}
+
+/// F-130：探詢 `OSC 7501 ; ?` 由引擎立刻寫回 PTY（一次）；attach 時的 replay 含那個探詢，但不會再回。
+/// 子程序關掉回顯、用 `cat -v` 把收到的輸入印出來（ESC 印成 `^[`，不會又被當成序列）。
+#[test]
+fn program_status_query_is_answered_once_and_not_on_replay() {
+    use ctx_core::session_status::{path_for, ProgramRecorder};
+    let (_tmp, d) = spine();
+    let script = r"stty -echo -icanon min 0 time 30; printf '\033]7501;?\033\\'; cat -v";
+    let spec = SpawnSpec::new(vec!["/bin/sh".into(), "-c".into(), script.into()]).cwd(&d);
+    let answered =
+        b"^[]7501;?:states=idle,working,done,blocked,error:kinds=permission,question,auth^[\\";
+    let s = TermSession::spawn_with_status(
+        "t1",
+        &spec,
+        TermMeta::shell("sh"),
+        None,
+        Some(ProgramRecorder::new(path_for(&d, "t1"))),
+    )
+    .unwrap();
+    assert!(wait_until(10, || count(&s.replay(), answered) >= 1));
+    // 新的訂閱者拿到含探詢的 replay：不回第二次
+    let late: Sink = Default::default();
+    s.attach(collector(&late));
+    assert!(count(&late.lock().unwrap(), b"\x1b]7501;?\x1b\\") >= 1);
+    std::thread::sleep(Duration::from_millis(800));
+    assert_eq!(count(&s.replay(), answered), 1);
+    s.kill();
+    assert!(wait_until(10, || !s.alive()));
+
+    // 沒掛寫入器（shell 會話、config 關掉）：不回應
+    let plain = TermSession::spawn("t2", &spec, TermMeta::shell("sh"), None).unwrap();
+    assert!(wait_until(10, || count(&plain.replay(), b"\x1b]7501;?") >= 1));
+    std::thread::sleep(Duration::from_millis(800));
+    assert_eq!(count(&plain.replay(), answered), 0);
+    plain.kill();
+}

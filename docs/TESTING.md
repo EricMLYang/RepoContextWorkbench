@@ -348,6 +348,18 @@
 | 8m-5 | spine 副本、沒掛 hook／MCP／skill 的設定目錄，在 spine 目錄跑 `claude -p "現在登記了幾個 repo"` 與 `codex exec` 同一句 | 兩家都答出 registry 的數量，沒有自己掃檔案系統找 `.git`（規劃 §5 的驗收） | [ ] | [ ] |
 | 8m-6 | 重跑 `ctx setup --claude` | 輸出跟以前一樣（入口檔不印）；之後 `ctx home sync --check` 是最新的 | [ ] | [ ] |
 
+## 8n. 狀態雙通道：agent 自己在終端報狀態（OSC 7501，F-130，2026-11-18）——**引擎單元測試與真 PTY 端到端（假程式印 7501）已過；真 Claude Code、真 Codex 在 App 裡還沒人點過**
+
+| # | 操作 | 應該看到 | macOS | Windows |
+|---|---|---|---|---|
+| 8n-1 | 沒跑過 `ctx setup --codex`（或 `~/.codex/hooks.json` 沒有 ctx 的 hook）的環境，在 App 開 Codex 會話，交代一件小事 | 會話列從沒狀態變成「處理中」，做完變「做完一輪」（亮綠）；切過去看過就變暗綠；終端標題列的淡字寫「agent 自報「…」」 | [ ] 未測 | [ ] 未測 |
+| 8n-2 | 同上，Codex 要你核准一個指令 | **預期行為**：Codex 只送狀態不送原因（沒有 `kind`），所以「要你允許」仍要靠 hook 才分得出來——沒掛 hook 時這裡多半停在「處理中」或顯示「等你回應」，不會說「要你允許」；這不是缺陷 | [ ] 未測 | [ ] 未測 |
+| 8n-3 | 在 App 開 Claude Code 會話（有 hook），照平常用一輪（處理中→要你允許→做完） | 跟以前一模一樣：終端標題列的淡字寫「Claude Code「…」」，要你允許照常發通知；終端裡 Claude 的畫面沒有怪字（7501 序列不顯示） | [ ] 未測 | [ ] 未測 |
+| 8n-4 | Claude Code 會話裡讓 hook 漏一個 Stop（例：把 `.state/session_hooks.json` 的 Stop 拿掉再開會話），跑完一輪等 2 分鐘 | 會話列從「處理中」變「做完一輪」、終端標題列寫「agent 自報」；再送一句（hook 的 prompt 來了）就回到「Claude Code「處理中」」 | [ ] 未測 | [ ] 未測 |
+| 8n-5 | `config.yaml` 加 `session: {program_status: off}`，重開一場 Codex 會話 | 沒有 hook 的 Codex 會話不再有狀態（跟功能上線前一樣）；`.state/session_status/` 沒有 `t*.program.json` | [ ] 未測 | [ ] 未測 |
+| 8n-6 | `config.yaml` 的 `thresholds` 加 `program_status_takeover_seconds: 10`，重做 8n-4 | 讓位變成約 10 秒 | [ ] 未測 | [ ] 未測 |
+| 8n-7 | 關掉 App 視窗再打開（會話還在跑），會話的 replay 裡有 Claude 開場的探詢 | 狀態照常；Claude 的輸入框沒有多出一串 `?:states=…` 的字（replay 不回應探詢） | [ ] 未測 | [ ] 未測 |
+
 ## 9. 要你決定
 
 - [ ] **#76**：App 助手、碰撞判定、`ask_repo`、backfill 都用 `claude -p`（程式化呼叫；BAT 引 2026-06-15 政策說它走另計的額度，

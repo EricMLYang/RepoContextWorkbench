@@ -205,6 +205,12 @@ Rust 端簽名建議：
   階段字串只在引擎 `status::AgentStatus` 定義（MCP `report_status` 仍只收 working／waiting／blocked／done）。
   `blocked` 的（agent 停住了）殼會在視窗不在前面時發系統通知「<會話> 要你允許」，同一次請求只發一次（`workbench::fresh_permission_asks`）。這種的多一個 `event` 鍵。
   跟 agent 經 MCP 回報的取新的（同一分鐘取 MCP 的）；會話結束刪檔、App 重開清空（sid 從 t1 重編）。
+  Rust 才有（F-130，2026-11-18）：`agent_status` 多 `source: "hook"|"program"`（依會話自動寫的才有；MCP 回報的沒有）、`ts`（毫秒）。
+  `program`＝agent 自己在終端報的（OSC 7501：App 的 PTY 讀到後寫 `.state/session_status/<sid>.program.json`，跟 hook 的檔並排、
+  同形）——這種另有 `program{state, kind?, app?, msg?, progress?, title?}`（原始回報），`event` 沿用 hook 的字：一般進度 `program`、
+  `blocked:kind=permission`＝`permission`（畫面說要你允許／回答）、其他 blocked＝`notification`（waiting）、error＝`stop-failure`（waiting）。
+  誰算數：有 hook 紀錄就用 hook；hook 靜默超過 `thresholds.program_status_takeover_seconds`（預設 120）而程式回報之後換到不同階段，
+  改用程式回報；下一個 hook 事件收回（`session_status::pick_source`）。這時 `tool` 是 null、不加 `quiet_minutes`。`session_seen` 兩個檔都記。
 - `ScanResult`：`group, states[RepoState], summary(WorkSummary), pulse, recent_commits[{repo,date,hash,subject}], question_cards[]（含 provenance：scope_kind="repo"）, questions[], quiet, session_tasks[{label,text}], audit[]`。
 - `RepoState`（`collect.collect_repo`）：`id, type, tier, path, exists, dirty, dirty_days, last_commit_days, ahead, behind, branch, last_subject, worktrees, commits_7d, commits_30d, recent_commits[], agents[], note`。
 - `WorkSummary`（`summary.build_summary`）：`group, saved_group, repos, at, goal, goal_gap, progress, progress_gap, since, changes[], changes_window, next, next_gap, changes_gap, gaps[], resume_task`；每個 fact 是 `{text, source, at}`。

@@ -444,8 +444,8 @@ pub fn peers(spine_dir: &Path) -> Vec<Value> {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        // <sid>.json 才是狀態檔（.meter.json 是用量）
-        if !name.ends_with(".json") || name.ends_with(".meter.json") {
+        // <sid>.json 才是狀態檔（.meter.json 是用量、.program.json 是 agent 自己報的狀態）
+        if !crate::session_status::is_status_file_name(&name) {
             continue;
         }
         let Some(v) = std::fs::read_to_string(&p)

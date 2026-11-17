@@ -1,7 +1,7 @@
 //! 會話：清冊上的回報、交接草稿。
 
 use super::*;
-use crate::session_status::StatusHook;
+use crate::session_status::{StatusHook, StatusSource};
 use crate::status::AgentStatus;
 use chrono::{Local, NaiveDateTime};
 use serde::{Deserialize, Serialize};
@@ -84,6 +84,7 @@ pub(super) fn annotate_terms_with(
     events: &[Event],
     data: &RegistryData,
 ) -> Vec<Value> {
+    let takeover = takeover_of(spine_dir);
     terms
         .iter()
         .map(|t| {
@@ -98,7 +99,13 @@ pub(super) fn annotate_terms_with(
                     session_report(t, events, data).unwrap_or(Value::Null),
                 );
                 // agent 自己回報的（MCP）或 Claude Code hook 自動寫的，只認會話開始後的
-                let st = agent_status_of(spine_dir, t, group.as_deref(), ids.as_deref());
+                let st = agent_status_of(spine_dir, t, group.as_deref(), ids.as_deref(), takeover);
+                // F-130：現在的階段是 agent 自己在終端報的（OSC 7501），不是 hook 寫的
+                let from_program = st
+                    .as_ref()
+                    .and_then(|s| s.get("source"))
+                    .and_then(Value::as_str)
+                    == Some(StatusSource::Program.as_str());
                 rec.insert("agent_status".into(), st.unwrap_or(Value::Null));
                 // F-71：Claude Code 取的對話標題、這一輪最後的回覆（hook 從逐字稿尾巴讀的）
                 let own = tget(t, "sid")
@@ -119,9 +126,11 @@ pub(super) fn annotate_terms_with(
                     rec.insert(to.into(), v.unwrap_or(Value::Null));
                 }
                 // F-82：正在用的工具、跑了幾分鐘、有沒有「可能卡住」——算好給畫面，前端只排版
+                // （階段改用程式回報時，hook 那筆停住的工具已經不算數）
                 rec.insert(
                     "tool".into(),
                     own.as_ref()
+                        .filter(|_| !from_program)
                         .and_then(|s| tool_in_progress(s, Local::now().naive_local()))
                         .unwrap_or(Value::Null),
                 );
@@ -223,13 +232,26 @@ fn tool_in_progress(own: &Value, now: NaiveDateTime) -> Option<Value> {
     }))
 }
 
-/// 會話現在的階段：agent 經 MCP 回報的（依範圍存）與 Claude Code hook 依會話自動寫的（Rust 才有，2026-10-14），
+/// hook 靜默多久讓給程式回報（config 讀一次給整批會話用；讀不到就用預設）。
+fn takeover_of(spine_dir: &Path) -> std::time::Duration {
+    crate::config::load(spine_dir)
+        .map(|c| c.program_status_takeover())
+        .unwrap_or_else(|_| {
+            std::time::Duration::from_secs(
+                crate::config::PROGRAM_STATUS_TAKEOVER_SECONDS.unsigned_abs(),
+            )
+        })
+}
+
+/// 會話現在的階段：agent 經 MCP 回報的（依範圍存）與依會話自動寫的（Rust 才有，2026-10-14：hook；
+/// F-130：agent 自己在終端報的 OSC 7501，兩者誰算數見 `session_status::pick_source`），
 /// 都只認會話開始後的；兩個都有取新的，同一分鐘取 agent 自己回報的（文字比較具體）。
 fn agent_status_of(
     spine_dir: &Path,
     t: &Value,
     group: Option<&str>,
     ids: Option<&[String]>,
+    takeover: std::time::Duration,
 ) -> Option<Value> {
     let started = tget(t, "started").unwrap_or("~");
     let at = |s: &Value| {
@@ -242,7 +264,7 @@ fn agent_status_of(
         .filter(|s| s.as_object().is_some_and(|o| !o.is_empty()))
         .filter(|s| at(s).as_str() >= started);
     let own = tget(t, "sid")
-        .and_then(|sid| crate::session_status::read(spine_dir, sid))
+        .and_then(|sid| crate::session_status::read_resolved(spine_dir, sid, takeover))
         .filter(|s| at(s).as_str() >= started);
     let st = match (reported, own) {
         (Some(r), Some(o)) => Some(if at(&o) > at(&r) { o } else { r }),
@@ -272,8 +294,13 @@ fn decay(mut st: Value, now: NaiveDateTime) -> Value {
         .get("status")
         .and_then(Value::as_str)
         .and_then(AgentStatus::parse);
+    // 程式回報只在換狀態時寫（沒有逐個工具的事件），`at` 不動不代表沒動靜
+    let from_program =
+        st.get("source").and_then(Value::as_str) == Some(StatusSource::Program.as_str());
     match status {
-        Some(AgentStatus::Working) if st.get("tool").is_none() && minutes >= QUIET_MINUTES => {
+        Some(AgentStatus::Working)
+            if st.get("tool").is_none() && !from_program && minutes >= QUIET_MINUTES =>
+        {
             st["quiet_minutes"] = json!(minutes);
         }
         Some(AgentStatus::Finished)
@@ -333,9 +360,10 @@ pub fn session_attention(spine_dir: impl AsRef<Path>, terms: &[Value]) -> Result
     let spine_dir = spine_dir.as_ref();
     let data = registry::load(spine_dir)?;
     let mut a = Attention::default();
+    let takeover = takeover_of(spine_dir);
     for t in live_agents(terms) {
         let (group, ids) = session_scope(t, &data);
-        a.count(agent_status_of(spine_dir, t, group.as_deref(), ids.as_deref()).as_ref());
+        a.count(agent_status_of(spine_dir, t, group.as_deref(), ids.as_deref(), takeover).as_ref());
     }
     Ok(a)
 }
@@ -357,15 +385,17 @@ pub fn sessions_needing_you(spine_dir: impl AsRef<Path>, terms: &[Value]) -> Res
 
 /// 活著、Claude Code hook 標成「要你允許工具」（blocked）的會話：`[{sid, title, text, at}]`——殼據此發系統通知
 /// （agent 停住動不了，打斷是掙來的）。只看依會話自動寫的狀態，只認會話開始後的（Rust 才有，2026-10-14）。
+/// F-130：程式回報 `blocked:kind=permission` 而且算數時（沒有 hook，或 hook 已讓位）也算。
 pub fn sessions_asking_permission(spine_dir: impl AsRef<Path>, terms: &[Value]) -> Vec<Value> {
     let spine_dir = spine_dir.as_ref();
+    let takeover = takeover_of(spine_dir);
     terms
         .iter()
         .filter(|t| t.get("kind").and_then(Value::as_str) == Some("agent"))
         .filter(|t| t.get("alive").and_then(Value::as_bool) == Some(true))
         .filter_map(|t| {
             let sid = tget(t, "sid")?;
-            let st = crate::session_status::read(spine_dir, sid)?;
+            let st = crate::session_status::read_resolved(spine_dir, sid, takeover)?;
             let at = st.get("at").and_then(Value::as_str)?;
             let asking = st.get("status").and_then(Value::as_str)
                 == Some(AgentStatus::Blocked.as_str())

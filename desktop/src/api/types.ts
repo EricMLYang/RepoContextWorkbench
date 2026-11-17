@@ -153,8 +153,28 @@ export interface AgentStatus {
   group?: string | null;
   repos?: string[] | null;
   repo?: string | null;
-  /** Rust 才有：Claude Code hook 自動寫的（stop／notification／prompt）；agent 經 MCP 回報的沒有這個鍵。 */
+  /** Rust 才有：Claude Code hook 自動寫的（stop／notification／prompt）；agent 經 MCP 回報的沒有這個鍵。
+   *  F-130：agent 自己在終端報的（OSC 7501）沿用同一套字：`program`（一般進度）、`permission`、`notification`、`stop-failure`。 */
   event?: string;
+  /** Rust 才有（F-130）：依會話自動寫的狀態從哪來——`hook`＝agent CLI 的 hook、`program`＝agent 自己在終端報的
+   *  （OSC 7501）。agent 經 MCP 回報的沒有這個鍵。 */
+  source?: StatusSource;
+  /** Rust 才有（F-130）：`source` 是 `program` 時的原始回報。 */
+  program?: ProgramStatus;
+  /** Rust 才有（F-130）：寫入時間（毫秒），優先規則用。 */
+  ts?: number;
+}
+
+export type StatusSource = "hook" | "program";
+
+/** OSC 7501 的原始回報（只有根紀錄）。沒有的欄位不出現。 */
+export interface ProgramStatus {
+  state: "idle" | "working" | "done" | "blocked" | "error";
+  kind?: "permission" | "question" | "auth";
+  app?: string;
+  msg?: string;
+  progress?: number;
+  title?: string;
 }
 
 export interface SessionReport {

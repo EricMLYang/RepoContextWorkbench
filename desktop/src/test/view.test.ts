@@ -201,6 +201,23 @@ describe("會話在等你（Claude Code hook 自動寫）", () => {
       "Claude Code「等你回應」01:02：Claude is waiting for your input",
     );
     expect(reportLine(term({ ...hook, event: undefined }))).toContain("Agent 回報「等你回應」");
+    // F-130：agent 自己在終端報的（OSC 7501）標「agent 自報」；permission 仍說要你允許
+    expect(
+      reportLine(
+        term({ ...hook, status: "working", text: "處理中", event: "program", source: "program" }),
+      ),
+    ).toBe("agent 自報「處理中」01:02：處理中");
+    expect(
+      reportLine(
+        term({
+          ...hook,
+          status: "blocked",
+          text: "要你允許",
+          event: "permission",
+          source: "program",
+        }),
+      ),
+    ).toBe("agent 自報「要你允許／回答」01:02：要你允許");
     expect(sessionNeedsYou(term(hook))).toBe(true);
     expect(sessionNeedsYou(term({ ...hook, status: "working" }))).toBe(false);
     expect(sessionNeedsYou(term(hook, false))).toBe(false);

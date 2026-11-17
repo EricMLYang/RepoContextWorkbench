@@ -21,6 +21,8 @@ use std::time::Duration;
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 
+use crate::program_status::{ProgramEvent, Scanner, QUERY_REPLY};
+use crate::session_status::ProgramRecorder;
 use crate::{agentmark, Error, Result};
 
 /// ring buffer 上限（位元組）。對應 `term.BUFFER_CAP`。
@@ -216,6 +218,18 @@ impl TermSession {
         meta: TermMeta,
         on_exit: Option<ExitHook>,
     ) -> Result<Arc<TermSession>> {
+        Self::spawn_with_status(sid, spec, meta, on_exit, None)
+    }
+
+    /// 同 [`TermSession::spawn`]，`program`＝要讀這個會話的 OSC 7501（F-130）：reader 執行緒掃輸出、
+    /// 回應探詢、把回報交給這個寫入器。None＝不解析也不回應（shell 會話、config 關掉時）。
+    pub fn spawn_with_status(
+        sid: impl Into<String>,
+        spec: &SpawnSpec,
+        meta: TermMeta,
+        on_exit: Option<ExitHook>,
+        program: Option<ProgramRecorder>,
+    ) -> Result<Arc<TermSession>> {
         let sid = sid.into();
         let Some(prog) = spec.argv.first() else {
             return Err(Error::invalid("指令是空的"));
@@ -297,16 +311,22 @@ impl TermSession {
         let s2 = sess.clone();
         std::thread::Builder::new()
             .name(format!("term-read-{}", sess.sid))
-            .spawn(move || s2.reader_loop(reader, on_exit))?;
+            .spawn(move || s2.reader_loop(reader, on_exit, program))?;
         Ok(sess)
     }
 
-    fn reader_loop(&self, mut reader: Box<dyn Read + Send>, on_exit: Option<ExitHook>) {
+    fn reader_loop(
+        &self,
+        mut reader: Box<dyn Read + Send>,
+        on_exit: Option<ExitHook>,
+        program: Option<ProgramRecorder>,
+    ) {
         let mut buf = vec![0u8; 65536];
+        let mut status = program.map(|rec| (Scanner::new(), rec));
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
-                Ok(n) => self.push(&buf[..n]),
+                Ok(n) => self.on_output(&buf[..n], status.as_mut()),
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(_) => break, // macOS／Linux：slave 全關後讀 master 是 EIO
             }
@@ -324,6 +344,32 @@ impl TermSession {
         *lock(&self.writer) = None;
         if let Some(f) = on_exit {
             f();
+        }
+    }
+
+    /// 一段即時輸出（只有 reader 執行緒會來；attach 時的 replay 不經過這裡，所以重播不會再回應探詢）：
+    /// 先掃 OSC 7501、有探詢就回，再原樣往前端送，最後記回報。
+    fn on_output(&self, data: &[u8], status: Option<&mut (Scanner, ProgramRecorder)>) {
+        let Some((scanner, rec)) = status else {
+            self.push(data);
+            return;
+        };
+        let mut queries = 0usize;
+        let mut reports = Vec::new();
+        scanner.feed(data, |ev| match ev {
+            ProgramEvent::Query => queries += 1,
+            ProgramEvent::Report(r) => reports.push(r),
+        });
+        // 探詢的回應要在 push 之前寫回 PTY：Claude Code 送完 `OSC 7501;?` 緊接著送 DA1（`ESC [ c`），
+        // 它只認「7501 的回應比 DA1 的回應先到」（2026-11-18 實測：順序反過來，整場都不送狀態）。
+        // DA1 是前端 xterm.js 收到這段輸出後才回的（經 IPC，比較晚），所以引擎在這裡、往前端送之前就回，順序自然是對的。
+        // `write` 自己會跳過已結束的會話。
+        for _ in 0..queries {
+            self.write(QUERY_REPLY);
+        }
+        self.push(data);
+        for r in reports {
+            rec.record(r, None);
         }
     }
 
@@ -689,7 +735,18 @@ impl TermManager {
             task: launch.task.clone(),
             home_group: launch.home_group.clone().or_else(|| launch.group.clone()),
         };
-        let s = TermSession::spawn(&sid, &spec, meta, Some(self.exit_hook(&sid, true)))?;
+        // F-130：agent 自己在終端報的狀態（OSC 7501）；config `session.program_status: off` 就整個不讀、不回應探詢
+        let program = crate::config::load(&self.spine_dir)
+            .map(|c| c.program_status())
+            .unwrap_or(true)
+            .then(|| ProgramRecorder::new(crate::session_status::path_for(&self.spine_dir, &sid)));
+        let s = TermSession::spawn_with_status(
+            &sid,
+            &spec,
+            meta,
+            Some(self.exit_hook(&sid, true)),
+            program,
+        )?;
         // agent 偵測（gitpane 課）：標記存活會話，P3 採集據此標「🤖 誰在跑」
         let pid = s.pid().map(i64::from).unwrap_or(0);
         agentmark::mark(&self.spine_dir, &sid, &launch.cwd, &agent, pid)?;

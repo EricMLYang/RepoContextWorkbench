@@ -42,6 +42,7 @@ pub mod ops;
 pub mod pack;
 pub mod policy;
 pub mod profile;
+pub mod program_status;
 pub mod prompts;
 pub mod pyjson;
 pub mod pystr;

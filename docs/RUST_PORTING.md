@@ -490,6 +490,18 @@ CLI／MCP（ctx-cli）：
   （2026-10-16，ideation F-80）`Stop` 寫的是 `finished`「這一輪做完了」不是 waiting：做完不等於等你，紅點只留給要你允許／回答；
   App 看過那個會話就呼叫 action `session_seen` 在狀態檔記 `seen: true`（下一個 hook 事件重寫整份、自然消失），
   `workbench::session_attention` 數「等你」與「做完沒看」各幾個，選單列寫「等你 N · 做完 M」、Dock 徽章＝兩者相加。
+- **狀態雙通道：agent 自己在終端報的狀態（OSC 7501，F-130，2026-11-18，Rust 才有）**：App 開的 agent 會話，PTY 讀取執行緒
+  多經過一個純狀態機（`program_status::Scanner`），輸出原樣往前端送；探詢 `OSC 7501 ; ?` 立刻寫回
+  `OSC 7501 ; ?:states=idle,working,done,blocked,error:kinds=permission,question,auth ST`（要比前端 xterm.js 回 DA1 早到，Claude Code 才會送狀態），
+  replay 不回。根紀錄的回報寫 `.state/session_status/<sid>.program.json`（**另一個檔**：hook 是別的行程、每次重寫整份 `<sid>.json`，
+  同一個檔會互蓋）；狀態沒變不寫。檔案跟 hook 的同形 `{status, text, at, event, source: "program", ts, program{state,kind,app,msg,progress,title}}`；
+  對應：working→working、done→finished、blocked+permission→blocked（`event: permission`）、blocked+question／auth／沒寫→waiting、
+  error→waiting（`event: stop-failure`）、idle／clear→撤掉這筆（做完／出錯之後的 idle 不撤）。
+  hook 寫的 `<sid>.json` **只增**兩個欄位 `source: "hook"`、`ts`（毫秒）；舊檔沒有照讀（`ts` 退回檔案修改時間）。
+  優先規則 `session_status::pick_source`：有 hook 就 hook；hook 靜默超過門檻、程式回報在那之後換到不同階段→程式；下一個 hook 事件收回；
+  hook 是 exited 一律 hook。新設定：`session.program_status`（預設開；`false`／`off`＝不解析、不回應探詢）、
+  `thresholds.program_status_takeover_seconds`（預設 120；不在 DEFAULTS 裡，`config` 輸出與對拍不變）。
+  只有 App 開的 agent 會話有（shell 會話、外部終端機開的不讀）；對講（`mailbox`）的 peers／送達判斷仍只看 hook 的檔。
 - **SIGPIPE 恢復預設**（2026-10-10，ideation N-27）：`ctx … | head` 截斷時安靜結束（exit 141），不再 panic
   「failed printing to stdout: Broken pipe」。Python 的行為是 BrokenPipeError traceback；Unix 指令慣例是安靜結束。
 - **沒接住的錯誤**：Python 會印 traceback、exit 1；Rust 印一行「錯誤：<訊息>」到 stderr、exit 1（exit code 相同）。

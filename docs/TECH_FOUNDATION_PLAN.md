@@ -21,8 +21,8 @@
 |---|---|---|---|---|---|
 | 0 | 量基準、驗兩個假設 | F-129 | 半天 | 無 | 完成（2026-11-18）：兩家都實測會送 OSC 7501；search 暖 1.6–1.9s、索引 111 MB；別家開的會話還沒驗 |
 | 1 | spine 靜態入口：生成 AGENTS.md 與每組的 REPOS.md | F-132 | 1–2 天 | 無 | 完成（2026-11-18）：`ctx home sync`；沒掛 hook／MCP 的 Codex 與 Claude Code 在 spine 副本都答出 23 個 repo；真 spine 還沒跑 |
-| 2 | 狀態雙通道：hook 優先、OSC 7501 補位 | F-130 | 2 天 | 階段 0 驗過 Codex 會送 | 未開始 |
-| 3 | 會話跑在 App 之外 | F-128 | 試作 1 天＋實作 3–5 天 | 決定 2 | 未開始 |
+| 2 | 狀態雙通道：hook 優先、OSC 7501 補位 | F-130 | 2 天 | 階段 0 驗過 Codex 會送 | 完成（2026-11-18）：真的 Claude Code 2.1.326 與 Codex 0.169 經引擎的 PTY 都記到 working → finished；App 畫面還沒測 |
+| 3 | 會話跑在 App 之外 | F-128 | 試作 1 天＋實作 3–5 天 | 決定 2 | 試作完成（2026-11-18，herdr-core 0.1.21）：安裝、存活（殺掉 core 會自己重啟、終端機還在）、狀態、JSON-RPC 都過；延遲與 Windows 沒驗到 → 走路線 A，做成設定開關、預設仍用行程內 PTY |
 | 4a | 合併回 main、刪 Python 版與對拍 | VISION §6 第 2 項 | 1–2 天 | 使用者真用驗收 | 未開始 |
 | 4b | 知識索引改 SQLite FTS5 | N-51 | 3 天 | 4a | 未開始 |
 | 4c | 會話索引（Claude Code＋Codex） | F-134 | 3 天 | 4b | 未開始 |

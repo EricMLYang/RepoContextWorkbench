@@ -391,7 +391,11 @@ export function reportLine(s: TermInfo): string {
   if (s.kind !== "agent") return "本機 Shell，不回報";
   if (s.agent_status)
     return (
-      (s.agent_status.event ? "Claude Code「" : "Agent 回報「") +
+      (s.agent_status.source === "program"
+        ? "agent 自報「"
+        : s.agent_status.event
+          ? "Claude Code「"
+          : "Agent 回報「") +
       statusLabel(s) +
       "」" +
       s.agent_status.at.slice(11) +
