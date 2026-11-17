@@ -150,6 +150,16 @@ fn ratio(n: usize, d: usize) -> Value {
     }
 }
 
+/// spine 靜態入口的狀態（F-132）：過期的檔、被手寫檔擋住的檔；查不了就帶 error。
+/// 每個 repo 跑一次 `git remote get-url`，所以不放在 [`health`] 裡（App 的 build_state 每次都呼叫它、只讀檔）——
+/// `ctx health` 另外接上 `home` 鍵。
+pub fn home_status(spine_dir: &Path) -> Value {
+    match crate::home::check(spine_dir) {
+        Ok(c) => json!({"stale": c.stale(), "conflicts": c.conflicts()}),
+        Err(e) => json!({"stale": [], "conflicts": [], "error": e.to_string()}),
+    }
+}
+
 /// 近 `days` 天的健康指標。`now`＝None 用現在（測試可指定）。
 pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result<Value> {
     let now = now.unwrap_or_else(|| Local::now().naive_local());

@@ -205,6 +205,10 @@ pub fn cmd_setup(ctx: &Ctx, a: &SetupArgs) -> CmdResult {
     }
     if a.dry_run {
         println!("加上不帶 --dry-run 再跑一次才會真的寫入。");
+    } else {
+        // F-132（Rust 才有）：spine 的靜態入口（AGENTS.md、CLAUDE.md、groups/*/REPOS.md）照 registry 重生。
+        // 不印在 stdout（setup 的輸出跟 Python 對拍）；失敗寫 stderr，衝突由 `ctx health` 提醒
+        ctx_core::home::sync_quiet(&d);
     }
     if failed {
         // 有一步沒成就不能回 0：呼叫的人（或 agent）會以為掛好了

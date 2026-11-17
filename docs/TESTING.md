@@ -337,6 +337,17 @@
 | 8l-13 | Codex 會話沒交接就結束，收件匣那張卡按「接續補交接」 | 接回的是 Codex 那場（`codex resume`），第一句是請它補交接 | [ ] | [ ] |
 | 8l-14 | 在 Codex 會話裡交接並帶提問（`handoff` 的 `ask`），之後在收件匣回答、按「接回原會話接著做」 | 接回的是 Codex 那場，任務文字帶著你的回答 | [ ] | [ ] |
 
+## 8m. spine 靜態入口（F-132，2026-11-18）——**引擎與 CLI 測試、對拍已過；spine 副本試跑過；真 agent 與真 spine 還沒人測過**
+
+| # | 操作 | 應該看到 | macOS | Windows |
+|---|---|---|---|---|
+| 8m-1 | 終端跑 `ctx home sync --check` | 列出 AGENTS.md、CLAUDE.md、每組與未分組的 REPOS.md 會新建；exit 1。跑 `ctx home sync` 後再 `--check`：都是最新的、exit 0 | [ ] | [ ] |
+| 8m-2 | 打開 spine 的 `AGENTS.md` 與 `groups/<組>/REPOS.md` | 第一行是生成標記；AGENTS.md ≤ 60 行、每組一行；每個 repo 一行：名片、本機路徑、Clone from …、提示（參考類「只讀，不要改。」）；路徑不在的標「（路徑不存在）」 | [ ] | [ ] |
+| 8m-3 | 在 App 改一個 repo 的名片、建組、把組改名、拖曳排序組 | 不用手動跑，`groups/<組>/REPOS.md` 與 AGENTS.md 跟著變；改名後舊名字的 REPOS.md 不見了（資料夾裡別的檔還在） | [ ] | [ ] |
+| 8m-4 | 在 spine 根目錄放一份自己寫的 `AGENTS.md`（第一行不是標記），再改 registry | 你的檔沒被蓋掉；`ctx home sync` 印「衝突」並 exit 1；`ctx health` 多一行 spine 入口檔被手寫檔擋住 | [ ] | [ ] |
+| 8m-5 | spine 副本、沒掛 hook／MCP／skill 的設定目錄，在 spine 目錄跑 `claude -p "現在登記了幾個 repo"` 與 `codex exec` 同一句 | 兩家都答出 registry 的數量，沒有自己掃檔案系統找 `.git`（規劃 §5 的驗收） | [ ] | [ ] |
+| 8m-6 | 重跑 `ctx setup --claude` | 輸出跟以前一樣（入口檔不印）；之後 `ctx home sync --check` 是最新的 | [ ] | [ ] |
+
 ## 9. 要你決定
 
 - [ ] **#76**：App 助手、碰撞判定、`ask_repo`、backfill 都用 `claude -p`（程式化呼叫；BAT 引 2026-06-15 政策說它走另計的額度，

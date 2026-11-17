@@ -136,5 +136,6 @@ pub fn spawn(
             Some(now),
         )?;
     }
+    crate::home::sync_quiet(spine_dir); // F-132：新 repo 進入口檔
     Ok(target)
 }

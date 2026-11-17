@@ -1014,6 +1014,7 @@ fn a_reorder(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
         ReorderArgs::Members { group, order } => registry::reorder_members(d, &group, &order)?,
         ReorderArgs::Repos { order } => registry::reorder_repos(d, &order)?,
     }
+    crate::home::sync_quiet(d); // F-132：入口檔的組與 repo 順序跟著 registry
     Ok(json!({"ok": true}))
 }
 
@@ -1130,6 +1131,7 @@ fn a_group_add_folder(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Val
             (None, _) => format!("登記 repo {id}（從工作台）"),
         };
         spine::append_event(d, "decision", "monitor", &tokens, &body, None)?;
+        crate::home::sync_quiet(d); // F-132
     }
     Ok(json!({"ok": true, "id": id, "registered": registered, "group": group}))
 }
@@ -1174,6 +1176,7 @@ fn a_register_repos(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value
         }
     );
     spine::append_event(d, "decision", "monitor", &tokens, &body, None)?;
+    crate::home::sync_quiet(d); // F-132
     Ok(json!({"ok": true, "added": added, "group": (!name.is_empty()).then_some(name)}))
 }
 

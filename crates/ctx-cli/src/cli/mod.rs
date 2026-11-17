@@ -2,7 +2,7 @@
 //!
 //! 依領域拆模組（同 Python 2026-09-25 架構檢查）：
 //!     common（spine 定位／錯誤出口／--json）、admin（init／registry／組，寫入走 ops）、
-//!     daily（日常原語）、apps（會話／MCP／工作台）、agent（agentapi 入口）、setup（hook／安裝）。
+//!     home（spine 靜態入口）、daily（日常原語）、apps（會話／MCP／工作台）、agent（agentapi 入口）、setup（hook／安裝）。
 //! 新增子命令：放進對應模組，再在 [`Cmd`] 加一項。要跨入口共用的管理寫入，先在 `ctx_core::ops` 加操作。
 //! exit code 約定見 common.rs。
 
@@ -13,6 +13,7 @@ pub mod common;
 pub mod daily;
 pub mod decide;
 pub mod health;
+pub mod home;
 pub mod relay;
 pub mod setup;
 pub mod steward;
@@ -54,6 +55,11 @@ pub enum Cmd {
     Group {
         #[command(subcommand)]
         action: admin::GroupCmd,
+    },
+    /// spine 靜態入口：sync 照 registry 生成 AGENTS.md、CLAUDE.md、groups/<組>/REPOS.md（--check 只報告過期與衝突；Rust 才有）
+    Home {
+        #[command(subcommand)]
+        cmd: home::HomeCmd,
     },
     // ── daily ──
     /// 活動脈動：7d/30d commit 數＋近期 commit 主旨（組的監控焦點）
@@ -228,6 +234,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Init(a) => admin::cmd_init(a),
         Registry { action } => admin::cmd_registry(ctx, action),
         Group { action } => admin::cmd_group(ctx, action),
+        Home { cmd } => home::cmd_home(ctx, cmd),
         Pulse(a) => daily::cmd_pulse(ctx, a),
         Collect(a) => daily::cmd_collect(ctx, a),
         Pack(a) => daily::cmd_pack(ctx, a),

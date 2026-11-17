@@ -107,6 +107,18 @@ impl RepoClass {
         }
     }
 
+    /// spine 靜態入口（`groups/<組>/REPOS.md`，F-132）每列尾巴的提示：動這個 repo 之前要知道的一句話。
+    /// 程式／領域 Agent 照 repo 自己的 AGENTS.md；其餘沿用 [`RepoClass::short_rule`] 的說法。
+    pub fn entry_hint(self) -> &'static str {
+        match self {
+            RepoClass::Code | RepoClass::Agent => "改之前先讀它的 AGENTS.md。",
+            RepoClass::Data => "數字要附出處。",
+            RepoClass::Docs => "事實別補、別外傳。",
+            RepoClass::Knowledge => "可自由整理，引用附出處。",
+            RepoClass::Reference => "只讀，不要改。",
+        }
+    }
+
     /// 要不要採集 git 狀態（沒 commit、多久沒動、ahead／behind）。參考 repo 不是你的工作，不採集。
     pub fn collects_git(self) -> bool {
         self != RepoClass::Reference

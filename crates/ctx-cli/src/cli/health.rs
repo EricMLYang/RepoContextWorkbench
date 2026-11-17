@@ -26,6 +26,8 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
     // 2026-10-21：App 開會話用的 .mcp.json 指到的 ctx 還在不在（10-18 重裝後指到被刪的 bundle，兩天沒人發現）
     let mcp_json = ctx_core::session::mcp_json_status(&d);
     v["setup"] = serde_json::json!({"skill": skill, "mcp_json": mcp_json, "clis": clis});
+    // F-132：spine 入口檔過期或被手寫檔擋住（要跑 git，所以不在引擎的 health 裡，App 的 build_state 不會跑到）
+    v["home"] = ctx_core::health::home_status(&d);
     // 2026-11-10：要人判斷的提醒（未結體檢、判斷回顧、關係建議、何時重看）搬來這裡——以前塞在每場 agent 會話的開場
     let here = ctx_core::agentapi::Target {
         cwd: std::env::current_dir().ok(),
@@ -251,6 +253,30 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                 "- App 開會話用的 .mcp.json 指到的 ctx 不在（{}）：那些會話的 MCP 會連不上、agent 退回 CLI；下一次 App 開會話會自動重寫，現在要修就跑 `ctx session --print`",
                 s(&r["setup"]["mcp_json"], "command")
             ));
+        }
+        // F-132：spine 入口檔（沒掛 hook／MCP 的 agent 在 spine 開場讀的）過期或被手寫檔擋住
+        let h = &r["home"];
+        let (stale, conflicts) = (arr(h, "stale"), arr(h, "conflicts"));
+        if !stale.is_empty() || !conflicts.is_empty() {
+            let mut why = Vec::new();
+            if !stale.is_empty() {
+                why.push(format!("{} 個過期", stale.len()));
+            }
+            if !conflicts.is_empty() {
+                let names: Vec<String> = conflicts.iter().map(ctx_core::pystr::py_str).collect();
+                why.push(format!("{} 個被手寫檔擋住（{}，不會覆蓋）", conflicts.len(), names.join("、")));
+            }
+            out.push(format!(
+                "- spine 入口檔（AGENTS.md、groups/*/REPOS.md）{}：{}",
+                why.join("、"),
+                if stale.is_empty() {
+                    "要改用生成的就先把手寫檔移走，再跑 `ctx home sync`"
+                } else {
+                    "跑 `ctx home sync`"
+                }
+            ));
+        } else if let Some(e) = h["error"].as_str() {
+            out.push(format!("- spine 入口檔查不了（{e}）：跑 `ctx home sync --check` 看看"));
         }
         let for_you = arr(r, "for_you");
         if !for_you.is_empty() {

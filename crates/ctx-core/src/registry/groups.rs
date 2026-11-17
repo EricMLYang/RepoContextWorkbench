@@ -175,8 +175,11 @@ pub fn update_group(
                 }
                 let src = spine_dir.join("groups").join(name);
                 let dst = spine_dir.join("groups").join(&new);
-                moved = src.is_dir();
-                if moved && dst.exists() {
+                // 只有生成的 REPOS.md（F-132）不算料：不搬（home sync 會在新名字底下重生、刪掉舊的）
+                moved = src.is_dir() && crate::home::group_dir_has_user_files(&src);
+                let dst_busy =
+                    dst.exists() && (!dst.is_dir() || crate::home::group_dir_has_user_files(&dst));
+                if moved && dst_busy {
                     return Err(Error::invalid(format!(
                         "資料夾已存在: groups/{new}/（先自行合併或移走，不代為覆蓋）"
                     )));
@@ -192,6 +195,7 @@ pub fn update_group(
         }
         let group = g.clone();
         if let Some((src, dst)) = rename_dirs {
+            crate::home::clear_generated_dir(&dst)?;
             std::fs::rename(src, dst)?;
         }
         Ok(GroupUpdated {
@@ -336,7 +340,9 @@ pub fn remove_group(spine_dir: impl AsRef<Path>, name: &str) -> Result<GroupRemo
         let d = spine_dir.join("groups").join(name);
         Ok(GroupRemoved {
             name: name.to_string(),
-            kept_dir: d.is_dir().then(|| d.to_string_lossy().into_owned()),
+            // 只剩生成的 REPOS.md 不算料（home sync 會把它刪掉）
+            kept_dir: (d.is_dir() && crate::home::group_dir_has_user_files(&d))
+                .then(|| d.to_string_lossy().into_owned()),
             schedule_refs: schedule_refs(spine_dir, name)?,
         })
     })

@@ -311,6 +311,7 @@ fn registry_scan(ctx: &Ctx, dir: &str, apply: bool) -> CmdResult {
     };
     if apply {
         let added = registry::scan_register(&d, dir).map_err(invalid)?;
+        ctx_core::home::sync_quiet(&d); // F-132
         for cid in &added {
             println!(
                 "已登記：{cid}（下半身預設 mine/active；上半身 type/tier/tags 用 registry set 補）"

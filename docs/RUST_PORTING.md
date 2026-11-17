@@ -583,4 +583,17 @@ CLI／MCP（ctx-cli）：
     第一行的 `cwd` 在範圍內才讀；`codex exec` 與子 agent 不列；標題讀 `session_index.jsonl`），每筆多 `agent`、`resume`。
     `ctx sessions`、App「過去的會話」、`ctx relay answer`（接回留下交接的那場）都跟著有。
   - 還沒做：Codex 會話的逐字稿檢視與 `ctx sessions --digest`、backfill、分岔；程式化呼叫（ask_repo、助手、碰撞判定）仍是 `claude -p`。
-
+- **spine 靜態入口 `ctx home sync [--check]`**（2026-11-18，F-132；Python 沒有，新模組 `home`）：由 registry 生成三種 spine 檔——
+  `AGENTS.md`（工作台是什麼、有 MCP 用哪些工具、沒有就 `ctx … --json`、每組一行指向它的清單、`registry.yaml`／`config.yaml`
+  是資料來源；上限 60 行，組超過 15 個只留名稱與數目，再放不下就幾組併一行）、`CLAUDE.md`（一行 `@AGENTS.md`）、
+  `groups/<組>/REPOS.md`（每個 repo 一行：名片或類別、本機路徑、`Clone from <remote> if missing.`、由類別推的提示；
+  沒分組的放 `groups/_ungrouped/REPOS.md`）。remote 用 `upstream`（`owner/repo` 補成 GitHub URL），沒有就讀
+  `git remote get-url origin`（URL 裡的帳密拿掉；讀不到就不寫）。每個生成檔第一行是 `home::MARKER`；檔案在、沒有標記＝手寫的，
+  不覆蓋、回報衝突（`--check` 與 sync 都 exit 1）。組刪了／改名了，舊的生成檔帶標記才刪（資料夾空了才收掉）。
+  `--check` 不寫，有過期或衝突就 exit 1；`--json` 回 `{ok, files:[{path, status}], conflicts}`（sync：written｜unchanged｜removed｜conflict）
+  或 `{ok, check, up_to_date, stale, conflicts, files}`（check：create｜update｜remove｜unchanged｜conflict）。
+  自動重生（`home::sync_quiet`，失敗只寫 stderr）：`ops::call` 成功之後（CLI／工作台／MCP 的 registry、組、名片、類別寫入都經過它，
+  含 `workbench_apply`）、工作台的 reorder／group_add_folder／register_repos、`registry scan --apply`（CLI 與 MCP）、`spawn`、
+  `ctx setup` 結束時（不印在 stdout）。組改名的 `moved_dir`、刪組的 `kept_dir` 不把「只有生成的 REPOS.md」的資料夾算成有料
+  （跟 Python 的輸出一致）。`ctx health` 多 `home` 鍵（`stale`、`conflicts`；CLI 才接，引擎的 `health()` 不跑——App 的 build_state 每次都呼叫它），有就印一行叫你跑 `ctx home sync`。
+  對拍時這幾個檔列為允許差異（`HOME_FILES_WHY`）。

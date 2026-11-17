@@ -141,6 +141,9 @@ ALLOW = {
 }
 
 # 只在檔案比對時允許的差異：(路徑 regex, 理由)
+HOME_FILES_WHY = ("Rust 才有的生成檔（F-132，2026-11-18）：spine 靜態入口 AGENTS.md、CLAUDE.md、groups/<組>/REPOS.md，"
+                  "由 registry 生成（ctx home sync；registry／組／名片寫入後與 ctx setup 結束時自動重生），Python 沒有")
+
 ALLOW_FILES = [
     (r"^\.mcp\.json$",
      "session 掛的 MCP 指令改指 Rust ctx（`ctx mcp`），不再是 `python -m repo_context mcp`"),
@@ -152,6 +155,10 @@ ALLOW_FILES = [
      "未結體檢結果快取（F-21／F-46，Rust 才有：開場與 scan 算好給桌面 App 收件匣讀）"),
     (r"^groups/[^/]+/materials/session-[^/]+\.md$",
      "會話料：範圍只有一個 repo 時情境卡改用 repo 的說法（標題、段名、repo 管家角色；#73，2026-10-15，Rust 才有）"),
+    (r"^(AGENTS|CLAUDE)\.md$",
+     HOME_FILES_WHY),
+    (r"^groups/[^/]+/REPOS\.md$",
+     HOME_FILES_WHY),
     (r"^\.agent_logs/",
      "provider 原始紀錄（除錯用 log，含 prompt 全文與呼叫序號；MockProvider 計數改成實例層）"),
 ]

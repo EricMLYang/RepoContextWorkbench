@@ -41,6 +41,7 @@ pub(super) fn t_registry_scan(d: &Path, a: &Args) -> Result<String> {
     let dir = arg_s(a, "dir").ok_or_else(|| Error::invalid("'dir'"))?;
     if arg_flag(a, "apply") {
         let added = registry::scan_register(d, &dir)?;
+        ctx_core::home::sync_quiet(d); // F-132
         return Ok(if added.is_empty() {
             "無新 repo 可登記".into()
         } else {

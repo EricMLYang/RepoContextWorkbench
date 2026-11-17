@@ -31,6 +31,7 @@ pub mod github;
 pub mod gitlog;
 pub mod health;
 pub mod history;
+pub mod home;
 pub mod hooks;
 pub mod init;
 pub mod knowledge;

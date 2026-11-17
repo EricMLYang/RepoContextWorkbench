@@ -777,5 +777,7 @@ pub fn call(
         }
     }
     let say = (o.say)(&result, &args);
+    // F-132：表裡每個操作都會改 registry（含名片、類別、組）——spine 入口檔跟著重生（失敗不影響這次操作）
+    crate::home::sync_quiet(spine_dir);
     Ok((result, say))
 }
