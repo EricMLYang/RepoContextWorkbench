@@ -7,27 +7,30 @@
 //! 紀律：
 //! - 洩密哨兵照走——長得像憑證的檔不進索引，也不會出現在片段裡（公私分界）。
 //! - 回傳帶分數與命中片段的「依據」，agent 要引用時說得出來自哪個 repo 哪份檔哪一行。
-//! - 索引依檔案 mtime 快取在 `.state/knowledge_index.json`（.state/ 已 gitignore；格式與 Python 共用）。
+//! - 索引存在 `.state/knowledge.db`（SQLite，Rust 才有，N-51，見 [`store`]）：依檔案 mtime 增量更新，
+//!   查詢只撈查詢詞的 posting。SQLite 只當倒排索引的儲存——斷詞、BM25、加權、片段全是這裡的算法，
+//!   不用 FTS5 的排序，結果跟從頭在記憶體裡建索引（[`build_docs`] 不給 spine、[`search`] 不給 spine）逐位元組相同。
+//!   Python 版還用它自己的 `.state/knowledge_index.json`；Rust 不讀不寫那份，第一次建好 db 後把它刪掉。
 //!
 //! 找得「準」（跨 repo 參考輪）：
 //! - 標題／frontmatter／檔名另建一份索引（htf），命中加權：md 有結構，標題命中比內文命中準得多。
 //! - boosts：呼叫端（agentapi）依主場算好——有關係的 repo 加分、落在 export 內加分；
 //!   近 30 天改過的檔小幅加分。每筆結果帶 why（為什麼排這裡），agent 才判斷得了要不要信。
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+mod store;
+
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::time::SystemTime;
 
 use regex::Regex;
-use serde::{Deserialize, Serialize};
-use serde_json::value::RawValue;
-use serde_json::{json, Value};
+use serde::Serialize;
 use std::sync::LazyLock;
 
 use crate::fsutil::{expanduser, mtime_secs, now_secs, read_text_lossy, resolve};
 use crate::pack::{self, RepoRef};
 use crate::pystr::{splitlines, take_chars};
+
+pub use store::{index_fallbacks, index_generation, DB_SCHEMA_VERSION};
 
 static WORD_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[a-z0-9][a-z0-9_\-\.]*[a-z0-9]|[a-z0-9]").expect("寫死的 regex"));
@@ -37,8 +40,6 @@ const K1: f64 = 1.5;
 const B: f64 = 0.75;
 /// 單檔上限：超大檔只索引前段（避免一本書的全文拖垮查詢）。
 const MAX_CHARS: usize = 200_000;
-/// 快取格式版本：舊快取沒有 htf，版本不符就重算。
-const INDEX_VERSION: i64 = 2;
 /// 標題／frontmatter／檔名命中的權重（相對內文）。
 const HEAD_WEIGHT: f64 = 2.0;
 const RECENT_DAYS: f64 = 30.0;
@@ -62,12 +63,12 @@ pub fn in_archive(rel: &str) -> bool {
     })
 }
 
-/// 查詢詞（去重）有幾成出現在這份檔的標題索引。
-fn title_coverage(qcount: &[(String, u64)], d: &Doc) -> f64 {
+/// 查詢詞（去重）有幾成出現在這份檔的標題索引。`has` 回答第 i 個查詢詞在不在標題索引。
+fn title_coverage(qcount: &[(String, u64)], has: impl Fn(usize) -> bool) -> f64 {
     if qcount.is_empty() {
         return 0.0;
     }
-    let hit = qcount.iter().filter(|(t, _)| d.htf.contains_key(t)).count();
+    let hit = (0..qcount.len()).filter(|&i| has(i)).count();
     hit as f64 / qcount.len() as f64
 }
 const STOP: &[&str] = &[
@@ -124,71 +125,6 @@ pub fn heading_text(text: &str, name: &str) -> String {
     out.join("\n")
 }
 
-fn cache_path(spine_dir: &Path) -> PathBuf {
-    spine_dir.join(".state").join("knowledge_index.json")
-}
-
-/// 快取一筆（`.state/knowledge_index.json` 的 value；欄位同 Python）。只在命中時解析。
-#[derive(Debug, Deserialize)]
-struct CachedRec {
-    mtime: Option<f64>,
-    #[serde(default)]
-    secret: bool,
-    #[serde(default)]
-    tf: HashMap<String, f64>,
-    #[serde(default)]
-    len: f64,
-    #[serde(default)]
-    htf: HashMap<String, f64>,
-    #[serde(default)]
-    hlen: f64,
-    v: Option<i64>,
-}
-
-/// 整份快取：路徑 → 原樣保留的 JSON（不展開成 Value 樹；只解析範圍內命中的那幾筆）。
-type Cache = BTreeMap<String, Box<RawValue>>;
-
-/// 行程內記住上次讀到的快取（MCP server／桌面 App 是常駐行程，同一份檔不用每次重讀重解析）。
-/// 檔案的 (mtime, 大小) 變了＝別的行程（Python 版、另一個 ctx）寫過 → 重讀。
-struct Memo {
-    path: PathBuf,
-    stamp: Option<(SystemTime, u64)>,
-    cache: Cache,
-}
-
-static MEMO: LazyLock<Mutex<Option<Memo>>> = LazyLock::new(|| Mutex::new(None));
-
-fn file_stamp(p: &Path) -> Option<(SystemTime, u64)> {
-    let m = std::fs::metadata(p).ok()?;
-    Some((m.modified().ok()?, m.len()))
-}
-
-/// 讀快取：行程內有同一份（stamp 沒變）就直接拿走，否則讀檔。壞檔＝空（同 Python）。
-fn take_cache(memo: &mut Option<Memo>, spine_dir: &Path) -> Cache {
-    let p = cache_path(spine_dir);
-    let stamp = file_stamp(&p);
-    if let Some(m) = memo.take() {
-        if m.path == p && m.stamp.is_some() && m.stamp == stamp {
-            return m.cache;
-        }
-    }
-    std::fs::read_to_string(&p)
-        .ok()
-        .and_then(|s| serde_json::from_str::<Cache>(&s).ok())
-        .unwrap_or_default()
-}
-
-/// 寫快取（先寫暫存檔再改名，別的行程不會讀到半份）。寫不進去不影響查詢。回傳寫完後的 stamp。
-fn save_cache(spine_dir: &Path, cache: &Cache) -> Option<(SystemTime, u64)> {
-    let p = cache_path(spine_dir);
-    if let Some(parent) = p.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let s = serde_json::to_string(cache).ok()?;
-    crate::fsutil::write_atomic_cache(&p, s.as_bytes()).ok()?;
-    file_stamp(&p)
-}
-
 /// 有序計數（插入順序＝首次出現順序，同 Python `Counter`）。
 pub(crate) fn count(toks: Vec<String>) -> Vec<(String, u64)> {
     let mut idx: HashMap<String, usize> = HashMap::new();
@@ -205,15 +141,11 @@ pub(crate) fn count(toks: Vec<String>) -> Vec<(String, u64)> {
     out
 }
 
-fn counts_to_json(c: &[(String, u64)]) -> Value {
-    Value::Object(c.iter().map(|(k, v)| (k.clone(), json!(v))).collect())
-}
-
 /// 索引裡的一份文件（對應 `build_docs` 回傳的 dict）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Doc {
     pub repo: String,
-    /// 絕對路徑字串（同時是快取鍵）。
+    /// 絕對路徑字串。
     pub path: String,
     pub rel: String,
     pub tf: HashMap<String, f64>,
@@ -223,33 +155,51 @@ pub struct Doc {
     pub mtime: f64,
 }
 
-/// 對應 `knowledge.build_docs`。有 `spine_dir` 就走 mtime 快取（與 Python 共用同一份檔）。
+/// 對應 `knowledge.build_docs`：範圍內每份可索引的 md（秘密檔不算），順序＝repo 順序 → 檔案順序。
 ///
-/// 與 Python 的差異（N-02，格式不變）：快取不展開成整棵 JSON 樹，只解析範圍內命中的檔；
-/// 沒有新算的檔就不重寫快取（Python 每次查詢都整份重寫）；常駐行程記住上次讀到的快取。
+/// 有 `spine_dir` 就走 `.state/knowledge.db`（增量更新後讀出整份；索引庫開不起來就退回在記憶體裡從頭建）；
+/// 沒有就在記憶體裡從頭建——這條是對照組（測試拿來證明索引庫的結果相同），正式路徑都給 spine。
 pub fn build_docs(entries: &[RepoRef], spine_dir: Option<&Path>) -> Vec<Doc> {
-    let Some(sd) = spine_dir else {
-        return build_docs_with(entries, &mut Cache::new()).0;
-    };
-    let mut memo = MEMO.lock().unwrap_or_else(|e| e.into_inner());
-    let mut cache = take_cache(&mut memo, sd);
-    let (docs, dirty) = build_docs_with(entries, &mut cache);
-    let stamp = if dirty {
-        save_cache(sd, &cache)
-    } else {
-        file_stamp(&cache_path(sd))
-    };
-    *memo = Some(Memo {
-        path: cache_path(sd),
-        stamp,
-        cache,
-    });
-    docs
+    if let Some(sd) = spine_dir {
+        if let Some(docs) = store::full_docs(sd, entries) {
+            return docs;
+        }
+    }
+    build_docs_mem(entries)
 }
 
-/// 回傳 (docs, 快取有沒有新算的檔)。列檔（git ls-files）與逐檔解析／索引都分給多條執行緒，
-/// 結果照原本順序（repo 順序 → 檔案順序）合併。
-fn build_docs_with(entries: &[RepoRef], cache: &mut Cache) -> (Vec<Doc>, bool) {
+/// 範圍內列出來的檔：存在的 repo 根（照 entries 順序），以及每份檔（屬於哪個根、絕對路徑），照 repo 順序 → 檔案順序。
+struct Listing<'a> {
+    roots: Vec<(&'a RepoRef, PathBuf)>,
+    files: Vec<(usize, PathBuf)>,
+}
+
+impl Listing<'_> {
+    fn repo(&self, i: usize) -> &str {
+        &self.roots[self.files[i].0].0.id
+    }
+    fn file(&self, i: usize) -> &Path {
+        &self.files[i].1
+    }
+    /// 絕對路徑字串（`Doc::path`，索引庫的鍵之一）。
+    fn key(&self, i: usize) -> String {
+        self.files[i].1.to_string_lossy().into_owned()
+    }
+    fn rel(&self, i: usize) -> String {
+        pack::rel_posix(&self.files[i].1, &self.roots[self.files[i].0].1)
+    }
+    fn meta(&self, i: usize, mtime: f64) -> Meta {
+        Meta {
+            repo: self.repo(i).to_string(),
+            path: self.key(i),
+            rel: self.rel(i),
+            mtime,
+        }
+    }
+}
+
+/// 列檔（`pack::doc_files`＝`git ls-files`，各 repo 同時跑）。不存在的 repo 目錄略過。
+fn list_files(entries: &[RepoRef]) -> Listing<'_> {
     let roots: Vec<(&RepoRef, PathBuf)> = entries
         .iter()
         .map(|e| (e, expanduser(&e.path)))
@@ -264,96 +214,74 @@ fn build_docs_with(entries: &[RepoRef], cache: &mut Cache) -> (Vec<Doc>, bool) {
             .map(|h| h.join().unwrap_or_default())
             .collect()
     });
-    let jobs: Vec<(&RepoRef, &Path, PathBuf)> = roots
-        .iter()
-        .zip(listed)
-        .flat_map(|((e, root), files)| files.into_iter().map(move |f| (*e, root.as_path(), f)))
+    let files = listed
+        .into_iter()
+        .enumerate()
+        .flat_map(|(i, fs)| fs.into_iter().map(move |f| (i, f)))
         .collect();
+    Listing { roots, files }
+}
+
+/// 把 `0..n` 分給多條執行緒算，結果照原本順序。
+fn par_map<R: Send>(n: usize, f: impl Fn(usize) -> R + Sync) -> Vec<R> {
     let threads = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4)
         .min(8);
-    let chunk = jobs.len().div_ceil(threads).max(64);
-    let shared: &Cache = cache;
-    let results: Vec<Vec<Indexed>> = std::thread::scope(|sc| {
-        let hs: Vec<_> = jobs
-            .chunks(chunk)
-            .map(|part| {
-                sc.spawn(move || {
-                    part.iter()
-                        .filter_map(|(e, root, f)| index_one(shared, e, root, f))
-                        .collect::<Vec<_>>()
-                })
+    let chunk = n.div_ceil(threads).max(64);
+    let f = &f;
+    std::thread::scope(|sc| {
+        let hs: Vec<_> = (0..n)
+            .step_by(chunk)
+            .map(|start| {
+                sc.spawn(move || (start..(start + chunk).min(n)).map(f).collect::<Vec<R>>())
             })
             .collect();
         hs.into_iter()
-            .map(|h| h.join().unwrap_or_default())
+            .flat_map(|h| h.join().unwrap_or_default())
             .collect()
-    });
-    let mut dirty = false;
-    let mut docs = Vec::new();
-    for it in results.into_iter().flatten() {
-        if let Some((key, raw)) = it.fresh {
-            cache.insert(key, raw);
-            dirty = true;
+    })
+}
+
+/// 一份檔算出來的索引（計數照首次出現順序；秘密檔只有 `secret`）。
+#[derive(Debug, Clone, Default)]
+struct Rec {
+    secret: bool,
+    tf: Vec<(String, u64)>,
+    len: u64,
+    htf: Vec<(String, u64)>,
+    hlen: u64,
+}
+
+impl Rec {
+    fn into_doc(self, meta: Meta) -> Doc {
+        let to_map = |c: Vec<(String, u64)>| c.into_iter().map(|(k, v)| (k, v as f64)).collect();
+        Doc {
+            repo: meta.repo,
+            path: meta.path,
+            rel: meta.rel,
+            tf: to_map(self.tf),
+            len: self.len as f64,
+            htf: to_map(self.htf),
+            hlen: self.hlen as f64,
+            mtime: meta.mtime,
         }
-        docs.extend(it.doc);
     }
-    (docs, dirty)
 }
 
-/// 單一檔的結果：要給查詢的 doc（秘密檔沒有）＋要寫回快取的新紀錄（命中快取就沒有）。
-struct Indexed {
-    doc: Option<Doc>,
-    fresh: Option<(String, Box<RawValue>)>,
+/// 讀檔並算索引。讀不到＝None（同 Python 略過）。
+fn read_rec(f: &Path) -> Option<Rec> {
+    let full = read_text_lossy(f).ok()?;
+    Some(index_text(f, take_chars(&full, MAX_CHARS)))
 }
 
-/// 單一檔：快取命中就解析快取，否則讀檔重算。讀不到的檔＝None（同 Python 略過）。
-fn index_one(cache: &Cache, e: &RepoRef, root: &Path, f: &Path) -> Option<Indexed> {
-    let key = f.to_string_lossy().into_owned();
-    let mtime = mtime_secs(f).ok()?;
-    let hit = cache
-        .get(&key)
-        .and_then(|raw| serde_json::from_str::<CachedRec>(raw.get()).ok())
-        .filter(|r| r.mtime == Some(mtime) && r.v == Some(INDEX_VERSION));
-    let (rec, fresh) = match hit {
-        Some(r) => (r, None),
-        None => {
-            let full = read_text_lossy(f).ok()?;
-            let (raw, rec) = index_file(f, take_chars(&full, MAX_CHARS), mtime);
-            let fresh = serde_json::value::to_raw_value(&raw)
-                .ok()
-                .map(|raw| (key.clone(), raw));
-            (rec, fresh)
-        }
-    };
-    let doc = (!rec.secret).then(|| Doc {
-        repo: e.id.clone(),
-        path: key,
-        rel: pack::rel_posix(f, root),
-        tf: rec.tf,
-        len: rec.len,
-        htf: rec.htf,
-        hlen: rec.hlen,
-        mtime,
-    });
-    Some(Indexed { doc, fresh })
-}
-
-/// 算一個檔的索引：(寫進快取的 JSON——計數是整數，同 Python, 給本次查詢用的紀錄)。
-fn index_file(f: &Path, text: &str, mtime: f64) -> (Value, CachedRec) {
+/// 算一個檔的索引：像憑證的檔只記 `secret`（不進索引，也不會出現在片段裡）。
+fn index_text(f: &Path, text: &str) -> Rec {
     if !pack::secret_hits(text).is_empty() {
-        let raw = json!({"mtime": mtime, "secret": true, "v": INDEX_VERSION});
-        let rec = CachedRec {
-            mtime: Some(mtime),
+        return Rec {
             secret: true,
-            tf: HashMap::new(),
-            len: 0.0,
-            htf: HashMap::new(),
-            hlen: 0.0,
-            v: Some(INDEX_VERSION),
+            ..Rec::default()
         };
-        return (raw, rec);
     }
     let tf = count(tokenize(text));
     let name = f
@@ -363,19 +291,35 @@ fn index_file(f: &Path, text: &str, mtime: f64) -> (Value, CachedRec) {
     let htf = count(tokenize(&heading_text(text, &name)));
     let len: u64 = tf.iter().map(|x| x.1).sum();
     let hlen: u64 = htf.iter().map(|x| x.1).sum();
-    let raw = json!({"mtime": mtime, "tf": counts_to_json(&tf), "len": len,
-                     "htf": counts_to_json(&htf), "hlen": hlen, "v": INDEX_VERSION});
-    let to_map = |c: &[(String, u64)]| c.iter().map(|(k, v)| (k.clone(), *v as f64)).collect();
-    let rec = CachedRec {
-        mtime: Some(mtime),
+    Rec {
         secret: false,
-        tf: to_map(&tf),
-        len: len as f64,
-        htf: to_map(&htf),
-        hlen: hlen as f64,
-        v: Some(INDEX_VERSION),
-    };
-    (raw, rec)
+        tf,
+        len,
+        htf,
+        hlen,
+    }
+}
+
+/// 在記憶體裡從頭建（對照組，也是索引庫打不開時的退路）：列檔 → 逐檔讀、斷詞、計數。
+fn build_docs_mem(entries: &[RepoRef]) -> Vec<Doc> {
+    let listing = list_files(entries);
+    par_map(listing.files.len(), |i| {
+        let mtime = mtime_secs(listing.file(i)).ok()?;
+        let rec = read_rec(listing.file(i))?;
+        (!rec.secret).then(|| rec.into_doc(listing.meta(i, mtime)))
+    })
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+/// 一份檔給排序用的身分（分數之外的部分）。
+#[derive(Debug, Clone)]
+struct Meta {
+    repo: String,
+    path: String,
+    rel: String,
+    mtime: f64,
 }
 
 /// 命中片段（行號 1 起算）。
@@ -452,6 +396,37 @@ pub(crate) fn bm25(qcount: &[(String, u64)], docs: &[Doc], head: bool) -> Vec<f6
         .collect()
 }
 
+/// 跟 [`bm25`] 同一條算式、同樣的累加順序（索引庫那條路用；結果要逐位元組相同）。
+///
+/// `dl`＝每份檔的長度（照 doc 順序）；`tfs[t]`＝第 t 個查詢詞出現在哪幾份檔（doc 序號 → tf）。
+/// 一份檔在 `tfs[t]` 裡最多一筆，所以 df＝`tfs[t].len()`（同 [`bm25`] 數「有這個詞的 doc 有幾份」）。
+fn bm25_sparse(qcount: &[(String, u64)], dl: &[f64], tfs: &[HashMap<usize, f64>]) -> Vec<f64> {
+    let n = dl.len() as f64;
+    let mut avg = if dl.is_empty() {
+        1.0
+    } else {
+        dl.iter().copied().sum::<f64>() / n
+    };
+    if avg == 0.0 {
+        avg = 1.0;
+    }
+    let df: Vec<f64> = tfs.iter().map(|m| m.len() as f64).collect();
+    (0..dl.len())
+        .map(|d| {
+            let mut s = 0.0;
+            for (((_, qn), dft), m) in qcount.iter().zip(&df).zip(tfs) {
+                let f = match m.get(&d) {
+                    Some(&f) if f != 0.0 => f,
+                    _ => continue,
+                };
+                let idf = (1.0 + (n - dft + 0.5) / (dft + 0.5)).ln();
+                s += *qn as f64 * idf * f * (K1 + 1.0) / (f + K1 * (1.0 - B + B * dl[d] / avg));
+            }
+            s
+        })
+        .collect()
+}
+
 /// 路徑前綴加權（對應 Python boosts["paths"] 的一列 `(repo, 前綴, 倍率, 理由)`）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct PathBoost {
@@ -469,7 +444,7 @@ pub struct Boosts {
 }
 
 /// 對應 `knowledge._boost`：回傳 (倍率, why 清單)。
-fn boost(d: &Doc, boosts: &Boosts, now: f64) -> (f64, Vec<String>) {
+fn boost(d: &Meta, boosts: &Boosts, now: f64) -> (f64, Vec<String>) {
     let (mut factor, mut why) = (1.0, Vec::new());
     if let Some((f, reason)) = boosts.repos.get(&d.repo) {
         factor *= f;
@@ -542,6 +517,9 @@ pub(crate) fn round2(x: f64) -> f64 {
 ///
 /// files：依分數排序的命中檔；repos：前 50 筆命中依 repo 加總排序，回答「這段文字跟哪些 repo 最相關」。
 /// `exclude_paths`＝不把查詢來源檔自己算進去。Python 預設 `limit=8`。
+///
+/// 有 `spine_dir` 走索引庫（`.state/knowledge.db`：增量更新、只撈查詢詞的 posting）；索引庫開不起來就退回
+/// 在記憶體裡從頭建——搜尋不會因為索引庫壞了而失敗。沒有 `spine_dir`＝在記憶體裡從頭建（對照組）。
 pub fn search(
     entries: &[RepoRef],
     query: &str,
@@ -550,44 +528,136 @@ pub fn search(
     exclude_paths: &[PathBuf],
     boosts: &Boosts,
 ) -> SearchResult {
-    let empty = |note: &str| SearchResult {
-        query: query.to_string(),
-        files: Vec::new(),
-        repos: Vec::new(),
-        note: Some(note.to_string()),
-        indexed_files: None,
-    };
     let qtoks = tokenize(query);
     if qtoks.is_empty() {
-        return empty("查詢字串斷不出可比對的詞");
+        return empty_result(query, "查詢字串斷不出可比對的詞");
     }
     let excluded: HashSet<PathBuf> = exclude_paths
         .iter()
         .map(|p| resolve(&expanduser(p)))
         .collect();
-    let docs: Vec<Doc> = build_docs(entries, spine_dir)
-        .into_iter()
-        .filter(|d| !excluded.contains(&resolve(Path::new(&d.path))))
-        .collect();
-    if docs.is_empty() {
-        return empty("範圍內沒有可索引的 md 檔");
-    }
+    // 沒有要排除的就不必每份檔都 canonicalize（真資料 8 千份檔約 60ms；結果一樣）
+    let keep = |path: &str| excluded.is_empty() || !excluded.contains(&resolve(Path::new(path)));
     let qcount = count(qtoks.clone());
-    let body = bm25(&qcount, &docs, false);
-    let head = bm25(&qcount, &docs, true);
+    let scores = spine_dir
+        .and_then(|sd| store::score_input(sd, entries, &qcount, &keep))
+        .map(|input| scores_of(&qcount, input))
+        .unwrap_or_else(|| scores_mem(entries, &qcount, &keep));
+    if scores.indexed == 0 {
+        return empty_result(query, "範圍內沒有可索引的 md 檔");
+    }
+    rank(query, &qtoks, scores, limit, boosts)
+}
+
+fn empty_result(query: &str, note: &str) -> SearchResult {
+    SearchResult {
+        query: query.to_string(),
+        files: Vec::new(),
+        repos: Vec::new(),
+        note: Some(note.to_string()),
+        indexed_files: None,
+    }
+}
+
+/// 排序前的一份命中檔：身分、內文分、標題分、查詢詞在標題索引的涵蓋率。
+struct Scored {
+    meta: Meta,
+    sb: f64,
+    sh: f64,
+    cov: f64,
+}
+
+/// 打完分：分數 > 0 的檔（照 doc 順序）＋範圍內可索引的檔數（`indexed_files`）。
+struct Scores {
+    hits: Vec<Scored>,
+    indexed: usize,
+}
+
+/// 索引庫撈回來的打分原料（[`store::score_input`]）：範圍內每份檔（照 doc 順序）的身分與長度，
+/// 以及每個查詢詞（照 `qcount` 順序）出現在哪幾份檔、tf 多少——內文、標題各一份。
+struct ScoreInput {
+    metas: Vec<Meta>,
+    len: Vec<f64>,
+    hlen: Vec<f64>,
+    body: Vec<HashMap<usize, f64>>,
+    head: Vec<HashMap<usize, f64>>,
+}
+
+fn scores_of(qcount: &[(String, u64)], input: ScoreInput) -> Scores {
+    let body = bm25_sparse(qcount, &input.len, &input.body);
+    let head = bm25_sparse(qcount, &input.hlen, &input.head);
+    let indexed = input.metas.len();
+    let hits = input
+        .metas
+        .into_iter()
+        .zip(body.into_iter().zip(head))
+        .enumerate()
+        .filter(|(_, (_, (sb, sh)))| sb + HEAD_WEIGHT * sh > 0.0)
+        .map(|(d, (meta, (sb, sh)))| Scored {
+            meta,
+            sb,
+            sh,
+            cov: title_coverage(qcount, |t| input.head[t].contains_key(&d)),
+        })
+        .collect();
+    Scores { hits, indexed }
+}
+
+/// 對照組：在記憶體裡從頭建索引再打分（[`bm25`]，搬到索引庫之前的算法原樣）。
+fn scores_mem(
+    entries: &[RepoRef],
+    qcount: &[(String, u64)],
+    keep: &dyn Fn(&str) -> bool,
+) -> Scores {
+    let docs: Vec<Doc> = build_docs_mem(entries)
+        .into_iter()
+        .filter(|d| keep(&d.path))
+        .collect();
+    let body = bm25(qcount, &docs, false);
+    let head = bm25(qcount, &docs, true);
+    let hits = docs
+        .iter()
+        .zip(body.into_iter().zip(head))
+        .filter(|(_, (sb, sh))| sb + HEAD_WEIGHT * sh > 0.0)
+        .map(|(d, (sb, sh))| Scored {
+            meta: Meta {
+                repo: d.repo.clone(),
+                path: d.path.clone(),
+                rel: d.rel.clone(),
+                mtime: d.mtime,
+            },
+            sb,
+            sh,
+            cov: title_coverage(qcount, |t| d.htf.contains_key(&qcount[t].0)),
+        })
+        .collect();
+    Scores {
+        hits,
+        indexed: docs.len(),
+    }
+}
+
+/// 分數 × boosts → 排序 → files（附片段）／repos。
+fn rank(
+    query: &str,
+    qtoks: &[String],
+    scores: Scores,
+    limit: usize,
+    boosts: &Boosts,
+) -> SearchResult {
     let now = now_secs();
-    let mut scored: Vec<(f64, &Doc, Vec<String>)> = Vec::new();
-    for ((d, sb), sh) in docs.iter().zip(body).zip(head) {
-        let s = sb + HEAD_WEIGHT * sh;
+    let mut scored: Vec<(f64, &Meta, Vec<String>)> = Vec::new();
+    for c in &scores.hits {
+        let s = c.sb + HEAD_WEIGHT * c.sh;
         if s <= 0.0 {
             continue;
         }
-        let (factor, mut why) = boost(d, boosts, now);
+        let (factor, mut why) = boost(&c.meta, boosts, now);
         // Rust 才有（F-126）：以前只要有一個詞碰到標題就標，幾乎每筆都有；改成查詢詞過半出現在標題才標
-        if sh > 0.0 && title_coverage(&qcount, d) >= TITLE_HIT_RATIO {
+        if c.sh > 0.0 && c.cov >= TITLE_HIT_RATIO {
             why.insert(0, "標題命中".into());
         }
-        scored.push((s * factor, d, why));
+        scored.push((s * factor, &c.meta, why));
     }
     scored.sort_by(|a, b| b.0.total_cmp(&a.0)); // 穩定排序，同分保留原順序
     let files = scored
@@ -599,12 +669,12 @@ pub fn search(
             path: d.path.clone(),
             score: round2(*s),
             why: why.clone(),
-            snippets: snippets(&d.path, &qtoks, 2),
+            snippets: snippets(&d.path, qtoks, 2),
         })
         .collect();
     // Counter.most_common：依分數降冪，同分照首次出現順序
     // 第一次碰到的就是那個 repo 分數最高的檔（scored 已排序）
-    let mut per_repo: Vec<(String, f64, usize, f64, &Doc)> = Vec::new();
+    let mut per_repo: Vec<(String, f64, usize, f64, &Meta)> = Vec::new();
     for (s, d, _) in scored.iter().take(50) {
         match per_repo.iter_mut().find(|r| r.0 == d.repo) {
             Some(r) => {
@@ -631,7 +701,7 @@ pub fn search(
         files,
         repos,
         note: None,
-        indexed_files: Some(docs.len()),
+        indexed_files: Some(scores.indexed),
     }
 }
 

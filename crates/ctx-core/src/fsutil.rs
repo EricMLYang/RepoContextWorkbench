@@ -200,7 +200,7 @@ pub fn write_atomic(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
     write_atomic_with(p, bytes, true)
 }
 
-/// 同 [`write_atomic`] 但不 fsync：給壞了可以重建的快取（知識索引 60MB，fsync 要多 40ms 左右）。
+/// 同 [`write_atomic`] 但不 fsync：給壞了可以重建的快取（例：相關 repo 建議；知識索引以前也是，N-51 起改存 SQLite）。
 /// 讀的人一樣不會看到寫一半的檔；只是當機時可能留下舊版或空檔，下次重建。
 pub fn write_atomic_cache(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
     write_atomic_with(p, bytes, false)

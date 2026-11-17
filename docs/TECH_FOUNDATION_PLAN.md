@@ -24,7 +24,7 @@
 | 2 | 狀態雙通道：hook 優先、OSC 7501 補位 | F-130 | 2 天 | 階段 0 驗過 Codex 會送 | 完成（2026-11-18）：真的 Claude Code 2.1.326 與 Codex 0.169 經引擎的 PTY 都記到 working → finished；App 畫面還沒測 |
 | 3 | 會話跑在 App 之外 | F-128 | 試作 1 天＋實作 3–5 天 | 決定 2 | 完成（2026-11-18，路線 A）：`session.backend: herdr-core`（預設仍是 pty）；真 hc 0.1.21 上，真的 Claude Code 跑到一半、丟掉 manager 再重建，接回後跑完；App 畫面、全螢幕程式、Windows 沒驗 |
 | 4a | 合併回 main、刪 Python 版與對拍 | VISION §6 第 2 項 | 1–2 天 | 使用者真用驗收 | 未開始 |
-| 4b | 知識索引改 SQLite FTS5 | N-51 | 3 天 | 4a | 未開始 |
+| 4b | 知識索引改存 SQLite（排序不變、增量） | N-51 | 3 天 | 無（沒等 4a） | 完成（2026-11-18）：副本上暖查詢 760→280–400 ms、改一檔後 800→300 ms，20 個查詢結果與改前相同；代價是 db 172 MB（原 97 MB）、冷建 2→4.5 秒；真 spine 還沒量 |
 | 4c | 會話索引（Claude Code＋Codex） | F-134 | 3 天 | 4b | 未開始 |
 | 5a | 介面合約由方法表生成 | N-52 | 3–5 天，可分批 | 4a | 未開始 |
 | 5b | 共享 skill 進 spine | F-133 | 盤點半天＋實作 1 天 | 階段 1、決定 3 | 未開始 |
@@ -156,25 +156,41 @@
 這是 `VISION.md` §6 已經排的事，條件是使用者真用驗收通過。它擋住 4b、4c、5a，
 因為這三項都會改到目前跟 Python 共用格式或對拍的東西。這一項的時機由使用者決定。
 
-### 4b 知識索引改 SQLite FTS5（N-51）
+### 4b 知識索引改存 SQLite（N-51，2026-11-18）
 
-- 依賴：`rusqlite`（bundled）。加之前量 `ctx` 執行檔變大多少，寫進 baseline。
-- `.state/knowledge.db`：一張文件表（repo、相對路徑、mtime、標題）＋FTS 表（內文、標題各一欄，標題加權沿用現在的做法）。
-- 更新：比對 mtime，只重建變動與刪除的檔。
-- 中文切詞：先沿用現在的字元 bigram（寫入前自己切）。FTS5 的 trigram tokenizer 另外實測，準才換。
-- 排序沿用現在的加權（關係、export、近 30 天），在查詢結果上套用。
-- 舊的 `knowledge_index.json` 在第一次成功建庫後刪掉。
+原本寫「用 FTS5、等 Python 刪掉後做」；實際做法改成現在就做、而且**搜尋結果一個位元都不變**
+（`ctx search` 跟 Python 對拍，排序、分數、片段、why 都是合約）：
 
-**驗收**
+- SQLite 只當「可增量更新、可局部讀取的倒排索引儲存」：`.state/knowledge.db` 的 `docs`（repo、絕對路徑、rel、mtime、
+  secret、長度、該檔的詞清單）、`terms`、`body`／`head` posting（詞 → 檔、tf；內文與標題＋frontmatter＋檔名各一份）。
+  格式版本放 `PRAGMA user_version`，不符整個重建。schema、並行、損毀處理見 `crates/ctx-core/src/knowledge/store.rs` 檔頭。
+- **不用 FTS5**，也不用它的 bm25()：斷詞（英數小寫單字＋中文字元 bigram）、BM25 參數、標題加權、boosts、片段全是
+  `knowledge` 原本的算法，浮點累加順序也照舊。查詢只撈查詢詞的 posting 來算分。
+- 更新：比對 mtime，只重讀新增／變動的檔；刪掉的檔、registry 移除的 repo 一併清掉；沒變動不寫。
+- 多個行程（CLI、多支 `ctx mcp`、App）：WAL、busy timeout 3 秒、寫入交易裡逐列重查；拿不到寫入鎖就不寫、這次查詢用記憶體裡剛算的。
+  壞了刪掉重建，再不行退回在記憶體裡從頭建——搜尋不會失敗。
+- Python 版不動、繼續用它自己的 `knowledge_index.json`；Rust 不讀不寫，第一次建好 db 後刪掉。對拍列為允許差異。
+- 原本「在記憶體裡從頭建再算分」的路留著當測試的對照組（`tests/knowledge_store.rs`：20 個查詢、增量、改名、切分支、
+  並行、版本不符、損毀，結果都要跟對照組逐位元組相同）。
+- 依賴：`rusqlite`（bundled）。
+- 量完發現索引之後的大頭是程式碼搜尋：`git grep -I` 要先把圖片讀進來才知道是二進位（card_notes 1 萬多張圖，
+  佔程式碼搜尋的大半）。改成 png／jpg／jpeg／gif／webp／ico 不交給 git grep（正常的圖本來就不會命中；
+  只有副檔名是圖、內容是純文字的檔會搜不到——登記的 repo 裡一個都沒有）。
 
-| 指標 | 目標 | 現在 |
-|---|---|---|
-| `ctx search` 暖 | < 150 ms | 600 ms（R36） |
-| `ctx search` 冷 | < 500 ms | 1.09 s（R36） |
-| 改一個檔後第一次查詢 | < 300 ms | 整份重寫，約 1.3 s（R29） |
-| 排序 | 20 個固定查詢，前 10 名與舊實作至少重疊 8 個 | — |
+**驗收**（真 spine 副本、release、`ctx search "會話 狀態 hook" --json`、cwd 本 repo；中位數，兩輪）
 
-目標數字是我訂的預算，階段 0 量完現況後可以調。
+| 指標 | 原訂目標 | 改之前（同版 build） | 改之後 |
+|---|---|---|---|
+| `ctx search` 暖 | < 150 ms | 756–838 ms | 283–302 ms |
+| `ctx search` 暖、`--no-code` | — | 684–703 ms | 205–214 ms |
+| `ctx search` 冷（沒有索引） | < 500 ms | 1.9–2.6 s | 4.5–5.4 s ❌（建庫寫 800 萬列 posting） |
+| 改一個 md 後第一次查詢 | < 300 ms | 780–830 ms（整份 JSON 重寫） | 294–317 ms（寫入約 12 ms） |
+| 排序 | 20 個固定查詢，前 10 名至少重疊 8 個 | — | 20/20 完全相同（files、repos、code 逐位元組） |
+| 索引檔 | — | JSON 97 MB | db 172 MB |
+| `ctx` 執行檔 | — | 8.9 MB | 10.7 MB |
+
+暖查詢裡索引本身只剩約 25 ms（stat、讀 docs 列、撈 posting）；`--no-code` 剩下的大多是 `git ls-files`（orca 的未追蹤檔掃描約 100 ms）。
+要整份 doc 的呼叫端（反芻、相關 repo 建議）比 JSON 時約慢 0.6 s（3.3 → 4.0 s）。
 
 ### 4c 會話索引（F-134）
 

@@ -105,10 +105,27 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
   判斷（有事發生又沒交接才記一筆，理由寫「超過 7 天沒有收到結束訊號」），然後清掉。門檻保守，會話可能一開好幾天。
 - **hook 沒有 session_id 不記 marker**（N-14）：Python 寫成 `hook_sessions/unknown.json`；Rust 照樣輸出注入內容，
   但不記會話（手動試跑、量測不會留下假會話，之後也不會被記成「未交接」）。
-- **知識索引快取**（N-02，格式不變）：不展開成整棵 JSON 樹，只解析用到的檔；沒有新算的檔就不重寫快取
-  （Python 每次查詢整份重寫）；常駐行程（MCP、App）記住上次讀到的快取；列檔與逐檔解析分給多條執行緒；
-  `serde_json` 開 `float_roundtrip`（預設的浮點解析不精確，mtime 對不上 → 曾有 631 份檔每次查詢都重算）。
-  程式碼搜尋（`git grep`）各 repo 同時跑。真資料 `ctx search` 2.1–3.0s → 約 0.55s，結果與舊版相同。
+- **知識索引快取**（N-02）：列檔與逐檔解析分給多條執行緒；程式碼搜尋（`git grep`）各 repo 同時跑。
+  真資料 `ctx search` 2.1–3.0s → 約 0.55s，結果與舊版相同。（原本的「JSON 只解析用到的檔、沒新算就不重寫、
+  常駐行程記住快取」已被下一條 N-51 取代。）
+- **知識索引改存 SQLite `.state/knowledge.db`**（N-51，2026-11-18；Rust 才有）：Rust 不再讀寫
+  `.state/knowledge_index.json`（Python 的格式；第一次建好 db 後刪掉），這是 `.state/` 合約裡唯一換掉的檔。
+  SQLite 只當倒排索引的儲存：`docs`（repo、絕對路徑、rel、mtime、secret、len、hlen、該檔的 (詞 id, tf) 清單）、
+  `terms`、`body`／`head` posting（主鍵 (term, doc)），`PRAGMA user_version`＝`knowledge::DB_SCHEMA_VERSION`，不符整個重建。
+  斷詞、BM25、htf 加權、boosts、片段全照舊（不用 FTS5 的 bm25()），`search` 的輸出跟在記憶體裡從頭建逐位元組相同
+  （`tests/knowledge_store.rs` 拿 `search(.., None, ..)` 當對照組證明）。依 mtime 增量：只重讀新增／變動的檔，
+  刪掉的檔與 registry 已移除的 repo 的列一併清掉；沒變動不寫。多行程：WAL、busy timeout 3 秒、寫入交易裡逐列重查，
+  拿不到寫入鎖就不寫（這次查詢用記憶體裡剛算的）；壞掉刪掉重建，再不行退回記憶體從頭建，搜尋不失敗（細節在
+  `knowledge/store.rs` 檔頭）。查詢只撈查詢詞的 posting，真資料（8 千份 md）索引本身約 25ms，剩下是 `git ls-files` 與
+  程式碼搜尋。代價：庫比 JSON 大（真資料 97 MB → 172 MB）、冷建 2–3s → 5s、要整份 doc 的反芻／相關 repo 建議約慢 0.6s。
+  新依賴 `rusqlite`（`bundled`，自帶 SQLite 原始碼；`ctx` release 執行檔 8.9 MB → 10.7 MB）。
+  對拍時兩個檔列為允許差異（Python 寫 JSON、Rust 寫 db；search 的結果照比）。
+- **程式碼搜尋不把圖片交給 git grep**（N-51 後續，2026-11-18；Rust 才有）：pathspec 多排除 `*.png／jpg／jpeg／gif／webp／ico`
+  （不分大小寫）。`-I` 本來就不比對二進位檔，但 git 要先讀進來才知道——card_notes 1 萬多張圖讓它的 git grep 從 10 ms 變 180 ms。
+  正常的圖檔頭一定有 NUL，結果不變；只有副檔名是圖、內容是純文字的檔以前搜得到、現在搜不到（登記的 repo 裡沒有這種檔）。
+  真資料暖查詢約 500 → 290 ms。對拍劇本沒有圖檔，照過。
+- **repo 名片排名的 why 順序固定**（2026-11-18）：`profile::rank` 原本把查詢詞放 `HashSet` 走訪，同一個查詢連跑兩次
+  `repo_profiles[].why` 的順序（與分數的累加順序）可能不同；改成照查詢詞第一次出現的順序。名片是 Rust 才有的，對拍本來就拿掉。
 - **反芻推送降噪**（N-03）：共同詞不收純數字／日期；中文 bigram 要「像一個詞」——含它的文件數 ÷ 含其中較少見
   那個字的文件數 ≥ 0.08（`CharStats::word_like`），擋掉「者決」「用後」這類跨詞邊界切出來的假詞；
   同一組同一份料還有沒處理的或被打掉過的推薦，檔案改了也不重推。

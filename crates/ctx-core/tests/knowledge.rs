@@ -104,7 +104,8 @@ fn test_search_skips_secret_files_and_caches() {
         &Boosts::default(),
     );
     assert!(r.files.iter().all(|f| f.file != "keys.md"));
-    assert!(sp.join(".state").join("knowledge_index.json").exists());
+    // Rust 才有（N-51）：索引存在 .state/knowledge.db（Python 是 knowledge_index.json）
+    assert!(sp.join(".state").join("knowledge.db").exists());
 }
 
 // ---- 以下為 Rust 版補測（非 Python 一對一）----
@@ -147,7 +148,7 @@ fn search_ranks_repos_and_snippets() {
     assert!(v.get("indexed_files").is_none());
 }
 
-/// 對應 test_search_skips_secret_files_and_caches：哨兵檔不進索引；有 spine 就寫快取，再查走快取結果一致。
+/// 對應 test_search_skips_secret_files_and_caches：哨兵檔不進索引；有 spine 就寫索引庫，再查走索引庫結果一致。
 #[test]
 fn search_skips_secret_files_and_caches() {
     let w = common::spine_with_repos();
@@ -165,15 +166,38 @@ fn search_skips_secret_files_and_caches() {
         &Boosts::default(),
     );
     assert!(r.files.iter().all(|f| f.file != "keys.md"));
-    let cache = w.spine.join(".state").join("knowledge_index.json");
-    assert!(cache.exists());
-    let v: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&cache).unwrap()).unwrap();
+    let db = rusqlite::Connection::open(w.spine.join(".state").join("knowledge.db")).unwrap();
     let key = w.repo_a.join("keys.md").to_string_lossy().into_owned();
-    assert_eq!(v[&key]["secret"], true);
+    let (secret, len): (i64, i64) = db
+        .query_row(
+            "SELECT secret, len FROM docs WHERE path = ?1",
+            [&key],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!((secret, len), (1, 0), "秘密檔只記 secret");
+    let posted: i64 = db
+        .query_row(
+            "SELECT count(*) FROM body JOIN docs ON docs.id = body.doc WHERE docs.path = ?1",
+            [&key],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(posted, 0, "秘密檔的詞不進 posting");
     let readme = w.repo_a.join("README.md").to_string_lossy().into_owned();
-    assert_eq!(v[&readme]["v"], 2);
-    assert!(v[&readme]["tf"]["快取"].as_u64().unwrap() >= 1);
+    let tf: i64 = db
+        .query_row(
+            "SELECT body.tf FROM body JOIN docs ON docs.id = body.doc JOIN terms ON terms.id = body.term \
+             WHERE docs.path = ?1 AND terms.term = '快取'",
+            [&readme],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(tf >= 1);
+    let v: i64 = db
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(v, knowledge::DB_SCHEMA_VERSION);
     let r2 = knowledge::search(
         &w.refs(),
         "widget 快取",
@@ -183,16 +207,16 @@ fn search_skips_secret_files_and_caches() {
         &Boosts::default(),
     );
     let r3 = knowledge::search(&w.refs(), "widget 快取", 8, None, &[], &Boosts::default());
-    assert_eq!(r2.files, r3.files);
+    assert_eq!(r2, r3);
 }
 
-/// Rust 才有（N-02）：mtime 帶很多位小數也要命中快取（serde_json 預設的浮點解析不精確，
-/// 曾讓 631 份檔每次查詢都重算、整份快取重寫），沒有新算的檔就不重寫快取。
+/// Rust 才有（N-02 → N-51）：mtime 帶很多位小數也要比對得上（存成 REAL，原樣來回），
+/// 沒有變動的檔就不寫索引庫。
 #[test]
 fn cache_hit_with_fractional_mtime_does_not_rewrite() {
     let w = common::spine_with_repos();
     let f = w.repo_a.join("README.md");
-    // 1789141470.6707613：預設解析會讀成 …670761，跟 stat 的值對不上
+    // 1789141470.6707613：以前 JSON 預設解析會讀成 …670761，跟 stat 的值對不上
     let t = std::time::UNIX_EPOCH + std::time::Duration::new(1_789_141_470, 670_761_300);
     std::fs::File::options()
         .write(true)
@@ -211,17 +235,13 @@ fn cache_hit_with_fractional_mtime_does_not_rewrite() {
         )
     };
     let first = search();
-    let cache = w.spine.join(".state").join("knowledge_index.json");
-    let stamp = || std::fs::metadata(&cache).unwrap().modified().unwrap();
-    let before = stamp();
-    std::thread::sleep(std::time::Duration::from_millis(20));
-    // 模擬另一個行程寫過快取（行程內記憶失效）→ 重讀檔後仍要全部命中
-    let text = std::fs::read_to_string(&cache).unwrap();
-    std::fs::write(&cache, &text).unwrap();
-    let rewritten = stamp();
-    assert!(rewritten > before);
-    assert_eq!(search().files, first.files);
-    assert_eq!(stamp(), rewritten, "全部命中時不該重寫快取");
+    let gen = knowledge::index_generation(&w.spine).unwrap();
+    assert_eq!(search(), first);
+    assert_eq!(
+        knowledge::index_generation(&w.spine),
+        Some(gen),
+        "全部命中時不該寫索引庫"
+    );
 }
 
 /// 對應 test_search_neighbor_boost_and_why 的精神：boost 改變排序並留下 why；exclude_paths 排除來源檔。

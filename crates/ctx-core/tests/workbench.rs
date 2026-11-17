@@ -2102,7 +2102,7 @@ fn search_content_finds_md_and_code_in_scope() {
     assert!(a["code"].as_array().is_none_or(|c| c.is_empty()), "{a}");
     // 空查詢＝錯（跟 MCP 一樣）
     assert!(act(&d, "search_content", json!({"query": " "})).is_err());
-    // 唯讀（畫面不必重抓）：只會寫知識索引的快取（.state/knowledge_index.json），不動 spine 本體
+    // 唯讀（畫面不必重抓）：只會寫知識索引（.state/knowledge.db），不動 spine 本體
     assert!(is_read_only("search_content"));
 }
 

@@ -112,6 +112,10 @@ mod tests {
             s,
             Path::new("/sp/.state/knowledge_index.json")
         ));
+        // 知識索引庫（N-51）：每次查詢可能寫，不該讓畫面重抓
+        for f in ["knowledge.db", "knowledge.db-wal", "knowledge.db-shm"] {
+            assert!(!is_relevant(s, &Path::new("/sp/.state").join(f)));
+        }
         assert!(is_relevant(s, Path::new("/sp/.state/last_seen.txt")));
         assert!(is_relevant(s, Path::new("/sp/.state/agent_status/g1.json")));
         assert!(is_relevant(

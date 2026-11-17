@@ -91,6 +91,15 @@ pub fn code_search(entries: &[Repo], query: &str, limit: usize, per_repo: usize)
         ":(exclude)*-lock.json",
         ":(exclude)*.min.js",
         ":(exclude)*.svg",
+        // N-51 後續（2026-11-18）：常見點陣圖不交給 git grep。`-I` 本來就不比對二進位檔，但 git 要先讀進來才知道是
+        // 二進位——card_notes 有 1 萬多張圖，光讀圖就佔整個程式碼搜尋 180ms 裡的 170ms。這幾種格式的檔頭
+        // 一定有 NUL（git 判成二進位），所以正常的圖結果不變；只有「副檔名是圖、內容其實是純文字」的檔以前搜得到、現在搜不到。
+        ":(exclude,icase)*.png",
+        ":(exclude,icase)*.jpg",
+        ":(exclude,icase)*.jpeg",
+        ":(exclude,icase)*.gif",
+        ":(exclude,icase)*.webp",
+        ":(exclude,icase)*.ico",
     ]);
     // 各 repo 的 git grep 同時跑（Rust 才有：依序跑時 15 個 repo 要 0.6 秒以上）；結果照 repo 順序合併
     let outs: Vec<Option<(i32, String)>> = std::thread::scope(|sc| {

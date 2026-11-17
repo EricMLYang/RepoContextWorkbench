@@ -619,7 +619,7 @@ fn test_search_skips_secret_files_and_caches() {
         .unwrap()
         .iter()
         .all(|f| f["file"] != "keys.md"));
-    assert!(w.sp.join(".state").join("knowledge_index.json").exists());
+    assert!(w.sp.join(".state").join("knowledge.db").exists()); // Rust 才有（N-51）：Python 是 knowledge_index.json
 }
 
 // test_tokenize_mixes_cjk_bigrams_and_words：純 knowledge 函式，見 tests/knowledge.rs 同名測試。

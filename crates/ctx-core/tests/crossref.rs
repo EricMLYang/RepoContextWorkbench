@@ -316,6 +316,23 @@ fn test_code_search() {
     assert!(r.iter().all(|c| !c.file.ends_with(".md")));
 }
 
+/// Rust 才有（N-51 後續）：點陣圖不交給 git grep（-I 本來就不比對二進位檔，只是省掉讀圖的時間）；
+/// 副檔名是圖、內容是純文字的檔也不搜（唯一的行為差異）。程式碼照搜。
+#[test]
+fn code_search_skips_images() {
+    let w = world();
+    std::fs::write(w.other.join("cache.py"), "def evict_lru(cache): pass\n").unwrap();
+    let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR evict_lru".to_vec();
+    png.extend([0u8; 16]);
+    std::fs::write(w.other.join("shot.png"), png).unwrap();
+    std::fs::write(w.other.join("fake.JPG"), "evict_lru in plain text\n").unwrap();
+    commit(&w.other, "code+images");
+    let entries = registry::load(&w.sp).unwrap().repos;
+    let r = crossref::code_search(&entries, "evict_lru", 10, 40);
+    let files: Vec<&str> = r.iter().map(|c| c.file.as_str()).collect();
+    assert_eq!(files, vec!["cache.py"]);
+}
+
 // ---- ⑥ ask_repo ----
 
 #[test]

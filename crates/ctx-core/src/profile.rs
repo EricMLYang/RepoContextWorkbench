@@ -194,7 +194,13 @@ fn fields(p: &RepoProfile) -> Vec<(&'static str, f64, HashSet<String>)> {
 
 /// 對 `query` 排名片：每個查詢詞 × 命中欄位的權重 × idf（越少 repo 有的詞越有鑑別力）。分數 0 的不回。
 pub fn rank(profiles: &[RepoProfile], query: &str, limit: usize) -> Vec<ProfileHit> {
-    let q: HashSet<String> = tokenize(query).into_iter().collect();
+    // 查詢詞去重、照第一次出現的順序（2026-11-18）：以前用 HashSet 走訪，why 的順序（和分數的累加順序）
+    // 每次執行都可能不同，同一個查詢連跑兩次輸出不一樣
+    let mut seen: HashSet<String> = HashSet::new();
+    let q: Vec<String> = tokenize(query)
+        .into_iter()
+        .filter(|t| seen.insert(t.clone()))
+        .collect();
     if q.is_empty() || profiles.is_empty() {
         return Vec::new();
     }
@@ -524,5 +530,31 @@ mod tests {
         assert!(rank(&ps, "   ", 5).is_empty());
         // 名稱的底線拆開也找得到
         assert_eq!(rank(&ps, "notes", 5)[0].repo, "card_notes");
+    }
+
+    /// 同一個查詢連跑多次輸出相同（以前查詢詞放 HashSet 走訪，why 的順序每次不同）；why 照查詢詞出現的順序。
+    #[test]
+    fn rank_is_deterministic_and_follows_query_order() {
+        let ps = vec![
+            prof(
+                "card_notes",
+                Some("知識庫 主題"),
+                Some("書摘 主題閱讀 知識庫"),
+                DescSource::Registry,
+            ),
+            prof(
+                "impl",
+                Some("書摘工具"),
+                Some("知識庫的實作"),
+                DescSource::Registry,
+            ),
+        ];
+        let first = rank(&ps, "書摘 知識庫 主題 閱讀", 5);
+        for _ in 0..50 {
+            // 每次新建的 HashSet 有不同的雜湊種子，舊寫法幾次內就會出現不同順序
+            assert_eq!(rank(&ps, "書摘 知識庫 主題 閱讀", 5), first);
+        }
+        let cn = first.iter().find(|h| h.repo == "card_notes").unwrap();
+        assert_eq!(cn.why, vec!["介紹命中".to_string(), "角色命中".to_string()]);
     }
 }

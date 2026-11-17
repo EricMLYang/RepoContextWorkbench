@@ -151,6 +151,11 @@ ALLOW_FILES = [
      "MCP 呼叫紀錄（N-07，Rust 才有：ctx health 算工具用量）"),
     (r"^\.state/relation_suggest\.json$",
      "相關 repo 建議快取（F-33，Rust 才有：反芻時順便算，開場讀）"),
+    (r"^\.state/knowledge_index\.json$",
+     "知識索引（N-51，2026-11-18）：Rust 改存 .state/knowledge.db（SQLite，增量更新），不再讀寫 Python 的 JSON 快取"
+     "（建好 db 後刪掉）；兩邊各用各的快取，search 的結果另外照比"),
+    (r"^\.state/knowledge\.db(-wal|-shm)?$",
+     "知識索引庫（N-51，Rust 才有）：取代 .state/knowledge_index.json；二進位、內容是快取，search 的結果另外照比"),
     (r"^\.state/review\.json$",
      "未結體檢結果快取（F-21／F-46，Rust 才有：開場與 scan 算好給桌面 App 收件匣讀）"),
     (r"^groups/[^/]+/materials/session-[^/]+\.md$",

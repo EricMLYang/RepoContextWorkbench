@@ -16,6 +16,7 @@ thiserror.workspace = true
 chrono.workspace = true
 regex.workspace = true
 portable-pty.workspace = true
+rusqlite.workspace = true
 tempfile = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
