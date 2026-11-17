@@ -28,6 +28,10 @@ pub const UNGROUPED_DIR: &str = "_ungrouped";
 const REPOS_FILE: &str = "REPOS.md";
 /// AGENTS.md 組那一行的目標最多幾個字（完整的在 REPOS.md）。
 const GOAL_MAX_CHARS: usize = 40;
+/// AGENTS.md「共享 skill」段最多列幾個（再多就併成一行「另 N 個」）。
+const SKILLS_MAX_LINES: usize = 12;
+/// 共享 skill 那一行的說明最多幾個字（完整的在 SKILL.md）。
+const SKILL_DESC_MAX_CHARS: usize = 60;
 /// 組數不超過這個才在 AGENTS.md 每組一行附目標（Home Repo Pattern 說約 20 個就該拆；組多了每行要短）。
 const FULL_MAX_GROUPS: usize = 15;
 const GIT_TIMEOUT: Duration = Duration::from_secs(3);
@@ -293,7 +297,44 @@ fn index_lines(entries: &[IndexEntry], budget: usize) -> Vec<String> {
     out
 }
 
-fn agents_md(data: &RegistryData, entries: &[IndexEntry]) -> String {
+/// spine 的共享 skill（F-133）：(名稱, SKILL.md frontmatter 的 description)。
+pub type SharedSkill = (String, Option<String>);
+
+/// 「共享 skill」段（沒有就空）：每個一行，太多就把後面的併成一行。
+fn skills_section(skills: &[SharedSkill]) -> Vec<String> {
+    if skills.is_empty() {
+        return Vec::new();
+    }
+    let mut out = vec![
+        String::new(),
+        "## 共享 skill".into(),
+        format!(
+            "`{}/<名稱>/SKILL.md` 是跨 repo 共用的 skill，`ctx setup --claude --codex` 會發到各家 CLI；要改就改這裡的，不要改發出去的副本。",
+            crate::shared_skills::SKILLS_DIR
+        ),
+    ];
+    let line = |(name, desc): &SharedSkill| match desc {
+        Some(d) => format!("- **{name}**：{}", clip(&one_line(d), SKILL_DESC_MAX_CHARS)),
+        None => format!("- **{name}**"),
+    };
+    if skills.len() <= SKILLS_MAX_LINES {
+        out.extend(skills.iter().map(line));
+    } else {
+        out.extend(skills[..SKILLS_MAX_LINES - 1].iter().map(line));
+        let rest = &skills[SKILLS_MAX_LINES - 1..];
+        out.push(format!(
+            "- 另 {} 個：{}",
+            rest.len(),
+            rest.iter()
+                .map(|(n, _)| n.as_str())
+                .collect::<Vec<_>>()
+                .join("、")
+        ));
+    }
+    out
+}
+
+fn agents_md(data: &RegistryData, entries: &[IndexEntry], skills: &[SharedSkill]) -> String {
     let head = vec![
         MARKER.to_string(),
         "# repo-context spine".into(),
@@ -319,13 +360,18 @@ fn agents_md(data: &RegistryData, entries: &[IndexEntry]) -> String {
         "- `registry.yaml`（repo、組、名片、類別）與 `config.yaml`（agent 指令、排程、provider）是資料來源；這幾份生成檔不要手改。".into(),
         "- 要改用 `ctx registry …`（登記、`describe` 名片、`class` 類別）或 `ctx group …`（建組、組員、改名、目標）；改完會自動重寫，也可以跑 `ctx home sync`。".into(),
     ];
+    let skills = skills_section(skills);
     let body = if entries.is_empty() {
         vec!["- 還沒有登記任何 repo：`ctx registry add <id> <路徑>`。".to_string()]
     } else {
-        index_lines(entries, AGENTS_MAX_LINES - head.len() - tail.len())
+        index_lines(
+            entries,
+            AGENTS_MAX_LINES - head.len() - tail.len() - skills.len(),
+        )
     };
     let mut out = head;
     out.extend(body);
+    out.extend(skills);
     out.extend(tail);
     out.push(String::new());
     out.join("\n")
@@ -333,6 +379,15 @@ fn agents_md(data: &RegistryData, entries: &[IndexEntry]) -> String {
 
 /// registry＋本機事實 → 所有生成檔（AGENTS.md、CLAUDE.md、每組的 REPOS.md、有未分組才有 `_ungrouped`）。純函式。
 pub fn render(data: &RegistryData, local: &BTreeMap<String, RepoLocal>) -> Vec<GenFile> {
+    render_with(data, local, &[])
+}
+
+/// 同 [`render`]，AGENTS.md 多列 spine 的共享 skill（F-133；空的就跟 [`render`] 一樣）。純函式。
+pub fn render_with(
+    data: &RegistryData,
+    local: &BTreeMap<String, RepoLocal>,
+    skills: &[SharedSkill],
+) -> Vec<GenFile> {
     let mut files = Vec::new();
     let mut entries = Vec::new();
     let mut grouped: BTreeSet<String> = BTreeSet::new();
@@ -386,7 +441,7 @@ pub fn render(data: &RegistryData, local: &BTreeMap<String, RepoLocal>) -> Vec<G
     let mut out = vec![
         GenFile {
             rel: "AGENTS.md".into(),
-            content: agents_md(data, &entries),
+            content: agents_md(data, &entries, skills),
         },
         GenFile {
             rel: "CLAUDE.md".into(),
@@ -505,7 +560,8 @@ pub fn local_facts(data: &RegistryData) -> BTreeMap<String, RepoLocal> {
 /// 要寫的檔＋要刪的舊生成檔，各自配上磁碟現況。
 fn plan(spine_dir: &Path) -> Result<Vec<(String, Option<String>, Pending)>> {
     let data = registry::load(spine_dir)?;
-    let want = render(&data, &local_facts(&data));
+    let skills = crate::shared_skills::listed(spine_dir);
+    let want = render_with(&data, &local_facts(&data), &skills);
     let wanted: BTreeSet<&str> = want.iter().map(|f| f.rel.as_str()).collect();
     let mut out: Vec<(String, Option<String>, Pending)> = want
         .iter()

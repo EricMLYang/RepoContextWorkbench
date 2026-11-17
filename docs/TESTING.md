@@ -396,6 +396,22 @@
 
 真資料量測（release，spine 副本，2026-11-18）：113 場（Claude Code 110、Codex 3）、1.9 萬則，冷建 4.1 秒、db 23 MB、暖查詢 10–20 ms。中文兩個字的詞（例「索引」）走 `LIKE`、三個字以上走 trigram 索引，兩種都實測搜得到。
 
+## 8q. 共享 skill 進 spine（F-133 的機制，2026-11-18）——**引擎與 CLI 測試已過（假 home）；真 spine、真 `~/.claude`／`~/.codex` 還沒人測過**
+
+這次只做機制，spine 裡還沒有任何共享 skill；要測就先自己放一個（例：從某個 repo 複製一個 skill 資料夾到 `spine/skills/`）。
+
+| # | 操作 | 應該看到 | macOS | Windows |
+|---|---|---|---|---|
+| 8q-1 | spine 還沒有 `skills/` 時跑 `ctx setup --claude --codex --dry-run` | 跟以前一模一樣，沒有「共享 skill」那行 | [ ] 未測 | [ ] 未測 |
+| 8q-2 | 放一個 `spine/skills/<名稱>/SKILL.md`（可帶子資料夾），跑 `ctx setup --claude --codex --dry-run`，再拿掉 `--dry-run` 跑 | 試跑每家多一行「發 spine/skills/ 的共享 skill 到 …：新增 <名稱>」且沒寫；真跑後 `~/.claude/skills/<名稱>/`、`~/.codex/skills/<名稱>/` 有整份檔＋`.ctx-managed` | [ ] 未測 | [ ] 未測 |
+| 8q-3 | 開新的 Claude Code 與 Codex 會話，問一句會觸發那個 skill 的話 | 兩家都讀到這個 skill（Claude Code 的 `/skills` 列得出來） | [ ] 未測 | [ ] 未測 |
+| 8q-4 | 改 spine 裡那個 skill 的一個檔、刪一個檔，跑 `ctx health`，再跑 `ctx setup --claude` | health 一行「共享 skill（spine/skills/）不是最新：Claude Code 過時 …；Codex 過時 …」；setup 後兩家都更新（Codex 沒點名也會更新）、刪掉的檔不見了 | [ ] 未測 | [ ] 未測 |
+| 8q-5 | 在 `~/.codex/skills/` 先放一個同名、自己寫的資料夾，再跑 setup | 你的資料夾沒被動；setup 與 health 都說「衝突」 | [ ] 未測 | [ ] 未測 |
+| 8q-6 | 從 spine 刪掉那個 skill，跑 setup | 兩家的副本被收掉；自己寫的同名資料夾（8q-5）還在 | [ ] 未測 | [ ] 未測 |
+| 8q-7 | 打開 spine 的 `AGENTS.md` | 有「共享 skill」段，每個一行（名稱＋說明）；總行數 ≤ 60；拿掉所有共享 skill 後這段不見 | [ ] 未測 | [ ] 未測 |
+| 8q-8 | 重裝 App 後在 App 按「更新 skill」 | 訊息裡多「共享 skill：…」那幾項 | [ ] 未測 | [ ] 未測 |
+| 8q-9 | Windows：skill 裡有 symlink（或 junction）指到資料夾外 | 不跟、回報「沒發的檔」；macOS 這條只有單元測試 | — | [ ] 未測 |
+
 ## 9. 要你決定
 
 - [ ] **#76**：App 助手、碰撞判定、`ask_repo`、backfill 都用 `claude -p`（程式化呼叫；BAT 引 2026-06-15 政策說它走另計的額度，

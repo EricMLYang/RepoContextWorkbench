@@ -363,8 +363,9 @@ fn a_search_content(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value
 
 /// 把 agent 讀的 skill 換成這版內建的（`ctx setup --claude`／`--codex` 的那一步，掛過的每一家都換；
 /// hook 與 MCP 指的是固定路徑，重裝不必動）。
-fn a_update_skill(_d: &Path, _p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
-    let done = crate::agentsetup::update_installed_skills()?;
+fn a_update_skill(d: &Path, _p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    // F-133：spine 的共享 skill 一起發
+    let done = crate::agentsetup::update_installed_skills(Some(d))?;
     let message = done
         .iter()
         .map(|(c, r)| format!("{}：{}", c.label(), r.message))

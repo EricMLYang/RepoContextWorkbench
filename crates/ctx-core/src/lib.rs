@@ -58,6 +58,7 @@ pub mod ruminate;
 pub mod screen;
 pub mod session;
 pub mod session_status;
+pub mod shared_skills;
 pub mod spawn;
 pub mod spine;
 pub mod status;

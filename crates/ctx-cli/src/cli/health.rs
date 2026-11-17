@@ -25,7 +25,20 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
         .collect();
     // 2026-10-21：App 開會話用的 .mcp.json 指到的 ctx 還在不在（10-18 重裝後指到被刪的 bundle，兩天沒人發現）
     let mcp_json = ctx_core::session::mcp_json_status(&d);
-    v["setup"] = serde_json::json!({"skill": skill, "mcp_json": mcp_json, "clis": clis});
+    // F-133：spine 的共享 skill 在掛過的各家是不是最新（只列有問題的那幾家）
+    let shared: Vec<serde_json::Value> = ctx_core::agentsetup::installed_clis()
+        .into_iter()
+        .filter_map(|c| {
+            let p = ctx_core::shared_skills::pending(&d, &c.home()).ok()?;
+            (!p.is_empty()).then(|| {
+                serde_json::json!({
+                    "cli": c.program(), "label": c.label(),
+                    "missing": p.missing, "stale": p.stale, "conflict": p.conflict,
+                })
+            })
+        })
+        .collect();
+    v["setup"] = serde_json::json!({"skill": skill, "mcp_json": mcp_json, "clis": clis, "shared_skills": shared});
     // F-132：spine 入口檔過期或被手寫檔擋住（要跑 git，所以不在引擎的 health 裡，App 的 build_state 不會跑到）
     v["home"] = ctx_core::health::home_status(&d);
     // F-128：會話後端（跑 `hc --version`，所以也不在引擎的 health 裡）
@@ -249,6 +262,32 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                     s(c, "cli")
                 ));
             }
+        }
+        // F-133：共享 skill 在某家沒發、過時（含 spine 裡已刪還留著的）或被同名資料夾擋住
+        let shared = arr(&r["setup"], "shared_skills");
+        if !shared.is_empty() {
+            let names = |c: &Value, k: &str| -> Vec<String> {
+                arr(c, k).iter().map(ctx_core::pystr::py_str).collect()
+            };
+            let per: Vec<String> = shared
+                .iter()
+                .map(|c| {
+                    let mut parts = Vec::new();
+                    for (k, word) in [("missing", "未安裝"), ("stale", "過時"), ("conflict", "衝突")] {
+                        let n = names(c, k);
+                        if !n.is_empty() {
+                            parts.push(format!("{word} {}", n.join("、")));
+                        }
+                    }
+                    format!("{} {}", s(c, "label"), parts.join("、"))
+                })
+                .collect();
+            let flags: Vec<String> = shared.iter().map(|c| format!("--{}", s(c, "cli"))).collect();
+            out.push(format!(
+                "- 共享 skill（spine/skills/）不是最新：{}——跑 `ctx setup {}`（衝突＝同名資料夾不是這個 spine 發的，不會覆蓋，要用共享的就先把它移走）",
+                per.join("；"),
+                flags.join(" ")
+            ));
         }
         if r["setup"]["mcp_json"]["status"] == "command_missing" {
             out.push(format!(

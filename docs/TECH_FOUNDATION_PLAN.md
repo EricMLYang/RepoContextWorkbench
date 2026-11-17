@@ -27,7 +27,7 @@
 | 4b | 知識索引改存 SQLite（排序不變、增量） | N-51 | 3 天 | 無（沒等 4a） | 完成（2026-11-18）：副本上暖查詢 760→280–400 ms、改一檔後 800→300 ms，20 個查詢結果與改前相同；代價是 db 172 MB（原 97 MB）、冷建 2→4.5 秒；真 spine 還沒量 |
 | 4c | 會話索引（Claude Code＋Codex） | F-134 | 3 天 | 4b | 完成（2026-11-18）：兩家各一個掃描器；Codex 補上逐字稿、digest、backfill、分岔；`ctx sessions --grep` 與 ⌘K「&」。副本上索引 113 場（Claude 110、Codex 3）、建 4.1 秒、db 23 MB、查詢 16–24 ms；App 畫面沒測 |
 | 5a | 介面合約由方法表生成 | N-52 | 3–5 天，可分批 | 無（沒等 4a） | 完成（2026-11-18）：MCP 參數由型別生成、單一方法表、tools/list 逐位元組不變；MCP／CLI 旗標／`--json` 形狀三份「上次發版」快照擋破壞性變更；前端只做契約測試，沒有生成 TS |
-| 5b | 共享 skill 進 spine | F-133 | 盤點半天＋實作 1 天 | 階段 1、決定 3 | 盤點完成（2026-11-18，102 個 skill）；等使用者決定哪些算共享 |
+| 5b | 共享 skill 進 spine | F-133 | 盤點半天＋實作 1 天 | 階段 1、決定 3 | 機制完成（2026-11-18）：`spine/skills/<名稱>/` 由 `ctx setup` 發到兩家，隔離的 Codex 看得到；盤點了 102 個 skill，搬哪些等使用者決定 |
 
 估計天數是我的推估，沒有實測依據；階段 3 的不確定性最大。
 
@@ -227,10 +227,13 @@ CLI、前端仍要各改各的，但改壞既有介面會被測試擋下。
 
 ### 5b 共享 skill 進 spine（F-133）
 
-1. 盤點各 repo 與 `~/.claude/skills` 的 skill，分成共享／重複／repo 專屬，給使用者勾。只讀不搬。
-2. 使用者勾完後，共享的複製到 `spine/skills/<名稱>/`；原 repo 裡的副本由使用者決定刪不刪（動別的 repo 要先問）。
-3. `ctx setup` 把 `spine/skills/` 下的都發到兩家。
-4. `repo-context` 自己的 skill 改成短 stub＋`ctx instructions`，拿掉「skill 過時」檢查。
+**現況（2026-11-18）：機制已做，搬哪些等使用者決定。**
+
+1. 盤點各 repo 與 `~/.claude/skills` 的 skill，分成共享／重複／repo 專屬，給使用者勾。只讀不搬。（已完成：102 個 skill）
+2. 使用者勾完後，共享的複製到 `spine/skills/<名稱>/`；原 repo 裡的副本由使用者決定刪不刪（動別的 repo 要先問）。（**等使用者決定**，一個都還沒搬）
+3. `ctx setup` 把 `spine/skills/` 下的都發到兩家。（**已做**：`shared_skills` 模組，整份同步＋`.ctx-managed` 標記、
+   無標記的同名資料夾不覆蓋、spine 裡刪掉的會收掉、`ctx health` 提醒、spine 的 AGENTS.md 列出；規約見 `docs/RUST_PORTING.md`，手測見 `docs/TESTING.md` §8q）
+4. `repo-context` 自己的 skill 改成短 stub＋`ctx instructions`，拿掉「skill 過時」檢查。（沒做）
 
 ## 10. 要你決定的
 

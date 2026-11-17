@@ -174,14 +174,9 @@ pub fn cmd_setup(ctx: &Ctx, a: &SetupArgs) -> CmdResult {
         .into_iter()
         .filter_map(|(on, cli)| on.then_some(cli))
         .collect();
-    let mut steps = agentsetup::plan(&clis);
-    // 這次沒點名、但之前掛過的那幾家：skill 順手換成這版（重裝後只跑 `--claude`，Codex 讀到的不會留在舊版）
-    steps.extend(
-        agentsetup::installed_clis()
-            .into_iter()
-            .filter(|c| !clis.contains(c))
-            .map(agentsetup::Step::Skill),
-    );
+    // 這次沒點名、但之前掛過的那幾家：skill 順手換成這版（重裝後只跑 `--claude`，Codex 讀到的不會留在舊版）；
+    // spine 有 `skills/` 才多「發共享 skill」那步（F-133）
+    let steps = agentsetup::setup_plan(&env, &clis, &agentsetup::installed_clis());
     for st in steps {
         println!(
             "{}{}",

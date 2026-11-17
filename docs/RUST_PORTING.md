@@ -677,3 +677,15 @@ CLI／MCP（ctx-cli）：
   `ctx setup` 結束時（不印在 stdout）。組改名的 `moved_dir`、刪組的 `kept_dir` 不把「只有生成的 REPOS.md」的資料夾算成有料
   （跟 Python 的輸出一致）。`ctx health` 多 `home` 鍵（`stale`、`conflicts`；CLI 才接，引擎的 `health()` 不跑——App 的 build_state 每次都呼叫它），有就印一行叫你跑 `ctx home sync`。
   對拍時這幾個檔列為允許差異（`HOME_FILES_WHY`）。
+- **共享 skill（`<spine>/skills/<名稱>/`）**（2026-11-18，F-133；Python 沒有，新模組 `shared_skills`）：`ctx setup --claude`／`--codex`
+  在內建 skill 之後多一步 `Step::SharedSkills`，把 spine 的共享 skill 整個資料夾同步到 `<cli home>/skills/<名稱>/`（新增、更新、
+  刪掉來源已沒有的檔；結果 `shared_skills::Outcome`＝installed／updated／unchanged／removed／conflict／skipped(原因)，冪等）。
+  每個發出去的資料夾有 `.ctx-managed`（JSON：來源 spine 的絕對路徑、內容雜湊 FNV-1a 64）；目的地同名資料夾沒有標記＝使用者的、
+  標記是別的 spine＝不動，都回報衝突；spine 裡刪掉的 skill，目的地帶本 spine 標記的才移除。名稱要小寫英數與 `-`（≤ 64 字）、
+  要有 `SKILL.md`；`repo-context` 保留。指到 skill 資料夾外的 symlink、指到資料夾的 symlink、壞掉的 symlink 不跟（其餘照發，
+  回報「沒發的檔」）；`skills/<名稱>` 本身是 symlink 整個略過；單檔 > 1 MB、整個 > 5 MB、> 1000 個檔整個略過。`.DS_Store`、`.git` 不發。
+  **spine 沒有 `skills/`（或是空的）、目的地也沒有本 spine 發過的時候不多任何一步**——setup 的輸出跟 Python 一字不差，對拍不加允許差異。
+  `--dry-run` 那行列出計畫（「新增 a；更新 b；衝突 c（…）；略過 d（…）」）。這次沒點名、之前掛過的那幾家（`installed_clis`）
+  也發；App 的 `update_skill` action（`update_installed_skills(Some(spine))`）也發。`ctx health` 的 `setup.shared_skills`
+  列掛過的各家有哪些未安裝／過時（含已刪還留著的）／衝突，有就印一行。spine 的 `AGENTS.md` 有共享 skill 時多「共享 skill」段
+  （每個一行：名稱＋frontmatter `description` 截 60 字，最多 12 行，再多併成「另 N 個」），仍守 60 行；沒有就不出現。

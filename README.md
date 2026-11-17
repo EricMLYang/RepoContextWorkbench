@@ -19,6 +19,7 @@
   spine/events/    事件，一則一個 md：判斷、待辦、交接、狀態回報（agent 的 log_decision／add_todo／handoff 寫在這）
   groups/          各組的筆記與彙整產物；groups/<組>/REPOS.md 是生成的 repo 清單（見下）
   AGENTS.md        生成的入口（CLAUDE.md 一行指向它）：沒掛 hook／MCP 的 agent 在 spine 開場也知道有哪些 repo
+  skills/          （選用）跨 repo 共用的 skill，`ctx setup` 發到各家 CLI（見下）
   config.yaml      工作台設定（可開哪些 agent 等）
   .state/          可重算的快取：搜尋索引、會話標記、已讀水位（不進 git）
 ```
@@ -30,6 +31,21 @@
   或在終端機跑 `ctx init ~/repo-spine`。接著 `ctx setup --claude` 記住位置、掛上 agent 的 MCP 與 hooks；
   用 Codex 就再加 `--codex`（兩家可以一起掛，拿到同一份脈絡、留痕進同一份 spine）。
 - spine 等於程式碼（見下方「信任模型」）：不要直接拿別人的 spine 來用。
+
+### 共享 skill：跨 repo 共用的 skill 放進 spine（Rust 才有）
+
+好幾個 repo 都想用同一個 skill，就把它放進 spine 用 git 管，不必每個 repo 各抄一份：
+
+1. 把整個 skill 資料夾放到 `~/repo-spine/skills/<名稱>/`，裡面要有 `SKILL.md`（其他檔與子資料夾照放）。
+   名稱只能用小寫英數與 `-`；`repo-context` 保留給內建的 skill。
+2. 跑 `ctx setup --claude --codex`（先加 `--dry-run` 看會新增、更新、移除哪些）。每個 skill 會整份同步到
+   `~/.claude/skills/<名稱>/` 與 `~/.codex/skills/<名稱>/`；之後改 spine 裡的檔再跑一次 setup 就更新，
+   從 spine 刪掉的也會從兩家收掉。重裝 App 後按「更新 skill」也會一起發。
+3. `ctx health` 會提醒哪一家還沒發、過時或有衝突；spine 的 `AGENTS.md` 會多一段列出共享 skill。
+
+規則：發出去的資料夾裡有 `.ctx-managed` 標記（記來源 spine 與內容雜湊），要改請改 spine 裡的，發出去的副本會被蓋回來。
+目的地已經有同名、但沒有標記的資料夾＝你自己的，不會覆蓋（setup 與 health 報「衝突」）；別的 spine 發的也不動。
+指到 skill 資料夾外面的 symlink 不跟；單檔超過 1 MB 或整個 skill 超過 5 MB 就整個略過——這些檔會進 agent 的脈絡。
 
 ## 架構
 
@@ -179,6 +195,7 @@ claude mcp get repo-context                    # 確認指令是 <…>/ctx mcp
 # 開始用
 ctx init ~/repo-spine                                  # 建 spine repo（桌面 App 首次打開也能建）
 ctx setup --spine ~/repo-spine --claude --dry-run      # 記住 spine＋掛 MCP（user scope）＋hooks＋skill；先看會改什麼
+ctx setup --claude --codex                             # 兩家都掛；spine 有 skills/ 時順手發共享 skill
 ctx registry add my-repo ~/Coding/my-repo              # 登記；registry scan <目錄> --apply 批次登記
 ctx group add 產品 my-repo,my-notes                     # 建組（add-member／remove-member／rename／remove）
 ctx registry describe my-notes --role 知識庫 --description "書摘與主題閱讀" --keywords 書摘,閱讀

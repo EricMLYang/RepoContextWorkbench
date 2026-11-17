@@ -15,6 +15,9 @@
 //!      Codex 的新 hook 要使用者在 `/hooks` 審核信任後才會跑——setup 不代簽，只在結果裡提醒。
 //!    - skill：`~/.codex/skills/repo-context/SKILL.md`
 //!
+//! 4. 共享 skill（F-133，2026-11-18，Rust 才有）：`<spine>/skills/<名稱>/` 在內建 skill 之後發到各家的
+//!    `skills/`（細節見 [`crate::shared_skills`]）；spine 沒有 `skills/` 時不多任何一步。
+//!
 //! 沒有 `claude`／`codex` 指令時，MCP 那步改印出手動指令，不失敗；真的註冊失敗則 [`StepResult::ok`]＝false，
 //! 入口據此回非 0（c231287：呼叫的人或 agent 會以為掛好了）。
 //!
@@ -29,7 +32,7 @@ use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::sync::LazyLock;
 
-use crate::{config, Error, Result};
+use crate::{config, shared_skills, Error, Result};
 
 pub const MCP_NAME: &str = "repo-context";
 /// Python 版 hook 指令的記號（`<python> -m repo_context hook <event>`）。
@@ -456,14 +459,30 @@ pub fn skill_status_of(homes: &[PathBuf]) -> &'static str {
 }
 
 /// 把每一家已裝的 skill 換成這版內建的；回各家的結果（一家都沒裝＝裝到 Claude Code，跟原本一樣）。
-pub fn update_installed_skills() -> Result<Vec<(AgentCli, StepResult)>> {
+/// 給了 spine 就順手把 `<spine>/skills/` 的共享 skill 也發一次（F-133；沒有共享 skill 就不多一項）。
+pub fn update_installed_skills(spine_dir: Option<&Path>) -> Result<Vec<(AgentCli, StepResult)>> {
     let mut clis = installed_clis();
     if clis.is_empty() {
         clis.push(AgentCli::Claude);
     }
-    clis.into_iter()
-        .map(|c| Ok((c, install_skill(&c.home())?)))
-        .collect()
+    let mut out = Vec::new();
+    for c in clis {
+        let home = c.home();
+        out.push((c, install_skill(&home)?));
+        if let Some(d) = spine_dir.filter(|d| shared_skills::has_work(d, &home)) {
+            out.push((c, install_shared_skills(d, &home)?));
+        }
+    }
+    Ok(out)
+}
+
+/// 發 `<spine>/skills/` 的共享 skill 到這一家（F-133）。衝突與略過只回報，不算失敗。
+pub fn install_shared_skills(spine_dir: &Path, cli_home: &Path) -> Result<StepResult> {
+    let r = shared_skills::sync(spine_dir, cli_home, true)?;
+    Ok(StepResult::ok(format!(
+        "共享 skill：{}",
+        shared_skills::summary(&r)
+    )))
 }
 
 /// 外部指令的結果（[`install_mcp_with`] 的注入點用）。
@@ -596,6 +615,8 @@ pub enum Step {
     Mcp(AgentCli),
     Hooks(AgentCli),
     Skill(AgentCli),
+    /// 發 `<spine>/skills/` 的共享 skill（F-133，Rust 才有）；只在有東西可發或可收時才進計畫（[`setup_plan`]）。
+    SharedSkills(AgentCli),
 }
 
 impl Step {
@@ -623,6 +644,17 @@ impl Step {
             Step::Skill(cli) => {
                 format!("安裝 skill 到 {}", cli.skill_file(env.home(cli)).display())
             }
+            Step::SharedSkills(cli) => {
+                let target = env.home(cli).join(shared_skills::SKILLS_DIR);
+                let plan = match shared_skills::sync(&env.spine_dir, env.home(cli), false) {
+                    Ok(r) => shared_skills::summary(&r),
+                    Err(e) => format!("讀不了（{e}）"),
+                };
+                format!(
+                    "發 spine/skills/ 的共享 skill 到 {}：{plan}",
+                    target.display()
+                )
+            }
         }
     }
 
@@ -633,6 +665,7 @@ impl Step {
             Step::Mcp(cli) => Ok(install_mcp_for(cli, &env.exe)),
             Step::Hooks(cli) => install_hooks_for(cli, &env.hooks_path(cli), &env.exe),
             Step::Skill(cli) => install_skill(env.home(cli)),
+            Step::SharedSkills(cli) => install_shared_skills(&env.spine_dir, env.home(cli)),
         }
     }
 }
@@ -644,6 +677,29 @@ pub fn plan(clis: &[AgentCli]) -> Vec<Step> {
         steps.extend([Step::Mcp(cli), Step::Hooks(cli), Step::Skill(cli)]);
     }
     steps
+}
+
+/// `ctx setup` 實際跑的步驟：[`plan`]＋之前掛過、這次沒點名的那幾家也換 skill（`installed`；重裝後只跑
+/// `--claude`，Codex 讀到的不會留在舊版）；每個 [`Step::Skill`] 後面，有共享 skill 可發或可收才接
+/// [`Step::SharedSkills`]——沒有 `<spine>/skills/` 時跟以前一模一樣（setup 的輸出跟 Python 對拍）。
+pub fn setup_plan(env: &SetupEnv, clis: &[AgentCli], installed: &[AgentCli]) -> Vec<Step> {
+    let mut steps = plan(clis);
+    steps.extend(
+        installed
+            .iter()
+            .filter(|c| !clis.contains(c))
+            .map(|&c| Step::Skill(c)),
+    );
+    let mut out = Vec::with_capacity(steps.len());
+    for st in steps {
+        out.push(st);
+        if let Step::Skill(c) = st {
+            if shared_skills::has_work(&env.spine_dir, env.home(c)) {
+                out.push(Step::SharedSkills(c));
+            }
+        }
+    }
+    out
 }
 
 /// 這台機器上哪幾家已經掛過 repo-context（skill 檔在）——重裝後更新 skill、`ctx health` 檢查版本都看這個。
