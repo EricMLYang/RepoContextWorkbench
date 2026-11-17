@@ -62,6 +62,19 @@ desktop/src（React，只管畫面）── IPC ┘
 - **閒置不吃 CPU**：檔案監看只看展開中的資料夾（`tree_watch`）；OS 漏掉事件時要整批重讀，不能直接丟掉。
 - **會話生命週期獨立於視窗**；本機服務只綁 127.0.0.1 並帶隨機 token；啟動時自己補 PATH（`env_path`）。
 - 殼裡的阻塞工作放進 `spawn_blocking`，不要卡住 IPC 執行緒。
+- **會話後端**（F-128，2026-11-18）：會話的 I/O 是引擎的 `term::SessionIo`（寫入、改大小、殺掉、放手），兩個實作——
+  行程內 PTY（`portable-pty`，預設）與 herdr-core（`ctx_core::hc`，config `session.backend: herdr-core`，會話跑在 App 之外）。
+  ring buffer、訂閱者、「先 replay 再即時」的順序保證都在 `TermSession` 這一層共用；後端只呼叫 `feed`／`finish` 把輸出餵進來。
+  殼只認 `TermSession`，不知道後端是哪個：`term_open`／`term_write` 照舊。App 結束一律呼叫 `TermManager::shutdown`
+  （PTY 的殺掉、herdr-core 的放手），不要直接 `kill_all`。herdr-core 這條路的規矩：
+  - 協定照 herdr-core `schema/README.md` 自己寫（std 的 `UnixStream`＋serde_json，不加 crate）：分幀、channel 0 JSON-RPC、
+    每個串流 DATA 消化後**立刻回 CREDIT**（不回＝256 KiB 後畫面凍住）。開串流的呼叫把處理器跟請求一起登記，回覆一到就掛上，第一畫面不會掉。
+  - 串流處理器跑在讀取執行緒上，**裡面不准做要等回覆的呼叫**（會等到自己）；要問 core 就另開執行緒（`settle`），或用不等回覆的 `notify`。
+  - core 關了某條串流不等於程式結束：先 `terminal.get` 問清楚再收尾；整條連線斷了就退避重連（約 30 秒）、重新 attach。
+  - OSC 7501 由 core 解析與回探詢，這條路上不跑我們的 `Scanner`（會回兩次）；狀態改吃 core 的 `status` 事件。
+  - 測試：假 core（`tests/hc_fake.rs`，測試裡的 UnixListener）一定跑；真 hc（`tests/hc_real.rs`）只在 `CTX_TEST_HC` 有設時跑，
+    而且每個測試自己的 `HC_SESSION`、`XDG_*`，結束時 `server stop`——不准在沒隔離的環境叫 hc。
+  - Windows（named pipe）還沒做：設了也退回 PTY 並提醒。
 
 ## 5. 前端（React＋TS）
 

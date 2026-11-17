@@ -61,13 +61,13 @@ pub fn which_in(name: &str, path_var: Option<&OsStr>) -> Option<PathBuf> {
 }
 
 #[cfg(unix)]
-fn is_executable(p: &Path) -> bool {
+pub fn is_executable(p: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
     std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
 
 #[cfg(not(unix))]
-fn is_executable(p: &Path) -> bool {
+pub fn is_executable(p: &Path) -> bool {
     p.is_file()
 }
 

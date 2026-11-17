@@ -77,6 +77,28 @@ ctx app                                  # 找 Repo Context.app（ctx 同目錄�
 
 桌面 App 目前只做了 macOS（Windows／VDI 未做、未測）。關視窗＝隱藏，會話照跑；選單列「結束」或 ⌘Q 才收掉會話。
 
+### 讓會話跑在 App 之外（herdr-core，選用）
+
+預設會話跑在 App 裡（⌘Q、當掉、重裝新版都會一起結束）。要讓它們跑在 App 之外、重開 App 接回來，先裝
+[herdr-core](https://github.com/herdrdev/herdr-core)（`hc`，Apache-2.0；指令照它官方 README）：
+
+```bash
+curl -fsSL https://releases.herdr.dev/core/install.sh | sh
+```
+
+再在 spine 的 `config.yaml` 加：
+
+```yaml
+session:
+  backend: herdr-core     # 預設 pty（行程內）
+  # hc_path: ~/.local/bin/herdr-core   # 選填：沒設就找 PATH 上的 hc／herdr-core，再找 ~/.local/bin/herdr-core
+  # hc_session: ctx                    # 選填：App 用自己的 HC_SESSION，不跟你自己用的 Herdr 混
+```
+
+重開 App。`ctx health` 會寫目前用哪個後端、hc 的版本與路徑；找不到 hc 或叫不起來時 App 退回行程內 PTY，
+會話區上方與 `ctx health` 都有一行提醒。App 不會替你裝或更新 hc（`hc update` 自己跑；更新時會話不中斷）。
+在終端機看這些會話：`HC_SESSION=ctx hc ls`。Windows 這次還沒做（設了也退回 PTY）。
+
 ### 桌面 App 常用操作
 
 - **⌘K**：找會話（切過去）、repo（名稱片段、詞首縮寫如 `rcw`、名片的角色／介紹／關鍵字）、牌組、檔案（目前範圍，用檔名）；

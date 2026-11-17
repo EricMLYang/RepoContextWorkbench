@@ -360,6 +360,25 @@
 | 8n-6 | `config.yaml` 的 `thresholds` 加 `program_status_takeover_seconds: 10`，重做 8n-4 | 讓位變成約 10 秒 | [ ] 未測 | [ ] 未測 |
 | 8n-7 | 關掉 App 視窗再打開（會話還在跑），會話的 replay 裡有 Claude 開場的探詢 | 狀態照常；Claude 的輸入框沒有多出一串 `?:states=…` 的字（replay 不回應探詢） | [ ] 未測 | [ ] 未測 |
 
+## 8o. 會話跑在 App 之外：herdr-core 後端（F-128，2026-11-18）——**引擎測試（假 core＋真 hc 0.1.21 隔離環境）已過；真 App 還沒人點過**
+
+先照 README「讓會話跑在 App 之外（herdr-core）」裝好 hc、`config.yaml` 設 `session: {backend: herdr-core}`，重開 App。
+`ctx health` 應該有一行「會話後端：herdr-core（hc …）」。
+
+| # | 操作 | 應該看到 | macOS | Windows |
+|---|---|---|---|---|
+| 8o-1 | 開一個 agent 會話與一個 Shell，各打幾個字；⌘Q；重開 App | 兩個會話都還在會話列（同一個 sid、同一個標題），點進去畫面還原（含捲動歷史），可以繼續輸入；`hc ls`（`HC_SESSION=ctx`）看得到它們 | [ ] 未測 | 不支援（退回 PTY，見 8o-6） |
+| 8o-2 | 同上，但用「強制結束」殺掉 App（活動監視器或 `kill -9`） | 同 8o-1；會話狀態（處理中／等你）重開後照舊 | [ ] 未測 | 不支援 |
+| 8o-3 | agent 正在跑一個長工作時重裝新版 App（`scripts/rebuild-app`，等 ⌘Q 那段照舊要等） | 重開後 agent 沒有中斷、輸出接得上；重裝期間它照樣在跑 | [ ] 未測 | 不支援 |
+| 8o-4 | 開 Claude Code 會話、不交接，⌘Q；在終端機 `HC_SESSION=ctx hc kill <t>` 把它結束（或讓它自己結束）；重開 App | 會話列那個會話是「已結束」、畫面寫「這個會話在 App 關著的時候結束了」；收件匣照常出現「沒交接就結束」的卡（那張卡是 Claude Code 的 SessionEnd hook 寫的）；`hc ls --all` 裡已經沒有它 | [ ] 未測 | 不支援 |
+| 8o-5 | 會話開著時 `HC_SESSION=ctx hc server restart`（或 `kill -9` core 的 pid） | 畫面最多停一兩秒就接回、可以繼續打字；不會出現「進程已結束」 | [ ] 未測 | 不支援 |
+| 8o-6 | `config.yaml` 拿掉 `session.backend`（或設 `pty`），重開 App | 跟以前一模一樣（行程內 PTY）；⌘Q 會結束會話；`ctx health` 寫「會話後端：行程內 PTY」 | [ ] 未測 | [ ] 未測 |
+| 8o-7 | `session.backend: herdr-core`、`session.hc_path` 指到不存在的檔（或把 hc 改名），重開 App | 會話照樣開得起來（行程內 PTY）；會話區上面一行「⚠ 會話後端設成 herdr-core，但…」；`ctx health` 也有這行 | [ ] 未測 | [ ] 未測（Windows 上設 herdr-core 應該一律看到「還不支援」） |
+| 8o-8 | 有 herdr-core 會話在跑時，打字、跑 `vim`／`htop` 這種全螢幕程式、改視窗大小 | 打字延遲跟 PTY 後端分不出差別（引擎量測：回顯中位數 PTY 約 0.05ms、herdr-core 約 0.1ms）；全螢幕程式畫面正常、改大小會跟著重排 | [ ] 未測 | 不支援 |
+
+已知限制：App 關著時沒有 `caffeinate`（F-86 的擋睡眠跟 App 一起結束），機器可能在 agent 跑到一半時睡著；
+自動繼續（F-98）、對講送達（F-121）也要 App 開著才會動。
+
 ## 9. 要你決定
 
 - [ ] **#76**：App 助手、碰撞判定、`ask_repo`、backfill 都用 `claude -p`（程式化呼叫；BAT 引 2026-06-15 政策說它走另計的額度，

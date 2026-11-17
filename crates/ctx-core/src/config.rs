@@ -143,6 +143,9 @@ pub struct Config {
 /// config `thresholds.program_status_takeover_seconds` 沒設時的預設（F-130）：hook 靜默 2 分鐘才讓給程式回報。
 pub const PROGRAM_STATUS_TAKEOVER_SECONDS: i64 = 120;
 
+/// config `session.hc_session` 沒設時的預設（F-128）：App 用自己的 herdr-core session，不跟使用者自己的 Herdr 混。
+pub const DEFAULT_HC_SESSION: &str = "ctx";
+
 /// `thresholds` 段。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Thresholds {
@@ -357,6 +360,33 @@ impl Config {
             Some(Value::String(s)) => !s.trim().eq_ignore_ascii_case("off"),
             _ => true,
         }
+    }
+
+    /// `session.backend`（F-128，Rust 才有）：App 的會話跑在哪裡。沒設＝`pty`（行程內）；`herdr-core`＝跑在 App 之外。
+    /// 不認得的值＝`Err(原字串)`（呼叫端退回 pty 並提醒）。
+    pub fn session_backend(&self) -> std::result::Result<crate::term::BackendKind, String> {
+        match self.get("session.backend") {
+            None | Some(Value::Null) => Ok(crate::term::BackendKind::Pty),
+            Some(Value::String(s)) => crate::term::BackendKind::parse(s).ok_or_else(|| s.clone()),
+            Some(other) => Err(other.to_string()),
+        }
+    }
+
+    /// `session.hc_path`（F-128）：指定 herdr-core 執行檔；沒設＝自己找（PATH 上的 `hc`／`herdr-core`、`~/.local/bin/herdr-core`）。
+    pub fn hc_path(&self) -> Option<PathBuf> {
+        self.str("session.hc_path")
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+    }
+
+    /// `session.hc_session`（F-128）：我們自己的 herdr-core session（`HC_SESSION`），跟使用者自己的 Herdr 分開。預設 [`DEFAULT_HC_SESSION`]。
+    pub fn hc_session(&self) -> String {
+        self.str("session.hc_session")
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or(DEFAULT_HC_SESSION)
+            .to_string()
     }
 
     /// `thresholds.program_status_takeover_seconds`（F-130，Rust 才有）：hook 靜默多久、程式回報又說已經離開那個狀態，
@@ -619,6 +649,22 @@ mod tests {
         let neg =
             Config::from_value(&json!({"thresholds": {"program_status_takeover_seconds": -5}}));
         assert_eq!(neg.program_status_takeover(), Duration::ZERO);
+    }
+
+    #[test]
+    fn session_backend_settings() {
+        use crate::term::BackendKind;
+        let d = Config::from_value(&json!({}));
+        assert_eq!(d.session_backend(), Ok(BackendKind::Pty));
+        assert_eq!(d.hc_path(), None);
+        assert_eq!(d.hc_session(), "ctx");
+        let c = Config::from_value(&json!({"session": {
+            "backend": "herdr-core", "hc_path": "~/bin/hc", "hc_session": "work"}}));
+        assert_eq!(c.session_backend(), Ok(BackendKind::HerdrCore));
+        assert_eq!(c.hc_path(), Some(PathBuf::from("~/bin/hc")));
+        assert_eq!(c.hc_session(), "work");
+        let bad = Config::from_value(&json!({"session": {"backend": "tmux"}}));
+        assert_eq!(bad.session_backend(), Err("tmux".to_string()));
     }
 
     #[test]

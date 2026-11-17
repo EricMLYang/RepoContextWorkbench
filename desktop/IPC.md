@@ -192,6 +192,10 @@ Rust 端簽名建議：
 - `lane`（卡片與 `recent[]` 事件）：`scope`＝屬於目前範圍、`global`＝全域與未分類（卡片另含：範圍外的打斷）、`other`＝不顯示。前端照它分欄，不自己判斷範圍。
 - `attention{needs_you, finished_unseen, working}`（Rust 才有，F-80／F-86）：活著的 agent 會話裡「在等你」（waiting／blocked）與「做完沒看」（finished 且沒 `seen`、沒 `faded`）各幾個——殼的選單列與 Dock 徽章直接讀這個，不自己比狀態字串（分類只在引擎 `workbench::Attention`）。
 - `usage{at, five_hour{used,resets}|null, seven_day{…}|null, context|null, model|null, warn}|（沒收過就沒有這個鍵）`（Rust 才有，F-83）：Claude Code 額度餘光，從 App 會話的 statusLine 來（`ctx hook statusline` → `.state/usage.json`）。
+- `session_backend{configured, active, warning?, hc_path?, hc_version?, hc_session?, at}`（Rust 才有，F-128）：會話跑在哪個後端
+  （`"pty"`＝行程內、`"herdr-core"`＝App 之外）。殼在 `get_state` 補上（引擎 `TermManager::backend_status()`）；設成 herdr-core 但退回 PTY
+  時 `warning` 是給人看的一句，前端在會話區原樣畫一行（`#backendwarn`），不自己判斷。終端串流（`term_open`／`term_write`…）不變：
+  herdr-core 的會話第一畫面就是 replay，前端看不出後端換了。spine 未設定時沒有這個鍵。
 - `decide{count, all, auto_recent, key}`（Rust 才有，F-127）：目前範圍與全部範圍要你決定幾件、近 7 天自動放行幾筆、卡有沒有變的指紋（變了前端才重抓 `decide_queue`）。
   不跑 git（`relay::plan_light`），真資料副本上 `decide::summary` 約 7ms、這個鍵約 450 bytes。成了決策卡的交接，`cards[]` 裡那則交接的未讀、
   與同一個 repo 在交接之前的「agent 等你回應」收掉（同一件事只出現一次，`covered_by_decision`）。

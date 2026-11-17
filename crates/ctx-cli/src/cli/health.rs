@@ -28,6 +28,8 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
     v["setup"] = serde_json::json!({"skill": skill, "mcp_json": mcp_json, "clis": clis});
     // F-132：spine 入口檔過期或被手寫檔擋住（要跑 git，所以不在引擎的 health 裡，App 的 build_state 不會跑到）
     v["home"] = ctx_core::health::home_status(&d);
+    // F-128：會話後端（跑 `hc --version`，所以也不在引擎的 health 裡）
+    v["session_backend"] = ctx_core::health::session_backend(&d);
     // 2026-11-10：要人判斷的提醒（未結體檢、判斷回顧、關係建議、何時重看）搬來這裡——以前塞在每場 agent 會話的開場
     let here = ctx_core::agentapi::Target {
         cwd: std::env::current_dir().ok(),
@@ -278,6 +280,7 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
         } else if let Some(e) = h["error"].as_str() {
             out.push(format!("- spine 入口檔查不了（{e}）：跑 `ctx home sync --check` 看看"));
         }
+        out.extend(backend_lines(&r["session_backend"]));
         let for_you = arr(r, "for_you");
         if !for_you.is_empty() {
             out.push("- 要你判斷的（不再進 agent 的開場）：".into());
@@ -288,6 +291,29 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
         out.join("\n")
     });
     Ok(())
+}
+
+/// 「會話後端」段（F-128）：用哪個、hc 在哪、什麼版本；設成 herdr-core 但用不了、或 App 上次退回 PTY 就多一行提醒。
+fn backend_lines(b: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    match (s(b, "configured").as_str(), b["problem"].as_str()) {
+        ("herdr-core", Some(p)) => out.push(format!(
+            "- 會話後端設成 herdr-core，但{p}：App 會退回行程內 PTY（關掉 App 時會話一起結束）"
+        )),
+        ("herdr-core", None) => out.push(format!(
+            "- 會話後端：herdr-core（hc {}，{}；HC_SESSION={}）——會話跑在 App 之外，⌘Q 之後還在",
+            s(b, "hc_version"),
+            s(b, "hc_path"),
+            s(b, "hc_session")
+        )),
+        (_, Some(p)) => out.push(format!("- 會話後端：行程內 PTY（{p}）")),
+        _ => out.push("- 會話後端：行程內 PTY（關掉 App 時會話一起結束；要讓會話跑在 App 之外，見 README「herdr-core」）".into()),
+    }
+    let app = &b["app"];
+    if let Some(w) = app["warning"].as_str() {
+        out.push(format!("  App 上次（{}）開會話清冊時：{w}", s(app, "at")));
+    }
+    out
 }
 
 /// 幾分鐘＋後綴 → 「45 分後重置」「2.5 hr 後重置」「3.2 天後重置」（10 以上不帶小數；跟前端 `spanText` 同一套）。

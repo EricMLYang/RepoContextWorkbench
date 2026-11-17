@@ -602,6 +602,22 @@ export interface WorkbenchState {
   agents: string[];
   /** Rust 才有（2026-11-14）：每個 agent 是哪一家——開會話對話框據此給選項。 */
   agent_kinds?: Record<string, AgentKind>;
+  /** Rust 才有（F-128）：會話後端的現況；`warning` 有值就在會話區畫一行（前端不判斷）。 */
+  session_backend?: SessionBackend;
+}
+
+/** 會話跑在哪裡（F-128）：行程內 PTY，或 App 之外的 herdr-core。 */
+export type SessionBackendKind = "pty" | "herdr-core";
+
+export interface SessionBackend {
+  configured: SessionBackendKind;
+  active: SessionBackendKind;
+  /** 退回 PTY 的原因、設定寫錯（沒事就沒有這個鍵）。 */
+  warning?: string;
+  hc_path?: string;
+  hc_version?: string;
+  hc_session?: string;
+  at: string;
 }
 
 // ── 決策佇列（F-123～F-127，Rust 才有） ─────────────────────────────────

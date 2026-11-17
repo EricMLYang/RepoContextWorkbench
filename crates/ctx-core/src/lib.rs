@@ -29,6 +29,7 @@ pub mod filetree;
 pub mod fsutil;
 pub mod github;
 pub mod gitlog;
+pub mod hc;
 pub mod health;
 pub mod history;
 pub mod home;

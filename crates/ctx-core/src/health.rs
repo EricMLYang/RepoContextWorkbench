@@ -160,6 +160,58 @@ pub fn home_status(spine_dir: &Path) -> Value {
     }
 }
 
+/// 會話後端（F-128）：設定要哪個、hc 在哪、什麼版本（跑 `hc --version`，不碰 core）、App 上次是不是退回了 PTY。
+/// 要跑外部指令，所以跟 [`home_status`] 一樣不放在 [`health`] 裡（App 的 build_state 不跑），`ctx health` 另外接上。
+pub fn session_backend(spine_dir: &Path) -> Value {
+    use crate::term::BackendKind;
+    let cfg = crate::config::load(spine_dir).ok();
+    let configured = cfg
+        .as_ref()
+        .map(|c| c.session_backend())
+        .unwrap_or(Ok(BackendKind::Pty));
+    let mut v = match configured {
+        Err(raw) => json!({
+            "configured": BackendKind::Pty.as_str(),
+            "problem": format!("config session.backend 不認得「{raw}」（可用 pty、herdr-core）"),
+        }),
+        Ok(BackendKind::Pty) => json!({"configured": BackendKind::Pty.as_str()}),
+        Ok(BackendKind::HerdrCore) => {
+            let session = cfg
+                .as_ref()
+                .map(|c| c.hc_session())
+                .unwrap_or_else(|| crate::config::DEFAULT_HC_SESSION.to_string());
+            let hc_path = cfg.as_ref().and_then(|c| c.hc_path());
+            let mut v =
+                json!({"configured": BackendKind::HerdrCore.as_str(), "hc_session": session});
+            if cfg!(not(unix)) {
+                v["problem"] = json!("這個平台（Windows）還不支援 herdr-core 後端");
+            }
+            match crate::hc::locate::find_hc(hc_path.as_deref()) {
+                Ok(exe) => {
+                    let setup = crate::hc::locate::HcSetup {
+                        exe: exe.clone(),
+                        session,
+                        env: Vec::new(),
+                    };
+                    v["hc_path"] = json!(exe.to_string_lossy());
+                    match setup.version() {
+                        Some(ver) => v["hc_version"] = json!(ver),
+                        None => {
+                            v["problem"] = json!(format!("{} --version 跑不起來", exe.display()))
+                        }
+                    }
+                }
+                Err(reason) => v["problem"] = json!(reason),
+            }
+            v
+        }
+    };
+    if let Some(app) = crate::term::read_backend_status(spine_dir) {
+        v["app"] = serde_json::to_value(app).unwrap_or(Value::Null);
+    }
+    v
+}
+
 /// 近 `days` 天的健康指標。`now`＝None 用現在（測試可指定）。
 pub fn health(spine_dir: &Path, days: i64, now: Option<NaiveDateTime>) -> Result<Value> {
     let now = now.unwrap_or_else(|| Local::now().naive_local());

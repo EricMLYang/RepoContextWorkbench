@@ -19,7 +19,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::program_status::{ProgramEvent, Scanner, QUERY_REPLY};
 use crate::session_status::ProgramRecorder;
@@ -67,7 +67,7 @@ impl std::str::FromStr for AttachId {
 }
 
 /// 會話種類（序列化字串與 Python `kind` 相同）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TermKind {
     Shell,
@@ -147,6 +147,53 @@ pub struct TermInfo {
     pub home_group: Option<String>,
 }
 
+/// 會話跑在哪個後端（F-128，Rust 才有）。config `session.backend` 的值就是 [`BackendKind::as_str`]。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BackendKind {
+    /// 行程內 PTY（portable-pty）：會話跟 App 同生共死。預設。
+    #[serde(rename = "pty")]
+    Pty,
+    /// herdr-core（`hc`）：會話跑在 App 之外，App 結束、當掉、換版後重開都接得回來。
+    #[serde(rename = "herdr-core")]
+    HerdrCore,
+}
+
+impl BackendKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            BackendKind::Pty => "pty",
+            BackendKind::HerdrCore => "herdr-core",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "pty" => Some(BackendKind::Pty),
+            "herdr-core" | "herdr" | "hc" => Some(BackendKind::HerdrCore),
+            _ => None,
+        }
+    }
+}
+
+/// 一個會話後端的 I/O 介面（F-128）：寫入、改大小、殺掉、放手。
+///
+/// 輸出不經過這個介面：後端把讀到的位元組交給 [`TermSession::feed`]、程序結束時呼叫 [`TermSession::finish`]，
+/// ring buffer、訂閱者、「先 replay 再即時」的順序保證都在 [`TermSession`] 這一層，兩個後端共用一份。
+/// 開會話與列出現存會話是後端自己的建構函式（PTY：[`TermSession::spawn_with_status`]；herdr-core：`hc::HcBackend`）。
+pub(crate) trait SessionIo: Send + Sync {
+    fn backend(&self) -> BackendKind;
+    fn pid(&self) -> Option<u32>;
+    /// 寫進程式的輸入。回 `false`＝再也寫不進去了（程式已經不在）；暫時寫不進去（重連中）要回 `true`。
+    fn write(&self, data: &[u8]) -> bool;
+    fn resize(&self, cols: u16, rows: u16);
+    /// 結束程式（人按關閉）。
+    fn kill(&self);
+    /// 輸出已經結束（[`TermSession::finish`] 呼叫）：放掉寫入端之類的資源。
+    fn closed(&self) {}
+    /// App 結束：放手但不殺（只有跑在 App 之外的後端有意義）。
+    fn detach(&self) {}
+}
+
 struct Shared {
     buf: VecDeque<Vec<u8>>,
     buf_len: usize,
@@ -154,23 +201,21 @@ struct Shared {
     next_attach: u64,
 }
 
-type ExitHook = Box<dyn FnOnce() + Send>;
+pub(crate) type ExitHook = Box<dyn FnOnce() + Send>;
 
-/// 一個 PTY 會話。對應 `term.TermSession`。
+/// 一個會話。對應 `term.TermSession`。後端（PTY 或 herdr-core）只管 I/O，見 [`SessionIo`]。
 pub struct TermSession {
     sid: String,
     meta: TermMeta,
     started: String,
     /// 開在哪個目錄（給「這個會話的 Terminal」沿用；不輸出到 `TermInfo`）。
     cwd: Option<PathBuf>,
-    pid: Option<u32>,
     alive: AtomicBool,
+    /// 結束收尾做過了沒（[`TermSession::finish`] 只做一次）
+    ended: AtomicBool,
     shared: Mutex<Shared>,
-    writer: Mutex<Option<Box<dyn Write + Send>>>,
-    master: Mutex<Box<dyn MasterPty + Send>>,
-    killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
-    /// 子程序已被回收（waiter 執行緒設）。kill 等它決定要不要補 SIGKILL。
-    reaped: Arc<(Mutex<bool>, Condvar)>,
+    io: Box<dyn SessionIo>,
+    on_exit: Mutex<Option<ExitHook>>,
 }
 
 fn joined(buf: &VecDeque<Vec<u8>>) -> Vec<u8> {
@@ -186,7 +231,7 @@ fn joined(buf: &VecDeque<Vec<u8>>) -> Vec<u8> {
 /// App 若是從某場 Claude 會話裡 `open` 出來的（例如 `install-app.sh --reopen`），macOS 會把呼叫端的環境
 /// 整包交給 App；`CommandBuilder::new` 又預設複製本程序環境，於是 App 開的每一場 claude 都以為自己是
 /// 那場的子會話（`CLAUDE_CODE_CHILD_SESSION`）——不存 transcript，之後 `/resume` 找不到。
-/// PTY 裡跑的會話是獨立的一場，這組變數一律不往下傳。
+/// PTY 裡跑的會話是獨立的一場，這組變數一律不往下傳（herdr-core 後端：叫起 core 時就拿掉，見 `hc::locate`）。
 pub const CLAUDE_SESSION_ENV: &[&str] = &[
     "CLAUDECODE",
     "CLAUDE_CODE_CHILD_SESSION",
@@ -205,9 +250,117 @@ fn scrub_claude_session_env(cmd: &mut CommandBuilder) {
     }
 }
 
+/// 每個會話都帶的環境變數（先放這些，再放 [`SpawnSpec::env`]——呼叫端給的優先）。兩個後端共用。
+pub(crate) fn session_env(spec: &SpawnSpec) -> Vec<(String, String)> {
+    let mut env = vec![
+        ("PYTHONUTF8".to_string(), "1".to_string()),
+        ("TERM".to_string(), "xterm-256color".to_string()),
+        ("COLORTERM".to_string(), "truecolor".to_string()),
+    ];
+    env.extend(spec.env.iter().cloned());
+    env
+}
+
+/// 沒給標題＝argv[0] 的檔名。
+pub(crate) fn title_or_program(meta: TermMeta, argv: &[String]) -> TermMeta {
+    if !meta.title.is_empty() {
+        return meta;
+    }
+    let prog = argv.first().cloned().unwrap_or_default();
+    let title = Path::new(&prog)
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or(prog);
+    TermMeta { title, ..meta }
+}
+
+/// 現在的時間（會話開始時間的格式）。
+pub(crate) fn now_started() -> String {
+    chrono::Local::now().format("%Y-%m-%d %H:%M").to_string()
+}
+
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     // 訂閱者 panic 不該讓整個會話卡死：毒化的鎖照樣拿來用
     m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// 行程內 PTY 後端（portable-pty）。
+struct PtyIo {
+    pid: Option<u32>,
+    writer: Mutex<Option<Box<dyn Write + Send>>>,
+    master: Mutex<Box<dyn MasterPty + Send>>,
+    killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
+    /// 子程序已被回收（waiter 執行緒設）。kill 等它決定要不要補 SIGKILL。
+    reaped: Arc<(Mutex<bool>, Condvar)>,
+}
+
+impl PtyIo {
+    fn is_reaped(&self) -> bool {
+        *lock(&self.reaped.0)
+    }
+
+    /// 等子程序被回收，最多 `timeout`。回傳是否已回收。
+    fn wait_reaped(&self, timeout: Duration) -> bool {
+        let (m, cv) = &*self.reaped;
+        let g = lock(m);
+        let (g, _) = cv
+            .wait_timeout_while(g, timeout, |done| !*done)
+            .unwrap_or_else(|e| e.into_inner());
+        *g
+    }
+}
+
+impl SessionIo for PtyIo {
+    fn backend(&self) -> BackendKind {
+        BackendKind::Pty
+    }
+
+    fn pid(&self) -> Option<u32> {
+        self.pid
+    }
+
+    fn write(&self, data: &[u8]) -> bool {
+        let mut w = lock(&self.writer);
+        match w.as_mut() {
+            Some(wr) => wr.write_all(data).and_then(|_| wr.flush()).is_ok(),
+            None => true, // 輸出已結束（finish 會把會話標成結束），這裡不必再報
+        }
+    }
+
+    /// 對應 `TermSession.resize`：失敗不報錯（Python 吞 OSError）。
+    fn resize(&self, cols: u16, rows: u16) {
+        let _ = lock(&self.master).resize(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        });
+    }
+
+    /// 對應 `TermSession.kill`：先客氣（SIGHUP＋SIGTERM），3 秒內沒走就 SIGKILL。Windows 走 ConPTY 的 terminate。
+    fn kill(&self) {
+        if self.is_reaped() {
+            return;
+        }
+        #[cfg(unix)]
+        if let Some(pid) = self.pid.and_then(|p| libc::pid_t::try_from(p).ok()) {
+            // 互動式 shell 會忽略 SIGTERM（Python 版因此常要等滿 3 秒）；先送 SIGHUP——
+            // 等同「關掉終端機」，shell 與 claude 都會收尾離開。
+            // SAFETY: 對自己 spawn 的子程序送訊號；pid 由 waiter 回收前不會被重用。
+            unsafe {
+                libc::kill(pid, libc::SIGHUP);
+                libc::kill(pid, libc::SIGTERM);
+            }
+            if self.wait_reaped(Duration::from_secs(3)) {
+                return;
+            }
+        }
+        let _ = lock(&self.killer).kill();
+    }
+
+    fn closed(&self) {
+        *lock(&self.writer) = None;
+    }
 }
 
 impl TermSession {
@@ -249,10 +402,7 @@ impl TermSession {
             cmd.cwd(cwd);
         }
         scrub_claude_session_env(&mut cmd);
-        cmd.env("PYTHONUTF8", "1");
-        cmd.env("TERM", "xterm-256color");
-        cmd.env("COLORTERM", "truecolor");
-        for (k, v) in &spec.env {
+        for (k, v) in session_env(spec) {
             cmd.env(k, v);
         }
         let mut child = pair
@@ -269,36 +419,23 @@ impl TermSession {
             .master
             .take_writer()
             .map_err(|e| Error::External(format!("PTY 寫入端：{e}")))?;
-        let pid = child.process_id();
-        let killer = child.clone_killer();
-        let title = if meta.title.is_empty() {
-            Path::new(prog)
-                .file_name()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| prog.clone())
-        } else {
-            meta.title.clone()
-        };
         let reaped = Arc::new((Mutex::new(false), Condvar::new()));
-        let sess = Arc::new(TermSession {
-            sid,
-            meta: TermMeta { title, ..meta },
-            // 開始時間＝之後判斷「這個會話期間有沒有留痕」的起點（2026-09-12 檢討 §5）
-            started: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
-            cwd: spec.cwd.clone(),
-            pid,
-            alive: AtomicBool::new(true),
-            shared: Mutex::new(Shared {
-                buf: VecDeque::new(),
-                buf_len: 0,
-                subs: Vec::new(),
-                next_attach: 1,
-            }),
+        let io = PtyIo {
+            pid: child.process_id(),
             writer: Mutex::new(Some(writer)),
             master: Mutex::new(pair.master),
-            killer: Mutex::new(killer),
+            killer: Mutex::new(child.clone_killer()),
             reaped: reaped.clone(),
-        });
+        };
+        // 開始時間＝之後判斷「這個會話期間有沒有留痕」的起點（2026-09-12 檢討 §5）
+        let sess = Self::from_io(
+            sid,
+            title_or_program(meta, &spec.argv),
+            now_started(),
+            spec.cwd.clone(),
+            Box::new(io),
+            on_exit,
+        );
         // waiter：回收子程序（不留 zombie），並讓 kill 知道它死了沒
         std::thread::Builder::new()
             .name(format!("term-wait-{}", sess.sid))
@@ -311,16 +448,38 @@ impl TermSession {
         let s2 = sess.clone();
         std::thread::Builder::new()
             .name(format!("term-read-{}", sess.sid))
-            .spawn(move || s2.reader_loop(reader, on_exit, program))?;
+            .spawn(move || s2.reader_loop(reader, program))?;
         Ok(sess)
     }
 
-    fn reader_loop(
-        &self,
-        mut reader: Box<dyn Read + Send>,
+    /// 用一個已經開好的後端 I/O 建會話（輸出之後由後端呼叫 [`TermSession::feed`]／[`TermSession::finish`] 餵進來）。
+    pub(crate) fn from_io(
+        sid: String,
+        meta: TermMeta,
+        started: String,
+        cwd: Option<PathBuf>,
+        io: Box<dyn SessionIo>,
         on_exit: Option<ExitHook>,
-        program: Option<ProgramRecorder>,
-    ) {
+    ) -> Arc<TermSession> {
+        Arc::new(TermSession {
+            sid,
+            meta,
+            started,
+            cwd,
+            alive: AtomicBool::new(true),
+            ended: AtomicBool::new(false),
+            shared: Mutex::new(Shared {
+                buf: VecDeque::new(),
+                buf_len: 0,
+                subs: Vec::new(),
+                next_attach: 1,
+            }),
+            io,
+            on_exit: Mutex::new(on_exit),
+        })
+    }
+
+    fn reader_loop(&self, mut reader: Box<dyn Read + Send>, program: Option<ProgramRecorder>) {
         let mut buf = vec![0u8; 65536];
         let mut status = program.map(|rec| (Scanner::new(), rec));
         loop {
@@ -331,18 +490,31 @@ impl TermSession {
                 Err(_) => break, // macOS／Linux：slave 全關後讀 master 是 EIO
             }
         }
+        self.finish(None);
+    }
+
+    /// 程序結束（後端偵測到的）：結束提示進 ring buffer、通知訂閱者、放掉 I/O、跑結束 hook。只做一次。
+    /// `note`＝結束提示前面多一行說明（例：「在 App 關著的時候結束了」）。
+    pub(crate) fn finish(&self, note: Option<&str>) {
         {
             // 結束三件事在同一把鎖裡做完：之後 attach 的人一定拿得到含結束提示的 replay
             let mut sh = lock(&self.shared);
+            if self.ended.swap(true, Ordering::SeqCst) {
+                return;
+            }
             self.alive.store(false, Ordering::SeqCst);
+            if let Some(n) = note {
+                Self::push_locked(&mut sh, n.as_bytes());
+            }
             Self::push_locked(&mut sh, EXIT_MSG.as_bytes());
             for (_, cb) in sh.subs.iter_mut() {
                 cb(TermEvent::Exited);
             }
             sh.subs.clear();
         }
-        *lock(&self.writer) = None;
-        if let Some(f) = on_exit {
+        self.io.closed();
+        let hook = lock(&self.on_exit).take();
+        if let Some(f) = hook {
             f();
         }
     }
@@ -370,6 +542,13 @@ impl TermSession {
         self.push(data);
         for r in reports {
             rec.record(r, None);
+        }
+    }
+
+    /// 後端讀到的即時輸出（herdr-core：attach 串流的第一畫面與之後的位元組）。
+    pub(crate) fn feed(&self, data: &[u8]) {
+        if !data.is_empty() {
+            self.push(data);
         }
     }
 
@@ -414,9 +593,14 @@ impl TermSession {
         self.alive.load(Ordering::SeqCst)
     }
 
+    /// 這個會話跑在哪個後端。
+    pub fn backend(&self) -> BackendKind {
+        self.io.backend()
+    }
+
     /// 對應 `TermSession.pid`。
     pub fn pid(&self) -> Option<u32> {
-        self.pid
+        self.io.pid()
     }
 
     /// 對應 `TermSession.write`：程序已結束就靜默丟掉。
@@ -424,22 +608,14 @@ impl TermSession {
         if !self.alive() {
             return;
         }
-        let mut w = lock(&self.writer);
-        if let Some(wr) = w.as_mut() {
-            if wr.write_all(data).and_then(|_| wr.flush()).is_err() {
-                self.alive.store(false, Ordering::SeqCst);
-            }
+        if !self.io.write(data) {
+            self.alive.store(false, Ordering::SeqCst);
         }
     }
 
     /// 對應 `TermSession.resize`：失敗不報錯（Python 吞 OSError）。
     pub fn resize(&self, cols: u16, rows: u16) {
-        let _ = lock(&self.master).resize(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        });
+        self.io.resize(cols, rows);
     }
 
     /// 目前 ring buffer 的內容（replay）。
@@ -453,7 +629,7 @@ impl TermSession {
         let id = AttachId(sh.next_attach);
         sh.next_attach += 1;
         let replay = joined(&sh.buf);
-        if cb(TermEvent::Data(&replay)) && self.alive() {
+        if cb(TermEvent::Data(&replay)) && !self.ended.load(Ordering::SeqCst) {
             sh.subs.push((id, cb));
         }
         id
@@ -472,40 +648,18 @@ impl TermSession {
         lock(&self.shared).subs.len()
     }
 
-    /// 對應 `TermSession.kill`：先客氣（SIGHUP＋SIGTERM），3 秒內沒走就 SIGKILL。Windows 走 ConPTY 的 terminate。
+    /// 對應 `TermSession.kill`：結束程式（PTY：SIGHUP＋SIGTERM、3 秒後 SIGKILL；herdr-core：`terminal.kill`）。
     pub fn kill(&self) {
         self.alive.store(false, Ordering::SeqCst);
-        if self.is_reaped() {
-            return;
-        }
-        #[cfg(unix)]
-        if let Some(pid) = self.pid.and_then(|p| libc::pid_t::try_from(p).ok()) {
-            // 互動式 shell 會忽略 SIGTERM（Python 版因此常要等滿 3 秒）；先送 SIGHUP——
-            // 等同「關掉終端機」，shell 與 claude 都會收尾離開。
-            // SAFETY: 對自己 spawn 的子程序送訊號；pid 由 waiter 回收前不會被重用。
-            unsafe {
-                libc::kill(pid, libc::SIGHUP);
-                libc::kill(pid, libc::SIGTERM);
-            }
-            if self.wait_reaped(Duration::from_secs(3)) {
-                return;
-            }
-        }
-        let _ = lock(&self.killer).kill();
+        self.io.kill();
     }
 
-    fn is_reaped(&self) -> bool {
-        *lock(&self.reaped.0)
-    }
-
-    /// 等子程序被回收，最多 `timeout`。回傳是否已回收。
-    pub fn wait_reaped(&self, timeout: Duration) -> bool {
-        let (m, cv) = &*self.reaped;
-        let g = lock(m);
-        let (g, _) = cv
-            .wait_timeout_while(g, timeout, |done| !*done)
-            .unwrap_or_else(|e| e.into_inner());
-        *g
+    /// App 結束：跑在 App 之外的會話放手不殺；行程內的照舊殺掉。
+    pub(crate) fn release(&self) {
+        match self.io.backend() {
+            BackendKind::Pty => self.kill(),
+            BackendKind::HerdrCore => self.io.detach(),
+        }
     }
 
     /// `list()` 的一筆。
@@ -609,43 +763,148 @@ pub struct AgentLaunch {
 
 type ExitListener = Arc<dyn Fn(&str) + Send + Sync>;
 
+/// 結束通知：有人聽就直接通知；還沒人聽（manager 剛建好時，接回發現在 App 關著期間就結束的會話）先排著，
+/// [`TermManager::set_on_exit`] 時補發——那些會話也照「結束」處理一次。
+#[derive(Default)]
+struct ExitNotice {
+    listener: Option<ExitListener>,
+    queued: Vec<String>,
+}
+
+/// 會話後端的現況（F-128，Rust 才有）：設定要哪個、實際用哪個、為什麼退回。
+/// App 的 `get_state` 帶 `session_backend`（前端在會話區畫 `warning`）；`ctx health` 讀 `.state/session_backend.json`。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackendStatus {
+    /// config `session.backend` 要的
+    pub configured: BackendKind,
+    /// 這次真的在用的（設成 herdr-core 但找不到 hc、或叫不起來＝退回 pty）
+    pub active: BackendKind,
+    /// 要讓使用者看到的一行（退回的原因、設定寫錯）；沒事＝不輸出
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hc_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hc_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hc_session: Option<String>,
+    /// App 什麼時候決定的（`YYYY-MM-DD HH:MM`）
+    pub at: String,
+}
+
+impl BackendStatus {
+    fn plain(kind: BackendKind) -> Self {
+        BackendStatus {
+            configured: kind,
+            active: kind,
+            warning: None,
+            hc_path: None,
+            hc_version: None,
+            hc_session: None,
+            at: now_started(),
+        }
+    }
+}
+
+/// `.state/session_backend.json`：App 上次開會話清冊時用的後端（`ctx health` 讀）。
+pub fn backend_status_path(spine_dir: &Path) -> PathBuf {
+    spine_dir.join(".state").join("session_backend.json")
+}
+
+/// 讀 App 上次記的後端現況；沒有或壞掉＝None。
+pub fn read_backend_status(spine_dir: &Path) -> Option<BackendStatus> {
+    let s = std::fs::read_to_string(backend_status_path(spine_dir)).ok()?;
+    serde_json::from_str(&s).ok()
+}
+
+enum Backend {
+    Pty,
+    Hc(Arc<crate::hc::HcBackend>),
+}
+
+/// 建 [`TermManager`] 的額外選項。
+#[derive(Debug, Clone, Default)]
+pub struct TermOptions {
+    /// 叫 `hc` 時另外帶的環境變數——只給測試隔離 herdr-core 用（`XDG_STATE_HOME`、`XDG_RUNTIME_DIR`…）。
+    pub hc_env: Vec<(String, String)>,
+}
+
 /// 工作台的會話清冊。對應 `term.TermManager`。agent 會話帶料、shell 會話裸開。
 pub struct TermManager {
     spine_dir: PathBuf,
     sessions: Mutex<Vec<Arc<TermSession>>>,
     ids: AtomicU64,
-    on_exit: Mutex<Option<ExitListener>>,
+    on_exit: Arc<Mutex<ExitNotice>>,
+    backend: Backend,
+    status: BackendStatus,
 }
 
 impl TermManager {
-    /// 新的會話清冊。sid 從 t1 重新編，所以前一次（App 上次開著時）留下的會話狀態檔一併清掉，
-    /// 免得新的 t1 撿到舊的「等你」。
+    /// 新的會話清冊。後端照 config `session.backend`（預設行程內 PTY）。
+    /// - PTY：sid 從 t1 重新編，前一次（App 上次開著時）留下的會話狀態檔一併清掉，免得新的 t1 撿到舊的「等你」。
+    /// - herdr-core：先把這個 spine 還在 core 裡的會話接回來（狀態檔留著），只清掉別的；sid 接著編。
     pub fn new(spine_dir: impl Into<PathBuf>) -> Self {
+        Self::with_options(spine_dir, TermOptions::default())
+    }
+
+    pub fn with_options(spine_dir: impl Into<PathBuf>, opts: TermOptions) -> Self {
         let spine_dir = spine_dir.into();
-        crate::session_status::clear_all(&spine_dir);
-        TermManager {
+        let (backend, status) = choose_backend(&spine_dir, &opts);
+        let m = TermManager {
+            ids: AtomicU64::new(crate::hc::next_free_id(&spine_dir)),
             spine_dir,
             sessions: Mutex::new(Vec::new()),
-            ids: AtomicU64::new(1),
-            on_exit: Mutex::new(None),
+            on_exit: Arc::new(Mutex::new(ExitNotice::default())),
+            backend,
+            status,
+        };
+        match &m.backend {
+            Backend::Pty => crate::session_status::clear_all(&m.spine_dir),
+            Backend::Hc(hc) => m.restore(hc.clone()),
         }
+        let _ = std::fs::create_dir_all(m.spine_dir.join(".state"));
+        if let Ok(b) = serde_json::to_vec(&m.status) {
+            let _ = crate::fsutil::write_atomic(&backend_status_path(&m.spine_dir), &b);
+        }
+        m
     }
 
     pub fn spine_dir(&self) -> &Path {
         &self.spine_dir
     }
 
+    /// 這次用的後端與退回的原因（F-128）。
+    pub fn backend_status(&self) -> &BackendStatus {
+        &self.status
+    }
+
     /// 任一會話程序結束時呼叫（參數是 sid）——桌面殼拿來發 `workbench://changed`。
+    /// 設之前就結束的（接回時發現早已結束的 herdr-core 會話）在這裡補發一次。
     pub fn set_on_exit(&self, f: impl Fn(&str) + Send + Sync + 'static) {
-        *lock(&self.on_exit) = Some(Arc::new(f));
+        let f: ExitListener = Arc::new(f);
+        let queued = {
+            let mut n = lock(&self.on_exit);
+            n.listener = Some(f.clone());
+            std::mem::take(&mut n.queued)
+        };
+        for sid in queued {
+            f(&sid);
+        }
     }
 
     fn next_sid(&self) -> String {
         format!("t{}", self.ids.fetch_add(1, Ordering::SeqCst))
     }
 
+    /// 接回來的 sid 之後才編新的（`t7` 接回來了，下一個至少是 `t8`）。
+    fn bump_ids(&self, sid: &str) {
+        if let Some(n) = sid.strip_prefix('t').and_then(|n| n.parse::<u64>().ok()) {
+            self.ids.fetch_max(n + 1, Ordering::SeqCst);
+        }
+    }
+
     fn exit_hook(&self, sid: &str, unmark_agent: bool) -> ExitHook {
-        let listener = lock(&self.on_exit).clone();
+        let notice = self.on_exit.clone();
         let spine = self.spine_dir.clone();
         let sid = sid.to_string();
         Box::new(move || {
@@ -653,10 +912,64 @@ impl TermManager {
                 agentmark::unmark(&spine, &sid);
                 crate::session_status::retire(&spine, &sid);
             }
+            let listener = {
+                let mut n = lock(&notice);
+                if n.listener.is_none() {
+                    n.queued.push(sid.clone());
+                }
+                n.listener.clone()
+            };
             if let Some(l) = listener {
                 l(&sid);
             }
         })
+    }
+
+    /// 照這次的後端開一個會話。`agent`＝agent 名（shell 是 None；herdr-core 後端存進中繼資料，接回時重標 agentmark）。
+    fn spawn(
+        &self,
+        sid: &str,
+        spec: &SpawnSpec,
+        meta: TermMeta,
+        agent: Option<&str>,
+        program: Option<ProgramRecorder>,
+    ) -> Result<Arc<TermSession>> {
+        let hook = self.exit_hook(sid, meta.kind == TermKind::Agent);
+        match &self.backend {
+            Backend::Pty => TermSession::spawn_with_status(sid, spec, meta, Some(hook), program),
+            Backend::Hc(hc) => hc.spawn(sid, spec, meta, agent, hook, program),
+        }
+    }
+
+    /// herdr-core：列出這個 spine 還在 core 裡的會話、接回來（開 manager 時一次）。
+    /// 在 App 關著的期間結束的：照「結束」處理一次（結束 hook，沒交接的卡片照常出現），然後從 core 拿掉。
+    fn restore(&self, hc: Arc<crate::hc::HcBackend>) {
+        let found = hc.existing();
+        let keep: Vec<String> = found.iter().map(|e| e.sid().to_string()).collect();
+        crate::session_status::clear_all_except(&self.spine_dir, &keep);
+        let program_on = crate::config::load(&self.spine_dir)
+            .map(|c| c.program_status())
+            .unwrap_or(true);
+        for e in found {
+            let sid = e.sid().to_string();
+            self.bump_ids(&sid);
+            let agent = e.kind() == TermKind::Agent;
+            let program = (agent && program_on).then(|| {
+                ProgramRecorder::new(crate::session_status::path_for(&self.spine_dir, &sid))
+            });
+            let hook = self.exit_hook(&sid, agent);
+            let name = e.meta.agent.clone();
+            let Some(s) = hc.adopt(e, hook, program) else {
+                continue;
+            };
+            if agent && s.alive() {
+                if let (Some(cwd), Some(name)) = (s.cwd(), name) {
+                    let pid = s.pid().map(i64::from).unwrap_or(0);
+                    let _ = agentmark::mark(&self.spine_dir, &sid, cwd, &name, pid);
+                }
+            }
+            lock(&self.sessions).push(s);
+        }
     }
 
     /// 對應 `TermManager.create_shell`：沒給 cwd 就開在 spine。
@@ -676,12 +989,12 @@ impl TermManager {
             origin,
             ..TermMeta::shell(title)
         };
-        let s = TermSession::spawn(&sid, &spec, meta, Some(self.exit_hook(&sid, false)))?;
+        let s = self.spawn(&sid, &spec, meta, None, None)?;
         lock(&self.sessions).push(s.clone());
         Ok(s)
     }
 
-    /// 對應 `TermManager.create_agent`（指令組裝那段在呼叫端）：登入 shell 包裝→PTY spawn→agentmark 標記。
+    /// 對應 `TermManager.create_agent`（指令組裝那段在呼叫端）：登入 shell 包裝→spawn→agentmark 標記。
     pub fn create_agent(&self, launch: AgentLaunch) -> Result<Arc<TermSession>> {
         let sid = self.next_sid();
         let steward = launch.origin.as_deref() == Some(STEWARD_ORIGIN);
@@ -735,18 +1048,13 @@ impl TermManager {
             task: launch.task.clone(),
             home_group: launch.home_group.clone().or_else(|| launch.group.clone()),
         };
-        // F-130：agent 自己在終端報的狀態（OSC 7501）；config `session.program_status: off` 就整個不讀、不回應探詢
+        // F-130：agent 自己在終端報的狀態（OSC 7501）；config `session.program_status: off` 就整個不讀、不回應探詢。
+        // herdr-core 後端：core 自己解析、自己回探詢，這個寫入器改吃 core 的狀態事件（見 `hc`）
         let program = crate::config::load(&self.spine_dir)
             .map(|c| c.program_status())
             .unwrap_or(true)
             .then(|| ProgramRecorder::new(crate::session_status::path_for(&self.spine_dir, &sid)));
-        let s = TermSession::spawn_with_status(
-            &sid,
-            &spec,
-            meta,
-            Some(self.exit_hook(&sid, true)),
-            program,
-        )?;
+        let s = self.spawn(&sid, &spec, meta, Some(&agent), program)?;
         // agent 偵測（gitpane 課）：標記存活會話，P3 採集據此標「🤖 誰在跑」
         let pid = s.pid().map(i64::from).unwrap_or(0);
         agentmark::mark(&self.spine_dir, &sid, &launch.cwd, &agent, pid)?;
@@ -778,11 +1086,87 @@ impl TermManager {
         lock(&self.sessions).iter().map(|s| s.info()).collect()
     }
 
-    /// 對應 `TermManager.kill_all`。
+    /// 對應 `TermManager.kill_all`：兩個後端的會話都殺。
     pub fn kill_all(&self) {
         let sids: Vec<String> = lock(&self.sessions).iter().map(|s| s.sid.clone()).collect();
         for sid in sids {
             self.kill(&sid);
+        }
+    }
+
+    /// App 結束（F-128）：行程內 PTY 的會話殺掉（跟以前一樣）；跑在 herdr-core 的放手不殺——
+    /// agentmark 與會話狀態檔都留著，下次開 App 接回來。
+    pub fn shutdown(&self) {
+        let all: Vec<Arc<TermSession>> = lock(&self.sessions).clone();
+        for s in all {
+            match s.backend() {
+                BackendKind::Pty => {
+                    self.kill(&s.sid);
+                }
+                BackendKind::HerdrCore => s.release(),
+            }
+        }
+        if let Backend::Hc(hc) = &self.backend {
+            hc.shutdown();
+        }
+    }
+}
+
+/// 照 config 決定後端；設成 herdr-core 但起不來＝退回 PTY，原因放進 `warning`。
+fn choose_backend(spine_dir: &Path, opts: &TermOptions) -> (Backend, BackendStatus) {
+    let cfg = crate::config::load(spine_dir).ok();
+    let configured = cfg
+        .as_ref()
+        .map(|c| c.session_backend())
+        .unwrap_or(Ok(BackendKind::Pty));
+    match configured {
+        Err(raw) => (
+            Backend::Pty,
+            BackendStatus {
+                warning: Some(format!(
+                    "config session.backend 不認得「{raw}」（可用 pty、herdr-core）：這次用行程內 PTY"
+                )),
+                ..BackendStatus::plain(BackendKind::Pty)
+            },
+        ),
+        Ok(BackendKind::Pty) => (Backend::Pty, BackendStatus::plain(BackendKind::Pty)),
+        Ok(BackendKind::HerdrCore) => {
+            let hc_path = cfg.as_ref().and_then(|c| c.hc_path());
+            let session = cfg
+                .as_ref()
+                .map(|c| c.hc_session())
+                .unwrap_or_else(|| crate::config::DEFAULT_HC_SESSION.to_string());
+            let base = BackendStatus {
+                hc_session: Some(session.clone()),
+                ..BackendStatus::plain(BackendKind::HerdrCore)
+            };
+            match crate::hc::HcBackend::start(
+                spine_dir,
+                hc_path.as_deref(),
+                &session,
+                opts.hc_env.clone(),
+            ) {
+                Ok(hc) => {
+                    let status = BackendStatus {
+                        hc_path: Some(hc.exe().to_string_lossy().into_owned()),
+                        hc_version: Some(hc.version().to_string()).filter(|v| !v.is_empty()),
+                        ..base
+                    };
+                    (Backend::Hc(hc), status)
+                }
+                Err(e) => (
+                    Backend::Pty,
+                    BackendStatus {
+                        active: BackendKind::Pty,
+                        warning: Some(format!(
+                            "會話後端設成 herdr-core，但{}——這次改用行程內 PTY（關掉 App 時會話會一起結束）",
+                            e.reason
+                        )),
+                        hc_path: e.exe.map(|p| p.to_string_lossy().into_owned()),
+                        ..base
+                    },
+                ),
+            }
         }
     }
 }

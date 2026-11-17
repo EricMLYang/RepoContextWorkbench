@@ -30,13 +30,21 @@ pub fn get_state(
     repos: Option<Vec<String>>,
 ) -> Result<Value, String> {
     let sp = spine(st)?;
-    let terms = st.terms_opt().map(|t| t.list()).unwrap_or_default();
-    workbench::api_state(
+    let manager = st.terms_opt();
+    let terms = manager.as_ref().map(|t| t.list()).unwrap_or_default();
+    let mut v = workbench::api_state(
         &sp,
         &StateScope::new(group.as_deref(), repos.as_deref()),
         &terms,
     )
-    .map_err(err)
+    .map_err(err)?;
+    // F-128：會話後端的現況（引擎決定的；前端只把 warning 畫成一行）
+    if let (Some(t), Some(o)) = (manager, v.as_object_mut()) {
+        if let Ok(b) = serde_json::to_value(t.backend_status()) {
+            o.insert("session_backend".into(), b);
+        }
+    }
+    Ok(v)
 }
 
 /// 未讀數（選單列用）：`get_state` 的 `unread` 長度。

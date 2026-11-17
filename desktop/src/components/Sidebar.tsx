@@ -61,6 +61,11 @@ export function Sidebar() {
         </button>
       </div>
       <Deck />
+      {state.session_backend?.warning ? (
+        <p id="backendwarn" className="emptyhint" role="status">
+          ⚠ {state.session_backend.warning}
+        </p>
+      ) : null}
       <div className="sechead sessionhead">
         <h2
           title={all.length ? "全部會話 " + all.length + " 個（牌組的放在各牌組區塊）" : undefined}

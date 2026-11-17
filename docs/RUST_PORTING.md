@@ -502,6 +502,19 @@ CLI／MCP（ctx-cli）：
   hook 是 exited 一律 hook。新設定：`session.program_status`（預設開；`false`／`off`＝不解析、不回應探詢）、
   `thresholds.program_status_takeover_seconds`（預設 120；不在 DEFAULTS 裡，`config` 輸出與對拍不變）。
   只有 App 開的 agent 會話有（shell 會話、外部終端機開的不讀）；對講（`mailbox`）的 peers／送達判斷仍只看 hook 的檔。
+- **會話可以跑在 App 之外：herdr-core 後端（F-128 路線 A，2026-11-18，Rust 才有）**：config 新增 `session.backend: pty | herdr-core`
+  （沒設＝`pty`，行為跟以前一樣）、`session.hc_path`（指定 `hc`／`herdr-core` 執行檔；沒設＝PATH 上的 `hc`／`herdr-core` → `~/.local/bin/herdr-core`；
+  有設就只用它，指錯了不默默換）、`session.hc_session`（`HC_SESSION`，預設 `ctx`，跟使用者自己的 Herdr 分開）。都不在 DEFAULTS 裡，`config` 輸出與對拍不變。
+  設成 herdr-core 但找不到 hc、叫不起來、或在 Windows（named pipe 這次沒做）＝**退回行程內 PTY**，原因放進 `TermManager::backend_status().warning`
+  （App 的 `get_state` 多 `session_backend`、會話區畫一行）。`.state/` 新檔：
+  `.state/hc_sessions/<sid>.json`（每個 herdr-core 會話一份中繼資料：sid、core 位址、kind、title、origin、scope、scope_repos、task、home_group、started、cwd、agent；
+  原子寫入，會話結束就刪）、`.state/session_backend.json`（App 上次開會話清冊時的 `BackendStatus`，`ctx health` 讀）。
+  core 裡的終端機帶標籤 `ctx.sid`、`ctx.spine`（spine 路徑的 FNV-1a 短雜湊，12 個十六進位字）、`ctx.kind`。
+  App 開時列出這個 spine 的終端機接回：活著的 attach（第一畫面＋1000 行歷史當 replay）、狀態檔留著（`session_status::clear_all_except`）、
+  agentmark 重標、sid 接著編；App 關著期間結束的照「結束」處理一次（結束 hook 在 `set_on_exit` 時補發；畫面是 `terminal.read` 留下的字＋一行說明），
+  然後 `terminal.rm`。App 結束（`TermManager::shutdown`）只殺行程內 PTY 的會話，herdr-core 的放手不殺、agentmark 與狀態檔都留著。
+  OSC 7501 在這條路上由 core 解析、回探詢：我們不跑 Scanner，改吃 core 的 `status` 事件寫同一個 `<sid>.program.json`。
+  PTY 後端的 sid 也從 `.state/hc_sessions` 最大的號碼之後編（退回 PTY 的那次不會跟還在 core 裡跑的會話撞名）。`ctx health` 多 `session_backend` 鍵與一行。
 - **SIGPIPE 恢復預設**（2026-10-10，ideation N-27）：`ctx … | head` 截斷時安靜結束（exit 141），不再 panic
   「failed printing to stdout: Broken pipe」。Python 的行為是 BrokenPipeError traceback；Unix 指令慣例是安靜結束。
 - **沒接住的錯誤**：Python 會印 traceback、exit 1；Rust 印一行「錯誤：<訊息>」到 stderr、exit 1（exit code 相同）。

@@ -275,6 +275,42 @@ pub fn clear_all(spine_dir: &Path) {
     }
 }
 
+/// 同 [`clear_all`]，但 `keep` 裡的會話（F-128：herdr-core 後端接回來的、App 關著期間還在跑的）留著：
+/// 它們的狀態檔、程式回報、用量、子 agent 標記、自動繼續都還算數。
+pub fn clear_all_except(spine_dir: &Path, keep: &[String]) {
+    if keep.is_empty() {
+        clear_all(spine_dir);
+        return;
+    }
+    // `<sid>.json`、`<sid>.program.json`、`<sid>.meter.json`、`<sid>.sub/` 的 sid 都是第一個點之前
+    let kept = |p: &Path| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.split('.').next())
+            .is_some_and(|sid| keep.iter().any(|k| k == sid))
+    };
+    for d in [dir(spine_dir), crate::auto_continue::dir(spine_dir)] {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if kept(&p) {
+                continue;
+            }
+            match p.extension().and_then(|x| x.to_str()) {
+                Some("json") => {
+                    let _ = std::fs::remove_file(p);
+                }
+                Some("sub") if p.is_dir() => {
+                    let _ = std::fs::remove_dir_all(p);
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 /// 寫 App 會話用的 Claude Code 設定檔（會話狀態 hook＋額度餘光的 statusLine），回傳路徑。每次開會話都重寫（`ctx` 位置可能變了）。
 pub fn settings_file(spine_dir: &Path, ctx: &Path) -> Result<PathBuf> {
     let p = spine_dir.join(".state").join("session_hooks.json");
@@ -998,6 +1034,42 @@ mod tests {
         clear_all(sp);
         assert!(read(sp, "t3").is_none());
         assert!(dir(sp).join("keep.txt").exists());
+    }
+
+    #[test]
+    fn clear_all_except_keeps_adopted_sessions() {
+        let t = tempfile::tempdir().unwrap();
+        let sp = t.path();
+        std::fs::create_dir_all(dir(sp)).unwrap();
+        for f in [
+            "t1.json",
+            "t1.program.json",
+            "t1.meter.json",
+            "t2.json",
+            "t12.json",
+        ] {
+            std::fs::write(dir(sp).join(f), "{}").unwrap();
+        }
+        std::fs::create_dir_all(dir(sp).join("t1.sub")).unwrap();
+        std::fs::create_dir_all(dir(sp).join("t2.sub")).unwrap();
+        std::fs::create_dir_all(crate::auto_continue::dir(sp)).unwrap();
+        std::fs::write(crate::auto_continue::dir(sp).join("t1.json"), "{}").unwrap();
+        std::fs::write(crate::auto_continue::dir(sp).join("t2.json"), "{}").unwrap();
+        clear_all_except(sp, &["t1".to_string()]);
+        let left = |d: PathBuf| {
+            let mut v: Vec<String> = std::fs::read_dir(d)
+                .unwrap()
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect();
+            v.sort();
+            v
+        };
+        assert_eq!(
+            left(dir(sp)),
+            ["t1.json", "t1.meter.json", "t1.program.json", "t1.sub"]
+        );
+        assert_eq!(left(crate::auto_continue::dir(sp)), ["t1.json"]);
     }
 
     #[test]

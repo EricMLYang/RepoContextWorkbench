@@ -106,10 +106,11 @@ impl AppState {
         self.notifier.changed(reason);
     }
 
-    /// 結束前收尾：殺掉所有會話（清掉 agentmark）、清掉畫面回報（別讓 agent 讀到不在了的畫面）。
+    /// 結束前收尾：行程內的會話殺掉（清掉 agentmark）、跑在 herdr-core 的放手不殺（F-128，下次開 App 接回）；
+    /// 清掉畫面回報（別讓 agent 讀到不在了的畫面）。
     pub fn shutdown(&self) {
         if let Some(t) = self.terms_opt() {
-            t.kill_all();
+            t.shutdown();
             ctx_core::screen::clear(t.spine_dir());
         }
         self.lock().watcher = None;
