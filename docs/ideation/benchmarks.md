@@ -79,6 +79,7 @@
 | HackMD／HedgeDoc／MarkText | md 編輯器 | 文件（雲端或本機檔） | 左寫右看分割預覽、工具列；MarkText 本機檔即時預覽 | 要協作／雲端才用 HackMD；ctx 只做 repo 裡檔案的輕量編輯，不做協作 → F-64 | 參考 | 🔗 | 2026-10-15 | 使用者點名 HackMD；R30 查詢 | [比較](https://unmarkdown.com/blog/stackedit-vs-hedgedoc-vs-hackmd) |
 | Clearly | md 編輯器（開源、Mac） | 本機 md 資料夾 | wiki-link 自動完成、backlinks（含未連結的提及）、標題大綱、全文搜尋排序；**自帶 MCP server** | 不管 repo 與 agent 會話；ctx 抄 backlinks（F-69），MCP 已有 | 參考 | 🔗 | 2026-10-15 | R32 查詢「local markdown editor … backlinks」 | [介紹](https://notes.nicolasdeville.com/apps/clearly/) |
 | Herdr | 終端 server（herdr-core）＋原生 App（GPUI）；另有原版 TUI；Apache-2.0 | space＝某台機器上的一個 repo | 會話跑在獨立 server，關 App／更新／當掉都不斷（→ F-128）；狀態只收 agent 自報的 OSC 7501（→ F-130）；`hc run／send／wait` 讓 agent 叫 agent、draft wait（→ F-131）；OpenRPC 可自己做 client；版面與功能是設定目錄裡的檔案，附 AGENTS.md 讓 agent 改 | 不管跨 repo 脈絡、不留判斷；沒有內建 diff 審查；mod 市集、手機直連不抄 | 參考 | ✅ | 2026-11-15（R41） | R35 搜尋；R41 使用者點名，clone 到 `reference_repo/herdr-app`、`herdr-core`、`herdr` | [herdr.dev](https://herdr.dev/) |
+| Home Repo Pattern（Matt Pocock，aihero.dev） | 做法（文章） | 一個中央 repo 指向其他 repo | 根目錄 AGENTS.md 的導航指標（名稱、是什麼、路徑、remote、提示）、超過 20 個 repo 按領域拆索引檔、共享 skill 用 git 版控、四階段盤點 prompt（→ F-132、F-133） | 手寫清單、沒有時間軸與留痕；單一 CWD 跨 repo 改檔不照抄（我們有組別範圍） | 參考 | 🔗 | 2026-11-17（R42） | 使用者貼摘要 | [aihero.dev](https://www.aihero.dev/the-home-repo-pattern) |
 
 ## 待查對標（下一輪處理）
 
@@ -160,7 +161,7 @@
 - R35：`Orca agent terminal alternatives 2026`（延伸法；結果多是 Superset 自家比較頁：Superset、Emdash、Conductor、Herdr、super.engineering）
 - R35：`agent memory recommendation relevance stale todo backlog pruning beads compaction`（沒找到「自動判斷待辦過時」的現成做法；bv 用 PageRank 排優先）
 - R41：沒有搜尋；讀 herdr.dev、三個 herdr repo 的 README 與 docs、Orca 與 BAT 的最新 README
-
+- R42：沒有搜尋；讀使用者貼的 Home Repo Pattern 摘要、herdr-core 的 AGENTS.md／schema／holder、Orca 的 daemon 與 agent-hooks 文件、ai-vault-search schema
 ### 下一輪查詢
 1. `beads bv triage PageRank betweenness agent task priority`（R35：未結 81 項、開 78 關 11，排序與清理的做法）
 2. `Conductor diff review workflow agent changes approve commit 2026`（F-62 之後：審完怎麼收）
