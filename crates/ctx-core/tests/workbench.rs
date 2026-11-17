@@ -2709,6 +2709,16 @@ fn resuming_a_codex_session_runs_codex_resume() {
         argv,
         ["npx", "codex", "resume", "--model=gpt-6.1", id, "請補交接"],
     );
+    // F-134：Codex 的分岔＝`codex fork <id>`（不是 Claude Code 的 `--fork-session`）
+    let mut forked = payload.clone();
+    forked["fork"] = json!(true);
+    handle_action(&d, "term_create", &forked, Some(&terms)).unwrap();
+    let argv = terms.0.lock().unwrap().last().unwrap().clone();
+    assert_eq!(
+        argv,
+        ["npx", "codex", "fork", "--model=gpt-6.1", id, "請補交接"],
+    );
+    terms.0.lock().unwrap().pop();
     // Claude Code 的照舊：`claude --settings=… --resume <id>`
     handle_action(
         &d,

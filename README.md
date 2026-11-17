@@ -130,8 +130,9 @@ session:
   不要的話在 `~/.config/repo-context/config.json` 加 `"keep_awake": false`。
 - **在等你的會話直接回**：會話列紅點那列有「回答…」，打一句 Enter 就切到該會話並貼進輸入框（不送出，看一眼再按 Enter）；
   處理中的會話寫出正在用的工具與跑了幾分，超過 10 分沒結束標「可能卡住」。
-- **過去的會話**：會話區「過去的…」列出這個範圍 Claude Code 談過的會話（標題、時間、分支、最後回覆），「接續」在原目錄開
-  `claude --resume`，「複製指令」給外面的終端。終端裡用 `ctx sessions`。
+- **過去的會話**：會話區「過去的…」列出這個範圍 Claude Code 與 Codex 談過的會話（標題、時間、分支、最後回覆），「接續」在原目錄開
+  `claude --resume`／`codex resume`，「分岔」「逐字稿」兩家都有，「複製指令」給外面的終端。⌘K 打「&」搜會話裡說過的話。
+  終端裡用 `ctx sessions`、`ctx sessions --grep <文字>`。
 - **看 agent 改了什麼**：右側欄「變更」頁籤（還沒 commit 的檔，點了看差異；「請 Agent 審…」先讓 agent 摘要風險）、
   檔案分頁上方「這組的變更」、終端標題列「查看變更」。差異裡滑過一行按「＋」留言，留好幾則再「貼給會話」一次送出。
 - **repo 名片**：右側欄「資訊」頁籤可直接寫介紹／角色／關鍵字；活動分頁的健康段列出還沒寫的（可「請 Agent 起草…」）。
@@ -194,7 +195,9 @@ ctx log "結論…依據…" [--supersedes <ref>] [--reopen-when "…"] [--outco
 ctx todo add "要做的事" ／ close '#3' --note "…" ／ list ／ review ／ brief '#3'
 ctx status waiting "在等使用者決定 X"
 ctx handoff --done "…" --next "…" --remaining "…"
-ctx sessions [--query 快取]      # 這個範圍過去的 Claude Code 會話（標題、最後回覆、claude --resume 指令）
+ctx sessions [--query 快取]      # 這個範圍過去的 Claude Code 與 Codex 會話（標題、最後回覆、接續指令）
+ctx sessions --grep "索引 增量"   # 搜過去的會話裡說過的話（每場一筆、附片段與接續指令；索引在 .state/sessions.db）
+ctx sessions --digest <id>       # 一場會話的交接包（兩家都可以）
 
 # 跨 repo 與知識
 ctx search "快取失效"             # 知識 ↔ repo 相關度＋過去的判斷

@@ -158,6 +158,7 @@ pub const ACTIONS: &[(&str, ActionFn)] = &[
     ("worktree_remove", files::a_worktree_remove),
     ("past_sessions", finder::a_past_sessions),
     ("session_transcript", finder::a_session_transcript),
+    ("session_grep", finder::a_session_grep),
     ("session_digest", finder::a_session_digest),
     ("agent_commands", finder::a_agent_commands),
     ("prompts", finder::a_prompts),
@@ -223,6 +224,8 @@ const READ_ONLY: &[&str] = &[
     "todo_tidy",
     "todo_tidy_brief",
     "session_transcript",
+    // 只寫會話索引快取 `.state/sessions.db`
+    "session_grep",
     "agent_commands",
     "prompts",
     "diff_notes_brief",

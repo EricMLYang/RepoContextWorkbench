@@ -130,7 +130,7 @@ pub enum Cmd {
         #[arg(long, default_value_t = 5)]
         limit: i64,
     },
-    /// 過去的 agent 會話：範圍內 repo 的 Claude Code 互動會話（標題、最後回覆、接續指令；Rust 才有）
+    /// 過去的 agent 會話：範圍內 repo 的 Claude Code 與 Codex 互動會話（標題、最後回覆、接續指令；Rust 才有）
     Sessions {
         #[command(flatten)]
         scope: agent::Scoped,
@@ -139,9 +139,13 @@ pub enum Cmd {
         /// 只列標題／第一句／最後回覆／repo／分支含這些詞的（空白分開，都要有）
         #[arg(long)]
         query: Option<String>,
-        /// 把這場會話（Claude Code 會話 id）整理成交接包：你說的話、動過的檔、指令、最後回覆，秘密遮掉（不寫檔）
+        /// 把這場會話（Claude Code 或 Codex 的會話 id）整理成交接包：你說的話、動過的檔、指令、最後回覆，秘密遮掉（不寫檔）
         #[arg(long, value_name = "ID")]
         digest: Option<String>,
+        /// 全文搜尋會話內容（你說的、回覆、工具摘要；空白分開的詞都要在同一則裡）：每場一筆，附命中片段與接續指令。
+        /// 查之前增量更新 .state/sessions.db
+        #[arg(long, value_name = "文字", conflicts_with_all = ["query", "digest"])]
+        grep: Option<String>,
     },
     /// 使用者在工作台 App 畫面上正在看什麼：開著的檔（路徑、看得到的行）或工作區分頁、牌組、右側欄（Rust 才有）
     Screen {
@@ -198,7 +202,7 @@ pub enum Cmd {
         #[arg(long, default_value_t = 14)]
         days: i64,
     },
-    /// 回填：從過去的 Claude Code 會話撈判斷／待辦／交接（scan／run／review／accept）
+    /// 回填：從過去的 Claude Code 與 Codex 會話撈判斷／待辦／交接（scan／run／review／accept）
     Backfill(agent::BackfillArgs),
     /// 名字 → 路徑：<repo>、<repo>:<export>[/子路徑]、<repo>:<相對路徑>
     Resolve {
@@ -262,6 +266,12 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Sessions {
             digest: Some(id), ..
         } => agent::cmd_session_digest(ctx, id),
+        Sessions {
+            scope,
+            limit,
+            grep: Some(q),
+            ..
+        } => agent::cmd_sessions_grep(ctx, scope, *limit, q),
         Sessions {
             scope,
             limit,

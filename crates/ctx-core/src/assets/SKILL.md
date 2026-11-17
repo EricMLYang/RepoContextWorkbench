@@ -91,7 +91,8 @@ description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context �
 - **交辦給新會話**：`ctx todo brief '#N'` 產生任務包（目標／背景／輸入／限制／完成條件）。
 - **關係建議**：`ctx registry suggest --json`；使用者同意才 `ctx registry relate`。
 - **之前談過的會話**：使用者提到「上次那個…」時，`ctx sessions --query <詞> --json` 找範圍內過去的會話（Claude Code 與 Codex）
-  （標題、最後回覆、哪一家 `agent`、接續指令 `resume`、逐字稿 `path`）；交接沒寫到的細節再去逐字稿找，別憑印象。
+  （標題、最後回覆、哪一家 `agent`、接續指令 `resume`、逐字稿 `path`）；要找「哪場講過 X」用 `ctx sessions --grep <詞> --json`
+  （搜會話裡說過的話，附片段）。交接沒寫到的細節再去逐字稿找，別憑印象。
   要接手一場會話：`ctx sessions --digest <id>` 印出交接包（你說的話、動過的檔、跑過的指令、最後回覆，秘密已遮），比整份逐字稿短。
 - **清 worktree**：`ctx worktrees <repo> --json` 看哪些乾淨、哪些有只在那裡的 commit；使用者同意才 `--remove <path>`（不強制、分支留著）。
 

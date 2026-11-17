@@ -241,7 +241,12 @@ Python `webui/state.py` 同步加了同樣欄位，兩邊 JSON 仍一致，`scri
 - 過去的會話 `past_sessions` 回的每一筆（`history::PastSession`，2026-11-14 加兩欄）：`agent`（`"claude"`｜`"codex"`）、
   `resume`（引擎組好的終端指令：`cd <目錄> && claude --resume <id>`／`codex resume <id>`）。接續＝`term_create`
   帶 `agent`＋`resume`＋`cwd`；`agent` 可以是 config 註冊表的名字，或哪一家（引擎會找註冊表裡第一個那一家的）。
-  分岔（`fork`）與逐字稿只有 Claude Code 的會話有。
+  分岔（`fork`）與逐字稿兩家都有（2026-11-18，F-134）：Codex 的分岔是 `codex fork <id>`（`term_create` 帶 `agent`＋`fork: true`）；
+  `session_transcript`／`session_digest` 多選填的 `agent`（`claude`｜`codex`；沒給＝兩家都找，Claude Code 先），
+  `session_transcript` 回傳多 `agent`。
+- `session_grep`（Rust 才有，F-134）：`{query, group?, repos?, limit?}` → `{hits: [convo::index::Hit], index}`。過去的會話內容全文搜尋
+  （⌘K「&」）：每場一筆（`agent`、`id`、`title`、`repo`、`cwd`、`branch`、`started`、`updated`、`role`、`at`、`snippet`、`hits`、
+  `resume`、`path`），最近活動的在前。點了走過去的會話同一個「接續」。只寫 `.state/sessions.db`（列在 READ_ONLY）。
 - 回答後的送達方式 `Delivery` 的 `resume` 多一欄 `agent`（哪一家；`claude_session_id` 欄位名不變，Codex 的 id 也放這裡）。
 - `term_create` 的旗標依哪一家驗（`LaunchFlags::argv_for`）：Claude Code 全收；Codex 只收 `model`（`--model=`），
   帶 `permission_mode`／`worktree`／`fork` 會被拒；其他家什麼都不收。

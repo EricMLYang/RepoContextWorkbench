@@ -784,7 +784,7 @@ pub(crate) fn reopen_items(spine_dir: &Path, t: &Target) -> Result<Vec<Value>> {
 
 /// 對應 `agentapi.next_work`：接下來值得做的事，依序：逾期未結 → 上次交接的下一步 → 有 due 的未結 →
 /// 其他未結 → 需要注意的 repo。每項都帶 why。Python 預設 `limit=5`。
-/// 範圍內過去的 Claude Code 互動會話（F-72，Rust 才有）：`{scope, sessions:[…], resume}`。
+/// 範圍內過去的互動會話（F-72，Rust 才有；Claude Code 與 Codex）：`{scope, sessions:[…], resume}`。
 /// 接續＝在該會話的 cwd 跑 `claude --resume <id>`。
 pub fn past_sessions(
     spine_dir: &Path,
@@ -800,6 +800,26 @@ pub fn past_sessions(
     };
     Ok(json!({"scope": s, "sessions": list,
               "resume": "在會話的 cwd 跑 claude --resume <id>"}))
+}
+
+/// 會話全文搜尋（F-134，Rust 才有）：`{scope, hits:[…], index:{…}}`。範圍規則同 [`past_sessions`]；
+/// 查之前增量更新 `.state/sessions.db`（[`crate::convo::index`]）。
+pub fn grep_sessions(
+    spine_dir: &Path,
+    t: &Target,
+    limit: usize,
+    query: &str,
+    src: &crate::convo::Sources,
+) -> Result<Value> {
+    let w = where_am_i(spine_dir, t.cwd.as_deref())?;
+    let s = scope_of(spine_dir, &w, t)?;
+    let found = match &s.group {
+        Some(g) => crate::convo::index::search(spine_dir, src, Some(g), None, query, limit)?,
+        None => {
+            crate::convo::index::search(spine_dir, src, None, s.repos.as_deref(), query, limit)?
+        }
+    };
+    Ok(json!({"scope": s, "hits": found.hits, "index": found.index}))
 }
 
 /// 範圍內全部未結（`ctx todo list`；沒掛 MCP 的 agent 用，跟 `next_work` 同一份資料但不截）。

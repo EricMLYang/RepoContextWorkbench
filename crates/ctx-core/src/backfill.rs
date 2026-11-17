@@ -31,6 +31,8 @@ use std::sync::LazyLock;
 
 use crate::agentapi::{self, Target};
 use crate::agents::{AgentProvider, ClaudeProvider};
+use crate::config::AgentKind;
+use crate::convo::{self, Origin, Role, Scanner, Sources};
 use crate::fsutil::{expanduser, mtime_secs, now_secs, resolve as py_resolve};
 use crate::pystr::py_str;
 use crate::{registry, Error, Result};
@@ -181,13 +183,10 @@ struct Meta {
     user_turns: usize,
 }
 
-fn jsonl_rows(path: &Path) -> Result<Vec<Value>> {
-    let bytes = std::fs::read(path)?;
-    let text = String::from_utf8_lossy(&bytes);
-    Ok(text
-        .lines()
-        .filter_map(|ln| serde_json::from_str::<Value>(ln).ok())
-        .collect())
+/// 逐行串流讀 JSONL（F-134 前是整份讀進記憶體；逐字稿可以幾十 MB）。解不開的行略過。
+fn jsonl_rows(path: &Path) -> Result<impl Iterator<Item = Value>> {
+    let mut lines = convo::Lines::open(path, convo::Start::Head, false)?;
+    Ok(std::iter::from_fn(move || lines.next_value()))
 }
 
 fn meta(path: &Path) -> Result<Meta> {
@@ -242,6 +241,17 @@ pub struct SessionRec {
     pub title: Option<String>,
     pub user_turns: usize,
     pub status: SessionStatus,
+    /// 哪一家的會話（F-134）。JSON 只在不是 Claude Code 時出現（`"agent": "codex"`），Claude Code 的輸出跟 Python 一樣。
+    #[serde(skip_serializing_if = "is_claude", serialize_with = "agent_name")]
+    pub agent: AgentKind,
+}
+
+fn is_claude(a: &AgentKind) -> bool {
+    *a == AgentKind::ClaudeCode
+}
+
+fn agent_name<S: serde::Serializer>(a: &AgentKind, s: S) -> std::result::Result<S::Ok, S::Error> {
+    s.serialize_str(a.name())
 }
 
 /// 一場會話的回填狀態（JSON 裡是小寫字串，合約不變）。
@@ -322,53 +332,101 @@ pub fn summarize(recs: &[SessionRec]) -> ScanSummary {
     }
 }
 
-/// 對應 `backfill.scan`：列出所有會話與狀態。`root` 預設 [`projects_root`]；`now` 為 epoch 秒（測試用）。
+/// 對應 `backfill.scan`：列出所有會話與狀態。`root` 預設 [`projects_root`]（並且也讀 Codex 的 `$CODEX_HOME`）；
+/// 給了 `root`（測試給暫存目錄）就只讀那裡的 Claude Code 逐字稿。`now` 為 epoch 秒（測試用）。
 pub fn scan(spine_dir: &Path, root: Option<&Path>, now: Option<f64>) -> Result<Vec<SessionRec>> {
-    let root = root.map(Path::to_path_buf).unwrap_or_else(projects_root);
+    let src = match root {
+        Some(r) => Sources::claude_only(r),
+        None => Sources::default_homes(),
+    };
+    scan_in(spine_dir, &src, now)
+}
+
+fn status_of(
+    sessions_dir: &Path,
+    now: f64,
+    p: &Path,
+    sid: &str,
+    repo: Option<&String>,
+    user_turns: usize,
+) -> Result<SessionStatus> {
+    Ok(if now - mtime_secs(p)? < LIVE_MINUTES * 60.0 {
+        SessionStatus::Live
+    } else if repo.is_none() {
+        SessionStatus::Unmapped
+    } else if user_turns == 0 {
+        SessionStatus::Empty
+    } else if truthy(load(&sessions_dir.join(format!("{sid}.json"))).as_ref()) {
+        SessionStatus::Done
+    } else {
+        SessionStatus::Pending
+    })
+}
+
+/// 同 [`scan`]，掃描器由呼叫端給（F-134）。Claude Code 的在前（照路徑排序，同 Python），Codex 的接在後面
+/// （新的在前；`codex exec` 與子 agent 不列——不是人談過的會話）。
+pub fn scan_in(spine_dir: &Path, src: &Sources, now: Option<f64>) -> Result<Vec<SessionRec>> {
     let now = now.unwrap_or_else(now_secs);
     let matcher = Matcher::new(spine_dir)?;
     let sessions_dir = dir(spine_dir, &["sessions"])?;
-    let mut files: Vec<PathBuf> = Vec::new();
-    for proj in std::fs::read_dir(&root).into_iter().flatten().flatten() {
-        let pp = proj.path();
-        if !pp.is_dir() {
-            continue;
-        }
-        for f in std::fs::read_dir(&pp).into_iter().flatten().flatten() {
-            let fp = f.path();
-            if fp.extension().and_then(|x| x.to_str()) == Some("jsonl") {
-                files.push(fp);
-            }
+    let mut out = Vec::new();
+    if let Some(cl) = &src.claude {
+        for p in cl.all_files() {
+            let m = meta(&p)?;
+            let sid = stem(&p);
+            let repo = matcher.matches(m.cwd.as_deref());
+            let status = status_of(&sessions_dir, now, &p, &sid, repo.as_ref(), m.user_turns)?;
+            out.push(SessionRec {
+                sid,
+                path: p.to_string_lossy().into_owned(),
+                repo,
+                cwd: m.cwd,
+                first: m.first,
+                last: m.last,
+                title: m.title,
+                user_turns: m.user_turns,
+                status,
+                agent: AgentKind::ClaudeCode,
+            });
         }
     }
-    files.sort();
-    let mut out = Vec::new();
-    for p in files {
-        let m = meta(&p)?;
-        let sid = stem(&p);
-        let repo = matcher.matches(m.cwd.as_deref());
-        let status = if now - mtime_secs(&p)? < LIVE_MINUTES * 60.0 {
-            SessionStatus::Live
-        } else if repo.is_none() {
-            SessionStatus::Unmapped
-        } else if m.user_turns == 0 {
-            SessionStatus::Empty
-        } else if truthy(load(&sessions_dir.join(format!("{sid}.json"))).as_ref()) {
-            SessionStatus::Done
-        } else {
-            SessionStatus::Pending
-        };
-        out.push(SessionRec {
-            sid,
-            path: p.to_string_lossy().into_owned(),
-            repo,
-            cwd: m.cwd,
-            first: m.first,
-            last: m.last,
-            title: m.title,
-            user_turns: m.user_turns,
-            status,
-        });
+    if let Some(cx) = &src.codex {
+        for p in cx.all_files() {
+            let Some(h) = cx.head_of(&p).filter(|h| h.origin == Origin::Interactive) else {
+                continue;
+            };
+            let (mut first, mut last, mut user_turns) = (None, None, 0usize);
+            let mut lines = convo::Lines::open(&p, convo::Start::Head, false)?;
+            let mut items = Vec::new();
+            while let Some(o) = lines.next_value() {
+                if let Some(ts) = o.get("timestamp").and_then(Value::as_str) {
+                    if first.is_none() {
+                        first = Some(ts.to_string());
+                    }
+                    last = Some(ts.to_string());
+                }
+                items.clear();
+                cx.row_items(&o, &mut items);
+                user_turns += items
+                    .iter()
+                    .filter(|i| matches!(i, convo::Item::Message(m) if m.role == Role::User))
+                    .count();
+            }
+            let repo = matcher.matches(Some(&h.cwd));
+            let status = status_of(&sessions_dir, now, &p, &h.id, repo.as_ref(), user_turns)?;
+            out.push(SessionRec {
+                sid: h.id,
+                path: p.to_string_lossy().into_owned(),
+                repo,
+                cwd: Some(h.cwd),
+                first,
+                last,
+                title: h.title,
+                user_turns,
+                status,
+                agent: AgentKind::Codex,
+            });
+        }
     }
     Ok(out)
 }
@@ -427,6 +485,35 @@ pub fn compact(path: &Path) -> Result<Vec<String>> {
                         _ => {}
                     }
                 }
+            }
+            _ => {}
+        }
+    }
+    Ok(lines)
+}
+
+/// Codex 的會話 → 跟 [`compact`] 同樣的精簡文字行（F-134，Rust 才有）：`[tN] 【使用者】`／`【agent】`／`〔工具 名〕摘要`。
+/// 經過 [`convo::codex::CodexScanner`]：Codex 自己塞的話（環境說明、AGENTS.md）、思考、工具結果都不算。
+pub fn compact_codex(path: &Path) -> Result<Vec<String>> {
+    let sc = convo::codex::CodexScanner::new(PathBuf::new());
+    let mut lines = Vec::new();
+    let mut turn = 0;
+    for it in convo::Items::open(&sc, path, convo::Start::Head)? {
+        let convo::Item::Message(m) = it else {
+            continue;
+        };
+        match m.role {
+            Role::User => {
+                turn += 1;
+                lines.push(format!(
+                    "[t{turn}] 【使用者】{}",
+                    take(m.text.trim(), MSG_CHARS)
+                ));
+            }
+            Role::Assistant => lines.push(format!("【agent】{}", take(m.text.trim(), MSG_CHARS))),
+            Role::Tool => {
+                let name = m.tool.as_ref().map_or("?", |t| t.name.as_str());
+                lines.push(format!("〔工具 {name}〕{}", take(&m.text, 120)));
             }
             _ => {}
         }
@@ -597,7 +684,11 @@ fn opt_str(v: &Option<String>) -> Value {
 
 /// 對應 `backfill.extract`：一場會話 → `sessions/<sid>.json`。回傳結果。
 pub fn extract(spine_dir: &Path, rec: &SessionRec, call: &Call<'_>) -> Result<Value> {
-    let parts = chunks(&compact(Path::new(&rec.path))?, CHUNK_CHARS);
+    let lines = match rec.agent {
+        AgentKind::Codex => compact_codex(Path::new(&rec.path))?,
+        _ => compact(Path::new(&rec.path))?,
+    };
+    let parts = chunks(&lines, CHUNK_CHARS);
     let date = take(rec.first.as_deref().unwrap_or(""), 10);
     let repo = rec.repo.clone().unwrap_or_else(|| "None".into());
     let n = parts.len().to_string();
@@ -622,13 +713,16 @@ pub fn extract(spine_dir: &Path, rec: &SessionRec, call: &Call<'_>) -> Result<Va
         );
         results.push(Value::Object(ask_json(call, &prompt)?));
     }
-    let out = json!({
+    let mut out = json!({
         "sid": rec.sid, "repo": opt_str(&rec.repo), "cwd": opt_str(&rec.cwd),
         "first": opt_str(&rec.first), "last": opt_str(&rec.last), "title": opt_str(&rec.title),
         "chunks": parts.len(),
         "extracted_at": Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
         "parts": results,
     });
+    if rec.agent != AgentKind::ClaudeCode {
+        out["agent"] = json!(rec.agent.name());
+    }
     save(
         &dir(spine_dir, &["sessions"])?.join(format!("{}.json", rec.sid)),
         &out,
@@ -659,8 +753,13 @@ fn get_or(v: &Value, k: &str, default: &str) -> String {
 }
 
 fn session_digest(s: &Value) -> String {
+    // Codex 的會話標出來（F-134）；Claude Code 的跟 Python 一樣
+    let who = match s.get("agent").and_then(Value::as_str) {
+        Some("codex") => "（Codex）",
+        _ => "",
+    };
     let mut lines = vec![format!(
-        "## 會話 {}（{}）{}",
+        "## 會話 {}（{}）{who}{}",
         take(&get_s(s, "sid", ""), 8),
         take(&get_or(s, "first", ""), 10),
         get_or(s, "title", "")
@@ -753,6 +852,30 @@ pub fn consolidate(spine_dir: &Path, repo: &str, call: &Call<'_>) -> Result<Opti
         _ => Value::Null,
     };
     let sids: Vec<String> = sessions.iter().map(|s| get_s(s, "sid", "")).collect();
+    // 出自 Codex 會話的候選標 `agent: "codex"`（F-134；accept 寫進事件的出處用）。Claude Code 的不加欄位
+    let codex_sids: Vec<String> = sessions
+        .iter()
+        .filter(|s| s.get("agent").and_then(Value::as_str) == Some("codex"))
+        .map(|s| get_s(s, "sid", ""))
+        .collect();
+    let from_codex = |v: &Value| {
+        let sid = get_or(v, "sid", "");
+        !sid.is_empty() && codex_sids.iter().any(|c| c.starts_with(&sid))
+    };
+    let mark = |mut items: Vec<Value>| {
+        for it in items.iter_mut() {
+            if from_codex(it) {
+                it["agent"] = json!("codex");
+            }
+        }
+        items
+    };
+    let decisions = mark(decisions);
+    let open_todos = mark(open_todos);
+    let mut handoff = handoff;
+    if handoff.is_object() && from_codex(&handoff) {
+        handoff["agent"] = json!("codex");
+    }
     let cand_path = dir(spine_dir, &["repos"])?.join(format!("{repo}.json"));
     let prev = load(&cand_path).unwrap_or_else(|| json!({}));
     let accepted = if prev.get("sessions").is_some() && sids_of(&prev) == sids {
@@ -802,7 +925,10 @@ pub struct RunReport {
 /// [`run`] 的選項（Python 預設 root=None, limit=None, repo=None, jobs=1）。
 #[derive(Debug, Clone, Default)]
 pub struct RunOpts {
+    /// Claude Code 專案資料夾根目錄；None＝預設（並且也讀 Codex 的 `$CODEX_HOME`）。
     pub root: Option<PathBuf>,
+    /// 給了 `root` 時另外要讀的 Codex 紀錄根目錄（測試用；F-134）。
+    pub codex: Option<PathBuf>,
     pub limit: Option<usize>,
     pub repo: Option<String>,
     pub jobs: usize,
@@ -811,7 +937,11 @@ pub struct RunOpts {
 /// 對應 `backfill.run`：抽取所有 pending 會話，再彙整有變動的 repo。單場失敗記下來繼續
 /// （整晚跑不能一場壞就停）。要重彙整的 repo 從「狀態」推，中途被殺過也能自癒。
 pub fn run(spine_dir: &Path, call: &Call<'_>, opts: &RunOpts, log: &Log<'_>) -> Result<RunReport> {
-    let scanned = scan(spine_dir, opts.root.as_deref(), None)?;
+    let src = match &opts.root {
+        Some(r) => Sources::new(Some(r), opts.codex.as_deref()),
+        None => Sources::default_homes(),
+    };
+    let scanned = scan_in(spine_dir, &src, None)?;
     let sdir = dir(spine_dir, &["sessions"])?;
     // 歸屬改了（例：後來才登記更精確的子專案）：已抽的結果改掛新 repo，新舊兩邊都重彙整，不重抽
     let mut remapped: BTreeSet<String> = BTreeSet::new();
@@ -1078,8 +1208,13 @@ pub fn accept<S: AsRef<str>>(spine_dir: &Path, repo: &str, ids: &[S]) -> Result<
         let Some((_, kind, it)) = items.iter().find(|x| x.0 == i) else {
             continue;
         };
+        // 出自 Codex 會話的標出來（F-134）；Claude Code 的跟 Python 一樣
+        let who = match it.get("agent").and_then(Value::as_str) {
+            Some("codex") => "Codex ",
+            _ => "",
+        };
         let src = format!(
-            "（回填自 {} 會話 {}）",
+            "（回填自 {} {who}會話 {}）",
             get_or(it, "date", "?"),
             take(&get_or(it, "sid", "?"), 8)
         );

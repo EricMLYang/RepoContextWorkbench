@@ -25,7 +25,7 @@
 | 3 | 會話跑在 App 之外 | F-128 | 試作 1 天＋實作 3–5 天 | 決定 2 | 完成（2026-11-18，路線 A）：`session.backend: herdr-core`（預設仍是 pty）；真 hc 0.1.21 上，真的 Claude Code 跑到一半、丟掉 manager 再重建，接回後跑完；App 畫面、全螢幕程式、Windows 沒驗 |
 | 4a | 合併回 main、刪 Python 版與對拍 | VISION §6 第 2 項 | 1–2 天 | 使用者真用驗收 | 未開始 |
 | 4b | 知識索引改存 SQLite（排序不變、增量） | N-51 | 3 天 | 無（沒等 4a） | 完成（2026-11-18）：副本上暖查詢 760→280–400 ms、改一檔後 800→300 ms，20 個查詢結果與改前相同；代價是 db 172 MB（原 97 MB）、冷建 2→4.5 秒；真 spine 還沒量 |
-| 4c | 會話索引（Claude Code＋Codex） | F-134 | 3 天 | 4b | 未開始 |
+| 4c | 會話索引（Claude Code＋Codex） | F-134 | 3 天 | 4b | 完成（2026-11-18）：兩家各一個掃描器；Codex 補上逐字稿、digest、backfill、分岔；`ctx sessions --grep` 與 ⌘K「&」。副本上索引 113 場（Claude 110、Codex 3）、建 4.1 秒、db 23 MB、查詢 16–24 ms；App 畫面沒測 |
 | 5a | 介面合約由方法表生成 | N-52 | 3–5 天，可分批 | 4a | 未開始 |
 | 5b | 共享 skill 進 spine | F-133 | 盤點半天＋實作 1 天 | 階段 1、決定 3 | 未開始 |
 

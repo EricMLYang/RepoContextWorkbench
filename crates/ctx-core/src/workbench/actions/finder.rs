@@ -206,7 +206,7 @@ struct PastArgs {
     query: Option<String>,
 }
 
-/// F-72（Rust 才有）：目前範圍過去的 Claude Code 互動會話（最近的在前），給「過去的會話」清單。
+/// F-72（Rust 才有）：目前範圍過去的互動會話（Claude Code 與 Codex，最近的在前），給「過去的會話」清單。
 pub(super) fn a_past_sessions(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
     let PastArgs {
         group,
@@ -222,6 +222,37 @@ pub(super) fn a_past_sessions(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Re
         limit.unwrap_or(20).min(100),
     )?;
     Ok(json!({"ok": true, "sessions": list}))
+}
+
+#[derive(serde::Deserialize)]
+struct GrepArgs {
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default)]
+    repos: Option<Vec<String>>,
+    #[serde(default)]
+    limit: Option<usize>,
+    query: String,
+}
+
+/// F-134（Rust 才有）：過去的會話的全文搜尋（⌘K「&」前綴）。查之前增量更新 `.state/sessions.db`。
+/// 每場一筆（`convo::index::Hit`），點了走過去的會話同一個「接續」（`term_create` 帶 `agent`＋`resume`＋`cwd`）。
+pub(super) fn a_session_grep(d: &Path, p: &Value, _t: Option<&dyn Terms>) -> Result<Value> {
+    let GrepArgs {
+        group,
+        repos,
+        limit,
+        query,
+    } = parse("session_grep", p)?;
+    let found = crate::convo::index::search(
+        d,
+        &crate::convo::Sources::default_homes(),
+        group.as_deref(),
+        repos.as_deref(),
+        &query,
+        limit.unwrap_or(20).min(100),
+    )?;
+    Ok(json!({"ok": true, "hits": found.hits, "index": found.index}))
 }
 
 #[derive(serde::Deserialize)]
@@ -275,11 +306,14 @@ struct TranscriptArgs {
     /// App 會話（從它的狀態檔拿 Claude Code 會話 id 與目錄）。
     #[serde(default)]
     sid: Option<String>,
-    /// 或直接給 Claude Code 會話 id（過去的會話）。
+    /// 或直接給那一家的會話 id（過去的會話）。
     #[serde(default)]
     id: Option<String>,
     #[serde(default)]
     cwd: Option<String>,
+    /// 哪一家：`claude`｜`codex`（F-134；過去的會話的 `agent` 欄位）。沒給＝兩家都找（Claude Code 先）。
+    #[serde(default)]
+    agent: Option<String>,
 }
 
 /// F-94（Rust 才有）：一場會話的逐字稿時間軸（你說的、回覆、思考、工具＋結果）。只讀。
@@ -298,26 +332,40 @@ fn transcript_of(
     d: &Path,
     args: TranscriptArgs,
 ) -> Result<(String, Option<String>, crate::timeline::Timeline)> {
-    let TranscriptArgs { sid, id, cwd } = args;
-    let (id, cwd) = match (sid, id) {
-        (_, Some(id)) => (id, cwd),
+    let TranscriptArgs {
+        sid,
+        id,
+        cwd,
+        agent,
+    } = args;
+    let agent = match agent.as_deref().map(str::trim).filter(|a| !a.is_empty()) {
+        Some(a) => Some(
+            crate::config::AgentKind::parse(a)
+                .ok_or_else(|| Error::invalid(format!("不認得的 agent：{a}（claude｜codex）")))?,
+        ),
+        None => None,
+    };
+    let (id, cwd, agent) = match (sid, id) {
+        (_, Some(id)) => (id, cwd, agent),
         (Some(sid), None) => {
             let st = crate::session_status::read(d, &sid).unwrap_or_default();
             let field = |k: &str| st.get(k).and_then(Value::as_str).map(str::to_string);
+            // Codex 的會話 id 也記在 `claude_session`（另有 `agent: "codex"`）
             let Some(id) = field("claude_session") else {
                 return Err(Error::invalid(
-                    "這個會話還沒有逐字稿：送出第一句之後才會有（或它不是 Claude Code 會話）",
+                    "這個會話還沒有逐字稿：送出第一句之後才會有（或它不是 Claude Code／Codex 會話）",
                 ));
             };
-            (id, cwd.or_else(|| field("cwd")))
+            let kind = agent.or_else(|| {
+                field("agent")
+                    .as_deref()
+                    .and_then(crate::config::AgentKind::parse)
+            });
+            (id, cwd.or_else(|| field("cwd")), kind)
         }
         (None, None) => return Err(Error::invalid("缺 sid 或 id")),
     };
-    let path = crate::timeline::locate(&id, cwd.as_deref(), None)
-        .ok_or_else(|| Error::invalid(format!("找不到這場會話的逐字稿：{id}")))?;
-    let tl = crate::timeline::read(&path)
-        .ok_or_else(|| Error::invalid(format!("讀不了逐字稿：{}", path.display())))?;
-    Ok((id, cwd, tl))
+    crate::timeline::find(&id, cwd.as_deref(), agent).map(|tl| (id, cwd, tl))
 }
 
 /// F-103（Rust 才有）：把一場會話整理成交接包（你說的話、動過的檔、跑過的指令、最後回覆；秘密遮掉），

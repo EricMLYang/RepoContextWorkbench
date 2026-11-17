@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { TranscriptFrame } from "../../api/types";
+import type { AgentKind, TranscriptFrame } from "../../api/types";
 import { DetailLayout, useDetail } from "../../dialogs/Modal";
 import { copyText } from "../../lib/clipboard";
 import { useStore, useUi } from "../../store/context";
@@ -41,11 +41,11 @@ export function frameShown(f: TranscriptFrame, filter: Filter): boolean {
 }
 
 /**
- * 會話逐字稿（F-94）：Claude Code 自己寫的完整紀錄，分成你說的／回覆／思考／工具（附結果）。
+ * 會話逐字稿（F-94）：Claude Code／Codex 自己寫的完整紀錄，分成你說的／回覆／思考／工具（附結果）。
  * 終端捲掉的、App 重開前的都看得到。「我說的」每一句可貼回目前的會話（F-104，不按 Enter）。
  */
-export function Transcript(props: { sid?: string; id?: string; cwd?: string }) {
-  const { sid, id, cwd } = props;
+export function Transcript(props: { sid?: string; id?: string; cwd?: string; agent?: AgentKind }) {
+  const { sid, id, cwd, agent } = props;
   const store = useStore();
   const ui = useUi();
   const { close, setError } = useDetail();
@@ -60,7 +60,7 @@ export function Transcript(props: { sid?: string; id?: string; cwd?: string }) {
   useEffect(() => {
     let alive = true;
     store
-      .action("session_transcript", sid ? { sid } : { id, cwd })
+      .action("session_transcript", sid ? { sid } : { id, cwd, agent })
       .then((r) => {
         if (!alive) return;
         setData(r);
@@ -70,7 +70,7 @@ export function Transcript(props: { sid?: string; id?: string; cwd?: string }) {
     return () => {
       alive = false;
     };
-  }, [store, sid, id, cwd, reload]);
+  }, [store, sid, id, cwd, agent, reload]);
   const shown = useMemo(
     () => (data ? data.frames.filter((f) => frameShown(f, filter)) : []),
     [data, filter],
@@ -84,7 +84,7 @@ export function Transcript(props: { sid?: string; id?: string; cwd?: string }) {
             title="把這場會話濃縮成一頁（你說的話、動過的檔、跑過的指令、最後回覆；秘密遮掉），交給新會話"
             disabled={!data}
             run={async () => {
-              const r = await store.action("session_digest", sid ? { sid } : { id, cwd });
+              const r = await store.action("session_digest", sid ? { sid } : { id, cwd, agent });
               ui.openDetail(digestSpec(r));
             }}
           >
@@ -192,7 +192,10 @@ export function Transcript(props: { sid?: string; id?: string; cwd?: string }) {
   );
 }
 
-export function transcriptSpec(target: { sid?: string; id?: string; cwd?: string }, title: string) {
+export function transcriptSpec(
+  target: { sid?: string; id?: string; cwd?: string; agent?: AgentKind },
+  title: string,
+) {
   return {
     title: "逐字稿：" + title,
     eyebrow: "TRANSCRIPT",

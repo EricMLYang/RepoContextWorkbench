@@ -48,9 +48,16 @@ pub(super) fn a_term_create(d: &Path, p: &Value, t: Option<&dyn Terms>) -> Resul
         // `agent` 可以是註冊表的名字，或哪一家（過去會話的 `agent` 欄位：claude｜codex）
         let agent = resume_agent(d, s(p, "agent"))?;
         let kind = session::agent_kind(d, &agent)?;
+        // 分岔：Claude Code 是旗標 `--fork-session`；Codex 是子指令 `codex fork <id>`（F-134）
+        let codex_fork = kind == AgentKind::Codex && flags.fork;
+        let flags = session::LaunchFlags {
+            fork: flags.fork && !codex_fork,
+            ..flags
+        };
         let extra = flags.argv_for(kind)?;
         let (rid, cwd) = crate::history::resume_target(d, &id, &s(p, "cwd").unwrap_or_default())?;
-        let (mut argv, at) = session::resume_argv(d, &agent, &id, s(p, "prompt").as_deref())?;
+        let (mut argv, at) =
+            session::resume_argv_with(d, &agent, &id, s(p, "prompt").as_deref(), codex_fork)?;
         if kind == AgentKind::ClaudeCode {
             let file =
                 crate::exe::ctx_exe().and_then(|exe| crate::session_status::settings_file(d, &exe));

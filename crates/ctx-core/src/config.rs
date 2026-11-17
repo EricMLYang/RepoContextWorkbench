@@ -222,6 +222,15 @@ impl AgentKind {
         }
     }
 
+    /// 從一場舊會話岔出新會話（原會話不動）要接在 agent 指令後面的參數（F-134）。
+    /// Claude Code 是 `--resume <id>` 再加旗標 `--fork-session`（見 `LaunchFlags`），這裡只管 Codex：`codex fork <id>`。
+    pub fn fork_args(self, id: &str) -> Option<Vec<String>> {
+        match self {
+            AgentKind::Codex => Some(vec!["fork".into(), id.into()]),
+            _ => None,
+        }
+    }
+
     /// 在終端自己接回的一行指令（事件內文、複製指令用；不含 `cd`）。
     pub fn resume_command(self, id: &str) -> Option<String> {
         let program = match self {

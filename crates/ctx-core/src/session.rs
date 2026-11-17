@@ -409,19 +409,35 @@ pub fn resume_argv(
     id: &str,
     prompt: Option<&str>,
 ) -> Result<(Vec<String>, usize)> {
+    resume_argv_with(spine_dir, agent, id, prompt, false)
+}
+
+/// 同 [`resume_argv`]；`codex_fork`＝Codex 改用 `codex fork <id>`（岔出新會話，原會話不動；F-134）。
+/// Claude Code 的分岔是旗標（`--fork-session`），不走這裡。
+pub fn resume_argv_with(
+    spine_dir: &Path,
+    agent: &str,
+    id: &str,
+    prompt: Option<&str>,
+    codex_fork: bool,
+) -> Result<(Vec<String>, usize)> {
     if !crate::history::valid_session_id(id) {
         return Err(Error::invalid(format!("會話 id 不對：{id}")));
     }
     let spec = config::load(spine_dir)?.agent(agent)?;
     let kind = spec.kind();
-    let Some(args) = kind.resume_args(id) else {
+    let args = match (kind, codex_fork) {
+        (AgentKind::Codex, true) => kind.fork_args(id),
+        _ => kind.resume_args(id),
+    };
+    let Some(args) = args else {
         return Err(Error::invalid(format!(
             "{agent} 不是 Claude Code 或 Codex，不能接續舊會話"
         )));
     };
     let mut cmd = spec.cmd.clone();
     let flags_at = match kind {
-        // `codex resume [OPTIONS] <id>`：旗標放子指令後面
+        // `codex resume [OPTIONS] <id>`／`codex fork [OPTIONS] <id>`：旗標放子指令後面
         AgentKind::Codex => cmd.len() + 1,
         _ => cmd.len(),
     };

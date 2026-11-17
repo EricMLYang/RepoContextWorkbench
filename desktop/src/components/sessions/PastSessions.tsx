@@ -14,7 +14,7 @@ export function resumeCommand(s: PastSession): string {
 /**
  * 過去的會話（F-72）：目前範圍內 repo 的互動會話（Claude Code 與 Codex），最近的在前。
  * 「接續」在原目錄開 `claude --resume <id>`／`codex resume <id>` 的 App 會話；「複製指令」給想在外面終端接的人。
- * 分岔與逐字稿目前只有 Claude Code 的會話有。
+ * 分岔：Claude Code 是 `--fork-session`、Codex 是 `codex fork <id>`（引擎決定）；逐字稿兩家都有（F-134）。
  */
 export function PastSessions() {
   const store = useStore();
@@ -98,26 +98,25 @@ export function PastSessions() {
               >
                 接續
               </AsyncButton>
-              {s.agent === "codex" ? null : (
-                <AsyncButton
-                  className="ghost small"
-                  title="帶著這場的前文開一場新的（新的會話 id），原本那場不動"
-                  run={async () => {
-                    const r = await store.action("term_create", {
-                      kind: "agent",
-                      resume: s.id,
-                      cwd: s.cwd,
-                      fork: true,
-                      task: "分岔：" + s.title,
-                    });
-                    await store.refreshState();
-                    close();
-                    ui.selectTerm(r.sid);
-                  }}
-                >
-                  分岔
-                </AsyncButton>
-              )}
+              <AsyncButton
+                className="ghost small"
+                title="帶著這場的前文開一場新的（新的會話 id），原本那場不動"
+                run={async () => {
+                  const r = await store.action("term_create", {
+                    kind: "agent",
+                    agent: s.agent,
+                    resume: s.id,
+                    cwd: s.cwd,
+                    fork: true,
+                    task: "分岔：" + s.title,
+                  });
+                  await store.refreshState();
+                  close();
+                  ui.selectTerm(r.sid);
+                }}
+              >
+                分岔
+              </AsyncButton>
               <AsyncButton
                 className="ghost small"
                 run={async () => {
@@ -127,15 +126,15 @@ export function PastSessions() {
               >
                 {copied === s.id ? "已複製" : "複製指令"}
               </AsyncButton>
-              {s.agent === "codex" ? null : (
-                <button
-                  type="button"
-                  className="ghost small"
-                  onClick={() => ui.openDetail(transcriptSpec({ id: s.id, cwd: s.cwd }, s.title))}
-                >
-                  逐字稿
-                </button>
-              )}
+              <button
+                type="button"
+                className="ghost small"
+                onClick={() =>
+                  ui.openDetail(transcriptSpec({ id: s.id, cwd: s.cwd, agent: s.agent }, s.title))
+                }
+              >
+                逐字稿
+              </button>
             </div>
           </li>
         ))}

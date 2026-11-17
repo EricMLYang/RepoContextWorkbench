@@ -624,7 +624,39 @@ CLI／MCP（ctx-cli）：
   - 過去的會話（`history::past_sessions`）併入 Codex 的紀錄（`codex_sessions`：`$CODEX_HOME/sessions/**/rollout-*.jsonl`
     第一行的 `cwd` 在範圍內才讀；`codex exec` 與子 agent 不列；標題讀 `session_index.jsonl`），每筆多 `agent`、`resume`。
     `ctx sessions`、App「過去的會話」、`ctx relay answer`（接回留下交接的那場）都跟著有。
-  - 還沒做：Codex 會話的逐字稿檢視與 `ctx sessions --digest`、backfill、分岔；程式化呼叫（ask_repo、助手、碰撞判定）仍是 `claude -p`。
+  - 還沒做：程式化呼叫（ask_repo、助手、碰撞判定）仍是 `claude -p`。逐字稿、`--digest`、backfill、分岔見下一條（F-134）。
+- **過去的會話的正規化層與全文搜尋**（F-134，2026-11-18；Rust 才有，新模組 `convo`）：
+  - 兩家各一個掃描器（`convo::Scanner`：`claude::ClaudeScanner` 讀 `~/.claude/projects`、`codex::CodexScanner` 讀
+    `$CODEX_HOME/sessions`），產出同一種 `convo::Session`（`agent: AgentKind`、id、cwd、開始時間、標題、第一句、最後回覆、分支、
+    `origin: Interactive｜Programmatic｜Subagent`）與 `convo::Item`（`Message`：角色 `User｜Assistant｜Thinking｜Tool｜Compact`、
+    時間、文字；工具只有名稱、類別 `ToolAction::Shell｜Edit｜Other` 與一行摘要；另有 `ToolResult`、`Title`）。讀訊息一律逐行串流
+    （`convo::Lines`），不整份讀進記憶體。`transcript.rs`、`codex_sessions.rs` 併進 `convo::claude`／`convo::codex`
+    （`ctx_core::transcript` 仍是 `convo::claude` 的別名）。過去的會話清單、時間軸／交接包、backfill 都改走這一層；
+    Claude Code 的輸出不變（`timeline` 測試留著舊的分類程式當規格，新舊路徑對同一份逐字稿 JSON 相同）。
+  - Codex 的訊息只讀 `response_item`（`message`、`reasoning` 的摘要、`function_call`／`custom_tool_call`／`local_shell_call`／
+    `web_search_call` 與各自的 `*_output`）與頂層 `compacted`；`event_msg` 的 `user_message`／`agent_message`／`item_completed`
+    是同一件事的另一份，不讀（照 Codex 的 rollout 政策，兩種歷史模式都一定存 `response_item`）。0.169 的工具多半是
+    `custom_tool_call` 的 `exec`（一段 JS）：每個 `tools.X(` 算一次，`exec_command` 取 `cmd`、`apply_patch` 取動到的檔。
+  - Codex 現在也有：逐字稿（App「過去的會話」的「逐字稿」、`session_transcript` 多 `agent` 參數與回傳欄）、交接包
+    （`ctx sessions --digest <id>` 兩家都找，Claude Code 先；回傳多 `agent`）、分岔（`codex fork <id>`，`term_create` 帶
+    `agent: codex`＋`fork: true`）、backfill（scan 也列 Codex 的互動會話，`codex exec`／子 agent 不列；那幾筆 JSON 多
+    `"agent": "codex"`，Claude Code 的不變；抽出的 `sessions/<sid>.json`、彙整候選的項目、彙整 prompt 的會話標題都只對 Codex
+    多一個標記；收下的事件內文寫「（回填自 <日期> Codex 會話 <sid 前 8 碼>）」，Claude Code 的一字不差）。
+    對拍的 fixture 裡沒有 Codex 的紀錄（`HOME` 是暫存目錄），所以沒有新的允許差異。
+  - backfill 讀 Claude Code 逐字稿改成逐行串流（以前整份讀進記憶體再切行），結果相同。
+  - **會話全文搜尋 `ctx sessions --grep <文字>`**（`--json`、`--limit`、範圍旗標同 `ctx sessions`）：每場一筆，
+    `agent`、`id`、`title`、`repo`、`cwd`、`branch`、`started`、`updated`、`role`（命中的那則是誰說的）、`at`、`snippet`、
+    `hits`、`resume`、`path`；`--json` 另有 `index`（庫裡幾場、各家幾場、訊息數、這次讀了幾份、只讀新增部分的幾份）。
+    App 是 action `session_grep`、⌘K「&」前綴。MCP 沒有加工具。
+  - 索引在 **`.state/sessions.db`**（新檔，跟 `knowledge.db` 分開；SQLite＋FTS5，`PRAGMA user_version`＝
+    `convo::index::DB_SCHEMA_VERSION`，不符整個重建）：`files`（每份逐字稿的大小、mtime、讀到的位元組、略過的理由）、
+    `sessions`、`messages`＋`messages_fts`（`tokenize='trigram'`）。只收 cwd 在登記的 repo 底下的互動會話，只存你說的、
+    回覆、工具摘要（思考、工具結果、壓縮摘要不存），每則最多 2 萬字；寫進庫之前每段文字都過 `redact::redact_secrets`，
+    片段從遮蔽後的文字切。查詢時增量更新：大小與 mtime 沒變＝不讀；變大＝從上次讀到的位元組往下讀完整的行；變小＝整份重讀；
+    登記變了就重新歸屬、移出登記的整場刪掉。多行程與壞掉時的紀律同 `knowledge.db`（WAL、busy 3 秒、一份檔一個寫入交易、
+    交易裡再看一次、拿不到鎖就照現有的查、壞了刪掉重建一次）。
+  - 中文：trigram 對三個字元以上的詞走索引（`MATCH`）；一兩個字的詞 trigram 查不到，改用同一張表的 `LIKE`（SQLite 退回
+    逐列比對）。實測（真資料 113 場、1.9 萬則、db 23 MB）：兩字詞（「索引」「登入」）20 ms、三字以上與英文 10 ms，都搜得到。
 - **spine 靜態入口 `ctx home sync [--check]`**（2026-11-18，F-132；Python 沒有，新模組 `home`）：由 registry 生成三種 spine 檔——
   `AGENTS.md`（工作台是什麼、有 MCP 用哪些工具、沒有就 `ctx … --json`、每組一行指向它的清單、`registry.yaml`／`config.yaml`
   是資料來源；上限 60 行，組超過 15 個只留名稱與數目，再放不下就幾組併一行）、`CLAUDE.md`（一行 `@AGENTS.md`）、

@@ -253,6 +253,38 @@ export interface PastSession {
   path: string;
 }
 
+/** 會話內容搜尋的一筆（F-134，引擎 `convo::index::Hit`）：命中的會話，附片段與接續指令。 */
+export interface SessionHit {
+  agent: AgentKind;
+  id: string;
+  title: string;
+  repo: string;
+  cwd: string;
+  branch: string | null;
+  started: string | null;
+  updated: string;
+  /** 命中的那則（最新的一則）是誰說的。 */
+  role: "user" | "assistant" | "tool";
+  at: string | null;
+  /** 命中處前後的一段（秘密已遮）。 */
+  snippet: string;
+  /** 這場有幾則命中。 */
+  hits: number;
+  resume: string;
+  path: string;
+}
+
+/** 會話索引這次做了什麼（`.state/sessions.db`）。 */
+export interface SessionIndexStats {
+  sessions: number;
+  by_agent: [string, number][];
+  messages: number;
+  read: number;
+  appended: number;
+  added: number;
+  busy: boolean;
+}
+
 /** Claude Code 的權限模式（F-96，引擎 `session::PermissionMode`）。 */
 export type PermissionMode =
   "manual" | "acceptEdits" | "plan" | "auto" | "dontAsk" | "bypassPermissions";
@@ -1121,14 +1153,22 @@ export interface ActionMap {
     payload: { id: string; path: string; notes: { where: string; code: string; note: string }[] };
     result: { ok: true; text: string; count: number };
   };
-  /** Rust 才有（F-72）：目前範圍過去的 Claude Code 互動會話（最近的在前）。 */
+  /** Rust 才有（F-72）：目前範圍過去的互動會話（Claude Code 與 Codex，最近的在前）。 */
   past_sessions: {
     payload: ScopePayload & { limit?: number; query?: string };
     result: { ok: true; sessions: PastSession[] };
   };
-  /** Rust 才有（F-94）：一場會話的逐字稿時間軸（App 會話給 sid；過去的會話給 id＋cwd）。只讀。 */
+  /** Rust 才有（F-134）：過去的會話內容全文搜尋（⌘K「&」）；每場一筆，最近活動的在前。 */
+  session_grep: {
+    payload: ScopePayload & { query: string; limit?: number };
+    result: { ok: true; hits: SessionHit[]; index: SessionIndexStats };
+  };
+  /**
+   * Rust 才有（F-94）：一場會話的逐字稿時間軸（App 會話給 sid；過去的會話給 id＋cwd＋agent）。只讀。
+   * F-134：Codex 的也讀得到；`agent` 沒給＝兩家都找（Claude Code 先）。
+   */
   session_transcript: {
-    payload: { sid?: string; id?: string; cwd?: string };
+    payload: { sid?: string; id?: string; cwd?: string; agent?: AgentKind };
     result: {
       ok: true;
       id: string;
@@ -1137,11 +1177,13 @@ export interface ActionMap {
       truncated: boolean;
       title: string | null;
       path: string;
+      /** 哪一家的逐字稿（F-134）。 */
+      agent: AgentKind;
     };
   };
   /** Rust 才有（F-103）：把一場會話整理成交接包（秘密遮掉），存到所屬組的 materials。 */
   session_digest: {
-    payload: { sid?: string; id?: string; cwd?: string };
+    payload: { sid?: string; id?: string; cwd?: string; agent?: AgentKind };
     result: {
       ok: true;
       path: string;

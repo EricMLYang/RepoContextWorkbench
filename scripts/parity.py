@@ -291,6 +291,8 @@ def py_env(home):
         e.pop(k, None)
     e.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"),
              CLAUDE_CONFIG_DIR=str(home / ".claude"), REPOCTX_NO_BACKGROUND="1",
+             # Rust 的 backfill scan 也讀 Codex 的紀錄（F-134）：指到暫存家目錄，不讀使用者真的 $CODEX_HOME
+             CODEX_HOME=str(home / ".codex"),
              PYTHONPATH=str(ROOT), PYTHONIOENCODING="utf-8",
              GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
              GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")

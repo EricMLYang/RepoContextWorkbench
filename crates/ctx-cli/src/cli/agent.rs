@@ -414,19 +414,61 @@ pub fn cmd_sessions(ctx: &Ctx, sc: &Scoped, limit: i64, query: Option<&str>) -> 
     )
 }
 
+/// `ctx sessions --grep <文字>`（F-134，Rust 才有）：會話內容的全文搜尋，範圍同 `ctx sessions`。
+pub fn cmd_sessions_grep(ctx: &Ctx, sc: &Scoped, limit: i64, query: &str) -> CmdResult {
+    let t = sc.target();
+    agent_call(
+        ctx,
+        |d| {
+            agentapi::grep_sessions(
+                d,
+                &t,
+                limit.max(0) as usize,
+                query,
+                &ctx_core::convo::Sources::default_homes(),
+            )
+        },
+        h_grep,
+    )
+}
+
+fn h_grep(r: &Value) -> String {
+    let mut out = vec![format!("# 會話內容搜尋（{}）", s(&r["scope"], "label"))];
+    let list = arr(r, "hits");
+    if list.is_empty() {
+        out.push("（沒有找到）".into());
+    }
+    for it in list {
+        out.push(format!(
+            "- {}  {}{} · {}（{} 則）",
+            s(it, "updated"),
+            s(it, "repo"),
+            match s(it, "agent").as_str() {
+                "" | "claude" => String::new(),
+                a => format!("（{a}）"),
+            },
+            s(it, "title"),
+            s(it, "hits"),
+        ));
+        out.push(format!("  {}：{}", s(it, "role"), s(it, "snippet")));
+        out.push(format!("  接續：{}", s(it, "resume")));
+    }
+    out.join("\n")
+}
+
 /// `ctx sessions --digest <id>`（F-103，Rust 才有）：跟 App「整理成交接包」同一份內容，只印不寫檔。
 pub fn cmd_session_digest(ctx: &Ctx, id: &str) -> CmdResult {
     agent_call(
         ctx,
         |_d| {
-            let path = ctx_core::timeline::locate(id, None, None)
-                .ok_or_else(|| ctx_core::Error::invalid(format!("找不到這場會話的逐字稿：{id}")))?;
-            let tl = ctx_core::timeline::read(&path).ok_or_else(|| {
-                ctx_core::Error::invalid(format!("讀不了逐字稿：{}", path.display()))
-            })?;
+            // F-134：Claude Code 先找、再找 Codex
+            let tl = ctx_core::timeline::find(id, None, None)?;
             let now = chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
             let (text, hidden) = ctx_core::timeline::digest(&tl, id, None, &now);
-            Ok(serde_json::json!({"id": id, "path": path, "hidden": hidden, "text": text}))
+            Ok(
+                serde_json::json!({"id": id, "path": tl.path, "hidden": hidden, "text": text,
+                                  "agent": tl.agent}),
+            )
         },
         |r| s(r, "text"),
     )
@@ -529,7 +571,7 @@ fn h_sessions(r: &Value) -> String {
     let mut out = vec![format!("# 過去的會話（{}）", s(&r["scope"], "label"))];
     let list = arr(r, "sessions");
     if list.is_empty() {
-        out.push("（沒有找到 Claude Code 的互動會話）".into());
+        out.push("（沒有找到 Claude Code 或 Codex 的互動會話）".into());
     }
     for it in list {
         let live = if it["live"] == true {
@@ -1340,6 +1382,7 @@ pub fn cmd_backfill(ctx: &Ctx, a: &BackfillArgs) -> CmdResult {
             let call = backfill::claude_caller(&d, &a.model);
             let opts = backfill::RunOpts {
                 root: None,
+                codex: None,
                 limit: a.limit.filter(|x| *x > 0).map(|x| x as usize),
                 repo: nz(&a.repo).map(str::to_string),
                 jobs: a.jobs.max(1) as usize,

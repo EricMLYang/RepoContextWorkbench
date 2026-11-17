@@ -3286,6 +3286,79 @@ describe("⌘K 找 repo／牌組", () => {
     );
   });
 
+  it("「&」搜過去的會話內容（F-134）：帶目前範圍、兩家都列；Enter 接續（帶 agent）、⌘Enter 看逐字稿", async () => {
+    const hit = (agent: "claude" | "codex", id: string, title: string) => ({
+      agent,
+      id,
+      title,
+      repo: "a",
+      cwd: "/r/a",
+      branch: null,
+      started: null,
+      updated: "2026-11-18 10:00",
+      role: "user",
+      at: null,
+      snippet: "幫我把索引改成增量",
+      hits: 2,
+      resume: "cd /r/a && codex resume " + id,
+      path: "/x.jsonl",
+    });
+    const action = vi.fn(async (name: string) => {
+      if (name === "session_grep")
+        return {
+          ok: true,
+          hits: [
+            hit("codex", "01a1da06-c73f", "索引改增量"),
+            hit("claude", "02908d1e-7843", "舊的"),
+          ],
+          index: {},
+        };
+      if (name === "term_create") return { ok: true, sid: "t9" };
+      if (name === "session_transcript")
+        return {
+          ok: true,
+          id: "x",
+          frames: [],
+          truncated: false,
+          title: null,
+          path: "/x",
+          agent: "codex",
+        };
+      return { ok: true };
+    });
+    await mount(mockBackend({ action: action as never }));
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    fireEvent.change(box(), { target: { value: "&索" } });
+    expect(screen.getByText(/打兩個字以上/)).toBeTruthy();
+    fireEvent.change(box(), { target: { value: "&索引" } });
+    await waitFor(() => expect(opts().length).toBe(2));
+    expect(action).toHaveBeenCalledWith("session_grep", { query: "索引", limit: 20 });
+    expect(opts()[0].textContent).toContain("Codex");
+    expect(opts()[0].textContent).toContain("索引改增量");
+    expect(opts()[0].textContent).toContain("2 則");
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter" }));
+    await waitFor(() =>
+      expect(action).toHaveBeenCalledWith("term_create", {
+        kind: "agent",
+        agent: "codex",
+        resume: "01a1da06-c73f",
+        cwd: "/r/a",
+        task: "接續：索引改增量",
+      }),
+    );
+    await act(async () => fireEvent.keyDown(window, { key: "k", metaKey: true }));
+    fireEvent.change(box(), { target: { value: "&索引" } });
+    await waitFor(() => expect(opts().length).toBe(2));
+    await act(async () => fireEvent.keyDown(box(), { key: "Enter", metaKey: true }));
+    await waitFor(() =>
+      expect(action).toHaveBeenCalledWith("session_transcript", {
+        id: "01a1da06-c73f",
+        cwd: "/r/a",
+        agent: "codex",
+      }),
+    );
+  });
+
   it("「>」指令有「常用 prompt…」（R37 F-106），選了開常用 prompt 對話框", async () => {
     const backend = backendWithPalette();
     (backend.action as ReturnType<typeof vi.fn>).mockImplementation(async (name: string) =>
