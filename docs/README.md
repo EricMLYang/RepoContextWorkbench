@@ -9,6 +9,7 @@
 | `UIUX_REVIEW.md` | App 的 UI/UX 檢討（內容待補） | 檢討畫面與互動、排前端體驗改進之前 |
 | `REPO_CLASSES.md` | repo 六類（程式／領域 Agent／數據探索／文件・PM／知識／參考）：怎麼分、第一版做了什麼、之後要加的共同限制 | 替某類 repo 加行為或限制之前 |
 | `APP_ASSISTANT.md` | App 助手設計：一句話 → 計畫 → 確認 → 走同一組 action 改設定（換組、標籤…） | 做助手或開放設定類 MCP 工具之前 |
+| `TECH_FOUNDATION_PLAN.md` | 技術基礎升級的開發規劃：spine 靜態入口、狀態雙通道、會話跑在 App 之外、索引換 SQLite、合約生成；每階段的做法、驗收、要使用者決定的 | 開始做其中任何一階段之前；做完一階段回來更新進度 |
 | `ideation/` | 構想池（`backlog.md`）、對標（`benchmarks.md`）、非功能基準（`baseline.md`）、最近一輪盤點（`rounds/`） | 跑 pm-ideation、挑下一個要做的功能時 |
 
 IPC 合約在 `../desktop/IPC.md`；硬規定在 `../AGENTS.md`。

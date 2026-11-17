@@ -119,6 +119,9 @@ repo 化是信念，不是手段；這個工具要補的是 repo 化的代價：
 3. **開源**：照 `DEVELOPMENT.md` §8 待辦（git 歷史、bundle id）與 §9（Releases、簽章、`ctx init` 一步上手、英文 README）。
 4. **Windows（VDI）**：每個功能都要註明測過沒有；先發 CLI＋MCP。
 
+**技術基礎升級**（2026-11-17）：四個底層要換——spine 補靜態入口、會話狀態雙通道、會話跑在 App 之外、索引改增量；
+順序、做法與驗收在 `TECH_FOUNDATION_PLAN.md`。階段 0–2 不用等合併回 main。
+
 **中期方向**（細節與排序在 `ideation/backlog.md`）
 
 - **當其他 agent 工具的脈絡層**（F-31）：Orca、Conductor 等開的會話也自動掛上 ctx 的 MCP＋hooks——不跟執行台拼終端機，做它們缺的跨 repo 脈絡與判斷留痕。
