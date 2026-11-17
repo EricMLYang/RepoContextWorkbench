@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use ctx_cli::mcp::{handle_message, ADMIN_TOOLS, WORK_TOOLS};
+use ctx_cli::mcp::{handle_message, tools_of, Layer};
 use ctx_core::agentapi::{self as api, Target};
 use ctx_core::registry::{self, AddRepo};
 use ctx_core::testkit::{make_git_repo, spine};
@@ -62,12 +62,12 @@ fn names(r: &Value) -> HashSet<String> {
 fn test_mcp_default_exposes_only_work_tools() {
     let w = two_groups();
     let got = names(&mcp(&w.sp, "tools/list", json!({}), None, None));
-    let work: HashSet<String> = WORK_TOOLS.iter().map(|t| t.name.clone()).collect();
+    let work: HashSet<String> = tools_of(Layer::Work).map(|t| t.name.clone()).collect();
     assert_eq!(got, work);
     assert!(!got.contains("spawn") && !got.contains("unread"));
     let full_r = mcp(&w.sp, "tools/list", json!({}), Some(true), None);
     let full = names(&full_r);
-    assert!(ADMIN_TOOLS.iter().all(|t| full.contains(&t.name)));
+    assert!(tools_of(Layer::Admin).all(|t| full.contains(&t.name)));
     // 說明不再用內部規格代號
     for t in full_r["result"]["tools"].as_array().unwrap() {
         assert!(

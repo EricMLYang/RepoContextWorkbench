@@ -10,7 +10,11 @@
 //! **管理層（`ctx mcp --admin` 或 config `mcp.admin: true` 才開）**：registry／組／採集／
 //! 打包／碰撞／升格等維護工具——給人（或人明確授權的 agent）用，預設不塞給 agent。
 //!
-//! stdio 傳輸（newline-delimited JSON-RPC 2.0），只用 serde_json 手寫、零額外依賴（耗材原則）。
+//! **方法表**（`tools.rs`，N-52）：每個工具宣告一次；參數是具名型別（`work.rs`／`admin.rs`），
+//! inputSchema 由型別生成（`params.rs`）。`schema/mcp.tools.json` 是生成的介面快照，
+//! `schema/mcp.tools.released.json` 是上次發版的——相容測試擋破壞性變更（`tests/mcp_schema.rs`）。
+//!
+//! stdio 傳輸（newline-delimited JSON-RPC 2.0），只用 serde_json 手寫。
 //! 拒寫去向（P10 檢討④）：validator 錯誤**原樣**回給 agent（isError tool result）供自我修正；
 //! dead-letter 是人的入口（hotkey）專屬，MCP 不走。
 
@@ -18,7 +22,7 @@ use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
 use chrono::Local;
-use ctx_core::agentapi::{self, SearchOpts, Target};
+use ctx_core::agentapi::{self, SearchOpts};
 use ctx_core::ask::AskInput;
 use ctx_core::collect::{self, RepoSpec};
 use ctx_core::ops::{self, Via};
@@ -27,6 +31,8 @@ use ctx_core::{
     brief, collide, config, context, crossref, digest, notify, pystr, registry, route, spawn,
     spine, upstream, Error, Result,
 };
+use schemars::JsonSchema;
+use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::sync::LazyLock;
 
@@ -39,32 +45,72 @@ type Args = Map<String, Value>;
 
 mod admin;
 mod args;
-mod schema;
+pub mod params;
 mod tools;
 mod work;
 
 use admin::*;
 use args::*;
-use schema::*;
-pub use tools::{ADMIN_TOOLS, WORK_TOOLS};
+use params::*;
+pub use tools::{Access, TOOLS};
 use work::*;
 
-// ---------------------------------------------------------------- 工作層
+// ---------------------------------------------------------------- 工具
 
-type WorkFn = fn(&Path, &Args, &Path) -> Result<Value>;
+/// 工作層的實作：(spine, arguments, 推主場用的目錄) → JSON。
+type WorkFn = Box<dyn Fn(&Path, &Args, &Path) -> Result<Value> + Send + Sync>;
+/// 管理層的實作：(spine, arguments) → 人話字串。
 type AdminFn = Box<dyn Fn(&Path, &Args) -> Result<String> + Send + Sync>;
 
-/// 一個工具：名稱、說明、inputSchema、實作。
+/// 方法表的一列（見 `tools.rs`）：名稱、說明、inputSchema（由參數型別生成）、唯讀與否、實作。
 pub struct Tool {
     pub name: String,
     pub description: String,
     pub schema: Value,
+    pub access: Access,
     kind: ToolKind,
+}
+
+/// 哪一層：工作層預設開；管理層 `--admin` 才開。由實作的種類決定（工作層回 JSON、管理層回字串）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Layer {
+    Work,
+    Admin,
 }
 
 enum ToolKind {
     Work(WorkFn),
     Admin(AdminFn),
+}
+
+impl Tool {
+    pub fn layer(&self) -> Layer {
+        match self.kind {
+            ToolKind::Work(_) => Layer::Work,
+            ToolKind::Admin(_) => Layer::Admin,
+        }
+    }
+
+    /// tools/list 裡的這一項。
+    pub fn listing(&self) -> Value {
+        let mut v =
+            json!({"name": self.name, "description": self.description, "inputSchema": self.schema});
+        if self.access == Access::ReadOnly {
+            v["annotations"] = json!({"readOnlyHint": true});
+        }
+        v
+    }
+}
+
+/// 某一層的工具（宣告順序）。
+pub fn tools_of(layer: Layer) -> impl Iterator<Item = &'static Tool> {
+    TOOLS.iter().filter(move |t| t.layer() == layer)
+}
+
+/// 介面快照（`schema/mcp.tools.json`）：兩層各自的 tools/list。相容測試拿它跟上次發版的比。
+pub fn interface() -> Value {
+    let list = |l| tools_of(l).map(Tool::listing).collect::<Vec<_>>();
+    json!({"work": list(Layer::Work), "admin": list(Layer::Admin)})
 }
 
 /// 對應 `_admin_enabled`：admin=None＝看 config `mcp.admin`。
@@ -80,11 +126,11 @@ fn admin_enabled(spine_dir: &Path, admin: Option<bool>) -> bool {
 
 /// 對應 `tool_table`：工作層＋（管理層開時）管理層。
 pub fn tool_table(spine_dir: &Path, admin: Option<bool>) -> Vec<&'static Tool> {
-    let mut out: Vec<&'static Tool> = WORK_TOOLS.iter().collect();
-    if admin_enabled(spine_dir, admin) {
-        out.extend(ADMIN_TOOLS.iter());
-    }
-    out
+    let admin = admin_enabled(spine_dir, admin);
+    TOOLS
+        .iter()
+        .filter(|t| admin || t.layer() == Layer::Work)
+        .collect()
 }
 
 fn text_of(v: &Value) -> String {
@@ -130,17 +176,7 @@ pub fn handle_message(
     }
     let table = tool_table(spine_dir, admin);
     if method == "tools/list" {
-        let tools: Vec<Value> = table
-            .iter()
-            .map(|t| {
-                let mut v =
-                    json!({"name": t.name, "description": t.description, "inputSchema": t.schema});
-                if tools::READ_ONLY_TOOLS.contains(&t.name.as_str()) {
-                    v["annotations"] = json!({"readOnlyHint": true});
-                }
-                v
-            })
-            .collect();
+        let tools: Vec<Value> = table.iter().map(|t| t.listing()).collect();
         return Some(ok(json!({ "tools": tools })));
     }
     if method == "tools/call" {
@@ -155,7 +191,7 @@ pub fn handle_message(
                 .get("name")
                 .map(pystr::py_str)
                 .unwrap_or_else(|| "None".into());
-            let hint = if ADMIN_TOOLS.iter().any(|t| t.name == name) {
+            let hint = if tools_of(Layer::Admin).any(|t| t.name == name) {
                 "（這是管理層工具，需用 `ctx mcp --admin` 啟動）"
             } else {
                 ""

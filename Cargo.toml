@@ -20,6 +20,8 @@ libc = "0.2"
 portable-pty = "0.9"
 # 知識索引的儲存（N-51，.state/knowledge.db）；bundled＝自帶 SQLite 原始碼，不依賴系統版本（Windows 也一樣）
 rusqlite = { version = "0.43", default-features = false, features = ["bundled"] }
+# MCP 工具的 inputSchema 由參數型別生成（N-52）；只開 derive，不帶 std 以外的功能
+schemars = { version = "1.2", default-features = false, features = ["derive", "std"] }
 
 [profile.release]
 lto = "thin"

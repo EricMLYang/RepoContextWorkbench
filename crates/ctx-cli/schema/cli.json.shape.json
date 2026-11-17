@@ -1,0 +1,1972 @@
+{
+  "where": {
+    "$": [
+      "object"
+    ],
+    "$.cwd": [
+      "string"
+    ],
+    "$.group": [
+      "string"
+    ],
+    "$.groups": [
+      "array"
+    ],
+    "$.groups[]": [
+      "string"
+    ],
+    "$.in_spine": [
+      "boolean"
+    ],
+    "$.registered": [
+      "boolean"
+    ],
+    "$.repo": [
+      "object"
+    ],
+    "$.repo.id": [
+      "string"
+    ],
+    "$.repo.path": [
+      "string"
+    ],
+    "$.repo.tier": [
+      "string"
+    ],
+    "$.repo.type": [
+      "string"
+    ],
+    "$.spine": [
+      "string"
+    ]
+  },
+  "context": {
+    "$": [
+      "object"
+    ],
+    "$.agent_status": [
+      "null"
+    ],
+    "$.attention": [
+      "array"
+    ],
+    "$.card": [
+      "string"
+    ],
+    "$.changes": [
+      "array"
+    ],
+    "$.changes[]": [
+      "object"
+    ],
+    "$.changes[].at": [
+      "string"
+    ],
+    "$.changes[].source": [
+      "string"
+    ],
+    "$.changes[].text": [
+      "string"
+    ],
+    "$.drift": [
+      "array"
+    ],
+    "$.goal": [
+      "null"
+    ],
+    "$.goal_gap": [
+      "string"
+    ],
+    "$.last_handoff": [
+      "null"
+    ],
+    "$.last_progress": [
+      "null"
+    ],
+    "$.neighbors": [
+      "array"
+    ],
+    "$.next": [
+      "null"
+    ],
+    "$.next_gap": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.open_loops": [
+      "array"
+    ],
+    "$.pulse": [
+      "string"
+    ],
+    "$.recent_events": [
+      "array"
+    ],
+    "$.recent_events[]": [
+      "object"
+    ],
+    "$.recent_events[].date": [
+      "string"
+    ],
+    "$.recent_events[].group": [
+      "null",
+      "string"
+    ],
+    "$.recent_events[].ref": [
+      "string"
+    ],
+    "$.recent_events[].repo": [
+      "null",
+      "string"
+    ],
+    "$.recent_events[].source": [
+      "string"
+    ],
+    "$.recent_events[].text": [
+      "string"
+    ],
+    "$.recent_events[].time": [
+      "string"
+    ],
+    "$.recent_events[].type": [
+      "string"
+    ],
+    "$.relations": [
+      "array"
+    ],
+    "$.roster": [
+      "array"
+    ],
+    "$.roster[]": [
+      "object"
+    ],
+    "$.roster[].description": [
+      "string"
+    ],
+    "$.roster[].description_source": [
+      "string"
+    ],
+    "$.roster[].id": [
+      "string"
+    ],
+    "$.roster[].path": [
+      "string"
+    ],
+    "$.roster[].sessions": [
+      "number"
+    ],
+    "$.roster[].you": [
+      "boolean"
+    ],
+    "$.scope": [
+      "object"
+    ],
+    "$.scope.group": [
+      "string"
+    ],
+    "$.scope.label": [
+      "string"
+    ],
+    "$.scope.repos": [
+      "array"
+    ],
+    "$.scope.repos[]": [
+      "string"
+    ],
+    "$.where": [
+      "object"
+    ],
+    "$.where.cwd": [
+      "string"
+    ],
+    "$.where.group": [
+      "string"
+    ],
+    "$.where.groups": [
+      "array"
+    ],
+    "$.where.groups[]": [
+      "string"
+    ],
+    "$.where.in_spine": [
+      "boolean"
+    ],
+    "$.where.registered": [
+      "boolean"
+    ],
+    "$.where.repo": [
+      "object"
+    ],
+    "$.where.repo.id": [
+      "string"
+    ],
+    "$.where.repo.path": [
+      "string"
+    ],
+    "$.where.repo.tier": [
+      "string"
+    ],
+    "$.where.repo.type": [
+      "string"
+    ],
+    "$.where.spine": [
+      "string"
+    ]
+  },
+  "log": {
+    "$": [
+      "object"
+    ],
+    "$.event": [
+      "object"
+    ],
+    "$.event.body": [
+      "string"
+    ],
+    "$.event.date": [
+      "string"
+    ],
+    "$.event.group": [
+      "string"
+    ],
+    "$.event.ref": [
+      "string"
+    ],
+    "$.event.repo": [
+      "string"
+    ],
+    "$.event.source": [
+      "string"
+    ],
+    "$.event.text": [
+      "string"
+    ],
+    "$.event.time": [
+      "string"
+    ],
+    "$.event.type": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.ref": [
+      "string"
+    ]
+  },
+  "todo add": {
+    "$": [
+      "object"
+    ],
+    "$.id": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.todo": [
+      "object"
+    ],
+    "$.todo.due": [
+      "null"
+    ],
+    "$.todo.group": [
+      "string"
+    ],
+    "$.todo.id": [
+      "string"
+    ],
+    "$.todo.opened": [
+      "string"
+    ],
+    "$.todo.overdue": [
+      "boolean"
+    ],
+    "$.todo.repo": [
+      "string"
+    ],
+    "$.todo.source": [
+      "string"
+    ],
+    "$.todo.text": [
+      "string"
+    ]
+  },
+  "todo add --due": {
+    "$": [
+      "object"
+    ],
+    "$.id": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.todo": [
+      "object"
+    ],
+    "$.todo.due": [
+      "string"
+    ],
+    "$.todo.group": [
+      "string"
+    ],
+    "$.todo.id": [
+      "string"
+    ],
+    "$.todo.opened": [
+      "string"
+    ],
+    "$.todo.overdue": [
+      "boolean"
+    ],
+    "$.todo.repo": [
+      "string"
+    ],
+    "$.todo.source": [
+      "string"
+    ],
+    "$.todo.text": [
+      "string"
+    ]
+  },
+  "todo close": {
+    "$": [
+      "object"
+    ],
+    "$.closed": [
+      "string"
+    ],
+    "$.event": [
+      "object"
+    ],
+    "$.event.body": [
+      "string"
+    ],
+    "$.event.date": [
+      "string"
+    ],
+    "$.event.group": [
+      "string"
+    ],
+    "$.event.ref": [
+      "string"
+    ],
+    "$.event.repo": [
+      "string"
+    ],
+    "$.event.source": [
+      "string"
+    ],
+    "$.event.text": [
+      "string"
+    ],
+    "$.event.time": [
+      "string"
+    ],
+    "$.event.type": [
+      "string"
+    ],
+    "$.id": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ]
+  },
+  "todo list": {
+    "$": [
+      "object"
+    ],
+    "$.count": [
+      "number"
+    ],
+    "$.loops": [
+      "array"
+    ],
+    "$.loops[]": [
+      "object"
+    ],
+    "$.loops[].due": [
+      "string"
+    ],
+    "$.loops[].group": [
+      "string"
+    ],
+    "$.loops[].id": [
+      "string"
+    ],
+    "$.loops[].opened": [
+      "string"
+    ],
+    "$.loops[].overdue": [
+      "boolean"
+    ],
+    "$.loops[].repo": [
+      "string"
+    ],
+    "$.loops[].source": [
+      "string"
+    ],
+    "$.loops[].text": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.overdue": [
+      "number"
+    ],
+    "$.scope": [
+      "object"
+    ],
+    "$.scope.group": [
+      "string"
+    ],
+    "$.scope.label": [
+      "string"
+    ],
+    "$.scope.repos": [
+      "array"
+    ],
+    "$.scope.repos[]": [
+      "string"
+    ]
+  },
+  "todo review": {
+    "$": [
+      "object"
+    ],
+    "$.active": [
+      "array"
+    ],
+    "$.active[]": [
+      "object"
+    ],
+    "$.active[].id": [
+      "string"
+    ],
+    "$.active[].text": [
+      "string"
+    ],
+    "$.active[].why": [
+      "string"
+    ],
+    "$.counts": [
+      "object"
+    ],
+    "$.counts.active": [
+      "number"
+    ],
+    "$.counts.maybe_done": [
+      "number"
+    ],
+    "$.counts.stale": [
+      "number"
+    ],
+    "$.items": [
+      "array"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.scope": [
+      "object"
+    ],
+    "$.scope.group": [
+      "string"
+    ],
+    "$.scope.label": [
+      "string"
+    ],
+    "$.scope.repos": [
+      "array"
+    ],
+    "$.scope.repos[]": [
+      "string"
+    ]
+  },
+  "todo tidy": {
+    "$": [
+      "object"
+    ],
+    "$.counts": [
+      "object"
+    ],
+    "$.counts.ask": [
+      "number"
+    ],
+    "$.counts.done": [
+      "number"
+    ],
+    "$.counts.live": [
+      "number"
+    ],
+    "$.counts.shelved": [
+      "number"
+    ],
+    "$.counts.total": [
+      "number"
+    ],
+    "$.items": [
+      "array"
+    ],
+    "$.items[]": [
+      "object"
+    ],
+    "$.items[].age_days": [
+      "number"
+    ],
+    "$.items[].bucket": [
+      "string"
+    ],
+    "$.items[].due": [
+      "string"
+    ],
+    "$.items[].evidence": [
+      "array"
+    ],
+    "$.items[].id": [
+      "string"
+    ],
+    "$.items[].opened": [
+      "string"
+    ],
+    "$.items[].overdue": [
+      "boolean"
+    ],
+    "$.items[].text": [
+      "string"
+    ],
+    "$.items[].why": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.scope": [
+      "object"
+    ],
+    "$.scope.group": [
+      "string"
+    ],
+    "$.scope.label": [
+      "string"
+    ],
+    "$.scope.repos": [
+      "array"
+    ],
+    "$.scope.repos[]": [
+      "string"
+    ],
+    "$.suggest_close": [
+      "array"
+    ]
+  },
+  "todo brief": {
+    "$": [
+      "object"
+    ],
+    "$.decisions": [
+      "array"
+    ],
+    "$.files": [
+      "array"
+    ],
+    "$.id": [
+      "string"
+    ],
+    "$.markdown": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.scope": [
+      "object"
+    ],
+    "$.scope.group": [
+      "string"
+    ],
+    "$.scope.label": [
+      "string"
+    ],
+    "$.scope.repos": [
+      "array"
+    ],
+    "$.scope.repos[]": [
+      "string"
+    ]
+  },
+  "status": {
+    "$": [
+      "object"
+    ],
+    "$.event": [
+      "object"
+    ],
+    "$.event.body": [
+      "string"
+    ],
+    "$.event.date": [
+      "string"
+    ],
+    "$.event.group": [
+      "string"
+    ],
+    "$.event.ref": [
+      "string"
+    ],
+    "$.event.repo": [
+      "string"
+    ],
+    "$.event.source": [
+      "string"
+    ],
+    "$.event.text": [
+      "string"
+    ],
+    "$.event.time": [
+      "string"
+    ],
+    "$.event.type": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.status": [
+      "object"
+    ],
+    "$.status.at": [
+      "string"
+    ],
+    "$.status.group": [
+      "string"
+    ],
+    "$.status.repo": [
+      "string"
+    ],
+    "$.status.repos": [
+      "array"
+    ],
+    "$.status.repos[]": [
+      "string"
+    ],
+    "$.status.scope": [
+      "string"
+    ],
+    "$.status.status": [
+      "string"
+    ],
+    "$.status.text": [
+      "string"
+    ]
+  },
+  "handoff": {
+    "$": [
+      "object"
+    ],
+    "$.ask": [
+      "object"
+    ],
+    "$.ask.evidence": [
+      "array"
+    ],
+    "$.ask.kind": [
+      "string"
+    ],
+    "$.ask.options": [
+      "array"
+    ],
+    "$.ask.options[]": [
+      "string"
+    ],
+    "$.ask.question": [
+      "string"
+    ],
+    "$.ask.recommend": [
+      "string"
+    ],
+    "$.ask.reversible": [
+      "boolean"
+    ],
+    "$.event": [
+      "object"
+    ],
+    "$.event.body": [
+      "string"
+    ],
+    "$.event.date": [
+      "string"
+    ],
+    "$.event.group": [
+      "string"
+    ],
+    "$.event.ref": [
+      "string"
+    ],
+    "$.event.repo": [
+      "string"
+    ],
+    "$.event.source": [
+      "string"
+    ],
+    "$.event.text": [
+      "string"
+    ],
+    "$.event.time": [
+      "string"
+    ],
+    "$.event.type": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.ref": [
+      "string"
+    ],
+    "$.todos": [
+      "array"
+    ]
+  },
+  "next": {
+    "$": [
+      "object"
+    ],
+    "$.goal": [
+      "null"
+    ],
+    "$.items": [
+      "array"
+    ],
+    "$.items[]": [
+      "object"
+    ],
+    "$.items[].due": [
+      "string"
+    ],
+    "$.items[].id": [
+      "string"
+    ],
+    "$.items[].kind": [
+      "string"
+    ],
+    "$.items[].ref": [
+      "string"
+    ],
+    "$.items[].text": [
+      "string"
+    ],
+    "$.items[].why": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.scope": [
+      "object"
+    ],
+    "$.scope.group": [
+      "string"
+    ],
+    "$.scope.label": [
+      "string"
+    ],
+    "$.scope.repos": [
+      "array"
+    ],
+    "$.scope.repos[]": [
+      "string"
+    ]
+  },
+  "context (after)": {
+    "$": [
+      "object"
+    ],
+    "$.agent_status": [
+      "object"
+    ],
+    "$.agent_status.at": [
+      "string"
+    ],
+    "$.agent_status.group": [
+      "string"
+    ],
+    "$.agent_status.repo": [
+      "string"
+    ],
+    "$.agent_status.repos": [
+      "array"
+    ],
+    "$.agent_status.repos[]": [
+      "string"
+    ],
+    "$.agent_status.scope": [
+      "string"
+    ],
+    "$.agent_status.status": [
+      "string"
+    ],
+    "$.agent_status.text": [
+      "string"
+    ],
+    "$.attention": [
+      "array"
+    ],
+    "$.card": [
+      "string"
+    ],
+    "$.changes": [
+      "array"
+    ],
+    "$.drift": [
+      "array"
+    ],
+    "$.goal": [
+      "null"
+    ],
+    "$.goal_gap": [
+      "string"
+    ],
+    "$.last_handoff": [
+      "object"
+    ],
+    "$.last_handoff.at": [
+      "string"
+    ],
+    "$.last_handoff.done": [
+      "string"
+    ],
+    "$.last_handoff.next_step": [
+      "string"
+    ],
+    "$.last_handoff.ref": [
+      "string"
+    ],
+    "$.last_handoff.remaining": [
+      "string"
+    ],
+    "$.last_handoff.repo": [
+      "string"
+    ],
+    "$.last_handoff.source": [
+      "string"
+    ],
+    "$.last_handoff.summary": [
+      "string"
+    ],
+    "$.last_progress": [
+      "object"
+    ],
+    "$.last_progress.at": [
+      "string"
+    ],
+    "$.last_progress.source": [
+      "string"
+    ],
+    "$.last_progress.text": [
+      "string"
+    ],
+    "$.neighbors": [
+      "array"
+    ],
+    "$.next": [
+      "object"
+    ],
+    "$.next.at": [
+      "string"
+    ],
+    "$.next.source": [
+      "string"
+    ],
+    "$.next.text": [
+      "string"
+    ],
+    "$.next_gap": [
+      "null"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.open_loops": [
+      "array"
+    ],
+    "$.open_loops[]": [
+      "object"
+    ],
+    "$.open_loops[].due": [
+      "string"
+    ],
+    "$.open_loops[].group": [
+      "string"
+    ],
+    "$.open_loops[].id": [
+      "string"
+    ],
+    "$.open_loops[].opened": [
+      "string"
+    ],
+    "$.open_loops[].overdue": [
+      "boolean"
+    ],
+    "$.open_loops[].repo": [
+      "string"
+    ],
+    "$.open_loops[].source": [
+      "string"
+    ],
+    "$.open_loops[].text": [
+      "string"
+    ],
+    "$.pulse": [
+      "string"
+    ],
+    "$.recent_events": [
+      "array"
+    ],
+    "$.recent_events[]": [
+      "object"
+    ],
+    "$.recent_events[].date": [
+      "string"
+    ],
+    "$.recent_events[].group": [
+      "null",
+      "string"
+    ],
+    "$.recent_events[].ref": [
+      "string"
+    ],
+    "$.recent_events[].repo": [
+      "null",
+      "string"
+    ],
+    "$.recent_events[].source": [
+      "string"
+    ],
+    "$.recent_events[].text": [
+      "string"
+    ],
+    "$.recent_events[].time": [
+      "string"
+    ],
+    "$.recent_events[].type": [
+      "string"
+    ],
+    "$.relations": [
+      "array"
+    ],
+    "$.roster": [
+      "array"
+    ],
+    "$.roster[]": [
+      "object"
+    ],
+    "$.roster[].description": [
+      "string"
+    ],
+    "$.roster[].description_source": [
+      "string"
+    ],
+    "$.roster[].id": [
+      "string"
+    ],
+    "$.roster[].path": [
+      "string"
+    ],
+    "$.roster[].sessions": [
+      "number"
+    ],
+    "$.roster[].you": [
+      "boolean"
+    ],
+    "$.scope": [
+      "object"
+    ],
+    "$.scope.group": [
+      "string"
+    ],
+    "$.scope.label": [
+      "string"
+    ],
+    "$.scope.repos": [
+      "array"
+    ],
+    "$.scope.repos[]": [
+      "string"
+    ],
+    "$.where": [
+      "object"
+    ],
+    "$.where.cwd": [
+      "string"
+    ],
+    "$.where.group": [
+      "string"
+    ],
+    "$.where.groups": [
+      "array"
+    ],
+    "$.where.groups[]": [
+      "string"
+    ],
+    "$.where.in_spine": [
+      "boolean"
+    ],
+    "$.where.registered": [
+      "boolean"
+    ],
+    "$.where.repo": [
+      "object"
+    ],
+    "$.where.repo.id": [
+      "string"
+    ],
+    "$.where.repo.path": [
+      "string"
+    ],
+    "$.where.repo.tier": [
+      "string"
+    ],
+    "$.where.repo.type": [
+      "string"
+    ],
+    "$.where.spine": [
+      "string"
+    ]
+  },
+  "decide list": {
+    "$": [
+      "object"
+    ],
+    "$.at": [
+      "string"
+    ],
+    "$.cards": [
+      "array"
+    ],
+    "$.cards[]": [
+      "object"
+    ],
+    "$.cards[].about": [
+      "null"
+    ],
+    "$.cards[].advice": [
+      "null"
+    ],
+    "$.cards[].class": [
+      "null"
+    ],
+    "$.cards[].days": [
+      "number"
+    ],
+    "$.cards[].done": [
+      "string"
+    ],
+    "$.cards[].evidence": [
+      "array"
+    ],
+    "$.cards[].group": [
+      "string"
+    ],
+    "$.cards[].handoff_at": [
+      "string"
+    ],
+    "$.cards[].handoff_ref": [
+      "string"
+    ],
+    "$.cards[].hours": [
+      "number"
+    ],
+    "$.cards[].kind": [
+      "string"
+    ],
+    "$.cards[].next_step": [
+      "string"
+    ],
+    "$.cards[].notes": [
+      "array"
+    ],
+    "$.cards[].options": [
+      "array"
+    ],
+    "$.cards[].options[]": [
+      "object"
+    ],
+    "$.cards[].options[].n": [
+      "number"
+    ],
+    "$.cards[].options[].recommended": [
+      "boolean"
+    ],
+    "$.cards[].options[].text": [
+      "string"
+    ],
+    "$.cards[].path": [
+      "string"
+    ],
+    "$.cards[].question": [
+      "string"
+    ],
+    "$.cards[].recommend": [
+      "string"
+    ],
+    "$.cards[].relay_status": [
+      "string"
+    ],
+    "$.cards[].remaining": [
+      "string"
+    ],
+    "$.cards[].repo": [
+      "string"
+    ],
+    "$.cards[].reversible": [
+      "boolean"
+    ],
+    "$.cards[].role": [
+      "null"
+    ],
+    "$.cards[].structured": [
+      "boolean"
+    ],
+    "$.scope": [
+      "string"
+    ],
+    "$.structured": [
+      "number"
+    ],
+    "$.suggestions": [
+      "array"
+    ]
+  },
+  "decide request": {
+    "$": [
+      "object"
+    ],
+    "$.decision": [
+      "string"
+    ],
+    "$.reason": [
+      "object"
+    ],
+    "$.reason.code": [
+      "string"
+    ],
+    "$.reason.message": [
+      "string"
+    ]
+  },
+  "search": {
+    "$": [
+      "object"
+    ],
+    "$.code": [
+      "array"
+    ],
+    "$.decisions": [
+      "array"
+    ],
+    "$.decisions[]": [
+      "object"
+    ],
+    "$.decisions[].at": [
+      "string"
+    ],
+    "$.decisions[].group": [
+      "string"
+    ],
+    "$.decisions[].hit": [
+      "string"
+    ],
+    "$.decisions[].ref": [
+      "string"
+    ],
+    "$.decisions[].repo": [
+      "string"
+    ],
+    "$.decisions[].score": [
+      "number"
+    ],
+    "$.decisions[].text": [
+      "string"
+    ],
+    "$.files": [
+      "array"
+    ],
+    "$.files[]": [
+      "object"
+    ],
+    "$.files[].file": [
+      "string"
+    ],
+    "$.files[].path": [
+      "string"
+    ],
+    "$.files[].ref": [
+      "string"
+    ],
+    "$.files[].repo": [
+      "string"
+    ],
+    "$.files[].score": [
+      "number"
+    ],
+    "$.files[].snippets": [
+      "array"
+    ],
+    "$.files[].snippets[]": [
+      "object"
+    ],
+    "$.files[].snippets[].line": [
+      "number"
+    ],
+    "$.files[].snippets[].text": [
+      "string"
+    ],
+    "$.files[].why": [
+      "array"
+    ],
+    "$.files[].why[]": [
+      "string"
+    ],
+    "$.indexed_files": [
+      "number"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.query": [
+      "string"
+    ],
+    "$.repo_profiles": [
+      "array"
+    ],
+    "$.repo_profiles[]": [
+      "object"
+    ],
+    "$.repo_profiles[].description": [
+      "string"
+    ],
+    "$.repo_profiles[].repo": [
+      "string"
+    ],
+    "$.repo_profiles[].score": [
+      "number"
+    ],
+    "$.repo_profiles[].why": [
+      "array"
+    ],
+    "$.repo_profiles[].why[]": [
+      "string"
+    ],
+    "$.repos": [
+      "array"
+    ],
+    "$.repos[]": [
+      "object"
+    ],
+    "$.repos[].matching_files": [
+      "number"
+    ],
+    "$.repos[].repo": [
+      "string"
+    ],
+    "$.repos[].score": [
+      "number"
+    ],
+    "$.scope": [
+      "string"
+    ]
+  },
+  "read": {
+    "$": [
+      "object"
+    ],
+    "$.commit": [
+      "string"
+    ],
+    "$.content": [
+      "string"
+    ],
+    "$.export": [
+      "null"
+    ],
+    "$.file_commit": [
+      "string"
+    ],
+    "$.kind": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.path": [
+      "string"
+    ],
+    "$.rel": [
+      "string"
+    ],
+    "$.repo": [
+      "string"
+    ],
+    "$.total_lines": [
+      "number"
+    ],
+    "$.truncated": [
+      "boolean"
+    ]
+  },
+  "resolve": {
+    "$": [
+      "object"
+    ],
+    "$.exists": [
+      "boolean"
+    ],
+    "$.export": [
+      "null"
+    ],
+    "$.kind": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.path": [
+      "string"
+    ],
+    "$.ref": [
+      "string"
+    ],
+    "$.rel": [
+      "string"
+    ],
+    "$.repo": [
+      "string"
+    ],
+    "$.root": [
+      "string"
+    ]
+  },
+  "repo": {
+    "$": [
+      "object"
+    ],
+    "$.ahead": [
+      "null"
+    ],
+    "$.areas": [
+      "array"
+    ],
+    "$.areas[]": [
+      "object"
+    ],
+    "$.areas[].added": [
+      "number"
+    ],
+    "$.areas[].area": [
+      "string"
+    ],
+    "$.areas[].deleted": [
+      "number"
+    ],
+    "$.areas[].files": [
+      "number"
+    ],
+    "$.behind": [
+      "null"
+    ],
+    "$.branch": [
+      "string"
+    ],
+    "$.broken_refs": [
+      "array"
+    ],
+    "$.commits_30d": [
+      "number"
+    ],
+    "$.commits_7d": [
+      "number"
+    ],
+    "$.dirty": [
+      "array"
+    ],
+    "$.drift": [
+      "array"
+    ],
+    "$.exists": [
+      "boolean"
+    ],
+    "$.head": [
+      "string"
+    ],
+    "$.last_commit_days": [
+      "number"
+    ],
+    "$.last_handoff": [
+      "object"
+    ],
+    "$.last_handoff.at": [
+      "string"
+    ],
+    "$.last_handoff.source": [
+      "string"
+    ],
+    "$.last_handoff.text": [
+      "string"
+    ],
+    "$.last_unhanded": [
+      "null"
+    ],
+    "$.new_commits": [
+      "array"
+    ],
+    "$.new_commits[]": [
+      "object"
+    ],
+    "$.new_commits[].date": [
+      "string"
+    ],
+    "$.new_commits[].hash": [
+      "string"
+    ],
+    "$.new_commits[].subject": [
+      "string"
+    ],
+    "$.note": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.path": [
+      "string"
+    ],
+    "$.repo": [
+      "string"
+    ],
+    "$.running": [
+      "array"
+    ],
+    "$.tier": [
+      "string"
+    ],
+    "$.window": [
+      "object"
+    ],
+    "$.window.kind": [
+      "string"
+    ],
+    "$.window.label": [
+      "string"
+    ]
+  },
+  "msg send": {
+    "$": [
+      "object"
+    ],
+    "$.delivery": [
+      "string"
+    ],
+    "$.event": [
+      "object"
+    ],
+    "$.event.body": [
+      "string"
+    ],
+    "$.event.date": [
+      "string"
+    ],
+    "$.event.group": [
+      "string"
+    ],
+    "$.event.ref": [
+      "string"
+    ],
+    "$.event.repo": [
+      "string"
+    ],
+    "$.event.source": [
+      "string"
+    ],
+    "$.event.text": [
+      "string"
+    ],
+    "$.event.time": [
+      "string"
+    ],
+    "$.event.type": [
+      "string"
+    ],
+    "$.id": [
+      "string"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.peers_in_target": [
+      "array"
+    ],
+    "$.re": [
+      "null"
+    ],
+    "$.to": [
+      "string"
+    ]
+  },
+  "msg list": {
+    "$": [
+      "object"
+    ],
+    "$.hint": [
+      "string"
+    ],
+    "$.messages": [
+      "array"
+    ],
+    "$.messages[]": [
+      "object"
+    ],
+    "$.messages[].at": [
+      "string"
+    ],
+    "$.messages[].direction": [
+      "string"
+    ],
+    "$.messages[].from": [
+      "string"
+    ],
+    "$.messages[].from_sid": [
+      "string"
+    ],
+    "$.messages[].id": [
+      "string"
+    ],
+    "$.messages[].new": [
+      "boolean"
+    ],
+    "$.messages[].text": [
+      "string"
+    ],
+    "$.messages[].to": [
+      "string"
+    ],
+    "$.new": [
+      "number"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.peers": [
+      "array"
+    ],
+    "$.repo": [
+      "string"
+    ]
+  },
+  "relay plan": {
+    "$": [
+      "object"
+    ],
+    "$.at": [
+      "string"
+    ],
+    "$.counts": [
+      "array"
+    ],
+    "$.counts[]": [
+      "object"
+    ],
+    "$.counts[].count": [
+      "number"
+    ],
+    "$.counts[].status": [
+      "string"
+    ],
+    "$.rows": [
+      "array"
+    ],
+    "$.rows[]": [
+      "object"
+    ],
+    "$.rows[].ask": [
+      "object"
+    ],
+    "$.rows[].ask.evidence": [
+      "array"
+    ],
+    "$.rows[].ask.kind": [
+      "string"
+    ],
+    "$.rows[].ask.options": [
+      "array"
+    ],
+    "$.rows[].ask.options[]": [
+      "string"
+    ],
+    "$.rows[].ask.question": [
+      "string"
+    ],
+    "$.rows[].ask.recommend": [
+      "string"
+    ],
+    "$.rows[].ask.reversible": [
+      "boolean"
+    ],
+    "$.rows[].group": [
+      "string"
+    ],
+    "$.rows[].handoff_at": [
+      "null",
+      "string"
+    ],
+    "$.rows[].handoff_ref": [
+      "null",
+      "string"
+    ],
+    "$.rows[].next_step": [
+      "null",
+      "string"
+    ],
+    "$.rows[].notes": [
+      "array"
+    ],
+    "$.rows[].notes[]": [
+      "string"
+    ],
+    "$.rows[].path": [
+      "string"
+    ],
+    "$.rows[].prompt": [
+      "null"
+    ],
+    "$.rows[].repo": [
+      "string"
+    ],
+    "$.rows[].status": [
+      "string"
+    ],
+    "$.rows[].waits_on_you": [
+      "boolean"
+    ],
+    "$.scope": [
+      "string"
+    ],
+    "$.skipped": [
+      "number"
+    ],
+    "$.waiting_on_you": [
+      "number"
+    ]
+  },
+  "relay report": {
+    "$": [
+      "object"
+    ],
+    "$.rows": [
+      "array"
+    ],
+    "$.rows[]": [
+      "object"
+    ],
+    "$.rows[].commits": [
+      "number"
+    ],
+    "$.rows[].dirty": [
+      "number"
+    ],
+    "$.rows[].exists": [
+      "boolean"
+    ],
+    "$.rows[].group": [
+      "string"
+    ],
+    "$.rows[].handoffs": [
+      "array"
+    ],
+    "$.rows[].handoffs[]": [
+      "object"
+    ],
+    "$.rows[].handoffs[].at": [
+      "string"
+    ],
+    "$.rows[].handoffs[].done": [
+      "string"
+    ],
+    "$.rows[].handoffs[].next_step": [
+      "string"
+    ],
+    "$.rows[].handoffs[].ref": [
+      "string"
+    ],
+    "$.rows[].path": [
+      "string"
+    ],
+    "$.rows[].recent_commits": [
+      "array"
+    ],
+    "$.rows[].recent_commits[]": [
+      "object"
+    ],
+    "$.rows[].recent_commits[].at": [
+      "string"
+    ],
+    "$.rows[].recent_commits[].short": [
+      "string"
+    ],
+    "$.rows[].recent_commits[].subject": [
+      "string"
+    ],
+    "$.rows[].repo": [
+      "string"
+    ],
+    "$.rows[].session": [
+      "string"
+    ],
+    "$.rows[].verdict": [
+      "string"
+    ],
+    "$.scope": [
+      "string"
+    ],
+    "$.since": [
+      "string"
+    ],
+    "$.skipped": [
+      "number"
+    ],
+    "$.total": [
+      "object"
+    ],
+    "$.total.commits": [
+      "number"
+    ],
+    "$.total.done": [
+      "number"
+    ],
+    "$.total.handoffs": [
+      "number"
+    ],
+    "$.total.idle": [
+      "number"
+    ],
+    "$.total.line": [
+      "string"
+    ],
+    "$.total.no_handoff": [
+      "number"
+    ],
+    "$.total.repos": [
+      "number"
+    ],
+    "$.total.running": [
+      "number"
+    ],
+    "$.total.waiting": [
+      "number"
+    ]
+  },
+  "sessions": {
+    "$": [
+      "object"
+    ],
+    "$.resume": [
+      "string"
+    ],
+    "$.scope": [
+      "object"
+    ],
+    "$.scope.group": [
+      "string"
+    ],
+    "$.scope.label": [
+      "string"
+    ],
+    "$.scope.repos": [
+      "array"
+    ],
+    "$.scope.repos[]": [
+      "string"
+    ],
+    "$.sessions": [
+      "array"
+    ]
+  },
+  "worktrees": {
+    "$": [
+      "object"
+    ],
+    "$.removed": [
+      "null"
+    ],
+    "$.repo": [
+      "string"
+    ],
+    "$.worktrees": [
+      "array"
+    ],
+    "$.worktrees[]": [
+      "object"
+    ],
+    "$.worktrees[].branch": [
+      "string"
+    ],
+    "$.worktrees[].dirty": [
+      "number"
+    ],
+    "$.worktrees[].head": [
+      "string"
+    ],
+    "$.worktrees[].locked": [
+      "boolean"
+    ],
+    "$.worktrees[].main": [
+      "boolean"
+    ],
+    "$.worktrees[].path": [
+      "string"
+    ],
+    "$.worktrees[].prunable": [
+      "boolean"
+    ],
+    "$.worktrees[].removable": [
+      "boolean"
+    ],
+    "$.worktrees[].unique": [
+      "number"
+    ]
+  },
+  "loops": {
+    "$": [
+      "array"
+    ],
+    "$[]": [
+      "object"
+    ],
+    "$[].due": [
+      "string"
+    ],
+    "$[].group": [
+      "string"
+    ],
+    "$[].id": [
+      "string"
+    ],
+    "$[].opened": [
+      "string"
+    ],
+    "$[].overdue": [
+      "boolean"
+    ],
+    "$[].repo": [
+      "string"
+    ],
+    "$[].source": [
+      "string"
+    ],
+    "$[].text": [
+      "string"
+    ]
+  },
+  "query": {
+    "$": [
+      "array"
+    ],
+    "$[]": [
+      "object"
+    ],
+    "$[].body": [
+      "string"
+    ],
+    "$[].date": [
+      "string"
+    ],
+    "$[].group": [
+      "null",
+      "string"
+    ],
+    "$[].ref": [
+      "string"
+    ],
+    "$[].repo": [
+      "null",
+      "string"
+    ],
+    "$[].source": [
+      "string"
+    ],
+    "$[].text": [
+      "string"
+    ],
+    "$[].time": [
+      "string"
+    ],
+    "$[].type": [
+      "string"
+    ]
+  },
+  "registry list": {
+    "$": [
+      "array"
+    ],
+    "$[]": [
+      "object"
+    ],
+    "$[].id": [
+      "string"
+    ],
+    "$[].path": [
+      "string"
+    ],
+    "$[].tags": [
+      "array"
+    ],
+    "$[].tier": [
+      "string"
+    ],
+    "$[].type": [
+      "string"
+    ]
+  },
+  "group list": {
+    "$": [
+      "array"
+    ],
+    "$[]": [
+      "object"
+    ],
+    "$[].landing": [
+      "string"
+    ],
+    "$[].members": [
+      "array"
+    ],
+    "$[].members[]": [
+      "string"
+    ],
+    "$[].name": [
+      "string"
+    ]
+  },
+  "refs check": {
+    "$": [
+      "object"
+    ],
+    "$.broken": [
+      "array"
+    ],
+    "$.drift": [
+      "array"
+    ],
+    "$.ok": [
+      "boolean"
+    ],
+    "$.suggest": [
+      "array"
+    ]
+  }
+}

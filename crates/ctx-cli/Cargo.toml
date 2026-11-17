@@ -24,6 +24,8 @@ clap = { version = "4", features = ["derive"] }
 # `ctx timer` 前景跑時接 Ctrl+C：跨平台（macOS＋Windows VDI 都要），比 signal-hook 少寫一層
 # 平台分支；只需要「收到中斷 → 送一個停止訊號給 run_loop」這一件事
 ctrlc = "3"
+# MCP 工具參數型別 → inputSchema（N-52，見 src/mcp/params.rs）
+schemars.workspace = true
 
 
 [target.'cfg(unix)'.dependencies]

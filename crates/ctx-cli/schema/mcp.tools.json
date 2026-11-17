@@ -1,0 +1,1477 @@
+{
+  "work": [
+    {
+      "name": "where_am_i",
+      "description": "我在哪：cwd 屬於哪個已登記 repo、哪些組、預設工作範圍是什麼。沒登記會告訴你怎麼登記。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          }
+        },
+        "required": []
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "context_for",
+      "description": "這個範圍的完整脈絡：目標、上次交接、建議下一步、未結事項（帶 id）、最近事件（帶 ref）、關係、需要注意的 repo、agent 狀態。開場注入已經給了摘要（交接、未結、同組成員）——要更多細節、或做到一半要重抓時才呼叫。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          },
+          "card": {
+            "type": "boolean",
+            "description": "是否另附 markdown 情境卡（內容跟其他欄位相同；預設 false）"
+          }
+        },
+        "required": []
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "next_work",
+      "description": "接下來值得做什麼（依序：上次交接的下一步 → 逾期未結 → 其他未結 → 擱置太久的 → 需要注意的 repo），每項都附 why。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "最多幾項，預設 5"
+          }
+        },
+        "required": []
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "log_decision",
+      "description": "記下一個判斷或結論（為什麼這樣做、依據哪份檔）。回傳 ref，之後可引用。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "判斷內容；第一行寫結論，後面寫依據"
+          },
+          "ref": {
+            "type": "string",
+            "description": "相關事件的 ref（例 decision:2026-09-25-d1、collision:2026-09-25-a）"
+          },
+          "supersedes": {
+            "type": "string",
+            "description": "這筆判斷取代哪一筆（decision:<id>）；被取代的之後不再出現在最近事件"
+          },
+          "reopen_when": {
+            "type": "string",
+            "description": "什麼情況要重看這個判斷（例：repo 超過 50 個、2026-12-01 前）；寫日期會在到期時提醒"
+          },
+          "outcome_of": {
+            "type": "string",
+            "description": "這段文字是哪一筆判斷後來的結果（decision:<id>）；會寫成結果（outcome）並指回它"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          },
+          "cross_scope_ok": {
+            "type": "boolean",
+            "description": "寫入主場以外的範圍。只有在使用者明確同意後才設 true"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "add_todo",
+      "description": "開一個未結事項（之後要有人處理的事）。編號自動配；有真實期限才給 due，沒給就沒有期限。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "要做的事，一句話"
+          },
+          "due": {
+            "type": "string",
+            "description": "YYYY-MM-DD，可省略"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          },
+          "cross_scope_ok": {
+            "type": "boolean",
+            "description": "寫入主場以外的範圍。只有在使用者明確同意後才設 true"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "close_todo",
+      "description": "關掉一個未結事項（用 context_for／next_work 回傳的 id，例 #3）。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "未結事項編號，例 #3"
+          },
+          "note": {
+            "type": "string",
+            "description": "怎麼結的，一句話"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "cross_scope_ok": {
+            "type": "boolean",
+            "description": "寫入主場以外的範圍。只有在使用者明確同意後才設 true"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "tidy_todos",
+      "description": "未結清理（使用者說「幫我清未結」時用）。不帶 close＝把範圍內的未結分成 done（可能已做完，附證據）／shelved（擱置太久）／ask（等使用者決定）／live（還在進行），並回 suggest_close。帶 close（編號陣列）＝一次關一批。先把要關的列給使用者看，他同意才帶 close。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "close": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "要關掉的未結編號，例 [\"#3\", \"#7\"]；省略＝只列不關"
+          },
+          "note": {
+            "type": "string",
+            "description": "怎麼結的，一句話（整批共用）"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          },
+          "cross_scope_ok": {
+            "type": "boolean",
+            "description": "寫入主場以外的範圍。只有在使用者明確同意後才設 true"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "report_status",
+      "description": "回報你現在的階段，讓使用者在工作台一眼看出輪到誰：working／waiting（等使用者回應）／blocked（卡住）／done。waiting 與 blocked 會進使用者的收件匣。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "目前階段",
+            "enum": [
+              "working",
+              "waiting",
+              "blocked",
+              "done"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "description": "在做什麼／在等什麼／卡在哪"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      }
+    },
+    {
+      "name": "request_decision",
+      "description": "做到一半需要使用者決定時先呼叫（不要直接停下來問）。使用者同意過這類自動放行時回 {decision:\"auto\", answer}：照 answer 接著做，不用停；否則回 {decision:\"wait\", reason}：能做的先做完，收尾 handoff 帶同一個 ask。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "一句不看程式也答得出來的問題"
+          },
+          "kind": {
+            "type": "string",
+            "description": "類別；省略＝other",
+            "enum": [
+              "commit",
+              "content_review",
+              "config_change",
+              "choose",
+              "visual_check",
+              "manual_test",
+              "push",
+              "publish",
+              "delete",
+              "send_external",
+              "other"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "選項（使用者用 1 起算的編號回答）"
+          },
+          "recommend": {
+            "type": "string",
+            "description": "你建議的選項（文字或編號）"
+          },
+          "reversible": {
+            "type": "boolean",
+            "description": "做了收得回來嗎；預設 true"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "要看的檔：repo 內相對路徑或 <repo>:<路徑>"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "cross_scope_ok": {
+            "type": "boolean",
+            "description": "寫入主場以外的範圍。只有在使用者明確同意後才設 true"
+          }
+        },
+        "required": [
+          "question"
+        ]
+      }
+    },
+    {
+      "name": "handoff",
+      "description": "收尾交接（每次會話結束前必呼叫）：完成了什麼、下次從哪接。下一個 agent 的開場與 context_for／next_work 會讀到它。remaining 只是交接裡的一行備註，不會開未結；要追蹤的事另外呼叫 add_todo。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "done": {
+            "type": "string",
+            "description": "這次完成了什麼（成果、改了哪些檔）"
+          },
+          "next_step": {
+            "type": "string",
+            "description": "下次從哪裡接，一句話"
+          },
+          "remaining": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "可省略：沒做完的事，只寫進交接文字，不開未結"
+          },
+          "ask": {
+            "type": "object",
+            "properties": {
+              "question": {
+                "type": "string",
+                "description": "一句不看程式也答得出來的問題"
+              },
+              "kind": {
+                "type": "string",
+                "description": "類別；省略＝other",
+                "enum": [
+                  "commit",
+                  "content_review",
+                  "config_change",
+                  "choose",
+                  "visual_check",
+                  "manual_test",
+                  "push",
+                  "publish",
+                  "delete",
+                  "send_external",
+                  "other"
+                ]
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "選項（使用者用 1 起算的編號回答）"
+              },
+              "recommend": {
+                "type": "string",
+                "description": "你建議的選項（文字或編號）"
+              },
+              "reversible": {
+                "type": "boolean",
+                "description": "做了收得回來嗎；預設 true"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "要看的檔：repo 內相對路徑或 <repo>:<路徑>"
+              }
+            },
+            "required": [
+              "question"
+            ],
+            "description": "可省略：下一步在等使用者決定／確認／驗收時才填，使用者會在決策佇列（ctx decide）看到並用編號回答；這類已設成自動放行時回傳多 auto（就是答案）。好：「首頁排序要改成依修改時間（A）還是維持依名稱（B）？」；差：「要繼續嗎？」"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          },
+          "cross_scope_ok": {
+            "type": "boolean",
+            "description": "寫入主場以外的範圍。只有在使用者明確同意後才設 true"
+          }
+        },
+        "required": [
+          "done",
+          "next_step"
+        ]
+      }
+    },
+    {
+      "name": "send_message",
+      "description": "對講：傳話給同組另一個 repo 的 agent（請它做事、問它介面、告訴它你改了共用的東西），或帶 re 回覆收到的訊息。那個 repo 有會話在跑就送進它的脈絡（它用完下一個工具時），沒有就進使用者收件匣、那邊下次開場看到；對方的回覆會送回你這場會話。不用等回覆，繼續手上的事。跨組要先問使用者再帶 cross_scope_ok。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "收件 repo id（同組成員見 context_for 的 roster）；回覆時可省略"
+          },
+          "text": {
+            "type": "string",
+            "description": "要說的話：要什麼、為什麼、做完怎樣算好；長內容寫成檔、這裡放路徑"
+          },
+          "re": {
+            "type": "string",
+            "description": "回覆哪一則（訊息編號，例 2026-11-04-m1）"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "cross_scope_ok": {
+            "type": "boolean",
+            "description": "寫入主場以外的範圍。只有在使用者明確同意後才設 true"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "messages",
+      "description": "對講收件匣：別的 repo 的 agent 傳給你這個 repo 的話（新的這次算收到）與你送出的，加上同組現在在跑的 agent（repo、標題、在做什麼）——要改共用的東西前先看誰在動。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "最多幾則，預設 10"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          }
+        },
+        "required": []
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "describe_repo",
+      "description": "寫 repo 的名片：一句話介紹、協作角色、搜尋關鍵字。組員名冊與 search_knowledge 的 repo 排名都靠它；存在 spine（registry），不會寫進 repo。開場名冊標「推測自 README」或沒有介紹時，做完手上的事順手補。只能改主場（所在 repo＋同組成員）；空字串／空陣列＝清掉該欄。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "repo id；省略＝你所在的 repo"
+          },
+          "description": {
+            "type": "string",
+            "description": "一句話：這個 repo 是什麼、別的 repo 會來這裡找什麼"
+          },
+          "role": {
+            "type": "string",
+            "description": "協作角色，一個短詞（例 知識庫、規格來源、實作）"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "搜尋用關鍵字（tags 是給人分類的，別重複）"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "cross_scope_ok": {
+            "type": "boolean",
+            "description": "寫入主場以外的範圍。只有在使用者明確同意後才設 true"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "workbench_apply",
+      "description": "改工作台設定（跟 App 助手同一份白名單）：建組 create_group、設組員 set_members、改名 rename_group、組目標 set_goal、標籤 tag、分層 set_tier、類別 set_class（code／agent／data／docs／knowledge／reference）。steps＝[{op, args}]；預設只回預覽，給使用者看過、同意後帶 confirm=true 才執行。碰到主場以外的 repo 要使用者同意（cross_scope_ok）。換範圍、切分頁等畫面動作只在 App 做。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "[{op, args}]，例 [{\"op\":\"tag\",\"args\":{\"id\":\"repo-a\",\"add\":[\"規格\"]}}]"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "使用者看過預覽並同意後才設 true"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "cross_scope_ok": {
+            "type": "boolean",
+            "description": "寫入主場以外的範圍。只有在使用者明確同意後才設 true"
+          }
+        },
+        "required": [
+          "steps"
+        ]
+      }
+    },
+    {
+      "name": "search_knowledge",
+      "description": "要別的 repo 的資訊先問誰有：最該去的 repo、起點、判斷、下一步。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "要比對的文字"
+          },
+          "detail": {
+            "type": "string",
+            "description": "預設 brief",
+            "enum": [
+              "brief",
+              "full"
+            ]
+          },
+          "everywhere": {
+            "type": "boolean",
+            "description": "true（預設）＝搜全部 repo；false＝只搜主場範圍"
+          },
+          "code": {
+            "type": "boolean",
+            "description": "是否也搜程式碼（預設 true）"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "最多回幾個檔，預設 8"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          },
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "repo_entry",
+      "description": "repo 入口卡：是什麼、從哪讀起、最近判斷與交接、現況。之後自己讀。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "read_from",
+      "description": "讀別的 repo 的檔或目錄並留引用（上游改了會提醒）：ref＝`<repo>:<export>/子路徑`、`<repo>:<相對路徑>` 或 search_knowledge 給的。回內容＋commit。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "description": "例 notes:書摘/Chapter03.md、impl:src/app.py、impl（只給 repo＝看根目錄）"
+          },
+          "lines": {
+            "type": "string",
+            "description": "只讀某段，例 120-180"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          }
+        },
+        "required": [
+          "ref"
+        ]
+      }
+    },
+    {
+      "name": "ask_repo",
+      "description": "在另一個 repo 開唯讀 agent 回答問題（照它的 AGENTS.md 找資料），只回結論＋引用。慢又花錢：要整理歸納才用。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "description": "repo id"
+          },
+          "question": {
+            "type": "string",
+            "description": "要問的問題，寫清楚要什麼"
+          },
+          "provider": {
+            "type": "string",
+            "description": "claude（預設看 config provider.ask）或 mock"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          }
+        },
+        "required": [
+          "repo",
+          "question"
+        ]
+      }
+    },
+    {
+      "name": "repo_status",
+      "description": "repo 狀態卡：最近變化與改動集中的目錄、沒 commit 的檔與放了幾天、正在跑的 dev server（啟動後有沒有檔案又改過＝要不要重開）、最後交接、agent 文件裡失效的跨 repo 路徑、上游變動。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "description": "repo id；省略＝你所在的 repo"
+          },
+          "since": {
+            "type": "string",
+            "description": "7d／30d 或 commit hash；省略＝最近 5 則"
+          },
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          }
+        },
+        "required": []
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "what_user_sees",
+      "description": "使用者在工作台 App 畫面上正在看什麼：主區開著哪個檔（repo、路徑、絕對路徑、看法、看得到第幾行、md 停在哪個標題、有沒有沒存的修改）或工作區哪個分頁，加上選的牌組與右側欄。只在使用者提到畫面時呼叫（「根據畫面」「我正在看的」「這個檔」「這段」「看一下我的畫面」）；沒提就別呼叫，也別把結果當成使用者的要求。拿到 abs 再自己讀檔；age_seconds 很大＝可能不是現在的畫面。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "type": "string",
+            "description": "用哪個目錄推主場；省略＝server 啟動目錄（通常就是你的專案）"
+          }
+        },
+        "required": []
+      },
+      "annotations": {
+        "readOnlyHint": true
+      }
+    }
+  ],
+  "admin": [
+    {
+      "name": "registry_list",
+      "description": "列出所有已登記 repo（id／類型／tier／路徑）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "registry_audit",
+      "description": "稽核 registry：tier 與實際活動不符、路徑失效、目錄裡有未登記 repo",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scan_dirs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "registry_scan",
+      "description": "掃一個目錄找未登記的 git repo（apply=true 才真的登記）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dir": {
+            "type": "string"
+          },
+          "apply": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dir"
+        ]
+      }
+    },
+    {
+      "name": "registry_relations",
+      "description": "讀 repo 間關係（給 id＝站在該 repo 兩向讀；省略＝全部）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "refs_check",
+      "description": "跨 repo 參考檢查：agent 文件裡失效的跨 repo 路徑、引用過的上游有變、建議宣告的 export",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "group_context",
+      "description": "組情境卡（markdown）：成員與角色、脈動、本組未結、最近事件、角色說明",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "group_list",
+      "description": "列出所有組與成員",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "collect",
+      "description": "採集 git 狀態（dirty、末次 commit、ahead/behind、worktree）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "pack",
+      "description": "把範圍內的 md 文件打包成一份全文（含洩密過濾）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          },
+          "budget": {
+            "type": "integer"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "pack_estimate",
+      "description": "只估算範圍內 md 文件的 token 成本，不打包",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "brief",
+      "description": "產生早晨簡報並存檔（會落一筆 presented 事件）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "spine_append",
+      "description": "直接寫一筆原始脊椎事件（進階；一般請用 log_decision／add_todo）。type: presented/chosen/decision/suggestion/collision/open-loop/outcome；kv: #編號 或 group:/repo:/ref:/due:/id: token",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "kv": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "body": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "source"
+        ]
+      }
+    },
+    {
+      "name": "spine_query",
+      "description": "查脊椎事件（依型別／日期／組）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "today": {
+            "type": "boolean"
+          },
+          "group": {
+            "type": "string"
+          },
+          "verbose": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "spine_stats",
+      "description": "量測：靈感命中率＋repo 存活率",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "open_loops",
+      "description": "未結事項（可依 group／repos 過濾）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "spine_lint",
+      "description": "脊椎衛生檢查：ref 斷鏈、逾期未結、碰撞沒回程、dead-letter 積壓",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "unread",
+      "description": "使用者的未讀事件（ack=true 會把使用者的收件匣全部標已讀，別隨便用）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ack": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "collide_submit",
+      "description": "把一個想法丟去跟範圍內的 repo 比對（wait=true 同步等判定）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "idea": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          },
+          "wait": {
+            "type": "boolean"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "idea"
+        ]
+      }
+    },
+    {
+      "name": "route",
+      "description": "把一段文字落檔（dest: group:<g> | repo:<id> | incubator）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "dest": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "dest"
+        ]
+      }
+    },
+    {
+      "name": "upstream_check",
+      "description": "查 external repo 的上游新 release／commit",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "digest_run",
+      "description": "跑增量摘要（便宜模型）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "組名；省略＝依 cwd 推出的主場"
+          },
+          "repos": {
+            "type": "string",
+            "description": "逗號分隔 repo id（臨時組合，優先於 group）"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "spawn",
+      "description": "把 incubator 的想法升格成新 repo（登記＋血統）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "from_incubator": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "registry_add",
+      "description": "登記一個 repo（id＋路徑）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "repo id"
+          },
+          "path": {
+            "type": "string",
+            "description": "repo 路徑"
+          },
+          "type": {
+            "type": "string",
+            "description": "mine 或 external"
+          },
+          "tier": {
+            "type": "string",
+            "description": "active／paused／dormant／archived"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "tag 清單"
+          },
+          "upstream": {
+            "type": "string",
+            "description": "external 的 GitHub owner/repo"
+          }
+        },
+        "required": [
+          "id",
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "registry_remove",
+      "description": "把 repo 移出 registry（同時清掉所有組的 membership 與指向它的關係）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "repo id"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "registry_set",
+      "description": "改 repo 的一個欄位（例 note、resume_when）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "repo id"
+          },
+          "key": {
+            "type": "string",
+            "description": "欄位名"
+          },
+          "value": {
+            "type": "string",
+            "description": "值"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "registry_tier",
+      "description": "改 repo 的 tier（paused 可一併給復工條件）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "repo id"
+          },
+          "tier": {
+            "type": "string",
+            "description": "active／paused／dormant／archived"
+          },
+          "resume_when": {
+            "type": "string",
+            "description": "paused 的復工條件"
+          }
+        },
+        "required": [
+          "id",
+          "tier"
+        ]
+      }
+    },
+    {
+      "name": "registry_tag",
+      "description": "加／移除 repo 的 tag（冪等）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "repo id"
+          },
+          "add": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "要加的 tag"
+          },
+          "remove": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "要移除的 tag"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "registry_relate",
+      "description": "設 repo 間關係 a --kind--> b（例 a pm-of b＝a 是 b 的 PM；kind: pm-of/feeds/derived-from/upstream-of/sibling-topic）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "a": {
+            "type": "string",
+            "description": "來源 repo"
+          },
+          "b": {
+            "type": "string",
+            "description": "目標 repo"
+          },
+          "kind": {
+            "type": "string",
+            "description": "關係種類"
+          },
+          "note": {
+            "type": "string",
+            "description": "一句說明"
+          },
+          "exports": {
+            "type": "string",
+            "description": "逗號分隔：這條關係用到 a 的哪些 export"
+          }
+        },
+        "required": [
+          "a",
+          "b",
+          "kind"
+        ]
+      }
+    },
+    {
+      "name": "registry_unrelate",
+      "description": "刪 repo 間關係（不給 kind＝刪 a→b 全部）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "a": {
+            "type": "string",
+            "description": "來源 repo"
+          },
+          "b": {
+            "type": "string",
+            "description": "目標 repo"
+          },
+          "kind": {
+            "type": "string",
+            "description": "關係種類"
+          }
+        },
+        "required": [
+          "a",
+          "b"
+        ]
+      }
+    },
+    {
+      "name": "registry_export",
+      "description": "登記 repo 對外提供的東西（export）：名稱→repo 內路徑；remove=true 刪除。agent 之後用 `<repo>:<名稱>/子路徑` 引用",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "repo id"
+          },
+          "name": {
+            "type": "string",
+            "description": "export 名稱"
+          },
+          "path": {
+            "type": "string",
+            "description": "repo 內路徑（登記時必填）"
+          },
+          "desc": {
+            "type": "string",
+            "description": "一句說明"
+          },
+          "remove": {
+            "type": "boolean",
+            "description": "true＝刪除"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "group_add",
+      "description": "建一個組",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "組名"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "repo id 清單"
+          }
+        },
+        "required": [
+          "name",
+          "members"
+        ]
+      }
+    },
+    {
+      "name": "group_update",
+      "description": "改組：add／remove 組員（repo 登記不動）、members 整份換掉、rename 改名；可一次給多項，任何一項失敗＝全部不改",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "組名"
+          },
+          "add": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "要加入的 repo id"
+          },
+          "remove": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "要移出的 repo id"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "新的完整成員名單（取代現有）"
+          },
+          "rename": {
+            "type": "string",
+            "description": "新組名"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "group_remove",
+      "description": "刪除一個組（只刪組定義；repo 登記與 groups/<組>/ 的料保留）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "組名"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "group_goal",
+      "description": "記下（或清除）組的一句話目標——目標只有人能給，agent 別自己編",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "組名"
+          },
+          "text": {
+            "type": "string",
+            "description": "一句話目標；空字串＝清除"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "registry_describe",
+      "description": "改 repo 的名片：一句話介紹、協作角色、搜尋關鍵字（存 registry，不寫進 repo；空字串＝清掉）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "repo id"
+          },
+          "description": {
+            "type": "string",
+            "description": "一句話介紹：這個 repo 是什麼、別的 repo 來這裡找什麼"
+          },
+          "role": {
+            "type": "string",
+            "description": "協作角色，一個短詞（例 知識庫、規格來源、實作）"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "搜尋用關鍵字"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "registry_class",
+      "description": "改 repo 類別：code（程式）／agent（領域 Agent）／data（數據探索）／docs（文件・PM）／knowledge（知識）／reference（參考，只讀、不採集）；空字串＝清掉",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "repo id"
+          },
+          "class": {
+            "type": "string",
+            "description": "code｜agent｜data｜docs｜knowledge｜reference；不給或空字串＝清掉"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    }
+  ]
+}

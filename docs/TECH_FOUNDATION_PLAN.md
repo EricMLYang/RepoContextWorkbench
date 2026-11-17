@@ -23,11 +23,11 @@
 | 1 | spine 靜態入口：生成 AGENTS.md 與每組的 REPOS.md | F-132 | 1–2 天 | 無 | 完成（2026-11-18）：`ctx home sync`；沒掛 hook／MCP 的 Codex 與 Claude Code 在 spine 副本都答出 23 個 repo；真 spine 還沒跑 |
 | 2 | 狀態雙通道：hook 優先、OSC 7501 補位 | F-130 | 2 天 | 階段 0 驗過 Codex 會送 | 完成（2026-11-18）：真的 Claude Code 2.1.326 與 Codex 0.169 經引擎的 PTY 都記到 working → finished；App 畫面還沒測 |
 | 3 | 會話跑在 App 之外 | F-128 | 試作 1 天＋實作 3–5 天 | 決定 2 | 完成（2026-11-18，路線 A）：`session.backend: herdr-core`（預設仍是 pty）；真 hc 0.1.21 上，真的 Claude Code 跑到一半、丟掉 manager 再重建，接回後跑完；App 畫面、全螢幕程式、Windows 沒驗 |
-| 4a | 合併回 main、刪 Python 版與對拍 | VISION §6 第 2 項 | 1–2 天 | 使用者真用驗收 | 未開始 |
+| 4a | 合併回 main、刪 Python 版與對拍 | VISION §6 第 2 項 | 1–2 天 | 使用者真用驗收 | 沒做：等使用者決定（4b、4c、5a 後來確認不必等它） |
 | 4b | 知識索引改存 SQLite（排序不變、增量） | N-51 | 3 天 | 無（沒等 4a） | 完成（2026-11-18）：副本上暖查詢 760→280–400 ms、改一檔後 800→300 ms，20 個查詢結果與改前相同；代價是 db 172 MB（原 97 MB）、冷建 2→4.5 秒；真 spine 還沒量 |
 | 4c | 會話索引（Claude Code＋Codex） | F-134 | 3 天 | 4b | 完成（2026-11-18）：兩家各一個掃描器；Codex 補上逐字稿、digest、backfill、分岔；`ctx sessions --grep` 與 ⌘K「&」。副本上索引 113 場（Claude 110、Codex 3）、建 4.1 秒、db 23 MB、查詢 16–24 ms；App 畫面沒測 |
-| 5a | 介面合約由方法表生成 | N-52 | 3–5 天，可分批 | 4a | 未開始 |
-| 5b | 共享 skill 進 spine | F-133 | 盤點半天＋實作 1 天 | 階段 1、決定 3 | 未開始 |
+| 5a | 介面合約由方法表生成 | N-52 | 3–5 天，可分批 | 無（沒等 4a） | 完成（2026-11-18）：MCP 參數由型別生成、單一方法表、tools/list 逐位元組不變；MCP／CLI 旗標／`--json` 形狀三份「上次發版」快照擋破壞性變更；前端只做契約測試，沒有生成 TS |
+| 5b | 共享 skill 進 spine | F-133 | 盤點半天＋實作 1 天 | 階段 1、決定 3 | 盤點完成（2026-11-18，102 個 skill）；等使用者決定哪些算共享 |
 
 估計天數是我的推估，沒有實測依據；階段 3 的不確定性最大。
 
@@ -37,7 +37,7 @@
 ## 3. 每一項都要守的
 
 - 能力先做成 `ctx-core` 的函式，CLI／MCP／App 各接一層薄殼；引擎不依賴 Tauri。
-- 型別表達狀態；錯誤用 `Result`。新依賴只在 4b 加一個（`rusqlite`）。
+- 型別表達狀態；錯誤用 `Result`。新依賴只在 4b 加一個（`rusqlite`）；5a 另加 `schemars`（使用者在 N-52 指定可加，成本見 `RUST_PORTING.md`）。
 - 既有的 spine、registry、`.state/`、CLI、MCP 欄位只增不改；新增的寫進 `RUST_PORTING.md`。
 - 4a 之前新增的東西標「Rust 才有」，在 `scripts/parity.py` 加允許差異。
 - **Claude Code 與 Codex 都要接、都要測**；做不到的那一家在回報裡明說。
@@ -205,14 +205,25 @@
 
 ### 5a 介面合約由方法表生成（N-52）
 
-分三批，每批獨立可用：
+分三批，每批獨立可用。2026-11-18 實際做的（流程寫在 `DEVELOPMENT.md` §6「介面只增不改」）：
 
-1. MCP 工具的參數與回傳改成具名型別，`inputSchema` 由型別生成；加「上次發版的 schema」快照測試，
-   刪工具、刪欄位、新增必填都會讓測試失敗。
-2. `--json` 輸出用同一批型別，CLI 與 MCP 回同一個結構。
-3. 前端 `types.ts` 由型別生成，`desktop/IPC.md` 只留說明、不再手抄欄位。
+1. **做了。** MCP 每個工具的參數改成具名的 Rust 型別（`crates/ctx-cli/src/mcp/work.rs`、`admin.rs`），`inputSchema`
+   由型別生成（新依賴 `schemars`，`mcp/params.rs` 把輸出整理成原本的形狀）；方法表 `mcp/tools.rs` 的 `TOOLS` 是唯一一份清單，
+   tools/list、分派、`readOnlyHint`、`--admin` 分層都從它來。`tools/list` 跟改之前逐位元組相同（對拍照過）。
+   快照 `crates/ctx-cli/schema/mcp.tools.json`＋上次發版的 `mcp.tools.released.json`，相容測試擋刪工具、改名、刪參數、
+   選填變必填、新增必填、型別或 enum 收得更少、唯讀變非唯讀、工作層移到管理層。操作表（`ctx_core::ops`）來的管理層工具
+   本來就是宣告式、跟 CLI／工作台共用，沒改。回傳沒有改成具名型別（大多已是 `Serialize` 的 struct，其餘是手組 JSON）。
+2. **改成擋破壞，沒有改成共用型別。** 把 `--json` 全部改成具名型別是幾萬行的重構；改做形狀快照：在固定 fixture 上跑
+   agent 會用的 31 個指令，`--json` 化成「鍵路徑 → 型別」（`cli.json.shape.json`／`.released.json`）；另由 clap 定義生成
+   全部子指令的旗標表面（`cli.flags.json`／`.released.json`）。測試在 `crates/ctx-cli/tests/cli_schema.rs`。
+3. **只做了契約測試，沒有生成 TypeScript。** `types.ts` 對應的引擎輸出大多是手組 `Value`；已是具名 struct 的（TermInfo、
+   會話、決策卡…）生成 TS 要在 `ctx-core` 加 derive 依賴，生成的寫法（`T | null`、封閉的字串聯集）也跟手寫的
+   （`field?:`、`(string & {})`）不同，換掉會牽動一串元件——風險大於收益，先不做。改做：`crates/ctx-core/tests/ipc_contract.rs`
+   產生 `get_state`／`get_scan` 的 fixture，`desktop/src/test/contract.test.ts` 用 TypeScript 編譯器讀 `types.ts` 驗欄位與型別。
+   `desktop/IPC.md` 只加了指向契約測試的一句，手抄的段落沒動。
 
-驗收：加一個欄位只改引擎的型別一處，其餘由生成與編譯器帶出來。
+原本的驗收「加一個欄位只改引擎的型別一處」：MCP 參數做到了（改參數 struct 一處，schema、解析、說明都跟著走）；
+CLI、前端仍要各改各的，但改壞既有介面會被測試擋下。
 
 ### 5b 共享 skill 進 spine（F-133）
 

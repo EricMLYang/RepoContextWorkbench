@@ -39,6 +39,12 @@ Rust 才有的功能放在 `agentapi/` 底下的子模組——review、decision
 - 時間：`chrono::Local`；凡是 Python 收 `when=`／`today=` 參數的函式，Rust 也收 `Option<NaiveDateTime>` 之類，方便測試。
 - 外部指令（git／gh／claude）用 `std::process::Command`，參數與 Python 相同；不引入 git2。
 - 依賴從嚴：要加 crate 先看 workspace `Cargo.toml` 有沒有；新增要有理由（寫在 commit message）。
+- 介面由型別生成（N-52，2026-11-18）：MCP 工具的參數是 `#[derive(Deserialize, JsonSchema)]` 的 struct，`inputSchema`
+  由新依賴 `schemars`（1.x，只開 `derive`＋`std`；workspace 早已因 Tauri 間接用到同一版）生成，再由 `ctx-cli/src/mcp/params.rs`
+  整理成原本的形狀——tools/list 與改之前逐位元組相同。參數的寬鬆解析（非字串照 `str()` 轉、真值、數字字串）照舊，
+  錯誤訊息（`handoff() missing 1 required positional argument: 'done'`、管理層的 `'dir'`）照舊。成本：`ctx` release
+  執行檔 10.89 MB → 11.36 MB（+0.47 MB），乾淨 release 重編 `ctx-cli` 約 36 s → 36–38 s（CPU 177 s → 180–185 s，差異在雜訊邊緣）。
+  介面快照與相容規則見 `DEVELOPMENT.md` §6「介面只增不改」。
 - 每個 pub 函式第一行 doc comment 寫它對應哪個 Python 函式，例：`/// 對應 spine.append_event`。
 - 保留 Python 檔頭 docstring 的「為什麼」（精簡成模組 `//!` 註解），不要只留「做什麼」。
 

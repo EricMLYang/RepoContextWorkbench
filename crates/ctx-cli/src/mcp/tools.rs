@@ -1,480 +1,281 @@
-//! 工具表：工作層（預設）與管理層（`--admin` 才開）。宣告順序＝tools/list 順序。
+//! 方法表（N-52）：每個 MCP 工具在這裡宣告**一次**——名稱、唯讀與否、說明、處理函式；
+//! 參數型別由處理函式的簽名帶出來，`inputSchema` 由參數型別生成（`params::input_schema`）。
+//! `tools/list`、`tools/call` 的分派、唯讀標記、`--admin` 分層都只讀這張表。宣告順序＝tools/list 順序。
+//!
+//! 加一個工具：寫參數 struct＋處理函式（`work.rs`／`admin.rs`），在下面加一行。
+//! 加一個參數：在參數 struct 加一個欄位（doc comment 就是說明）。
+//! 兩者都會讓 `schema/mcp.tools.json` 過期——`CTX_UPDATE_SCHEMA=1 cargo test -p ctx-cli --test mcp_schema` 重生，
+//! 相容規則見 `docs/DEVELOPMENT.md` §6。
 
 use super::*;
+use serde::de::DeserializeOwned;
 
-pub(super) fn work(name: &str, desc: &str, schema: Value, f: WorkFn) -> Tool {
-    Tool {
-        name: name.into(),
-        description: desc.into(),
-        schema,
-        kind: ToolKind::Work(f),
-    }
-}
-
-pub(super) fn admin(
-    name: &str,
-    desc: &str,
-    schema: Value,
-    f: impl Fn(&Path, &Args) -> Result<String> + Send + Sync + 'static,
-) -> Tool {
-    Tool {
-        name: name.into(),
-        description: desc.into(),
-        schema,
-        kind: ToolKind::Admin(Box::new(f)),
-    }
-}
-
-/// 只讀不寫的工具（2026-11-14）：tools/list 標 `annotations.readOnlyHint`（MCP 標準欄位）。
+/// tools/list 要不要標 `annotations.readOnlyHint`（MCP 標準欄位，2026-11-14）。
 /// Codex 對沒標的工具每次都要使用者核准（`codex exec` 沒人可問，直接拒絕）；標了才會直接放行，
-/// 查脈絡不必一直按同意。會留痕的（log_decision、handoff…）、會記引用的（read_from）、
-/// 會另開 agent 花額度的（ask_repo）都不算只讀。
-pub const READ_ONLY_TOOLS: [&str; 8] = [
-    "where_am_i",
-    "context_for",
-    "next_work",
-    "messages",
-    "search_knowledge",
-    "repo_entry",
-    "repo_status",
-    "what_user_sees",
-];
+/// 查脈絡不必一直按同意。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Access {
+    /// 只讀不寫：標 readOnlyHint。
+    ReadOnly,
+    /// 有副作用——會留痕的（log_decision、handoff…）、會記引用的（read_from）、會另開 agent 花額度的
+    /// （ask_repo）都算；不標。管理層工具一律算這種（給人用的維護工具，不必自動放行）。
+    Effects,
+}
 
-/// 對應 `WORK_TOOLS`（宣告順序＝tools/list 順序）。
-pub static WORK_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
-    vec![
+use Access::{Effects, ReadOnly};
+
+/// 工作層工具：`f` 收參數型別 `P`（arguments 反序列化而來）、回 JSON。缺必填照 Python TypeError 報。
+fn work<P, F>(name: &'static str, access: Access, description: &str, f: F) -> Tool
+where
+    P: JsonSchema + DeserializeOwned,
+    F: Fn(&Path, P, &Path) -> Result<Value> + Send + Sync + 'static,
+{
+    let schema = input_schema::<P>();
+    let required = required_of(&schema);
+    Tool {
+        name: name.into(),
+        description: description.into(),
+        schema,
+        access,
+        kind: ToolKind::Work(Box::new(move |d, a, here| {
+            f(d, parse(name, a, &required, Missing::Positional)?, here)
+        })),
+    }
+}
+
+/// 管理層工具（`--admin` 才開）：回人話字串。缺必填照 Python KeyError 報（`'dir'`）。
+fn admin<P, F>(name: &'static str, description: &str, f: F) -> Tool
+where
+    P: JsonSchema + DeserializeOwned,
+    F: Fn(&Path, P) -> Result<String> + Send + Sync + 'static,
+{
+    let schema = input_schema::<P>();
+    let required = required_of(&schema);
+    Tool {
+        name: name.into(),
+        description: description.into(),
+        schema,
+        access: Effects,
+        kind: ToolKind::Admin(Box::new(move |d, a| {
+            f(d, parse(name, a, &required, Missing::Key)?)
+        })),
+    }
+}
+
+/// 操作表（`ctx_core::ops`）的一項 → 管理層寫入工具：參數宣告、驗證、留痕、錯誤訊息跟 CLI／工作台同一份。
+fn admin_op(o: &'static ops::Op) -> Tool {
+    let name = o.name;
+    Tool {
+        name: name.into(),
+        description: o.summary.into(),
+        schema: o.schema(),
+        access: Effects,
+        kind: ToolKind::Admin(Box::new(move |d, a| {
+            Ok(ops::call(d, name, Value::Object(a.clone()), Via::Mcp)?.1)
+        })),
+    }
+}
+
+/// 全部工具：工作層、管理層手寫的、管理層操作表來的。
+pub static TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
+    let mut v = vec![
         work(
             "where_am_i",
+            ReadOnly,
             "我在哪：cwd 屬於哪個已登記 repo、哪些組、預設工作範圍是什麼。沒登記會告訴你怎麼登記。",
-            s_(cwd_props(), &[]),
             w_where,
         ),
         work(
             "context_for",
+            ReadOnly,
             "這個範圍的完整脈絡：目標、上次交接、建議下一步、未結事項（帶 id）、\
              最近事件（帶 ref）、關係、需要注意的 repo、agent 狀態。開場注入已經給了摘要（交接、未結、同組成員）——\
              要更多細節、或做到一半要重抓時才呼叫。",
-            s_(
-                cat(vec![
-                    cwd_props(),
-                    scope_props(),
-                    vec![("card", d_(bool_t(), "是否另附 markdown 情境卡（內容跟其他欄位相同；預設 false）"))],
-                ]),
-                &[],
-            ),
             w_context,
         ),
         work(
             "next_work",
+            ReadOnly,
             "接下來值得做什麼（依序：上次交接的下一步 → 逾期未結 → 其他未結 → 擱置太久的 → 需要注意的 repo），\
              每項都附 why。",
-            s_(
-                cat(vec![
-                    cwd_props(),
-                    scope_props(),
-                    vec![("limit", d_(int_t(), "最多幾項，預設 5"))],
-                ]),
-                &[],
-            ),
             w_next,
         ),
         work(
             "log_decision",
+            Effects,
             "記下一個判斷或結論（為什麼這樣做、依據哪份檔）。回傳 ref，之後可引用。",
-            s_(
-                cat(vec![
-                    vec![
-                        ("text", d_(str_t(), "判斷內容；第一行寫結論，後面寫依據")),
-                        (
-                            "ref",
-                            d_(
-                                str_t(),
-                                "相關事件的 ref（例 decision:2026-09-25-d1、collision:2026-09-25-a）",
-                            ),
-                        ),
-                        (
-                            "supersedes",
-                            d_(
-                                str_t(),
-                                "這筆判斷取代哪一筆（decision:<id>）；被取代的之後不再出現在最近事件",
-                            ),
-                        ),
-                        (
-                            "reopen_when",
-                            d_(
-                                str_t(),
-                                "什麼情況要重看這個判斷（例：repo 超過 50 個、2026-12-01 前）；寫日期會在到期時提醒",
-                            ),
-                        ),
-                        (
-                            "outcome_of",
-                            d_(
-                                str_t(),
-                                "這段文字是哪一筆判斷後來的結果（decision:<id>）；會寫成結果（outcome）並指回它",
-                            ),
-                        ),
-                    ],
-                    cwd_props(),
-                    scope_props(),
-                    cross_props(),
-                ]),
-                &["text"],
-            ),
             w_log,
         ),
         work(
             "add_todo",
+            Effects,
             "開一個未結事項（之後要有人處理的事）。編號自動配；有真實期限才給 due，沒給就沒有期限。",
-            s_(
-                cat(vec![
-                    vec![
-                        ("text", d_(str_t(), "要做的事，一句話")),
-                        ("due", d_(str_t(), "YYYY-MM-DD，可省略")),
-                    ],
-                    cwd_props(),
-                    scope_props(),
-                    cross_props(),
-                ]),
-                &["text"],
-            ),
             w_add_todo,
         ),
         work(
             "close_todo",
+            Effects,
             "關掉一個未結事項（用 context_for／next_work 回傳的 id，例 #3）。",
-            s_(
-                cat(vec![
-                    vec![
-                        ("id", d_(str_t(), "未結事項編號，例 #3")),
-                        ("note", d_(str_t(), "怎麼結的，一句話")),
-                    ],
-                    cwd_props(),
-                    cross_props(),
-                ]),
-                &["id"],
-            ),
             w_close_todo,
         ),
         work(
             "tidy_todos",
+            Effects,
             "未結清理（使用者說「幫我清未結」時用）。不帶 close＝把範圍內的未結分成 done（可能已做完，附證據）／\
              shelved（擱置太久）／ask（等使用者決定）／live（還在進行），並回 suggest_close。\
              帶 close（編號陣列）＝一次關一批。先把要關的列給使用者看，他同意才帶 close。",
-            s_(
-                cat(vec![
-                    vec![
-                        ("close", d_(arr_t(), "要關掉的未結編號，例 [\"#3\", \"#7\"]；省略＝只列不關")),
-                        ("note", d_(str_t(), "怎麼結的，一句話（整批共用）")),
-                    ],
-                    cwd_props(),
-                    scope_props(),
-                    cross_props(),
-                ]),
-                &[],
-            ),
             w_tidy_todos,
         ),
         work(
             "report_status",
+            Effects,
             "回報你現在的階段，讓使用者在工作台一眼看出輪到誰：working／waiting（等使用者回應）／\
              blocked（卡住）／done。waiting 與 blocked 會進使用者的收件匣。",
-            s_(
-                cat(vec![
-                    vec![
-                        ("status", {
-                            let mut v = d_(str_t(), "目前階段");
-                            v["enum"] = json!(agentapi::STATUSES);
-                            v
-                        }),
-                        ("text", d_(str_t(), "在做什麼／在等什麼／卡在哪")),
-                    ],
-                    cwd_props(),
-                    scope_props(),
-                ]),
-                &["status"],
-            ),
             w_status,
         ),
         work(
             "request_decision",
+            Effects,
             "做到一半需要使用者決定時先呼叫（不要直接停下來問）。使用者同意過這類自動放行時回 \
              {decision:\"auto\", answer}：照 answer 接著做，不用停；否則回 {decision:\"wait\", reason}：\
              能做的先做完，收尾 handoff 帶同一個 ask。",
-            s_(cat(vec![ask_props(), cwd_props(), cross_props()]), &["question"]),
             w_request_decision,
         ),
         work(
             "handoff",
+            Effects,
             "收尾交接（每次會話結束前必呼叫）：完成了什麼、下次從哪接。\
              下一個 agent 的開場與 context_for／next_work 會讀到它。remaining 只是交接裡的一行備註，\
              不會開未結；要追蹤的事另外呼叫 add_todo。",
-            s_(
-                cat(vec![
-                    vec![
-                        ("done", d_(str_t(), "這次完成了什麼（成果、改了哪些檔）")),
-                        ("next_step", d_(str_t(), "下次從哪裡接，一句話")),
-                        ("remaining", d_(arr_t(), "可省略：沒做完的事，只寫進交接文字，不開未結")),
-                        ("ask", ask_schema()),
-                    ],
-                    cwd_props(),
-                    scope_props(),
-                    cross_props(),
-                ]),
-                &["done", "next_step"],
-            ),
             w_handoff,
         ),
         work(
             "send_message",
+            Effects,
             "對講：傳話給同組另一個 repo 的 agent（請它做事、問它介面、告訴它你改了共用的東西），或帶 re 回覆收到的訊息。\
              那個 repo 有會話在跑就送進它的脈絡（它用完下一個工具時），沒有就進使用者收件匣、那邊下次開場看到；\
              對方的回覆會送回你這場會話。不用等回覆，繼續手上的事。跨組要先問使用者再帶 cross_scope_ok。",
-            s_(
-                cat(vec![
-                    vec![
-                        ("to", d_(str_t(), "收件 repo id（同組成員見 context_for 的 roster）；回覆時可省略")),
-                        ("text", d_(str_t(), "要說的話：要什麼、為什麼、做完怎樣算好；長內容寫成檔、這裡放路徑")),
-                        ("re", d_(str_t(), "回覆哪一則（訊息編號，例 2026-11-04-m1）")),
-                    ],
-                    cwd_props(),
-                    cross_props(),
-                ]),
-                &["text"],
-            ),
             w_send_message,
         ),
         work(
             "messages",
+            ReadOnly,
             "對講收件匣：別的 repo 的 agent 傳給你這個 repo 的話（新的這次算收到）與你送出的，\
              加上同組現在在跑的 agent（repo、標題、在做什麼）——要改共用的東西前先看誰在動。",
-            s_(
-                cat(vec![
-                    vec![("limit", d_(int_t(), "最多幾則，預設 10"))],
-                    cwd_props(),
-                ]),
-                &[],
-            ),
             w_messages,
         ),
         work(
             "describe_repo",
+            Effects,
             "寫 repo 的名片：一句話介紹、協作角色、搜尋關鍵字。組員名冊與 search_knowledge 的 repo 排名都靠它；\
              存在 spine（registry），不會寫進 repo。開場名冊標「推測自 README」或沒有介紹時，做完手上的事順手補。\
              只能改主場（所在 repo＋同組成員）；空字串／空陣列＝清掉該欄。",
-            s_(
-                cat(vec![
-                    vec![
-                        ("id", d_(str_t(), "repo id；省略＝你所在的 repo")),
-                        (
-                            "description",
-                            d_(str_t(), "一句話：這個 repo 是什麼、別的 repo 會來這裡找什麼"),
-                        ),
-                        ("role", d_(str_t(), "協作角色，一個短詞（例 知識庫、規格來源、實作）")),
-                        ("keywords", d_(arr_t(), "搜尋用關鍵字（tags 是給人分類的，別重複）")),
-                    ],
-                    cwd_props(),
-                    cross_props(),
-                ]),
-                &[],
-            ),
             w_describe,
         ),
         work(
             "workbench_apply",
+            Effects,
             "改工作台設定（跟 App 助手同一份白名單）：建組 create_group、設組員 set_members、改名 rename_group、\
              組目標 set_goal、標籤 tag、分層 set_tier、類別 set_class（code／agent／data／docs／knowledge／reference）。steps＝[{op, args}]；預設只回預覽，\
              給使用者看過、同意後帶 confirm=true 才執行。碰到主場以外的 repo 要使用者同意（cross_scope_ok）。\
              換範圍、切分頁等畫面動作只在 App 做。",
-            s_(
-                cat(vec![
-                    vec![
-                        (
-                            "steps",
-                            d_(
-                                json!({"type": "array", "items": {"type": "object"}}),
-                                "[{op, args}]，例 [{\"op\":\"tag\",\"args\":{\"id\":\"repo-a\",\"add\":[\"規格\"]}}]",
-                            ),
-                        ),
-                        ("confirm", d_(bool_t(), "使用者看過預覽並同意後才設 true")),
-                    ],
-                    cwd_props(),
-                    cross_props(),
-                ]),
-                &["steps"],
-            ),
             w_apply,
         ),
         work(
             "search_knowledge",
+            ReadOnly,
             "要別的 repo 的資訊先問誰有：最該去的 repo、起點、判斷、下一步。",
-            s_(
-                cat(vec![
-                    vec![
-                        ("query", d_(str_t(), "要比對的文字")),
-                        ("detail", {
-                            let mut v = d_(str_t(), "預設 brief");
-                            v["enum"] = json!(["brief", "full"]);
-                            v
-                        }),
-                        (
-                            "everywhere",
-                            d_(bool_t(), "true（預設）＝搜全部 repo；false＝只搜主場範圍"),
-                        ),
-                        ("code", d_(bool_t(), "是否也搜程式碼（預設 true）")),
-                        ("limit", d_(int_t(), "最多回幾個檔，預設 8")),
-                    ],
-                    cwd_props(),
-                    scope_props(),
-                ]),
-                &["query"],
-            ),
             w_search,
         ),
         work(
             "repo_entry",
+            ReadOnly,
             "repo 入口卡：是什麼、從哪讀起、最近判斷與交接、現況。之後自己讀。",
-            s_(vec![("repo", str_t())], &["repo"]),
             w_repo_entry,
         ),
         work(
             "read_from",
+            Effects,
             "讀別的 repo 的檔或目錄並留引用（上游改了會提醒）：ref＝`<repo>:<export>/子路徑`、`<repo>:<相對路徑>` \
              或 search_knowledge 給的。回內容＋commit。",
-            s_(
-                cat(vec![
-                    vec![
-                        (
-                            "ref",
-                            d_(
-                                str_t(),
-                                "例 notes:書摘/Chapter03.md、impl:src/app.py、impl（只給 repo＝看根目錄）",
-                            ),
-                        ),
-                        ("lines", d_(str_t(), "只讀某段，例 120-180")),
-                    ],
-                    cwd_props(),
-                ]),
-                &["ref"],
-            ),
             w_read,
         ),
         work(
             "ask_repo",
+            Effects,
             "在另一個 repo 開唯讀 agent 回答問題（照它的 AGENTS.md 找資料），只回結論＋引用。慢又花錢：要整理歸納才用。",
-            s_(
-                cat(vec![
-                    vec![
-                        ("repo", d_(str_t(), "repo id")),
-                        ("question", d_(str_t(), "要問的問題，寫清楚要什麼")),
-                        (
-                            "provider",
-                            d_(str_t(), "claude（預設看 config provider.ask）或 mock"),
-                        ),
-                    ],
-                    cwd_props(),
-                ]),
-                &["repo", "question"],
-            ),
             w_ask,
         ),
         work(
             "repo_status",
+            ReadOnly,
             "repo 狀態卡：最近變化與改動集中的目錄、沒 commit 的檔與放了幾天、正在跑的 dev server\
              （啟動後有沒有檔案又改過＝要不要重開）、最後交接、agent 文件裡失效的跨 repo 路徑、上游變動。",
-            s_(
-                cat(vec![
-                    vec![
-                        ("repo", d_(str_t(), "repo id；省略＝你所在的 repo")),
-                        (
-                            "since",
-                            d_(str_t(), "7d／30d 或 commit hash；省略＝最近 5 則"),
-                        ),
-                    ],
-                    cwd_props(),
-                ]),
-                &[],
-            ),
             w_repo_status,
         ),
         work(
             "what_user_sees",
+            ReadOnly,
             "使用者在工作台 App 畫面上正在看什麼：主區開著哪個檔（repo、路徑、絕對路徑、看法、看得到第幾行、\
              md 停在哪個標題、有沒有沒存的修改）或工作區哪個分頁，加上選的牌組與右側欄。\
              只在使用者提到畫面時呼叫（「根據畫面」「我正在看的」「這個檔」「這段」「看一下我的畫面」）；\
              沒提就別呼叫，也別把結果當成使用者的要求。拿到 abs 再自己讀檔；age_seconds 很大＝可能不是現在的畫面。",
-            s_(cwd_props(), &[]),
             w_screen,
         ),
-    ]
-});
-
-/// 對應 `ADMIN_TOOLS`：手寫的維護工具＋操作表（`ops::ops()`）自動變成的寫入工具。
-pub static ADMIN_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
-    let mut v = vec![
+        // ---- 管理層（`ctx mcp --admin`）
         admin(
             "registry_list",
             "列出所有已登記 repo（id／類型／tier／路徑）",
-            s_(vec![], &[]),
             t_registry_list,
         ),
         admin(
             "registry_audit",
             "稽核 registry：tier 與實際活動不符、路徑失效、目錄裡有未登記 repo",
-            s_(vec![("scan_dirs", arr_t())], &[]),
             t_registry_audit,
         ),
         admin(
             "registry_scan",
             "掃一個目錄找未登記的 git repo（apply=true 才真的登記）",
-            s_(vec![("dir", str_t()), ("apply", bool_t())], &["dir"]),
             t_registry_scan,
         ),
         admin(
             "registry_relations",
             "讀 repo 間關係（給 id＝站在該 repo 兩向讀；省略＝全部）",
-            s_(vec![("id", str_t())], &[]),
             t_registry_relations,
         ),
         admin(
             "refs_check",
             "跨 repo 參考檢查：agent 文件裡失效的跨 repo 路徑、引用過的上游有變、建議宣告的 export",
-            s_(vec![], &[]),
             t_refs_check,
         ),
         admin(
             "group_context",
             "組情境卡（markdown）：成員與角色、脈動、本組未結、最近事件、角色說明",
-            s_(scope_props(), &[]),
             t_group_context,
         ),
         admin(
             "group_list",
             "列出所有組與成員",
-            s_(vec![], &[]),
             t_group_list,
         ),
         admin(
             "collect",
             "採集 git 狀態（dirty、末次 commit、ahead/behind、worktree）",
-            s_(scope_props(), &[]),
             t_collect,
         ),
         admin(
             "pack",
             "把範圍內的 md 文件打包成一份全文（含洩密過濾）",
-            s_(cat(vec![scope_props(), vec![("budget", int_t())]]), &[]),
             t_pack,
         ),
         admin(
             "pack_estimate",
             "只估算範圍內 md 文件的 token 成本，不打包",
-            s_(scope_props(), &[]),
             t_pack_estimate,
         ),
         admin(
             "brief",
             "產生早晨簡報並存檔（會落一筆 presented 事件）",
-            s_(scope_props(), &[]),
             t_brief,
         ),
         admin(
@@ -482,115 +283,60 @@ pub static ADMIN_TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
             "直接寫一筆原始脊椎事件（進階；一般請用 log_decision／add_todo）。\
              type: presented/chosen/decision/suggestion/collision/open-loop/outcome；\
              kv: #編號 或 group:/repo:/ref:/due:/id: token",
-            s_(
-                vec![
-                    ("type", str_t()),
-                    ("source", str_t()),
-                    ("kv", arr_t()),
-                    ("body", str_t()),
-                ],
-                &["type", "source"],
-            ),
             t_spine_append,
         ),
         admin(
             "spine_query",
             "查脊椎事件（依型別／日期／組）",
-            s_(
-                vec![
-                    ("type", str_t()),
-                    ("date", str_t()),
-                    ("today", bool_t()),
-                    ("group", str_t()),
-                    ("verbose", bool_t()),
-                ],
-                &[],
-            ),
             t_spine_query,
         ),
         admin(
             "spine_stats",
             "量測：靈感命中率＋repo 存活率",
-            s_(vec![], &[]),
             t_spine_stats,
         ),
         admin(
             "open_loops",
             "未結事項（可依 group／repos 過濾）",
-            s_(scope_props(), &[]),
             t_open_loops,
         ),
         admin(
             "spine_lint",
             "脊椎衛生檢查：ref 斷鏈、逾期未結、碰撞沒回程、dead-letter 積壓",
-            s_(vec![], &[]),
             t_spine_lint,
         ),
         admin(
             "unread",
             "使用者的未讀事件（ack=true 會把使用者的收件匣全部標已讀，別隨便用）",
-            s_(vec![("ack", bool_t())], &[]),
             t_unread,
         ),
         admin(
             "collide_submit",
             "把一個想法丟去跟範圍內的 repo 比對（wait=true 同步等判定）",
-            s_(
-                cat(vec![
-                    vec![("idea", str_t())],
-                    scope_props(),
-                    vec![("wait", bool_t()), ("provider", str_t())],
-                ]),
-                &["idea"],
-            ),
             t_collide_submit,
         ),
         admin(
             "route",
             "把一段文字落檔（dest: group:<g> | repo:<id> | incubator）",
-            s_(
-                vec![("text", str_t()), ("dest", str_t()), ("title", str_t())],
-                &["text", "dest"],
-            ),
             t_route,
         ),
         admin(
             "upstream_check",
             "查 external repo 的上游新 release／commit",
-            s_(scope_props(), &[]),
             t_upstream_check,
         ),
         admin(
             "digest_run",
             "跑增量摘要（便宜模型）",
-            s_(cat(vec![scope_props(), vec![("provider", str_t())]]), &[]),
             t_digest_run,
         ),
         admin(
             "spawn",
             "把 incubator 的想法升格成新 repo（登記＋血統）",
-            s_(
-                vec![
-                    ("id", str_t()),
-                    ("path", str_t()),
-                    ("from_incubator", str_t()),
-                    ("origin", str_t()),
-                ],
-                &["id", "path"],
-            ),
             t_spawn,
         ),
     ];
-    // 管理類寫入動作一律來自操作表：參數、留痕、錯誤訊息跟 CLI／工作台同一份
-    for o in ops::ops() {
-        let name = o.name;
-        let tool = admin(name, o.summary, o.schema(), move |d, a| {
-            Ok(ops::call(d, name, Value::Object(a.clone()), Via::Mcp)?.1)
-        });
-        match v.iter_mut().find(|t| t.name == name) {
-            Some(slot) => *slot = tool,
-            None => v.push(tool),
-        }
-    }
+    // 管理類寫入動作一律來自操作表（加一個操作就自動多一個工具）
+    v.extend(ops::ops().iter().map(admin_op));
     v
 });

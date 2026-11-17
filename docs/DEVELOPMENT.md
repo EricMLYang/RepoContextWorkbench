@@ -113,6 +113,42 @@ desktop/src（React，只管畫面）── IPC ┘
   一定帶 timeout、逾時交回 TUI。2026-10-18 實測（release、7MB 逐字稿）：tool-start／tool-end／stop／prompt 都約 10ms。
   SessionStart 是例外（要組脈絡），預算 < 500ms。
 
+### 介面只增不改：方法表、生成的 schema、發版快照（N-52，2026-11-18）
+
+MCP 工具、CLI 旗標、agent 會用的 `--json` 輸出都有「目前的介面」與「上次發版的介面」兩份快照，在 `crates/ctx-cli/schema/`：
+
+| 介面 | 目前（生成） | 上次發版 | 測試 |
+|---|---|---|---|
+| MCP 工具（兩層的 tools/list） | `mcp.tools.json` | `mcp.tools.released.json` | `crates/ctx-cli/tests/mcp_schema.rs` |
+| CLI 旗標（clap 定義） | `cli.flags.json` | `cli.flags.released.json` | `crates/ctx-cli/tests/cli_schema.rs` |
+| CLI `--json` 輸出形狀 | `cli.json.shape.json` | `cli.json.shape.released.json` | 同上 |
+
+- **加一個 MCP 工具**：在 `crates/ctx-cli/src/mcp/work.rs`（工作層，回 JSON）或 `admin.rs`（管理層，回字串）寫參數 struct
+  （`#[derive(Deserialize, JsonSchema)]`）與處理函式 `fn(&Path, 參數, &Path) -> Result<Value>`，在 `mcp/tools.rs` 的方法表
+  `TOOLS` 加一行 `work("名稱", ReadOnly|Effects, "說明", 處理函式)`。`inputSchema`、分派、`readOnlyHint`、`--admin` 分層都由這一行帶出來。
+  管理類的寫入動作改在 `ctx_core::ops` 的操作表加，MCP 自動多一個管理層工具。
+- **加一個參數**：在參數 struct 加一個欄位，doc comment 就是 agent 看到的說明。選填＝`Option<…>`，必填＝不包 `Option`；
+  共用的 `cwd`／`group`＋`repos`／`cross_scope_ok` 用 `#[serde(flatten)]` 攤 `Cwd`／`Scope`／`Cross`；enum 用
+  `#[schemars(extend("enum" = 引擎的常數))]`。欄位型別用 `mcp/params.rs` 的寬鬆型別（`Str`、`Flag`、`Int`、`List`…）：
+  agent 送錯型別照 Python 的規則照收（`"3"` 當 3、`text: 123` 當 `"123"`），驗值留給引擎，錯誤訊息才講得清楚。
+- 改完跑 `CTX_UPDATE_SCHEMA=1 cargo test -p ctx-cli --test mcp_schema --test cli_schema` 重生「目前」的快照，看 `git diff`
+  確認只動到想動的。忘了重生，`cargo test` 會失敗並說是哪些工具／指令過期。
+- **相容規則**（`*.released.json` → 目前，測試擋住會弄壞舊呼叫者的變更）：
+  - MCP：不能刪工具或改名、不能把工作層工具移到管理層、唯讀不能變非唯讀、不能刪參數、選填不能變必填、不能新增必填參數、
+    參數型別與 enum 不能收得更少（巢狀物件與陣列元素一樣）。可以：新工具、新的選填參數、enum 多值、改說明、必填變選填。
+  - CLI 旗標：子指令、旗標、別名不能消失或改名，長短名與位置參數的位置不能變，選填不能變必填，不能新增必填旗標，
+    收不收值不能變，可選值不能變少。
+  - `--json` 輸出：在固定 fixture 上跑 `cli_schema.rs` 的 `SCRIPT`，輸出化成「鍵路徑 → 型別」（陣列取元素聯集，整數小數不分）；
+    舊的鍵路徑不能消失，不能多出舊的沒有的型別（包括多出 `null`）。可以多鍵。agent 會用的新指令要加進 `SCRIPT`。
+- **發版時**：把三份「目前」複製成對應的 `*.released.json`，跟發版的 commit 一起進 git。
+- **真的要破壞**（改名、刪掉、改意思）：先想能不能不破壞——舊參數留著當別名、新增欄位取代、舊鍵照給到下一版。
+  非破壞不可時：在同一個 commit 裡改 `*.released.json`（等於宣告這次發版不相容），`RUST_PORTING.md` 記一條「合約變更」寫清楚
+  舊呼叫者會遇到什麼、怎麼改，`ctx instructions`／skill 一起改。不要為了讓測試過而只改快照不寫理由。
+- **前端型別**：`get_state`／`get_scan` 在引擎多是手組的 JSON，`desktop/src/api/types.ts` 仍是手寫；守法是契約測試——
+  `crates/ctx-core/tests/ipc_contract.rs` 在 testkit spine 上跑引擎，存成 `desktop/src/test/fixtures/engine-contract.json`
+  （形狀過期就失敗，`CTX_UPDATE_SCHEMA=1 cargo test -p ctx-core --test ipc_contract` 重生），`desktop/src/test/contract.test.ts`
+  用 TypeScript 編譯器讀 `types.ts`，驗宣告為必有的欄位都在、型別對（物件與陣列元素往下驗）。
+
 ## 7. 測試與驗證
 
 - 改完必跑（CI 也跑同一套）：**`scripts/check.sh [rust|front|all]`** 一次跑完下面這些，過的步驟不印、失敗印尾巴——

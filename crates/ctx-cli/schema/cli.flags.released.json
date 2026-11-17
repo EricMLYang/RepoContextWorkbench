@@ -1,0 +1,3201 @@
+{
+  "ctx": {
+    "aliases": [],
+    "args": {
+      "spine": {
+        "long": "spine",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "json": {
+        "long": "json",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx init": {
+    "aliases": [],
+    "args": {
+      "path": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx registry add": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "path": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "kind": {
+        "long": "type",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": [
+          "mine",
+          "external"
+        ]
+      },
+      "tier": {
+        "long": "tier",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "tags": {
+        "long": "tags",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "upstream": {
+        "long": "upstream",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry set": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "key": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "value": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry describe": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "description": {
+        "long": "description",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "role": {
+        "long": "role",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "keywords": {
+        "long": "keywords",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry class": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "class": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry tier": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "tier": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "resume_when": {
+        "long": "resume-when",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry remove": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry tag": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "add": {
+        "long": "add",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "remove": {
+        "long": "remove",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry list": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx registry scan": {
+    "aliases": [],
+    "args": {
+      "dir": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "apply": {
+        "long": "apply",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx registry audit": {
+    "aliases": [],
+    "args": {
+      "scan": {
+        "long": "scan",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry relate": {
+    "aliases": [],
+    "args": {
+      "a": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "b": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "kind": {
+        "long": "kind",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "note": {
+        "long": "note",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "export": {
+        "long": "export",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry unrelate": {
+    "aliases": [],
+    "args": {
+      "a": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "b": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "kind": {
+        "long": "kind",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry relations": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry changes": {
+    "aliases": [],
+    "args": {
+      "since": {
+        "long": "since",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry suggest": {
+    "aliases": [],
+    "args": {
+      "dismiss": {
+        "long": "dismiss",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry export": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "path": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "note": {
+        "long": "note",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry unexport": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx registry exports": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx group": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx group add": {
+    "aliases": [],
+    "args": {
+      "name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "members": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx group list": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx group add-member": {
+    "aliases": [],
+    "args": {
+      "name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "members": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx group remove-member": {
+    "aliases": [],
+    "args": {
+      "name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "members": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx group rename": {
+    "aliases": [],
+    "args": {
+      "name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "new_name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx group remove": {
+    "aliases": [],
+    "args": {
+      "name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx group goal": {
+    "aliases": [],
+    "args": {
+      "name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "text": {
+        "long": "text",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx group context": {
+    "aliases": [],
+    "args": {
+      "name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "members": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx group summary": {
+    "aliases": [],
+    "args": {
+      "name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "members": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx home": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx home sync": {
+    "aliases": [],
+    "args": {
+      "check": {
+        "long": "check",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx pulse": {
+    "aliases": [],
+    "args": {
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "limit": {
+        "long": "limit",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx collect": {
+    "aliases": [],
+    "args": {
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx pack": {
+    "aliases": [],
+    "args": {
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "budget": {
+        "long": "budget",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "estimate": {
+        "long": "estimate",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx brief": {
+    "aliases": [],
+    "args": {
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx append": {
+    "aliases": [],
+    "args": {
+      "etype": {
+        "long": "type",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "source": {
+        "long": "source",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "body": {
+        "long": "body",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "kv": {
+        "long": "kv",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "dead_letter": {
+        "long": "dead-letter",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx query": {
+    "aliases": [],
+    "args": {
+      "etype": {
+        "long": "type",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "date": {
+        "long": "date",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "today": {
+        "long": "today",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "stats": {
+        "long": "stats",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "verbose": {
+        "long": "verbose",
+        "short": "v",
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx loops": {
+    "aliases": [],
+    "args": {
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx lint": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx collide": {
+    "aliases": [],
+    "args": {
+      "action": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": [
+          "submit",
+          "run"
+        ]
+      },
+      "idea": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cid": {
+        "long": "cid",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "provider": {
+        "long": "provider",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "wait": {
+        "long": "wait",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "no_run": {
+        "long": "no-run",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx route": {
+    "aliases": [],
+    "args": {
+      "text": {
+        "long": "text",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "file": {
+        "long": "file",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "dest": {
+        "long": "dest",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "title": {
+        "long": "title",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx unread": {
+    "aliases": [],
+    "args": {
+      "ack": {
+        "long": "ack",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx commit": {
+    "aliases": [],
+    "args": {
+      "message": {
+        "long": "message",
+        "short": "m",
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx upstream": {
+    "aliases": [],
+    "args": {
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx digest": {
+    "aliases": [],
+    "args": {
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "provider": {
+        "long": "provider",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx spawn": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "path": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "from_incubator": {
+        "long": "from-incubator",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "origin": {
+        "long": "origin",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx timer": {
+    "aliases": [],
+    "args": {
+      "once": {
+        "long": "once",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "interval": {
+        "long": "interval",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx notify": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx session": {
+    "aliases": [],
+    "args": {
+      "steward": {
+        "long": "steward",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repo": {
+        "long": "repo",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "task": {
+        "long": "task",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "agent": {
+        "long": "agent",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "print_only": {
+        "long": "print",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx mcp": {
+    "aliases": [],
+    "args": {
+      "admin": {
+        "long": "admin",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx app": {
+    "aliases": [],
+    "args": {
+      "port": {
+        "long": "port",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx ui": {
+    "aliases": [],
+    "args": {
+      "port": {
+        "long": "port",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "no_browser": {
+        "long": "no-browser",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx where": {
+    "aliases": [],
+    "args": {
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx context": {
+    "aliases": [],
+    "args": {
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx next": {
+    "aliases": [],
+    "args": {
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "limit": {
+        "long": "limit",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx sessions": {
+    "aliases": [],
+    "args": {
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "limit": {
+        "long": "limit",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "query": {
+        "long": "query",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "digest": {
+        "long": "digest",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "grep": {
+        "long": "grep",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx screen": {
+    "aliases": [],
+    "args": {
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx worktrees": {
+    "aliases": [],
+    "args": {
+      "repo": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "remove": {
+        "long": "remove",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx log": {
+    "aliases": [],
+    "args": {
+      "text": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "reference": {
+        "long": "ref",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "supersedes": {
+        "long": "supersedes",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "reopen_when": {
+        "long": "reopen-when",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "outcome_of": {
+        "long": "outcome-of",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cross_scope_ok": {
+        "long": "cross-scope-ok",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "source": {
+        "long": "source",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx todo": {
+    "aliases": [],
+    "args": {
+      "action": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": [
+          "add",
+          "close",
+          "list",
+          "review",
+          "brief",
+          "tidy"
+        ]
+      },
+      "text": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "more": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "close": {
+        "long": "close",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "due": {
+        "long": "due",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "note": {
+        "long": "note",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "all": {
+        "long": "all",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cross_scope_ok": {
+        "long": "cross-scope-ok",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "source": {
+        "long": "source",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx status": {
+    "aliases": [],
+    "args": {
+      "status": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": [
+          "working",
+          "waiting",
+          "blocked",
+          "done"
+        ]
+      },
+      "text": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx handoff": {
+    "aliases": [],
+    "args": {
+      "done": {
+        "long": "done",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "next_step": {
+        "long": "next",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "remaining": {
+        "long": "remaining",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "question": {
+        "long": "ask",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "kind": {
+        "long": "kind",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": [
+          "commit",
+          "content_review",
+          "config_change",
+          "choose",
+          "visual_check",
+          "manual_test",
+          "push",
+          "publish",
+          "delete",
+          "send_external",
+          "other"
+        ]
+      },
+      "options": {
+        "long": "option",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "recommend": {
+        "long": "recommend",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "irreversible": {
+        "long": "irreversible",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "evidence": {
+        "long": "evidence",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cross_scope_ok": {
+        "long": "cross-scope-ok",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "source": {
+        "long": "source",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx msg": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx msg send": {
+    "aliases": [],
+    "args": {
+      "to": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "text": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "re": {
+        "long": "re",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cross_scope_ok": {
+        "long": "cross-scope-ok",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx msg list": {
+    "aliases": [],
+    "args": {
+      "limit": {
+        "long": "limit",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx relay": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx relay plan": {
+    "aliases": [],
+    "args": {
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "all": {
+        "long": "all",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx relay report": {
+    "aliases": [],
+    "args": {
+      "since": {
+        "long": "since",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "all": {
+        "long": "all",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx relay answer": {
+    "aliases": [],
+    "args": {
+      "repo": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "reply": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx decide": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx decide list": {
+    "aliases": [],
+    "args": {
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "all": {
+        "long": "all",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "auto": {
+        "long": "auto",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "mine": {
+        "long": "mine",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "since": {
+        "long": "since",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx decide answer": {
+    "aliases": [],
+    "args": {
+      "repo": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "reply": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx decide request": {
+    "aliases": [],
+    "args": {
+      "question": {
+        "long": "ask",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "kind": {
+        "long": "kind",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": [
+          "commit",
+          "content_review",
+          "config_change",
+          "choose",
+          "visual_check",
+          "manual_test",
+          "push",
+          "publish",
+          "delete",
+          "send_external",
+          "other"
+        ]
+      },
+      "options": {
+        "long": "option",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "recommend": {
+        "long": "recommend",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "irreversible": {
+        "long": "irreversible",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "evidence": {
+        "long": "evidence",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cross_scope_ok": {
+        "long": "cross-scope-ok",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "source": {
+        "long": "source",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx decide trust": {
+    "aliases": [],
+    "args": {
+      "repo": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "kind": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "paths": {
+        "long": "paths",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx decide untrust": {
+    "aliases": [],
+    "args": {
+      "repo": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "kind": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx decide overturn": {
+    "aliases": [],
+    "args": {
+      "reference": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "why": {
+        "long": "why",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx decide rules": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx decide suggest": {
+    "aliases": [],
+    "args": {
+      "repo": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "text": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "why": {
+        "long": "why",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx steward": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx search": {
+    "aliases": [],
+    "args": {
+      "query": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "file": {
+        "long": "file",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "here": {
+        "long": "here",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "no_code": {
+        "long": "no-code",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "limit": {
+        "long": "limit",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "brief": {
+        "long": "brief",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx fresh": {
+    "aliases": [],
+    "args": {
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "run": {
+        "long": "run",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "days": {
+        "long": "days",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "all": {
+        "long": "all",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "dismiss": {
+        "long": "dismiss",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "try_id": {
+        "long": "try",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "stats": {
+        "long": "stats",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx decisions": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx decisions export": {
+    "aliases": [],
+    "args": {
+      "dir": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "group": {
+        "long": "group",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repos": {
+        "long": "repos",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx assist": {
+    "aliases": [],
+    "args": {
+      "text": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "yes": {
+        "long": "yes",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  },
+  "ctx health": {
+    "aliases": [],
+    "args": {
+      "days": {
+        "long": "days",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx backfill": {
+    "aliases": [],
+    "args": {
+      "action": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": [
+          "scan",
+          "run",
+          "review",
+          "accept"
+        ]
+      },
+      "ids": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repo": {
+        "long": "repo",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "limit": {
+        "long": "limit",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "model": {
+        "long": "model",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "jobs": {
+        "long": "jobs",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx resolve": {
+    "aliases": [],
+    "args": {
+      "reference": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx read": {
+    "aliases": [],
+    "args": {
+      "reference": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "lines": {
+        "long": "lines",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx ask": {
+    "aliases": [],
+    "args": {
+      "repo": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "question": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": []
+      },
+      "provider": {
+        "long": "provider",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx repo": {
+    "aliases": [],
+    "args": {
+      "id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "entry_id": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "since": {
+        "long": "since",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "peek": {
+        "long": "peek",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx refs": {
+    "aliases": [],
+    "args": {
+      "action": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": [
+          "check",
+          "drift",
+          "suggest",
+          "cite"
+        ]
+      },
+      "reference": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "repo": {
+        "long": "repo",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "note": {
+        "long": "note",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "min": {
+        "long": "min",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx hook": {
+    "aliases": [],
+    "args": {
+      "event": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": true,
+        "takes_value": true,
+        "values": [
+          "session-start",
+          "session-end",
+          "stop",
+          "notification",
+          "prompt",
+          "permission",
+          "permission-request",
+          "statusline",
+          "tool-start",
+          "tool-end",
+          "stop-failure",
+          "subagent-start",
+          "subagent-stop"
+        ]
+      },
+      "agent": {
+        "long": "agent",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
+  "ctx instructions": {
+    "aliases": [],
+    "args": {}
+  },
+  "ctx setup": {
+    "aliases": [],
+    "args": {
+      "spine_path": {
+        "long": "spine",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "claude": {
+        "long": "claude",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "codex": {
+        "long": "codex",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      },
+      "dry_run": {
+        "long": "dry-run",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": false,
+        "values": [
+          "true",
+          "false"
+        ]
+      }
+    }
+  }
+}

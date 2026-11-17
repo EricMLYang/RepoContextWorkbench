@@ -1,0 +1,623 @@
+{
+  "get_state": {
+    "groups": [
+      {
+        "name": "g1",
+        "members": [
+          "repo-a",
+          "repo-b"
+        ],
+        "goal": "",
+        "goal_at": ""
+      }
+    ],
+    "repos": [
+      "repo-a",
+      "repo-b"
+    ],
+    "tiers": {
+      "repo-a": "active",
+      "repo-b": "active"
+    },
+    "tags": {
+      "repo-a": [],
+      "repo-b": []
+    },
+    "tag_vocab": [],
+    "relations": [
+      {
+        "from": "repo-a",
+        "to": "repo-b",
+        "kind": "pm-of",
+        "note": "n",
+        "in_scope": true,
+        "task": "檢查規劃與實作是否一致：repo-a 是 repo-b 的 PM。請比對 repo-a 的規劃／需求文件與 repo-b 的實作與驗收條件，列出不一致、缺漏與已過期的部分，每條標明來自哪個 repo 的哪份檔，再跟我確認要改哪一邊。"
+      }
+    ],
+    "rel_kinds": {
+      "pm-of": {
+        "forward": "規劃（PM）",
+        "inverse": "PM 是"
+      },
+      "feeds": {
+        "forward": "供料給",
+        "inverse": "吃料自"
+      },
+      "derived-from": {
+        "forward": "衍生自",
+        "inverse": "衍生出"
+      },
+      "upstream-of": {
+        "forward": "是其上游",
+        "inverse": "上游是"
+      },
+      "sibling-topic": {
+        "forward": "同主題",
+        "inverse": "同主題",
+        "symmetric": true
+      }
+    },
+    "unread": [
+      {
+        "date": "2026-11-18",
+        "time": "03:32",
+        "type": "open-loop",
+        "source": "agent",
+        "tokens": [
+          "#1",
+          "due:2099-01-01",
+          "group:g1"
+        ],
+        "body": "補測試",
+        "header": "## 03:32 open-loop [agent] #1 due:2099-01-01 group:g1"
+      },
+      {
+        "date": "2026-11-18",
+        "time": "03:32",
+        "type": "decision",
+        "source": "agent",
+        "tokens": [
+          "id:2026-11-18-d1",
+          "group:g1"
+        ],
+        "body": "快取改用 LRU",
+        "header": "## 03:32 decision [agent] id:2026-11-18-d1 group:g1"
+      },
+      {
+        "date": "2026-11-18",
+        "time": "03:32",
+        "type": "decision",
+        "source": "agent",
+        "tokens": [
+          "id:2026-11-18-d2",
+          "group:g1"
+        ],
+        "body": "交接：改了快取\n完成：改了快取\n剩下：無\n下次從這裡接：補測試",
+        "header": "## 03:32 decision [agent] id:2026-11-18-d2 group:g1"
+      },
+      {
+        "date": "2026-11-18",
+        "time": "03:32",
+        "type": "decision",
+        "source": "monitor",
+        "tokens": [
+          "repo:repo-a"
+        ],
+        "body": "〔registry〕關係：repo-a 規劃（PM）→ repo-b（pm-of）（從工作台）",
+        "header": "## 03:32 decision [monitor] repo:repo-a"
+      }
+    ],
+    "loops": [
+      {
+        "date": "2026-11-18",
+        "time": "03:32",
+        "type": "open-loop",
+        "source": "agent",
+        "tokens": [
+          "#1",
+          "due:2099-01-01",
+          "group:g1"
+        ],
+        "body": "補測試",
+        "header": "## 03:32 open-loop [agent] #1 due:2099-01-01 group:g1"
+      }
+    ],
+    "cards": [
+      {
+        "key": "decision:03:32",
+        "kind": "event",
+        "scope_kind": "group",
+        "scope_label": "g1",
+        "scope_repos": [
+          "repo-a",
+          "repo-b"
+        ],
+        "time": "03:32",
+        "date": "2026-11-18",
+        "etype": "decision",
+        "source": "agent",
+        "title": "快取改用 LRU",
+        "lines": [],
+        "actions": [
+          {
+            "label": "忽略並記錄",
+            "action": "ignore",
+            "payload": {
+              "type": "decision",
+              "time": "03:32",
+              "header": "## 03:32 decision [agent] id:2026-11-18-d1 group:g1"
+            }
+          }
+        ],
+        "lane": "scope"
+      },
+      {
+        "key": "decision:03:32",
+        "kind": "event",
+        "scope_kind": "group",
+        "scope_label": "g1",
+        "scope_repos": [
+          "repo-a",
+          "repo-b"
+        ],
+        "time": "03:32",
+        "date": "2026-11-18",
+        "etype": "decision",
+        "source": "agent",
+        "title": "交接：改了快取",
+        "lines": [
+          "完成：改了快取",
+          "剩下：無",
+          "下次從這裡接：補測試"
+        ],
+        "actions": [
+          {
+            "label": "忽略並記錄",
+            "action": "ignore",
+            "payload": {
+              "type": "decision",
+              "time": "03:32",
+              "header": "## 03:32 decision [agent] id:2026-11-18-d2 group:g1"
+            }
+          }
+        ],
+        "lane": "scope"
+      },
+      {
+        "key": "loop:#1",
+        "kind": "loop",
+        "num": "#1",
+        "scope_kind": "group",
+        "scope_label": "g1",
+        "scope_repos": [
+          "repo-a",
+          "repo-b"
+        ],
+        "due": "2099-01-01",
+        "time": "03:32",
+        "date": "2026-11-18",
+        "title": "補測試",
+        "lines": [],
+        "actions": [
+          {
+            "label": "開碰撞",
+            "action": "collide_prefill",
+            "payload": {
+              "text": "補測試"
+            },
+            "primary": true
+          },
+          {
+            "label": "延 7 天",
+            "action": "loop_defer",
+            "payload": {
+              "num": "#1",
+              "days": 7
+            }
+          },
+          {
+            "label": "關閉",
+            "action": "close_loop",
+            "payload": {
+              "num": "#1"
+            }
+          },
+          {
+            "label": "用任務包開會話",
+            "action": "brief_session",
+            "payload": {
+              "num": "#1"
+            }
+          }
+        ],
+        "lane": "scope"
+      }
+    ],
+    "recent": [
+      {
+        "date": "2026-11-18",
+        "time": "03:32",
+        "type": "decision",
+        "source": "monitor",
+        "tokens": [
+          "repo:repo-a"
+        ],
+        "body": "〔registry〕關係：repo-a 規劃（PM）→ repo-b（pm-of）（從工作台）",
+        "header": "## 03:32 decision [monitor] repo:repo-a",
+        "scope_kind": "repo",
+        "scope_label": "repo-a",
+        "scope_repos": [
+          "repo-a"
+        ],
+        "lane": "scope"
+      },
+      {
+        "date": "2026-11-18",
+        "time": "03:32",
+        "type": "decision",
+        "source": "agent",
+        "tokens": [
+          "id:2026-11-18-d2",
+          "group:g1"
+        ],
+        "body": "交接：改了快取\n完成：改了快取\n剩下：無\n下次從這裡接：補測試",
+        "header": "## 03:32 decision [agent] id:2026-11-18-d2 group:g1",
+        "scope_kind": "group",
+        "scope_label": "g1",
+        "scope_repos": [
+          "repo-a",
+          "repo-b"
+        ],
+        "lane": "scope"
+      },
+      {
+        "date": "2026-11-18",
+        "time": "03:32",
+        "type": "decision",
+        "source": "agent",
+        "tokens": [
+          "id:2026-11-18-d1",
+          "group:g1"
+        ],
+        "body": "快取改用 LRU",
+        "header": "## 03:32 decision [agent] id:2026-11-18-d1 group:g1",
+        "scope_kind": "group",
+        "scope_label": "g1",
+        "scope_repos": [
+          "repo-a",
+          "repo-b"
+        ],
+        "lane": "scope"
+      },
+      {
+        "date": "2026-11-18",
+        "time": "03:32",
+        "type": "open-loop",
+        "source": "agent",
+        "tokens": [
+          "#1",
+          "due:2099-01-01",
+          "group:g1"
+        ],
+        "body": "補測試",
+        "header": "## 03:32 open-loop [agent] #1 due:2099-01-01 group:g1",
+        "scope_kind": "group",
+        "scope_label": "g1",
+        "scope_repos": [
+          "repo-a",
+          "repo-b"
+        ],
+        "lane": "scope"
+      }
+    ],
+    "stats": {
+      "collisions": 0,
+      "collisions_with_outcome": 0,
+      "hit_rate": null,
+      "spawned": 0,
+      "alive": 0,
+      "survival_rate": null
+    },
+    "scope": {
+      "group": "g1",
+      "repos": null,
+      "members": [
+        "repo-a",
+        "repo-b"
+      ],
+      "gone": false
+    },
+    "health": {
+      "ok": true,
+      "days": 14,
+      "since": "2026-11-04 03:32",
+      "profiles": {
+        "repos": 2,
+        "described": 0,
+        "with_role": 0,
+        "undescribed": [
+          "repo-a",
+          "repo-b"
+        ],
+        "undescribed_more": 0,
+        "stale": []
+      },
+      "handoff": {
+        "handoffs": 1,
+        "missed": 0,
+        "rate": 1.0
+      },
+      "fresh": {
+        "found": 0,
+        "used": 0,
+        "dismissed": 0,
+        "hit_rate": null
+      },
+      "decisions": {
+        "with_outcome": 0,
+        "awaiting_retro": 0,
+        "outcome_rate": null
+      },
+      "loops": {
+        "opened": 1,
+        "closed": 0,
+        "open_now": 1,
+        "overdue": 0
+      },
+      "tools": [],
+      "agent_calls": {
+        "calls": 0,
+        "today": 0,
+        "avg_ms": 0,
+        "errors": 0,
+        "policy": "allow"
+      },
+      "assist": {
+        "runs": 0,
+        "from_agent": 0,
+        "did_something": 0,
+        "failed": 0,
+        "undone": 0
+      },
+      "mailbox": {
+        "requests": 0,
+        "replies": 0,
+        "answered": 0,
+        "undelivered": 0,
+        "via": {}
+      }
+    },
+    "decide": {
+      "count": 0,
+      "all": 0,
+      "auto_recent": 0,
+      "key": ""
+    },
+    "attention": {
+      "needs_you": 0,
+      "finished_unseen": 0,
+      "working": 0
+    },
+    "terms": [
+      {
+        "sid": "t1",
+        "title": "Agent 任務",
+        "alive": true,
+        "kind": "agent",
+        "origin": "group:g1",
+        "scope": "g1",
+        "scope_repos": null,
+        "started": "",
+        "task": null,
+        "report": null,
+        "agent_status": null,
+        "ai_title": null,
+        "last_reply": null,
+        "claude_session": null,
+        "agent_kind": null,
+        "resume_cwd": null,
+        "tool": null,
+        "context_pct": null,
+        "model": null,
+        "subagents": 0,
+        "auto_continue": null,
+        "talk": null,
+        "cache_cold": false,
+        "report_basis": "會話開始後、範圍內（g1）的脊椎留痕"
+      }
+    ],
+    "agents": [
+      "claude"
+    ],
+    "agent_kinds": {
+      "claude": "claude"
+    }
+  },
+  "get_scan": {
+    "group": "g1",
+    "states": [
+      {
+        "id": "repo-a",
+        "type": "mine",
+        "tier": "active",
+        "path": "<tmp>/repo-a",
+        "exists": true,
+        "dirty": 0,
+        "dirty_days": null,
+        "last_commit_days": 1.0000133746062163,
+        "ahead": null,
+        "behind": null,
+        "branch": "master",
+        "last_subject": "init",
+        "worktrees": 0,
+        "commits_7d": 1,
+        "commits_30d": 1,
+        "recent_commits": [
+          {
+            "date": "2026-11-17",
+            "hash": "e0e8ccb",
+            "subject": "init"
+          }
+        ],
+        "agents": [],
+        "note": ""
+      },
+      {
+        "id": "repo-b",
+        "type": "mine",
+        "tier": "active",
+        "path": "<tmp>/repo-b",
+        "exists": true,
+        "dirty": 2,
+        "dirty_days": 5.000001222502302,
+        "last_commit_days": 6.00000179949182,
+        "ahead": null,
+        "behind": null,
+        "branch": "master",
+        "last_subject": "init",
+        "worktrees": 0,
+        "commits_7d": 1,
+        "commits_30d": 1,
+        "recent_commits": [
+          {
+            "date": "2026-11-12",
+            "hash": "f627089",
+            "subject": "init"
+          }
+        ],
+        "agents": [],
+        "note": ""
+      }
+    ],
+    "summary": {
+      "group": "g1",
+      "saved_group": "g1",
+      "repos": [
+        "repo-a",
+        "repo-b"
+      ],
+      "at": "2026-11-18 03:32",
+      "goal": null,
+      "goal_gap": "尚未登記這組的目標——寫一句話，摘要才說得出這組在做什麼。",
+      "progress": {
+        "text": "交接：改了快取",
+        "source": "脊椎 decision [agent]",
+        "at": "2026-11-18 03:32"
+      },
+      "progress_gap": null,
+      "since": "2026-11-18 03:32",
+      "changes": [
+        {
+          "text": "repo-b 有 2 個未提交檔，最舊 5 天",
+          "source": "git status · repo-b",
+          "at": null
+        }
+      ],
+      "changes_window": "自上次紀錄（2026-11-18 03:32）以來",
+      "next": {
+        "text": "補測試",
+        "source": "脊椎 交接 decision [agent]",
+        "at": "2026-11-18 03:32"
+      },
+      "next_gap": null,
+      "changes_gap": "本次採集沒有看到新的 commit、未提交檔或新未結。",
+      "gaps": [
+        "尚未登記這組的目標——寫一句話，摘要才說得出這組在做什麼。"
+      ],
+      "resume_task": "接續「g1」上次的工作。脊椎最後一筆紀錄（2026-11-18 03:32，脊椎 decision [agent]）：交接：改了快取。工作台建議的下一步（依據：脊椎 交接 decision [agent]）：補測試。請先確認這件事現在的實際狀態與依據，再提出接下來一步；不確定或需要動到組外的東西就先問我。"
+    },
+    "pulse": {
+      "repos": 2,
+      "commits_7d": 2,
+      "commits_30d": 2,
+      "per_repo_7d": {
+        "repo-a": 1,
+        "repo-b": 1
+      },
+      "active_7d": [
+        "repo-a",
+        "repo-b"
+      ],
+      "quiet_30d": [],
+      "most_active": "repo-a",
+      "latest": {
+        "repo": "repo-a",
+        "date": "2026-11-17",
+        "hash": "e0e8ccb",
+        "subject": "init"
+      }
+    },
+    "recent_commits": [
+      {
+        "repo": "repo-a",
+        "date": "2026-11-17",
+        "hash": "e0e8ccb",
+        "subject": "init"
+      },
+      {
+        "repo": "repo-b",
+        "date": "2026-11-12",
+        "hash": "f627089",
+        "subject": "init"
+      }
+    ],
+    "question_cards": [
+      {
+        "kind": "question",
+        "qkind": "dirty",
+        "repo": "repo-b",
+        "key": "q:dirty:repo-b",
+        "title": "repo-b 有 2 個未提交檔案、最舊已 5 天，本週要處理嗎？",
+        "actions": [
+          {
+            "label": "與 Agent 一起收尾",
+            "action": "term_create",
+            "payload": {
+              "kind": "agent",
+              "repo": "repo-b",
+              "repos": [
+                "repo-b"
+              ],
+              "task": "收尾 repo-b 的 2 個未提交檔：先看 git status 與 diff，判斷該 commit、丟棄或拆開，跟我確認後執行",
+              "origin": "q:dirty:repo-b"
+            },
+            "primary": true
+          },
+          {
+            "label": "七天後再提醒",
+            "action": "defer",
+            "payload": {
+              "id": "repo-b",
+              "qkind": "dirty",
+              "days": 7
+            }
+          }
+        ],
+        "scope_kind": "repo",
+        "scope_label": "repo-b",
+        "scope_repos": [
+          "repo-b"
+        ]
+      }
+    ],
+    "questions": [
+      "repo-b 有 2 個未提交檔案、最舊已 5 天，本週要處理嗎？ → 〔與 Agent 一起收尾〕〔七天後再提醒〕"
+    ],
+    "quiet": 1,
+    "session_tasks": [
+      {
+        "label": "接續上次工作",
+        "text": "接續「g1」上次的工作。脊椎最後一筆紀錄（2026-11-18 03:32，脊椎 decision [agent]）：交接：改了快取。工作台建議的下一步（依據：脊椎 交接 decision [agent]）：補測試。請先確認這件事現在的實際狀態與依據，再提出接下來一步；不確定或需要動到組外的東西就先問我。"
+      },
+      {
+        "label": "整理本組現況",
+        "text": "先讀情境卡，用 3 行說明：你拿到哪些脈絡、這次預計產出什麼、哪些動作需要我先確認，再問我要做什麼。"
+      },
+      {
+        "label": "規劃（PM）：repo-a → repo-b",
+        "text": "檢查規劃與實作是否一致：repo-a 是 repo-b 的 PM。請比對 repo-a 的規劃／需求文件與 repo-b 的實作與驗收條件，列出不一致、缺漏與已過期的部分，每條標明來自哪個 repo 的哪份檔，再跟我確認要改哪一邊。"
+      }
+    ],
+    "audit": []
+  }
+}

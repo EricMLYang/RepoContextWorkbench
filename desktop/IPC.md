@@ -4,6 +4,8 @@
 > 對照組：Python 版 HTTP API（`repo_context/webui/`），前端 `src/api/http.ts` 打的就是它。
 > **兩邊回傳的 JSON 必須一致**——Rust 端照 `webui/state.py`、`webui/actions.py` 的欄位序列化（snake_case，不改名）。
 > 改這份合約要同時改 `tauri.ts`、`types.ts` 與 `src/test/api.test.ts`。
+> `get_state`／`get_scan` 的欄位由契約測試守著（N-52）：`src/test/contract.test.ts` 拿引擎產生的 `src/test/fixtures/engine-contract.json`
+> 驗 `types.ts` 宣告的欄位與型別；引擎改了欄位，`crates/ctx-core/tests/ipc_contract.rs` 會要你重生 fixture。
 
 前端在執行時偵測 `window.__TAURI_INTERNALS__`：有就走這份 IPC，沒有就走 HTTP（`/api/*`、`/ws/term/*`）。
 
