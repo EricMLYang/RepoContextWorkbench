@@ -6,3 +6,6 @@ __pycache__/
 .claude/worktrees/
 node_modules/
 dist/
+
+# cargo sweep 的時間戳（scripts/check.sh 收尾產生）
+sweep.timestamp
