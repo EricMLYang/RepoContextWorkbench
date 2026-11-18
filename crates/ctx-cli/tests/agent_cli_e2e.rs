@@ -169,10 +169,10 @@ fn test_setup_mcp_failure_is_nonzero() {
     assert!(r.stdout.contains("註冊失敗") && r.code == 1, "{}", r.stdout);
 }
 
-/// Rust 才有（F-133）：共享 skill。沒有 `skills/`（或是空的）時 setup 的輸出跟以前一字不差（跟 Python 對拍）；
-/// 有才多一步、`--dry-run` 列得出計畫且不寫；`ctx health` 在過時時一行提醒。兩家都跑。
+/// Rust 才有（F-133）：工作台 skill 不發成檔案。spine 有 `skills/` 時 setup 的輸出跟以前一字不差、
+/// 兩家的使用者層都沒有副本；`ctx skill` 只在納管 repo 回應；舊版留在使用者層的副本由 setup 收回、health 提醒。
 #[test]
-fn setup_publishes_shared_skills_to_both_clis() {
+fn workbench_skills_are_not_published_and_only_answer_in_registered_repos() {
     let e = env_spine();
     let home = e.tmp().join("home");
     std::fs::create_dir_all(&home).unwrap();
@@ -183,76 +183,74 @@ fn setup_publishes_shared_skills_to_both_clis() {
     let args = ["setup", "--spine", s(&e.sp), "--claude", "--codex"];
     let dry = [&args[..], &["--dry-run"]].concat();
     let plain_dry = c.run(&dry);
-    let plain = c.run(&args);
+    assert_eq!(c.run(&args).code, 0);
+    let plain = c.run(&args); // 裝好之後的樣子（第一次會寫入，輸出不同）
     assert_eq!(plain.code, 0, "{}", plain.stdout);
-    assert!(!plain.stdout.contains("共享 skill"), "{}", plain.stdout);
-    std::fs::create_dir_all(e.sp.join("skills")).unwrap();
-    assert_eq!(c.run(&dry).stdout, plain_dry.stdout);
-    assert_eq!(c.run(&args).stdout, c.run(&args).stdout);
-    assert!(!c.run(&args).stdout.contains("共享 skill"));
 
-    let src = e.sp.join("skills/pdf-tools");
-    std::fs::create_dir_all(src.join("scripts")).unwrap();
+    let src = e.sp.join("skills/find-context");
+    std::fs::create_dir_all(src.join("references")).unwrap();
     std::fs::write(
         src.join("SKILL.md"),
-        "---\nname: pdf-tools\ndescription: 處理 PDF\n---\n",
+        "---\nname: find-context\ndescription: 找別的 repo 的資料\n---\n# 找脈絡\n",
     )
     .unwrap();
-    std::fs::write(src.join("scripts/run.sh"), "echo\n").unwrap();
-    let r = c.run(&dry);
-    assert_eq!(r.code, 0);
+    std::fs::write(src.join("references/steps.md"), "步驟\n").unwrap();
+    assert_eq!(c.run(&dry).stdout, plain_dry.stdout);
+    assert_eq!(c.run(&args).stdout, plain.stdout);
     for d in [".claude", ".codex"] {
-        assert!(
-            r.stdout.contains(&format!("{d}/skills：新增 pdf-tools")),
-            "{}",
-            r.stdout
-        );
-        assert!(!home.join(d).join("skills/pdf-tools").exists());
+        assert!(!home.join(d).join("skills/find-context").exists(), "{d}");
     }
-    // health：掛過的兩家都還沒發
-    let h = c.clone().spine(&e.sp).run(&["health"]);
-    assert!(
-        h.stdout
-            .contains("共享 skill（spine/skills/）不是最新：Claude Code 未安裝 pdf-tools；Codex 未安裝 pdf-tools——跑 `ctx setup --claude --codex`"),
-        "{}",
-        h.stdout
-    );
-    let r = c.run(&args);
-    assert_eq!(r.code, 0, "{}", r.stdout);
-    assert_eq!(
-        r.stdout.matches("→ 共享 skill：新增 pdf-tools").count(),
-        2,
-        "{}",
-        r.stdout
-    );
-    for d in [".claude", ".codex"] {
-        assert!(home
-            .join(d)
-            .join("skills/pdf-tools/scripts/run.sh")
-            .exists());
-    }
-    let h = c.clone().spine(&e.sp).run(&["health"]);
-    assert!(!h.stdout.contains("共享 skill"), "{}", h.stdout);
-    // setup 結束時 spine 的 AGENTS.md 跟著列出
+    // spine 的 AGENTS.md 列出
     let agents = std::fs::read_to_string(e.sp.join("AGENTS.md")).unwrap();
-    assert!(agents.contains("- **pdf-tools**：處理 PDF"), "{agents}");
-    // 來源改了 → health 說過時；只跑 --claude 也會更新之前掛過的 Codex
-    std::fs::write(src.join("scripts/run.sh"), "echo 2\n").unwrap();
-    let h = c.clone().spine(&e.sp).run(&["health", "--json"]);
-    let shared = &h.json()["setup"]["shared_skills"];
-    assert_eq!(shared.as_array().unwrap().len(), 2, "{shared}");
-    assert_eq!(shared[0]["stale"], json!(["pdf-tools"]));
-    let r = c.run(&["setup", "--spine", s(&e.sp), "--claude"]);
-    assert_eq!(
-        r.stdout.matches("→ 共享 skill：更新 pdf-tools").count(),
-        2,
+    assert!(
+        agents.contains("- **find-context**：找別的 repo 的資料"),
+        "{agents}"
+    );
+
+    // ctx skill：納管 repo 裡列得出、讀得到；外面拒絕
+    let cs = c.clone().spine(&e.sp);
+    let r = cs.clone().cwd(&e.impl_).run(&["skill", "--json"]);
+    assert_eq!(r.code, 0, "{}", r.stdout);
+    assert_eq!(r.json()["skills"][0]["name"], "find-context");
+    let r = cs.clone().cwd(&e.impl_).run(&["skill", "find-context"]);
+    assert!(r.stdout.contains("# 找脈絡"), "{}", r.stdout);
+    let r =
+        cs.clone()
+            .cwd(&e.impl_)
+            .run(&["skill", "find-context", "--file", "references/steps.md"]);
+    assert_eq!(r.stdout.trim(), "步驟");
+    let r = cs.clone().cwd(e.tmp()).run(&["skill", "--json"]);
+    assert!(
+        r.code != 0 && r.json()["error"] == "not_found",
         "{}",
         r.stdout
     );
-    assert_eq!(
-        std::fs::read_to_string(home.join(".codex/skills/pdf-tools/scripts/run.sh")).unwrap(),
-        "echo 2\n"
+
+    // 舊版留下的使用者層副本：health 提醒、setup 收回
+    let old = home.join(".codex/skills/find-context");
+    std::fs::create_dir_all(&old).unwrap();
+    std::fs::write(old.join("SKILL.md"), "舊副本").unwrap();
+    let spine_abs = std::fs::canonicalize(&e.sp).unwrap();
+    std::fs::write(
+        old.join(".ctx-managed"),
+        json!({"spine": spine_abs.to_string_lossy(), "hash": "x"}).to_string(),
+    )
+    .unwrap();
+    let h = cs.run(&["health"]);
+    assert!(
+        h.stdout.contains("舊版工作台 skill 還留在使用者層（沒納管的地方也看得到）：Codex find-context——跑 `ctx setup --codex` 收回"),
+        "{}",
+        h.stdout
     );
+    let r = c.run(&["setup", "--spine", s(&e.sp), "--claude"]);
+    assert!(
+        r.stdout
+            .contains("→ 工作台 skill：收回使用者層的舊副本 find-context"),
+        "{}",
+        r.stdout
+    );
+    assert!(!old.exists());
+    assert!(!cs.run(&["health"]).stdout.contains("工作台 skill"));
 }
 
 /// 不是 spine 的 --spine：--json 回 no_spine＋exit 3。

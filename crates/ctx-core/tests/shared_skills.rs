@@ -1,13 +1,12 @@
-//! 共享 skill（F-133，Rust 才有）：`<spine>/skills/<名稱>/` → 各家 CLI 的 `skills/<名稱>/`。
-//! 全部用 tempdir 與 [`SetupEnv`] 的假 home，不碰真的 `~/.claude`、`~/.codex`。
+//! 工作台 skill（F-133，Rust 才有）：`<spine>/skills/<名稱>/` 只在納管 repo 的會話用得到——開場清單＋`skill_get`，
+//! 不發成檔案；舊版發到使用者層的副本由 setup 收回。全部用 tempdir，不碰真的 `~/.claude`、`~/.codex`。
 
 use std::path::{Path, PathBuf};
 
 use ctx_core::agentsetup::{self, AgentCli, SetupEnv, Step};
-use ctx_core::shared_skills::{
-    self, Conflict, Outcome, Report, SkipReason, MARK_FILE, MAX_FILE_BYTES, MAX_SKILL_BYTES,
-};
-use ctx_core::testkit::spine;
+use ctx_core::shared_skills::{self, SkipReason, MARK_FILE, MAX_FILE_BYTES, MAX_SKILL_BYTES};
+use ctx_core::testkit::{spine, spine_with_repos};
+use serde_json::json;
 
 fn env_in(tmp: &Path, spine_dir: &Path) -> SetupEnv {
     SetupEnv {
@@ -28,281 +27,224 @@ fn skill_md(desc: &str) -> String {
     format!("---\nname: x\ndescription: {desc}\n---\n# 說明\n")
 }
 
-fn outcomes(r: &[Report]) -> Vec<(&str, &Outcome)> {
-    r.iter().map(|x| (x.name.as_str(), &x.outcome)).collect()
+fn repo_path(sp: &Path, id: &str) -> PathBuf {
+    let data = ctx_core::registry::load(sp).unwrap();
+    data.repo(id).unwrap().path()
 }
 
-fn run(env: &SetupEnv, cli: AgentCli) -> Vec<Report> {
-    shared_skills::sync(&env.spine_dir, env.home(cli), true).unwrap()
+fn opening_text(sp: &Path, cwd: &Path) -> String {
+    let out = ctx_core::hooks::session_start(sp, &json!({"cwd": cwd.to_string_lossy()}), None);
+    if out.is_empty() {
+        return out;
+    }
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap()
+        .to_string()
 }
 
-/// 發送、更新、來源刪檔、來源刪 skill、冪等、dry-run 不寫——兩家各跑一次。
-#[test]
-fn publish_update_delete_and_idempotent_for_both_clis() {
-    for cli in AgentCli::ALL {
-        let (t, sp) = spine();
-        let env = env_in(t.path(), &sp);
-        let src = sp.join("skills/pdf-tools");
-        write(&src.join("SKILL.md"), &skill_md("處理 PDF"));
-        write(&src.join("scripts/run.sh"), "echo hi\n");
-        write(&src.join("ref/a.md"), "a\n");
-        let dest = env.home(cli).join("skills/pdf-tools");
-
-        // dry-run：算得出計畫、不寫
-        let plan = shared_skills::sync(&sp, env.home(cli), false).unwrap();
-        assert_eq!(outcomes(&plan), [("pdf-tools", &Outcome::Installed)]);
-        assert!(!dest.exists());
-        assert!(shared_skills::has_work(&sp, env.home(cli)));
-
-        // 發送
-        let r = run(&env, cli);
-        assert_eq!(outcomes(&r), [("pdf-tools", &Outcome::Installed)]);
-        assert_eq!(
-            std::fs::read_to_string(dest.join("scripts/run.sh")).unwrap(),
-            "echo hi\n"
-        );
-        assert!(dest.join("SKILL.md").is_file() && dest.join("ref/a.md").is_file());
-        let mark = std::fs::read_to_string(dest.join(MARK_FILE)).unwrap();
-        let mark: serde_json::Value = serde_json::from_str(&mark).unwrap();
-        assert_eq!(
-            mark["spine"].as_str().unwrap(),
-            ctx_core::fsutil::resolve(&sp).to_string_lossy()
-        );
-        assert_eq!(mark["hash"].as_str().unwrap().len(), 16);
-        // 內建 skill 不受影響、也沒被當成要收的
-        assert!(!env.home(cli).join("skills/repo-context").exists());
-
-        // 冪等
-        assert_eq!(
-            outcomes(&run(&env, cli)),
-            [("pdf-tools", &Outcome::Unchanged)]
-        );
-        assert!(shared_skills::pending(&sp, env.home(cli))
-            .unwrap()
-            .is_empty());
-
-        // 改一個檔 → 更新
-        write(&src.join("scripts/run.sh"), "echo bye\n");
-        let p = shared_skills::pending(&sp, env.home(cli)).unwrap();
-        assert_eq!(p.stale, ["pdf-tools"]);
-        assert_eq!(
-            outcomes(&run(&env, cli)),
-            [("pdf-tools", &Outcome::Updated)]
-        );
-        assert_eq!(
-            std::fs::read_to_string(dest.join("scripts/run.sh")).unwrap(),
-            "echo bye\n"
-        );
-        let mark2 = std::fs::read_to_string(dest.join(MARK_FILE)).unwrap();
-        assert_ne!(
-            serde_json::from_str::<serde_json::Value>(&mark2).unwrap()["hash"],
-            mark["hash"]
-        );
-
-        // 有人改了發出去的副本 → 下次換回來源的樣子
-        write(&dest.join("SKILL.md"), "被改了");
-        assert_eq!(
-            outcomes(&run(&env, cli)),
-            [("pdf-tools", &Outcome::Updated)]
-        );
-        assert_eq!(
-            std::fs::read_to_string(dest.join("SKILL.md")).unwrap(),
-            skill_md("處理 PDF")
-        );
-
-        // 來源刪檔 → 目的地跟著刪（空資料夾一起收）
-        std::fs::remove_dir_all(src.join("ref")).unwrap();
-        assert_eq!(
-            outcomes(&run(&env, cli)),
-            [("pdf-tools", &Outcome::Updated)]
-        );
-        assert!(!dest.join("ref").exists());
-        assert!(dest.join("scripts/run.sh").exists());
-
-        // 來源刪 skill → 目的地移除；dry-run 先看得到
-        std::fs::remove_dir_all(&src).unwrap();
-        let plan = shared_skills::sync(&sp, env.home(cli), false).unwrap();
-        assert_eq!(outcomes(&plan), [("pdf-tools", &Outcome::Removed)]);
-        assert!(dest.exists());
-        assert_eq!(
-            shared_skills::pending(&sp, env.home(cli)).unwrap().stale,
-            ["pdf-tools"]
-        );
-        assert_eq!(
-            outcomes(&run(&env, cli)),
-            [("pdf-tools", &Outcome::Removed)]
-        );
-        assert!(!dest.exists());
-        assert!(run(&env, cli).is_empty());
-        assert!(!shared_skills::has_work(&sp, env.home(cli)));
-        // 另一家沒被動到
-        let other = AgentCli::ALL.into_iter().find(|c| *c != cli).unwrap();
-        assert!(!env.home(other).exists());
+fn reject_code(e: ctx_core::Error) -> &'static str {
+    match e {
+        ctx_core::Error::Rejected { code, .. } => code.as_str(),
+        other => panic!("不是 Rejected：{other:?}"),
     }
 }
 
-/// 無標記的同名資料夾＝使用者的，不覆蓋；別的 spine 發的不動（也不當成已刪而收掉）。
+/// 清單、SKILL.md、附檔：三層都讀得到；不在清單裡的檔（含 `..`）讀不到。
 #[test]
-fn user_folders_and_other_spines_are_left_alone() {
-    for cli in AgentCli::ALL {
-        let (t, sp) = spine();
-        let env = env_in(t.path(), &sp);
-        write(&sp.join("skills/mine/SKILL.md"), &skill_md("我的"));
-        write(&sp.join("skills/shared/SKILL.md"), &skill_md("共用"));
-        let home = env.home(cli);
-        write(&home.join("skills/mine/SKILL.md"), "使用者自己寫的");
-        // 別的 spine 發的：一個同名（衝突）、一個 spine 裡沒有（不收）
-        let other = r#"{"spine": "/elsewhere/spine", "hash": ""}"#;
-        write(&home.join("skills/shared/SKILL.md"), "別的 spine 的");
-        write(&home.join("skills/shared").join(MARK_FILE), other);
-        write(&home.join("skills/theirs/SKILL.md"), "別的 spine 的");
-        write(&home.join("skills/theirs").join(MARK_FILE), other);
-        // 使用者自己的另一個 skill（沒標記、spine 裡沒有）也不收
-        write(&home.join("skills/private/SKILL.md"), "x");
+fn index_and_read_progressive_layers() {
+    let (_t, sp) = spine();
+    let src = sp.join("skills/find-context");
+    write(&src.join("SKILL.md"), &skill_md("找別的 repo 的資料"));
+    write(&src.join("references/steps.md"), "步驟\n");
+    write(&sp.join("registry.yaml.bak"), "x"); // skill 資料夾外的檔
 
-        let r = run(&env, cli);
-        assert_eq!(
-            outcomes(&r),
-            [
-                ("mine", &Outcome::Conflict(Conflict::UserOwned)),
-                (
-                    "shared",
-                    &Outcome::Conflict(Conflict::OtherSpine("/elsewhere/spine".into()))
-                ),
-            ]
-        );
-        assert_eq!(
-            std::fs::read_to_string(home.join("skills/mine/SKILL.md")).unwrap(),
-            "使用者自己寫的"
-        );
-        assert!(!home.join("skills/mine").join(MARK_FILE).exists());
-        assert_eq!(
-            std::fs::read_to_string(home.join("skills/shared/SKILL.md")).unwrap(),
-            "別的 spine 的"
-        );
-        assert!(home.join("skills/theirs/SKILL.md").exists());
-        assert!(home.join("skills/private/SKILL.md").exists());
-        let p = shared_skills::pending(&sp, home).unwrap();
-        assert_eq!(p.conflict, ["mine", "shared"]);
-        let line = shared_skills::summary(&r);
-        assert!(
-            line.contains("衝突 mine（同名資料夾不是 ctx 發的，不覆蓋）"),
-            "{line}"
-        );
+    let idx = shared_skills::index(&sp).unwrap();
+    assert_eq!(idx.skills.len(), 1);
+    assert_eq!(idx.skills[0].name, "find-context");
+    assert_eq!(
+        idx.skills[0].description.as_deref(),
+        Some("找別的 repo 的資料")
+    );
+    assert_eq!(idx.skills[0].files, ["SKILL.md", "references/steps.md"]);
+
+    let d = shared_skills::read(&sp, "find-context", None).unwrap();
+    assert_eq!(d.file, "SKILL.md");
+    assert!(d.text.contains("# 說明"));
+    assert!(d.dir.ends_with("skills/find-context"), "{}", d.dir);
+    let f = shared_skills::read(&sp, "find-context", Some("./references/steps.md")).unwrap();
+    assert_eq!(
+        (f.file.as_str(), f.text.as_str()),
+        ("references/steps.md", "步驟\n")
+    );
+
+    for bad in ["../../registry.yaml.bak", "nope.md"] {
+        let e = shared_skills::read(&sp, "find-context", Some(bad)).unwrap_err();
+        assert_eq!(reject_code(e), "not_found");
     }
+    let e = shared_skills::read(&sp, "nope", None).unwrap_err();
+    assert_eq!(reject_code(e), "not_found");
 }
 
-/// 保留名稱、不合法名稱、沒有 SKILL.md、超過上限：略過並回報；目的地什麼都不寫。
+/// 保留名稱、不合法名稱、沒有 SKILL.md、超過上限：不進清單、列在 skipped，讀的時候講原因。
 #[test]
 fn reserved_bad_names_and_limits_are_skipped() {
-    for cli in AgentCli::ALL {
-        let (t, sp) = spine();
-        let env = env_in(t.path(), &sp);
-        let s = sp.join("skills");
-        write(&s.join("repo-context/SKILL.md"), &skill_md("冒名"));
-        write(&s.join("Bad_Name/SKILL.md"), &skill_md("x"));
-        write(&s.join("no-md/README.md"), "x");
-        write(&s.join("big-file/SKILL.md"), &skill_md("x"));
-        std::fs::write(
-            s.join("big-file/blob.bin"),
-            vec![b'x'; (MAX_FILE_BYTES + 1) as usize],
-        )
-        .unwrap();
-        write(&s.join("big-total/SKILL.md"), &skill_md("x"));
-        let chunk = vec![b'y'; (MAX_FILE_BYTES - 10) as usize];
-        for i in 0..=(MAX_SKILL_BYTES / MAX_FILE_BYTES) {
-            std::fs::write(s.join(format!("big-total/part{i}.bin")), &chunk).unwrap();
-        }
-        // skills/ 底下的單檔與隱藏資料夾不算 skill
-        write(&s.join("README.md"), "這裡放共享 skill");
-        write(&s.join(".hidden/SKILL.md"), "x");
-
-        let r = run(&env, cli);
-        let got = outcomes(&r);
-        assert_eq!(got.len(), 5, "{got:?}");
-        assert_eq!(got[0], ("Bad_Name", &Outcome::Skipped(SkipReason::BadName)));
-        assert!(matches!(
-            got[1],
-            ("big-file", Outcome::Skipped(SkipReason::FileTooLarge { file, .. })) if file == "blob.bin"
-        ));
-        assert!(matches!(
-            got[2],
-            ("big-total", Outcome::Skipped(SkipReason::TooLarge { .. }))
-        ));
-        assert_eq!(got[3], ("no-md", &Outcome::Skipped(SkipReason::NoSkillMd)));
-        assert_eq!(
-            got[4],
-            ("repo-context", &Outcome::Skipped(SkipReason::Reserved))
-        );
-        assert!(!env.home(cli).join("skills").exists());
-        let line = shared_skills::summary(&r);
-        assert!(
-            line.starts_with("略過 Bad_Name（資料夾名只能用小寫英數與 -）"),
-            "{line}"
-        );
-        assert!(
-            line.contains("repo-context（repo-context 是內建 skill 的名字）"),
-            "{line}"
-        );
-
-        // 內建 skill 裝好之後，spine 的同名資料夾也不會蓋過它
-        agentsetup::install_skill(env.home(cli)).unwrap();
-        run(&env, cli);
-        assert_eq!(agentsetup::skill_status(env.home(cli)), "current");
+    let (_t, sp) = spine();
+    let s = sp.join("skills");
+    write(&s.join("repo-context/SKILL.md"), &skill_md("冒名"));
+    write(&s.join("Bad_Name/SKILL.md"), &skill_md("x"));
+    write(&s.join("no-md/README.md"), "x");
+    write(&s.join("big-file/SKILL.md"), &skill_md("x"));
+    std::fs::write(
+        s.join("big-file/blob.bin"),
+        vec![b'x'; (MAX_FILE_BYTES + 1) as usize],
+    )
+    .unwrap();
+    write(&s.join("big-total/SKILL.md"), &skill_md("x"));
+    let chunk = vec![b'y'; (MAX_FILE_BYTES - 10) as usize];
+    for i in 0..=(MAX_SKILL_BYTES / MAX_FILE_BYTES) {
+        std::fs::write(s.join(format!("big-total/part{i}.bin")), &chunk).unwrap();
     }
+    // skills/ 底下的單檔與隱藏資料夾不算 skill
+    write(&s.join("README.md"), "這裡放工作台 skill");
+    write(&s.join(".hidden/SKILL.md"), "x");
+
+    let idx = shared_skills::index(&sp).unwrap();
+    assert!(idx.skills.is_empty());
+    let got: Vec<(&str, &SkipReason)> = idx
+        .skipped
+        .iter()
+        .map(|k| (k.name.as_str(), &k.reason))
+        .collect();
+    assert_eq!(got.len(), 5, "{got:?}");
+    assert_eq!(got[0], ("Bad_Name", &SkipReason::BadName));
+    assert!(
+        matches!(got[1], ("big-file", SkipReason::FileTooLarge { file, .. }) if file == "blob.bin")
+    );
+    assert!(matches!(got[2], ("big-total", SkipReason::TooLarge { .. })));
+    assert_eq!(got[3], ("no-md", &SkipReason::NoSkillMd));
+    assert_eq!(got[4], ("repo-context", &SkipReason::Reserved));
+    let e = shared_skills::read(&sp, "no-md", None).unwrap_err();
+    assert!(format!("{e:?}").contains("沒有啟用"), "{e:?}");
+    assert!(shared_skills::opening(&sp).is_none());
 }
 
-/// 指到 skill 資料夾外面的 symlink 不跟（裡面的照發成一般檔）；skill 資料夾本身是 symlink 也不跟。
+/// 指到 skill 資料夾外面的 symlink 不跟（列在 ignored、讀不到）；skill 資料夾本身是 symlink 也不跟。
 #[cfg(unix)]
 #[test]
 fn symlinks_outside_are_not_followed() {
     use std::os::unix::fs::symlink;
-    for cli in AgentCli::ALL {
-        let (t, sp) = spine();
-        let env = env_in(t.path(), &sp);
-        let src = sp.join("skills/linky");
-        write(&src.join("SKILL.md"), &skill_md("x"));
-        write(&src.join("inner.md"), "inner\n");
-        let secret = t.path().join("secret.txt");
-        std::fs::write(&secret, "不該發出去").unwrap();
-        symlink(&secret, src.join("leak.txt")).unwrap();
-        symlink(t.path(), src.join("outdir")).unwrap();
-        symlink(src.join("inner.md"), src.join("alias.md")).unwrap();
-        symlink(t.path().join("nope"), src.join("broken")).unwrap();
-        let elsewhere = t.path().join("elsewhere-skill");
-        write(&elsewhere.join("SKILL.md"), &skill_md("x"));
-        symlink(&elsewhere, sp.join("skills/linked-dir")).unwrap();
+    let (t, sp) = spine();
+    let outside = t.path().join("secret.txt");
+    write(&outside, "秘密");
+    let src = sp.join("skills/linky");
+    write(&src.join("SKILL.md"), &skill_md("x"));
+    write(&src.join("inner.md"), "裡面的");
+    symlink(&outside, src.join("leak.txt")).unwrap();
+    symlink(src.join("inner.md"), src.join("alias.md")).unwrap();
+    let other = t.path().join("elsewhere-skill");
+    write(&other.join("SKILL.md"), &skill_md("x"));
+    symlink(&other, sp.join("skills/linked")).unwrap();
 
-        let r = run(&env, cli);
-        assert_eq!(
-            outcomes(&r),
-            [
-                ("linked-dir", &Outcome::Skipped(SkipReason::Symlink)),
-                ("linky", &Outcome::Installed),
-            ]
-        );
-        let dest = env.home(cli).join("skills/linky");
-        assert!(!dest.join("leak.txt").exists());
-        assert!(!dest.join("outdir").exists());
-        assert!(!dest.join("broken").exists());
-        assert!(!env.home(cli).join("skills/linked-dir").exists());
-        let alias = dest.join("alias.md");
-        assert!(!std::fs::symlink_metadata(&alias).unwrap().is_symlink());
-        assert_eq!(std::fs::read_to_string(alias).unwrap(), "inner\n");
-        assert_eq!(r[1].ignored.len(), 3, "{:?}", r[1].ignored);
-        let line = shared_skills::summary(&r);
-        assert!(
-            line.contains("linky/leak.txt（symlink 指到 skill 資料夾外，不跟）"),
-            "{line}"
-        );
-        // 冪等（symlink 不會讓每次都算成更新）
-        assert_eq!(run(&env, cli)[1].outcome, Outcome::Unchanged);
-    }
+    let idx = shared_skills::index(&sp).unwrap();
+    assert_eq!(idx.skills.len(), 1);
+    let e = &idx.skills[0];
+    assert_eq!(e.files, ["SKILL.md", "alias.md", "inner.md"]);
+    assert_eq!(e.ignored, ["leak.txt（symlink 指到 skill 資料夾外，不跟）"]);
+    assert_eq!(
+        idx.skipped
+            .iter()
+            .map(|k| (k.name.as_str(), &k.reason))
+            .collect::<Vec<_>>(),
+        [("linked", &SkipReason::Symlink)]
+    );
+    assert!(shared_skills::read(&sp, "linky", Some("leak.txt")).is_err());
+    assert_eq!(
+        shared_skills::read(&sp, "linky", Some("alias.md"))
+            .unwrap()
+            .text,
+        "裡面的"
+    );
 }
 
-/// setup 的計畫：沒有 `skills/`（或是空的）時跟以前一模一樣；有才在內建 skill 之後接一步，desc 列得出計畫。
+/// 只在納管 repo 用得到：開場清單與 skill_get 在 repo 裡有、在外面沒有；repo 移出 registry 就都沒有。
+/// 整個過程任何 repo 的工作目錄都沒多出檔案。
 #[test]
-fn setup_plan_adds_step_only_when_there_are_shared_skills() {
+fn only_registered_repos_see_workbench_skills() {
+    let (t, sp) = spine_with_repos();
+    let ra = repo_path(&sp, "repo-a");
+    let outside = t.path().join("not-registered");
+    std::fs::create_dir_all(&outside).unwrap();
+    let before = opening_text(&sp, &ra);
+    assert!(!before.contains("工作台 skill"));
+
+    write(
+        &sp.join("skills/find-context/SKILL.md"),
+        &skill_md("找別的 repo 的資料"),
+    );
+    // 第 1 層：納管 repo 的開場多一段（原本的內容一字不差、段落接在後面）
+    let text = opening_text(&sp, &ra);
+    assert!(text.starts_with(&before), "{text}");
+    assert!(
+        text.ends_with("\n- find-context：找別的 repo 的資料"),
+        "{text}"
+    );
+    // 不在納管 repo：hook 什麼都不輸出
+    assert_eq!(opening_text(&sp, &outside), "");
+
+    // 第 2 層：skill_get
+    let list = ctx_core::agentapi::skill_get(&sp, None, None, Some(&ra)).unwrap();
+    assert_eq!(list["skills"][0]["name"], "find-context");
+    let doc = ctx_core::agentapi::skill_get(&sp, Some("find-context"), None, Some(&ra.join("src")))
+        .unwrap();
+    assert!(doc["text"].as_str().unwrap().contains("# 說明"));
+    let e =
+        ctx_core::agentapi::skill_get(&sp, Some("find-context"), None, Some(&outside)).unwrap_err();
+    assert_eq!(reject_code(e), "not_found");
+
+    // repo 裡沒有任何 skill 檔
+    for d in [".claude", ".agents", ".codex"] {
+        assert!(!ra.join(d).exists(), "{d}");
+    }
+    let st = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(&ra)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&st.stdout), "");
+
+    // 移出列管：下一場開場沒有、skill_get 拒絕
+    ctx_core::registry::remove_repo(&sp, "repo-a").unwrap();
+    assert_eq!(opening_text(&sp, &ra), "");
+    assert!(ctx_core::agentapi::skill_get(&sp, None, None, Some(&ra)).is_err());
+}
+
+/// 開場清單有上限：超過 [`shared_skills::OPENING_MAX`] 個併成一行，說明太長截短。
+#[test]
+fn opening_is_capped() {
+    let (_t, sp) = spine();
+    let n = shared_skills::OPENING_MAX + 3;
+    for i in 0..n {
+        write(
+            &sp.join(format!("skills/s{i:02}/SKILL.md")),
+            &skill_md(&"很長的說明".repeat(40)),
+        );
+    }
+    let t = shared_skills::opening(&sp).unwrap();
+    let lines: Vec<&str> = t.lines().collect();
+    assert_eq!(lines.len(), 1 + shared_skills::OPENING_MAX + 1, "{t}");
+    assert_eq!(
+        *lines.last().unwrap(),
+        "- …還有 3 個：skill_get 不帶名稱看全部"
+    );
+    assert!(lines[1].ends_with('…'));
+    assert!(lines[1].chars().count() <= shared_skills::OPENING_DESC_CHARS + 10);
+}
+
+/// 舊版發到使用者層的副本：帶本 spine 標記的才收；使用者自己的、別的 spine 的不動。setup 有東西可收才多一步。
+#[test]
+fn retire_user_level_copies() {
     let (t, sp) = spine();
     let env = env_in(t.path(), &sp);
     let both = [AgentCli::Claude, AgentCli::Codex];
@@ -310,71 +252,50 @@ fn setup_plan_adds_step_only_when_there_are_shared_skills() {
         agentsetup::setup_plan(&env, &both, &[]),
         agentsetup::plan(&both)
     );
-    std::fs::create_dir_all(sp.join("skills")).unwrap();
-    assert_eq!(
-        agentsetup::setup_plan(&env, &both, &[]),
-        agentsetup::plan(&both)
-    );
-    // 這次沒點名、之前掛過的那家：內建 skill 換新（照舊）
-    assert_eq!(
-        agentsetup::setup_plan(&env, &[AgentCli::Claude], &both),
-        [
-            Step::SaveSpine,
-            Step::Mcp(AgentCli::Claude),
-            Step::Hooks(AgentCli::Claude),
-            Step::Skill(AgentCli::Claude),
-            Step::Skill(AgentCli::Codex),
-        ]
-    );
 
-    write(&sp.join("skills/pdf-tools/SKILL.md"), &skill_md("處理 PDF"));
-    let steps = agentsetup::setup_plan(&env, &[AgentCli::Claude], &both);
+    let ours =
+        json!({"spine": ctx_core::fsutil::resolve(&sp).to_string_lossy(), "hash": "x"}).to_string();
+    let other = r#"{"spine": "/elsewhere/spine", "hash": ""}"#;
+    let home = env.home(AgentCli::Codex);
+    write(&home.join("skills/old-shared/SKILL.md"), "舊副本");
+    write(&home.join("skills/old-shared").join(MARK_FILE), &ours);
+    write(&home.join("skills/theirs/SKILL.md"), "別的 spine 的");
+    write(&home.join("skills/theirs").join(MARK_FILE), other);
+    write(&home.join("skills/private/SKILL.md"), "使用者自己寫的");
+
     assert_eq!(
-        steps[3..],
-        [
-            Step::Skill(AgentCli::Claude),
-            Step::SharedSkills(AgentCli::Claude),
-            Step::Skill(AgentCli::Codex),
-            Step::SharedSkills(AgentCli::Codex),
-        ]
+        shared_skills::retire(&sp, home, false).unwrap(),
+        ["old-shared"]
     );
-    let desc = Step::SharedSkills(AgentCli::Codex).desc(&env);
-    assert!(
-        desc.starts_with("發 spine/skills/ 的共享 skill 到 "),
-        "{desc}"
-    );
-    assert!(desc.ends_with(".codex/skills：新增 pdf-tools"), "{desc}");
-    assert!(!env.codex_home.exists()); // desc 不寫
-    let r = Step::SharedSkills(AgentCli::Codex).run(&env).unwrap();
-    assert!(r.ok);
-    assert_eq!(r.message, "共享 skill：新增 pdf-tools");
-    assert!(env.codex_home.join("skills/pdf-tools/SKILL.md").exists());
-    assert_eq!(
-        Step::SharedSkills(AgentCli::Codex)
-            .run(&env)
-            .unwrap()
-            .message,
-        "共享 skill：已是最新 pdf-tools"
-    );
-    // 刪光之後，目的地還有本 spine 發的 → 這步還在（要收掉）
-    std::fs::remove_dir_all(sp.join("skills/pdf-tools")).unwrap();
+    assert!(home.join("skills/old-shared").exists()); // 試跑不寫
     let steps = agentsetup::setup_plan(&env, &both, &[]);
-    assert!(steps.contains(&Step::SharedSkills(AgentCli::Codex)));
-    assert!(!steps.contains(&Step::SharedSkills(AgentCli::Claude)));
-    Step::SharedSkills(AgentCli::Codex).run(&env).unwrap();
+    assert!(steps.contains(&Step::RetireSharedSkills(AgentCli::Codex)));
+    assert!(!steps.contains(&Step::RetireSharedSkills(AgentCli::Claude)));
+    let desc = Step::RetireSharedSkills(AgentCli::Codex).desc(&env);
+    assert!(desc.ends_with("：old-shared"), "{desc}");
+    let r = Step::RetireSharedSkills(AgentCli::Codex).run(&env).unwrap();
+    assert!(r.ok);
+    assert!(
+        r.message.contains("收回使用者層的舊副本 old-shared"),
+        "{}",
+        r.message
+    );
+    assert!(!home.join("skills/old-shared").exists());
+    assert!(home.join("skills/theirs/SKILL.md").exists());
+    assert!(home.join("skills/private/SKILL.md").exists());
     assert_eq!(
         agentsetup::setup_plan(&env, &both, &[]),
         agentsetup::plan(&both)
     );
 }
 
-/// spine 的 AGENTS.md：有共享 skill 才多一段，每個一行（名稱＋description 截短），仍守 60 行。
+/// spine 的 AGENTS.md：有工作台 skill 才多一段，每個一行（名稱＋description 截短），仍守 60 行。
 #[test]
 fn agents_md_lists_shared_skills() {
     let (_t, sp) = spine();
     ctx_core::home::sync(&sp).unwrap();
     let before = std::fs::read_to_string(sp.join("AGENTS.md")).unwrap();
-    assert!(!before.contains("共享 skill"));
+    assert!(!before.contains("工作台 skill"));
     // 空的 skills/：不出現
     std::fs::create_dir_all(sp.join("skills")).unwrap();
     ctx_core::home::sync(&sp).unwrap();
@@ -393,7 +314,7 @@ fn agents_md_lists_shared_skills() {
     assert_eq!(st.stale(), ["AGENTS.md"]);
     ctx_core::home::sync(&sp).unwrap();
     let text = std::fs::read_to_string(sp.join("AGENTS.md")).unwrap();
-    assert!(text.contains("\n## 共享 skill\n"), "{text}");
+    assert!(text.contains("\n## 工作台 skill\n"), "{text}");
     let line = text
         .lines()
         .find(|l| l.starts_with("- **pdf-tools**："))
@@ -402,8 +323,8 @@ fn agents_md_lists_shared_skills() {
     assert!(text.lines().any(|l| l == "- **plain**"));
     assert!(!text.contains("Bad"));
     // 段落在 Repos 之後、資料來源之前
-    assert!(text.find("## Repos").unwrap() < text.find("## 共享 skill").unwrap());
-    assert!(text.find("## 共享 skill").unwrap() < text.find("## 資料來源").unwrap());
+    assert!(text.find("## Repos").unwrap() < text.find("## 工作台 skill").unwrap());
+    assert!(text.find("## 工作台 skill").unwrap() < text.find("## 資料來源").unwrap());
 }
 
 /// 很多 skill、很多組時仍守 60 行上限。

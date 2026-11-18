@@ -2949,6 +2949,38 @@
       }
     }
   },
+  "ctx skill": {
+    "aliases": [],
+    "args": {
+      "name": {
+        "long": null,
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "file": {
+        "long": "file",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      },
+      "cwd": {
+        "long": "cwd",
+        "short": null,
+        "aliases": [],
+        "positional": null,
+        "required": false,
+        "takes_value": true,
+        "values": []
+      }
+    }
+  },
   "ctx ask": {
     "aliases": [],
     "args": {

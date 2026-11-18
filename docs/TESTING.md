@@ -396,21 +396,24 @@
 
 真資料量測（release，spine 副本，2026-11-18）：113 場（Claude Code 110、Codex 3）、1.9 萬則，冷建 4.1 秒、db 23 MB、暖查詢 10–20 ms。中文兩個字的詞（例「索引」）走 `LIKE`、三個字以上走 trigram 索引，兩種都實測搜得到。
 
-## 8q. 共享 skill 進 spine（F-133 的機制，2026-11-18）——**引擎與 CLI 測試已過（假 home）；真 spine、真 `~/.claude`／`~/.codex` 還沒人測過**
+## 8q. 工作台 skill：只在納管的 repo 裡有（F-133，2026-11-18 改版）——**引擎與 CLI 測試已過；真 agent 見下表**
 
-這次只做機制，spine 裡還沒有任何共享 skill；要測就先自己放一個（例：從某個 repo 複製一個 skill 資料夾到 `spine/skills/`）。
+這些 skill 教 agent 用本工具；**不發成檔案**，納管 repo 的開場列出、`skill_get` 讀。要測先放一個到 spine，例：
+`mkdir -p ~/Coding/repo-spine/skills/ctx-test && printf -- '---\nname: ctx-test\ndescription: 使用者問「工作台暗號」時使用。\n---\n暗號是藍鯨四十二。\n' > ~/Coding/repo-spine/skills/ctx-test/SKILL.md`，測完刪掉。
 
 | # | 操作 | 應該看到 | macOS | Windows |
 |---|---|---|---|---|
-| 8q-1 | spine 還沒有 `skills/` 時跑 `ctx setup --claude --codex --dry-run` | 跟以前一模一樣，沒有「共享 skill」那行 | [x] 真 spine | [ ] 未測 |
-| 8q-2 | 放一個 `spine/skills/<名稱>/SKILL.md`（可帶子資料夾），跑 `ctx setup --claude --codex --dry-run`，再拿掉 `--dry-run` 跑 | 試跑每家多一行「發 spine/skills/ 的共享 skill 到 …：新增 <名稱>」且沒寫；真跑後 `~/.claude/skills/<名稱>/`、`~/.codex/skills/<名稱>/` 有整份檔＋`.ctx-managed` | [x] 真 spine、真 `~/.claude`／`~/.codex` | [ ] 未測 |
-| 8q-3 | 開新的 Claude Code 與 Codex 會話，問一句會觸發那個 skill 的話 | 兩家都讀到這個 skill（Claude Code 的 `/skills` 列得出來） | [x] `claude -p`、`codex exec` 都答出 skill 內容 | [ ] 未測 |
-| 8q-4 | 改 spine 裡那個 skill 的一個檔、刪一個檔，跑 `ctx health`，再跑 `ctx setup --claude` | health 一行「共享 skill（spine/skills/）不是最新：Claude Code 過時 …；Codex 過時 …」；setup 後兩家都更新（Codex 沒點名也會更新）、刪掉的檔不見了 | [x] | [ ] 未測 |
-| 8q-5 | 在 `~/.codex/skills/` 先放一個同名、自己寫的資料夾，再跑 setup | 你的資料夾沒被動；setup 與 health 都說「衝突」 | [x]（小瑕疵：health 對衝突仍建議「跑 setup」，其實要先移走） | [ ] 未測 |
-| 8q-6 | 從 spine 刪掉那個 skill，跑 setup | 兩家的副本被收掉；自己寫的同名資料夾（8q-5）還在 | [x] | [ ] 未測 |
-| 8q-7 | 打開 spine 的 `AGENTS.md` | 有「共享 skill」段，每個一行（名稱＋說明）；總行數 ≤ 60；拿掉所有共享 skill 後這段不見 | [x] 有段時 28 行；拿掉後段落消失 | [ ] 未測 |
-| 8q-8 | 重裝 App 後在 App 按「更新 skill」 | 訊息裡多「共享 skill：…」那幾項 | [ ] 未測 | [ ] 未測 |
-| 8q-9 | Windows：skill 裡有 symlink（或 junction）指到資料夾外 | 不跟、回報「沒發的檔」；macOS 這條只有單元測試 | — | [ ] 未測 |
+| 8q-1 | spine 沒有 `skills/` 時在納管 repo 開會話 | 開場跟以前一樣，沒有「工作台 skill」段；`ctx setup --claude --codex --dry-run` 也跟以前一樣 | [ ] | [ ] |
+| 8q-2 | 放好 ctx-test，在**納管 repo** 用 App、終端機 `claude`、`codex` 各開一場，問「工作台暗號是什麼」 | 開場最後一段「工作台 skill」列出 ctx-test；agent 呼叫 `skill_get` 讀全文後答「藍鯨四十二」 | [ ] | [ ] |
+| 8q-3 | 同上，但在**沒納管的資料夾**（例 `/tmp`）開 | 開場沒有那段；問暗號答不出來；硬叫它 `skill_get` 會被拒絕「不在 repo-context 納管的 repo 裡」 | [ ] | [ ] |
+| 8q-4 | 看納管 repo 的工作目錄與 `git status`、`~/.claude/skills`、`~/.codex/skills` | 都沒有 ctx-test 的任何檔 | [ ] | [ ] |
+| 8q-5 | 把某個 repo 移出 registry，在那裡重開會話 | 沒有那段、`skill_get` 拒絕；不用清任何東西 | [ ] | [ ] |
+| 8q-6 | skill 帶附檔（`references/x.md`），SKILL.md 叫 agent 去讀 | agent 用 `skill_get` 帶 `file` 讀到；`ctx skill ctx-test --file references/x.md` 也讀得到 | [ ] | [ ] |
+| 8q-7 | 放一個不合法的（例資料夾名 `Bad_Name`、或沒有 SKILL.md），跑 `ctx health` | 一行「spine/skills/ 裡有工作台 skill 沒啟用：Bad_Name（…）」 | [ ] | [ ] |
+| 8q-8 | 舊版副本：`~/.claude/skills/` 或 `~/.codex/skills/` 還有帶 `.ctx-managed` 的資料夾時跑 `ctx health`，再跑 `ctx setup --claude` | health 一行「舊版工作台 skill 還留在使用者層…」；setup 多一行「收回使用者層的舊副本 …」，之後 health 沒這行；你自己寫的同名資料夾不動 | [ ] | [ ] |
+| 8q-9 | 長會話讓 Claude Code 壓縮脈絡（`/compact`）後再問暗號 | 壓縮後開場重注入，清單還在 | [ ] | [ ] |
+| 8q-10 | 同上換 Codex | **還沒驗**：Codex 壓縮後會不會重跑開場 hook；不會的話清單可能被摘要掉（`skill_get` 不帶名稱仍列得出來） | [ ] | [ ] |
+| 8q-11 | spine 的 `AGENTS.md` | 有「工作台 skill」段，每個一行；拿掉所有 skill 後這段不見 | [ ] | [ ] |
 
 ## 9. 要你決定
 

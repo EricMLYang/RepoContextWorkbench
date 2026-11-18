@@ -201,6 +201,13 @@ pub static TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
             w_read,
         ),
         work(
+            "skill_get",
+            ReadOnly,
+            "讀工作台 skill（教你用 repo-context 做事的 skill，只在納管的 repo 裡有）：開場「工作台 skill」段列了名稱與用途，\
+             要用時帶 name 讀全文；SKILL.md 提到的附檔帶 file 讀。不帶 name＝列出全部。",
+            w_skill_get,
+        ),
+        work(
             "ask_repo",
             Effects,
             "在另一個 repo 開唯讀 agent 回答問題（照它的 AGENTS.md 找資料），只回結論＋引用。慢又花錢：要整理歸納才用。",

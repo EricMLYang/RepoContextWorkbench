@@ -201,6 +201,7 @@ MCP_EXTRA_TOOLS = {
     "request_decision": "放行規則 request_decision（F-124，2026-11-14，Rust 才有：做到一半要人決定時先問，規則允許就自動放行）",
     "send_message": MAILBOX_REASON,
     "messages": MAILBOX_REASON,
+    "skill_get": "工作台 skill skill_get（F-133，2026-11-18，Rust 才有：只在納管 repo 讀 spine/skills/ 的 skill）",
 }
 
 

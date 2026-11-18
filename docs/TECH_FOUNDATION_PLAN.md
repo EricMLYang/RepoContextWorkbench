@@ -27,7 +27,7 @@
 | 4b | 知識索引改存 SQLite（排序不變、增量） | N-51 | 3 天 | 無（沒等 4a） | 完成（2026-11-18）：副本上暖查詢 760→280–400 ms、改一檔後 800→300 ms，20 個查詢結果與改前相同；代價是 db 172 MB（原 97 MB）、冷建 2→4.5 秒；真 spine 還沒量 |
 | 4c | 會話索引（Claude Code＋Codex） | F-134 | 3 天 | 4b | 完成（2026-11-18）：兩家各一個掃描器；Codex 補上逐字稿、digest、backfill、分岔；`ctx sessions --grep` 與 ⌘K「&」。副本上索引 113 場（Claude 110、Codex 3）、建 4.1 秒、db 23 MB、查詢 16–24 ms；App 畫面沒測 |
 | 5a | 介面合約由方法表生成 | N-52 | 3–5 天，可分批 | 無（沒等 4a） | 完成（2026-11-18）：MCP 參數由型別生成、單一方法表、tools/list 逐位元組不變；MCP／CLI 旗標／`--json` 形狀三份「上次發版」快照擋破壞性變更；前端只做契約測試，沒有生成 TS |
-| 5b | 共享 skill 進 spine | F-133 | 盤點半天＋實作 1 天 | 階段 1、決定 3 | 機制完成（2026-11-18）：`spine/skills/<名稱>/` 由 `ctx setup` 發到兩家，隔離的 Codex 看得到；盤點了 102 個 skill，搬哪些等使用者決定 |
+| 5b | 工作台 skill 進 spine | F-133 | 盤點半天＋實作 1 天 | 階段 1、決定 3 | 機制完成（2026-11-18，同日改版）：`spine/skills/<名稱>/` 只在納管 repo 的開場列出、`skill_get` 讀，不發成檔案；盤點了 102 個 skill，搬哪些等使用者決定 |
 
 估計天數是我的推估，沒有實測依據；階段 3 的不確定性最大。
 
@@ -225,15 +225,23 @@
 原本的驗收「加一個欄位只改引擎的型別一處」：MCP 參數做到了（改參數 struct 一處，schema、解析、說明都跟著走）；
 CLI、前端仍要各改各的，但改壞既有介面會被測試擋下。
 
-### 5b 共享 skill 進 spine（F-133）
+### 5b 工作台 skill 進 spine（F-133）
 
-**現況（2026-11-18）：機制已做，搬哪些等使用者決定。**
+**現況（2026-11-18）：機制已做（同日改版），搬哪些等使用者決定。**
+
+使用者定的需求：這些 skill 是教 agent 用本工具（搜尋、拿別的 repo 的 context…）的，**repo 納管才用得到；沒納管、別處 clone、
+移出列管都不能有任何檔案或痕跡**。所以不發成檔案，改由工具在會話裡提供，漸進揭露跟原生 skill 一樣三層：
 
 1. 盤點各 repo 與 `~/.claude/skills` 的 skill，分成共享／重複／repo 專屬，給使用者勾。只讀不搬。（已完成：102 個 skill）
-2. 使用者勾完後，共享的複製到 `spine/skills/<名稱>/`；原 repo 裡的副本由使用者決定刪不刪（動別的 repo 要先問）。（**等使用者決定**，一個都還沒搬）
-3. `ctx setup` 把 `spine/skills/` 下的都發到兩家。（**已做**：`shared_skills` 模組，整份同步＋`.ctx-managed` 標記、
-   無標記的同名資料夾不覆蓋、spine 裡刪掉的會收掉、`ctx health` 提醒、spine 的 AGENTS.md 列出；規約見 `docs/RUST_PORTING.md`，手測見 `docs/TESTING.md` §8q）
-4. `repo-context` 自己的 skill 改成短 stub＋`ctx instructions`，拿掉「skill 過時」檢查。（沒做）
+2. 使用者勾完後，要的放進 `spine/skills/<名稱>/`；原 repo 裡的副本由使用者決定刪不刪（動別的 repo 要先問）。（**等使用者決定**，一個都還沒搬）
+3. 提供方式（**已做**，`shared_skills` 模組；規約見 `docs/RUST_PORTING.md`，手測見 `docs/TESTING.md` §8q）：
+   - 第 1 層：開場 hook 只在納管 repo 注入「工作台 skill」段（名稱＋一行說明，有上限）；
+   - 第 2、3 層：MCP `skill_get`／`ctx skill` 讀 SKILL.md 與附檔，只在納管 repo 回應；
+   - 早上那版發到 `~/.claude/skills`、`~/.codex/skills` 的副本由 `ctx setup` 收回，`ctx health` 提醒。
+   考慮過但沒採用：發到每個 repo 的 `.claude/skills`／`.agents/skills`＋`.git/info/exclude`（repo 工作目錄裡還是有檔）；
+   Claude Code 外掛照專案開關（多則回報不可靠、Codex 要另寫一套）。
+4. 還沒驗：Codex 壓縮脈絡後會不會重跑 SessionStart（不會的話清單會在長會話裡被摘要掉；`skill_get` 不帶名稱仍列得出來）。
+5. `repo-context` 自己的 skill 還裝在使用者層（沒納管的地方也看得到），改成同樣的方式或短 stub＋`ctx instructions`。（沒做）
 
 ## 10. 要你決定的
 

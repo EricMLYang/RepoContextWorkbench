@@ -32,18 +32,19 @@
   用 Codex 就再加 `--codex`（兩家可以一起掛，拿到同一份脈絡、留痕進同一份 spine）。
 - spine 等於程式碼（見下方「信任模型」）：不要直接拿別人的 spine 來用。
 
-### 共享 skill：跨 repo 共用的 skill 放進 spine（Rust 才有）
+### 工作台 skill：教 agent 用本工具的 skill，只在納管的 repo 裡有（Rust 才有）
 
-好幾個 repo 都想用同一個 skill，就把它放進 spine 用 git 管，不必每個 repo 各抄一份：
+想讓 agent 學會用本工具做某件事（例如怎麼找別的 repo 的 context），就寫成 skill 放進 spine：
 
-1. 把整個 skill 資料夾放到 `~/repo-spine/skills/<名稱>/`，裡面要有 `SKILL.md`（其他檔與子資料夾照放）。
-   名稱只能用小寫英數與 `-`；`repo-context` 保留給內建的 skill。
-2. 跑 `ctx setup --claude --codex`（先加 `--dry-run` 看會新增、更新、移除哪些）。每個 skill 會整份同步到
-   `~/.claude/skills/<名稱>/` 與 `~/.codex/skills/<名稱>/`；之後改 spine 裡的檔再跑一次 setup 就更新，
-   從 spine 刪掉的也會從兩家收掉。重裝 App 後按「更新 skill」也會一起發。
-3. `ctx health` 會提醒哪一家還沒發、過時或有衝突；spine 的 `AGENTS.md` 會多一段列出共享 skill。
+1. 把整個 skill 資料夾放到 `~/repo-spine/skills/<名稱>/`，裡面要有 `SKILL.md`（frontmatter 寫 `description`：什麼時候用），
+   其他檔與子資料夾照放。名稱只能用小寫英數與 `-`；`repo-context` 保留給內建的 skill。
+2. 不用跑任何指令。在**納管的 repo** 開 Claude Code 或 Codex（App、終端機、IDE 都一樣），開場會多一段「工作台 skill」，
+   每個一行（名稱＋說明）；agent 要用時呼叫 MCP `skill_get` 讀全文與附檔（沒掛 MCP 用 `ctx skill <名稱>`）。
+3. **不發成檔案**：任何 repo、`~/.claude`、`~/.codex` 都不放副本。沒納管的地方開場沒有這段、`skill_get` 也拒絕；
+   repo 移出 registry，下一場會話就用不到，沒有東西要清。別處 clone 那個 repo 也不會有。
 
-規則：發出去的資料夾裡有 `.ctx-managed` 標記（記來源 spine 與內容雜湊），要改請改 spine 裡的，發出去的副本會被蓋回來。
+spine 裡有沒啟用的（名稱不合法、沒有 SKILL.md、太大）`ctx health` 會列出。2026-11-18 早上那版曾發到 `~/.claude/skills`、
+`~/.codex/skills`，`ctx setup` 會把那些副本收回（`ctx health` 會提醒）。
 目的地已經有同名、但沒有標記的資料夾＝你自己的，不會覆蓋（setup 與 health 報「衝突」）；別的 spine 發的也不動。
 指到 skill 資料夾外面的 symlink 不跟；單檔超過 1 MB 或整個 skill 超過 5 MB 就整個略過——這些檔會進 agent 的脈絡。
 
@@ -195,7 +196,7 @@ claude mcp get repo-context                    # 確認指令是 <…>/ctx mcp
 # 開始用
 ctx init ~/repo-spine                                  # 建 spine repo（桌面 App 首次打開也能建）
 ctx setup --spine ~/repo-spine --claude --dry-run      # 記住 spine＋掛 MCP（user scope）＋hooks＋skill；先看會改什麼
-ctx setup --claude --codex                             # 兩家都掛；spine 有 skills/ 時順手發共享 skill
+ctx setup --claude --codex                             # 兩家都掛（MCP＋hooks＋內建 skill）
 ctx registry add my-repo ~/Coding/my-repo              # 登記；registry scan <目錄> --apply 批次登記
 ctx group add 產品 my-repo,my-notes                     # 建組（add-member／remove-member／rename／remove）
 ctx registry describe my-notes --role 知識庫 --description "書摘與主題閱讀" --keywords 書摘,閱讀

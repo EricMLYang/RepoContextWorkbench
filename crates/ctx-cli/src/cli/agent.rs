@@ -1483,6 +1483,52 @@ pub fn cmd_read(ctx: &Ctx, a: &ReadArgs) -> CmdResult {
 }
 
 #[derive(Args, Debug)]
+pub struct SkillArgs {
+    /// skill 名稱（省略＝列出這個 repo 用得到的工作台 skill）
+    pub name: Option<String>,
+    /// skill 資料夾裡的附檔（省略＝SKILL.md）
+    #[arg(long)]
+    pub file: Option<String>,
+    /// 用哪個目錄判斷是不是納管的 repo（預設目前目錄）
+    #[arg(long)]
+    pub cwd: Option<String>,
+}
+
+/// F-133：工作台 skill（只在納管 repo 回應）。
+pub fn cmd_skill(ctx: &Ctx, a: &SkillArgs) -> CmdResult {
+    let c = cwd_path(&a.cwd);
+    agent_call(
+        ctx,
+        |d| agentapi::skill_get(d, nz(&a.name), nz(&a.file), c.as_deref()),
+        h_skill,
+    )
+}
+
+fn h_skill(r: &Value) -> String {
+    if r.get("text").is_some() {
+        return s(r, "text");
+    }
+    let skills = arr(r, "skills");
+    if skills.is_empty() {
+        return s(r, "hint");
+    }
+    let mut lines: Vec<String> = skills
+        .iter()
+        .map(|k| {
+            let d = s(k, "description");
+            if d.is_empty() || d == "None" {
+                format!("- {}", s(k, "name"))
+            } else {
+                format!("- {}：{d}", s(k, "name"))
+            }
+        })
+        .collect();
+    lines.push(String::new());
+    lines.push("`ctx skill <名稱>` 讀全文；附檔用 `--file <路徑>`。".into());
+    lines.join("\n")
+}
+
+#[derive(Args, Debug)]
 pub struct AskArgs {
     pub repo: String,
     #[arg(required = true, num_args = 1..)]

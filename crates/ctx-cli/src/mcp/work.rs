@@ -512,6 +512,25 @@ pub(super) fn w_read(d: &Path, p: ReadFrom, here: &Path) -> Result<Value> {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct SkillGet {
+    /// skill 名稱（開場「工作台 skill」那段列的）；省略＝列出全部
+    name: Option<Str>,
+    /// skill 資料夾裡的附檔（SKILL.md 提到的，例 references/x.md）；省略＝SKILL.md
+    file: Option<Str>,
+    #[serde(flatten)]
+    cwd: Cwd,
+}
+/// F-133：工作台 skill（只在納管 repo 回應）。
+pub(super) fn w_skill_get(d: &Path, p: SkillGet, here: &Path) -> Result<Value> {
+    agentapi::skill_get(
+        d,
+        nz(&p.name).as_deref(),
+        nz(&p.file).as_deref(),
+        Some(&p.cwd.dir(here)),
+    )
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct AskRepo {
     /// repo id
     repo: Str,

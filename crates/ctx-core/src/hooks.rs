@@ -486,6 +486,11 @@ fn session_start_inner(
     }
     let now = now.unwrap_or_else(|| Local::now().naive_local());
     let mut text = render_start(&ctx);
+    // F-133 工作台 skill 第 1 層：只有納管 repo 的會話看得到（不算進開場預算——有上限，見 shared_skills::opening）
+    if let Some(skills) = crate::shared_skills::opening(spine_dir) {
+        text.push_str("\n\n");
+        text.push_str(&skills);
+    }
     // F-121 對講：別的 repo 的 agent 留給這個 repo 的話（不算進開場預算——是點名給你的）
     let mail = agentapi::mailbox::take_for(
         spine_dir,

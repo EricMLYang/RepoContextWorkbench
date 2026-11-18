@@ -25,19 +25,23 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
         .collect();
     // 2026-10-21：App 開會話用的 .mcp.json 指到的 ctx 還在不在（10-18 重裝後指到被刪的 bundle，兩天沒人發現）
     let mcp_json = ctx_core::session::mcp_json_status(&d);
-    // F-133：spine 的共享 skill 在掛過的各家是不是最新（只列有問題的那幾家）
-    let shared: Vec<serde_json::Value> = ctx_core::agentsetup::installed_clis()
+    // F-133：工作台 skill——舊版留在使用者層的副本（沒納管的地方也看得到，要收），與 spine 裡沒啟用的
+    let retired: Vec<serde_json::Value> = ctx_core::agentsetup::AgentCli::ALL
         .into_iter()
         .filter_map(|c| {
-            let p = ctx_core::shared_skills::pending(&d, &c.home()).ok()?;
-            (!p.is_empty()).then(|| {
-                serde_json::json!({
-                    "cli": c.program(), "label": c.label(),
-                    "missing": p.missing, "stale": p.stale, "conflict": p.conflict,
-                })
-            })
+            let names = ctx_core::shared_skills::retire(&d, &c.home(), false).ok()?;
+            (!names.is_empty()).then(
+                || serde_json::json!({"cli": c.program(), "label": c.label(), "names": names}),
+            )
         })
         .collect();
+    let skipped: Vec<serde_json::Value> = ctx_core::shared_skills::index(&d)
+        .map(|i| i.skipped)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|k| serde_json::json!({"name": k.name, "reason": k.reason.text()}))
+        .collect();
+    let shared = serde_json::json!({"retired": retired, "skipped": skipped});
     v["setup"] = serde_json::json!({"skill": skill, "mcp_json": mcp_json, "clis": clis, "shared_skills": shared});
     // F-132：spine 入口檔過期或被手寫檔擋住（要跑 git，所以不在引擎的 health 裡，App 的 build_state 不會跑到）
     v["home"] = ctx_core::health::home_status(&d);
@@ -263,30 +267,32 @@ pub fn cmd_health(ctx: &Ctx, days: i64) -> CmdResult {
                 ));
             }
         }
-        // F-133：共享 skill 在某家沒發、過時（含 spine 裡已刪還留著的）或被同名資料夾擋住
-        let shared = arr(&r["setup"], "shared_skills");
-        if !shared.is_empty() {
-            let names = |c: &Value, k: &str| -> Vec<String> {
-                arr(c, k).iter().map(ctx_core::pystr::py_str).collect()
-            };
-            let per: Vec<String> = shared
+        // F-133：工作台 skill 舊副本還在使用者層（沒納管的地方也看得到）、spine 裡有沒啟用的
+        let retired = arr(&r["setup"]["shared_skills"], "retired");
+        if !retired.is_empty() {
+            let per: Vec<String> = retired
                 .iter()
                 .map(|c| {
-                    let mut parts = Vec::new();
-                    for (k, word) in [("missing", "未安裝"), ("stale", "過時"), ("conflict", "衝突")] {
-                        let n = names(c, k);
-                        if !n.is_empty() {
-                            parts.push(format!("{word} {}", n.join("、")));
-                        }
-                    }
-                    format!("{} {}", s(c, "label"), parts.join("、"))
+                    let n: Vec<String> = arr(c, "names").iter().map(ctx_core::pystr::py_str).collect();
+                    format!("{} {}", s(c, "label"), n.join("、"))
                 })
                 .collect();
-            let flags: Vec<String> = shared.iter().map(|c| format!("--{}", s(c, "cli"))).collect();
+            let flags: Vec<String> = retired.iter().map(|c| format!("--{}", s(c, "cli"))).collect();
             out.push(format!(
-                "- 共享 skill（spine/skills/）不是最新：{}——跑 `ctx setup {}`（衝突＝同名資料夾不是這個 spine 發的，不會覆蓋，要用共享的就先把它移走）",
+                "- 舊版工作台 skill 還留在使用者層（沒納管的地方也看得到）：{}——跑 `ctx setup {}` 收回",
                 per.join("；"),
                 flags.join(" ")
+            ));
+        }
+        let skipped = arr(&r["setup"]["shared_skills"], "skipped");
+        if !skipped.is_empty() {
+            let per: Vec<String> = skipped
+                .iter()
+                .map(|k| format!("{}（{}）", s(k, "name"), s(k, "reason")))
+                .collect();
+            out.push(format!(
+                "- spine/skills/ 裡有工作台 skill 沒啟用：{}",
+                per.join("、")
             ));
         }
         if r["setup"]["mcp_json"]["status"] == "command_missing" {

@@ -211,6 +211,8 @@ pub enum Cmd {
     },
     /// 讀別的 repo 的檔案或目錄（附 commit；會記一筆引用）
     Read(agent::ReadArgs),
+    /// 工作台 skill：列出／讀全文（只在納管的 repo 裡用得到）
+    Skill(agent::SkillArgs),
     /// 在另一個 repo 開唯讀 agent 回答問題（慢、花錢；回結論＋引用）
     Ask(agent::AskArgs),
     /// repo 狀態卡：上次看過後的變化、沒 commit 的檔、正在跑的程序、交接、失效路徑
@@ -296,6 +298,7 @@ pub fn dispatch(ctx: &Ctx, cmd: &Cmd) -> common::CmdResult {
         Backfill(a) => agent::cmd_backfill(ctx, a),
         Resolve { reference } => agent::cmd_resolve(ctx, reference),
         Read(a) => agent::cmd_read(ctx, a),
+        Skill(a) => agent::cmd_skill(ctx, a),
         Ask(a) => agent::cmd_ask(ctx, a),
         Repo(a) => agent::cmd_repo(ctx, a),
         Refs(a) => agent::cmd_refs(ctx, a),

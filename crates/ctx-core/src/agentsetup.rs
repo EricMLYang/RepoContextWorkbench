@@ -15,8 +15,9 @@
 //!      Codex 的新 hook 要使用者在 `/hooks` 審核信任後才會跑——setup 不代簽，只在結果裡提醒。
 //!    - skill：`~/.codex/skills/repo-context/SKILL.md`
 //!
-//! 4. 共享 skill（F-133，2026-11-18，Rust 才有）：`<spine>/skills/<名稱>/` 在內建 skill 之後發到各家的
-//!    `skills/`（細節見 [`crate::shared_skills`]）；spine 沒有 `skills/` 時不多任何一步。
+//! 4. 工作台 skill（F-133，Rust 才有）：`<spine>/skills/<名稱>/` **不發成檔案**——只在納管 repo 的會話開場列出、
+//!    用 `skill_get` 讀（[`crate::shared_skills`]）。2026-11-18 早上那版曾發到各家的 `skills/`，setup 在內建 skill
+//!    之後把那些副本收回；沒有可收的就不多任何一步。
 //!
 //! 沒有 `claude`／`codex` 指令時，MCP 那步改印出手動指令，不失敗；真的註冊失敗則 [`StepResult::ok`]＝false，
 //! 入口據此回非 0（c231287：呼叫的人或 agent 會以為掛好了）。
@@ -459,7 +460,7 @@ pub fn skill_status_of(homes: &[PathBuf]) -> &'static str {
 }
 
 /// 把每一家已裝的 skill 換成這版內建的；回各家的結果（一家都沒裝＝裝到 Claude Code，跟原本一樣）。
-/// 給了 spine 就順手把 `<spine>/skills/` 的共享 skill 也發一次（F-133；沒有共享 skill 就不多一項）。
+/// 給了 spine 就順手收回舊版發到使用者層的工作台 skill（F-133；沒有就不多一項）。
 pub fn update_installed_skills(spine_dir: Option<&Path>) -> Result<Vec<(AgentCli, StepResult)>> {
     let mut clis = installed_clis();
     if clis.is_empty() {
@@ -469,19 +470,24 @@ pub fn update_installed_skills(spine_dir: Option<&Path>) -> Result<Vec<(AgentCli
     for c in clis {
         let home = c.home();
         out.push((c, install_skill(&home)?));
-        if let Some(d) = spine_dir.filter(|d| shared_skills::has_work(d, &home)) {
-            out.push((c, install_shared_skills(d, &home)?));
+        if let Some(d) = spine_dir.filter(|d| has_retired_copies(d, &home)) {
+            out.push((c, retire_shared_skills(d, &home)?));
         }
     }
     Ok(out)
 }
 
-/// 發 `<spine>/skills/` 的共享 skill 到這一家（F-133）。衝突與略過只回報，不算失敗。
-pub fn install_shared_skills(spine_dir: &Path, cli_home: &Path) -> Result<StepResult> {
-    let r = shared_skills::sync(spine_dir, cli_home, true)?;
+/// 這一家的使用者層有沒有舊版發的工作台 skill 副本（讀不了就當有，讓那一步把錯誤講出來）。
+pub fn has_retired_copies(spine_dir: &Path, cli_home: &Path) -> bool {
+    shared_skills::retire(spine_dir, cli_home, false).map_or(true, |r| !r.is_empty())
+}
+
+/// 收回這一家使用者層的舊版工作台 skill 副本（F-133）。
+pub fn retire_shared_skills(spine_dir: &Path, cli_home: &Path) -> Result<StepResult> {
+    let r = shared_skills::retire(spine_dir, cli_home, true)?;
     Ok(StepResult::ok(format!(
-        "共享 skill：{}",
-        shared_skills::summary(&r)
+        "工作台 skill：收回使用者層的舊副本 {}（現在只在納管 repo 的開場提供）",
+        r.join("、")
     )))
 }
 
@@ -615,8 +621,8 @@ pub enum Step {
     Mcp(AgentCli),
     Hooks(AgentCli),
     Skill(AgentCli),
-    /// 發 `<spine>/skills/` 的共享 skill（F-133，Rust 才有）；只在有東西可發或可收時才進計畫（[`setup_plan`]）。
-    SharedSkills(AgentCli),
+    /// 收回舊版發到使用者層的工作台 skill 副本（F-133，Rust 才有）；只在有東西可收時才進計畫（[`setup_plan`]）。
+    RetireSharedSkills(AgentCli),
 }
 
 impl Step {
@@ -644,14 +650,14 @@ impl Step {
             Step::Skill(cli) => {
                 format!("安裝 skill 到 {}", cli.skill_file(env.home(cli)).display())
             }
-            Step::SharedSkills(cli) => {
+            Step::RetireSharedSkills(cli) => {
                 let target = env.home(cli).join(shared_skills::SKILLS_DIR);
-                let plan = match shared_skills::sync(&env.spine_dir, env.home(cli), false) {
-                    Ok(r) => shared_skills::summary(&r),
+                let names = match shared_skills::retire(&env.spine_dir, env.home(cli), false) {
+                    Ok(r) => r.join("、"),
                     Err(e) => format!("讀不了（{e}）"),
                 };
                 format!(
-                    "發 spine/skills/ 的共享 skill 到 {}：{plan}",
+                    "收回舊版發到 {} 的工作台 skill（現在只在納管 repo 的開場提供）：{names}",
                     target.display()
                 )
             }
@@ -665,7 +671,7 @@ impl Step {
             Step::Mcp(cli) => Ok(install_mcp_for(cli, &env.exe)),
             Step::Hooks(cli) => install_hooks_for(cli, &env.hooks_path(cli), &env.exe),
             Step::Skill(cli) => install_skill(env.home(cli)),
-            Step::SharedSkills(cli) => install_shared_skills(&env.spine_dir, env.home(cli)),
+            Step::RetireSharedSkills(cli) => retire_shared_skills(&env.spine_dir, env.home(cli)),
         }
     }
 }
@@ -680,8 +686,8 @@ pub fn plan(clis: &[AgentCli]) -> Vec<Step> {
 }
 
 /// `ctx setup` 實際跑的步驟：[`plan`]＋之前掛過、這次沒點名的那幾家也換 skill（`installed`；重裝後只跑
-/// `--claude`，Codex 讀到的不會留在舊版）；每個 [`Step::Skill`] 後面，有共享 skill 可發或可收才接
-/// [`Step::SharedSkills`]——沒有 `<spine>/skills/` 時跟以前一模一樣（setup 的輸出跟 Python 對拍）。
+/// `--claude`，Codex 讀到的不會留在舊版）；每個 [`Step::Skill`] 後面，有舊版工作台 skill 副本可收才接
+/// [`Step::RetireSharedSkills`]——沒有時跟以前一模一樣（setup 的輸出跟 Python 對拍）。
 pub fn setup_plan(env: &SetupEnv, clis: &[AgentCli], installed: &[AgentCli]) -> Vec<Step> {
     let mut steps = plan(clis);
     steps.extend(
@@ -694,8 +700,8 @@ pub fn setup_plan(env: &SetupEnv, clis: &[AgentCli], installed: &[AgentCli]) -> 
     for st in steps {
         out.push(st);
         if let Step::Skill(c) = st {
-            if shared_skills::has_work(&env.spine_dir, env.home(c)) {
-                out.push(Step::SharedSkills(c));
+            if has_retired_copies(&env.spine_dir, env.home(c)) {
+                out.push(Step::RetireSharedSkills(c));
             }
         }
     }

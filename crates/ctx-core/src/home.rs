@@ -28,9 +28,9 @@ pub const UNGROUPED_DIR: &str = "_ungrouped";
 const REPOS_FILE: &str = "REPOS.md";
 /// AGENTS.md 組那一行的目標最多幾個字（完整的在 REPOS.md）。
 const GOAL_MAX_CHARS: usize = 40;
-/// AGENTS.md「共享 skill」段最多列幾個（再多就併成一行「另 N 個」）。
+/// AGENTS.md「工作台 skill」段最多列幾個（再多就併成一行「另 N 個」）。
 const SKILLS_MAX_LINES: usize = 12;
-/// 共享 skill 那一行的說明最多幾個字（完整的在 SKILL.md）。
+/// 工作台 skill 那一行的說明最多幾個字（完整的在 SKILL.md）。
 const SKILL_DESC_MAX_CHARS: usize = 60;
 /// 組數不超過這個才在 AGENTS.md 每組一行附目標（Home Repo Pattern 說約 20 個就該拆；組多了每行要短）。
 const FULL_MAX_GROUPS: usize = 15;
@@ -297,19 +297,19 @@ fn index_lines(entries: &[IndexEntry], budget: usize) -> Vec<String> {
     out
 }
 
-/// spine 的共享 skill（F-133）：(名稱, SKILL.md frontmatter 的 description)。
+/// spine 的工作台 skill（F-133）：(名稱, SKILL.md frontmatter 的 description)。
 pub type SharedSkill = (String, Option<String>);
 
-/// 「共享 skill」段（沒有就空）：每個一行，太多就把後面的併成一行。
+/// 「工作台 skill」段（沒有就空）：每個一行，太多就把後面的併成一行。
 fn skills_section(skills: &[SharedSkill]) -> Vec<String> {
     if skills.is_empty() {
         return Vec::new();
     }
     let mut out = vec![
         String::new(),
-        "## 共享 skill".into(),
+        "## 工作台 skill".into(),
         format!(
-            "`{}/<名稱>/SKILL.md` 是跨 repo 共用的 skill，`ctx setup --claude --codex` 會發到各家 CLI；要改就改這裡的，不要改發出去的副本。",
+            "`{}/<名稱>/SKILL.md` 是工作台 skill：只在納管 repo 的會話開場列出，agent 用 MCP `skill_get`（或 `ctx skill <名稱>`）讀全文；不發成檔案，repo 移出 registry 就用不到。要改就改這裡。",
             crate::shared_skills::SKILLS_DIR
         ),
     ];
@@ -382,7 +382,7 @@ pub fn render(data: &RegistryData, local: &BTreeMap<String, RepoLocal>) -> Vec<G
     render_with(data, local, &[])
 }
 
-/// 同 [`render`]，AGENTS.md 多列 spine 的共享 skill（F-133；空的就跟 [`render`] 一樣）。純函式。
+/// 同 [`render`]，AGENTS.md 多列 spine 的工作台 skill（F-133；空的就跟 [`render`] 一樣）。純函式。
 pub fn render_with(
     data: &RegistryData,
     local: &BTreeMap<String, RepoLocal>,

@@ -1067,6 +1067,43 @@ pub fn read_from(
     Ok(v)
 }
 
+/// 工作台 skill（F-133，Rust 才有）：name 省略＝清單（漸進揭露第 1 層的全部），給了就讀 SKILL.md 或 file 指的附檔。
+/// **只在納管的 repo 裡回應**：不在任何登記的 repo（含 spine 本身之外的地方）就拒絕——repo 沒納管就用不到。
+pub fn skill_get(
+    spine_dir: &Path,
+    name: Option<&str>,
+    file: Option<&str>,
+    cwd: Option<&Path>,
+) -> Result<Value> {
+    let w = where_am_i(spine_dir, cwd)?;
+    if w.repo.is_none() {
+        return Err(agent_error(
+            crate::RejectCode::NotFound,
+            format!(
+                "這裡（{}）不在 repo-context 納管的 repo 裡，沒有工作台 skill",
+                w.cwd
+            ),
+            Some("工作台 skill 只在登記進 registry 的 repo 裡用得到。"),
+        ));
+    }
+    match name.map(str::trim).filter(|n| !n.is_empty()) {
+        None => {
+            let idx = crate::shared_skills::index(spine_dir)?;
+            Ok(json!({
+                "skills": idx.skills,
+                "hint": if idx.skills.is_empty() {
+                    "spine 裡還沒有工作台 skill（spine/skills/<名稱>/SKILL.md）。"
+                } else {
+                    "帶 name 讀 SKILL.md；SKILL.md 提到的附檔再帶 file 讀。"
+                },
+            }))
+        }
+        Some(n) => Ok(serde_json::to_value(crate::shared_skills::read(
+            spine_dir, n, file,
+        )?)?),
+    }
+}
+
 /// `read_from` 讀到的是 md 時，附上「repo 裡哪些 md 連到這份」（前幾則；跟 App 的反向連結同一個引擎，F-69）。
 /// 沒有就不加這個鍵；找不到 repo 或讀失敗也不擋讀檔。Rust 才有（2026-10-15）。
 fn add_linked_from(spine_dir: &Path, v: &mut Value) {

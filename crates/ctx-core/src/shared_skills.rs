@@ -1,19 +1,19 @@
-//! 共享 skill（F-133，2026-11-18，Rust 才有）：跨 repo 共用的 skill 放在 spine 用 git 版控
-//! （`<spine>/skills/<名稱>/SKILL.md`，資料夾裡可以有其他檔與子資料夾），`ctx setup --claude`／`--codex`
-//! 發到該家 CLI 的使用者層 skill 目錄（`<cli home>/skills/<名稱>/`）。
+//! 工作台 skill（F-133，2026-11-18，Rust 才有）：教 agent 用本工具（搜尋、拿別的 repo 的 context…）的 skill
+//! 放在 spine 用 git 版控（`<spine>/skills/<名稱>/SKILL.md`，資料夾裡可以有其他檔與子資料夾）。
 //!
-//! - 整個資料夾同步：新增、更新、刪掉來源已沒有的檔。每個由我們發的資料夾放 [`MARK_FILE`]
-//!   （記來源 spine 與內容雜湊）。目的地同名資料夾沒有標記＝使用者自己的，不覆蓋、回報衝突；
-//!   標記是別的 spine 的也不動。spine 裡刪掉的 skill，目的地帶本 spine 標記的才移除。
-//! - 內建的 `repo-context`（[`crate::agentsetup::MCP_NAME`]）名稱保留：spine 裡有同名資料夾就略過。
-//! - 不跟隨指到 skill 資料夾外面的 symlink（也不跟指到資料夾的 symlink，免得繞圈）；單檔超過
-//!   [`MAX_FILE_BYTES`]、整個 skill 超過 [`MAX_SKILL_BYTES`] 就整個略過——這些檔會進 agent 的脈絡目錄。
-//! - [`sync`] 冪等：`write=false` 只算計畫（`--dry-run`、`ctx health` 用），結果跟真的跑一樣。
+//! **只在納管的 repo 裡用得到，任何 repo 與使用者層都不放檔**（使用者 2026-11-18 定）：
+//! - 第 1 層（名稱＋一行說明）：開場 hook 在納管 repo 的會話注入 [`opening`]；不在納管 repo＝hook 不輸出，看不到。
+//! - 第 2、3 層（SKILL.md 全文、附檔）：agent 要用時呼叫 MCP `skill_get`／`ctx skill <名稱>`（[`read`]），
+//!   同樣只在納管 repo 回應（範圍檢查在 [`crate::agentapi::skill_get`]）。
+//! - repo 移出 registry：下一場會話起就沒有清單、讀不到——沒有東西要清。
+//! - 2026-11-18 早上那版曾發到 `<cli home>/skills/`；[`retire`] 收回帶本 spine 標記（[`MARK_FILE`]）的副本。
+//!
+//! 不跟隨指到 skill 資料夾外面的 symlink（也不跟指到資料夾的 symlink）；單檔超過 [`MAX_FILE_BYTES`]、
+//! 整個 skill 超過 [`MAX_SKILL_BYTES`] 就整個略過。內建的 `repo-context`（[`crate::agentsetup::MCP_NAME`]）名稱保留。
 
-use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use serde_json::json;
+use serde::Serialize;
 
 use crate::Result;
 
@@ -85,45 +85,6 @@ fn human(bytes: u64) -> String {
     }
 }
 
-/// 目的地同名資料夾為什麼不能動。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Conflict {
-    /// 沒有標記：使用者自己的。
-    UserOwned,
-    /// 別的 spine 發的。
-    OtherSpine(String),
-}
-
-impl Conflict {
-    pub fn text(&self) -> String {
-        match self {
-            Conflict::UserOwned => "同名資料夾不是 ctx 發的，不覆蓋".into(),
-            Conflict::OtherSpine(s) => format!("同名資料夾是別的 spine（{s}）發的，不動"),
-        }
-    }
-}
-
-/// 一個共享 skill 在某一家 CLI 的結果（`write=false` 時是「會怎樣」）。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Outcome {
-    Installed,
-    Updated,
-    Unchanged,
-    Removed,
-    Conflict(Conflict),
-    Skipped(SkipReason),
-}
-
-/// 一個 skill 的報告。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Report {
-    /// 資料夾名（不合法的名稱也照原樣）。
-    pub name: String,
-    pub outcome: Outcome,
-    /// 沒發的個別檔（symlink 指到外面、指到資料夾、壞掉的連結），相對 skill 資料夾。
-    pub ignored: Vec<String>,
-}
-
 /// 名稱合法：小寫英數與 `-`，不以 `-` 開頭或結尾，不超過 64 字。
 pub fn name_ok(name: &str) -> bool {
     !name.is_empty()
@@ -157,9 +118,7 @@ struct Source {
 #[derive(Debug, Default)]
 struct Listing {
     sources: Vec<Source>,
-    skipped: Vec<Report>,
-    /// `skills/` 下所有資料夾名（含不合法、略過的）：這些名稱在目的地不會被當成「已刪」移除。
-    present: BTreeSet<String>,
+    skipped: Vec<Skipped>,
 }
 
 fn list(spine_dir: &Path) -> Result<Listing> {
@@ -180,15 +139,13 @@ fn list(spine_dir: &Path) -> Result<Listing> {
             continue; // .git、.DS_Store 之類
         }
         let Ok(ft) = e.file_type() else { continue };
-        let skip = |reason| Report {
+        let skip = |reason| Skipped {
             name: name.clone(),
-            outcome: Outcome::Skipped(reason),
-            ignored: Vec::new(),
+            reason,
         };
         if ft.is_symlink() {
             // 指到資料夾的 symlink 才算一個 skill（指到檔的跟 README 一樣忽略）
             if e.path().is_dir() {
-                out.present.insert(name.clone());
                 out.skipped.push(skip(SkipReason::Symlink));
             }
             continue;
@@ -196,7 +153,6 @@ fn list(spine_dir: &Path) -> Result<Listing> {
         if !ft.is_dir() {
             continue; // skills/README.md 之類
         }
-        out.present.insert(name.clone());
         if !name_ok(&name) {
             out.skipped.push(skip(SkipReason::BadName));
             continue;
@@ -208,11 +164,7 @@ fn list(spine_dir: &Path) -> Result<Listing> {
         match scan(&e.path()) {
             Ok((files, ignored)) => {
                 if !files.iter().any(|f| f.rel == SKILL_FILE) {
-                    out.skipped.push(Report {
-                        name,
-                        outcome: Outcome::Skipped(SkipReason::NoSkillMd),
-                        ignored,
-                    });
+                    out.skipped.push(skip(SkipReason::NoSkillMd));
                 } else {
                     out.sources.push(Source {
                         name,
@@ -300,70 +252,198 @@ fn scan(dir: &Path) -> std::result::Result<(Vec<SrcFile>, Vec<String>), SkipReas
     Ok((files, ignored))
 }
 
-/// 讀內容（掃描之後檔案又變大也擋）。
-fn load(src: &Source) -> std::result::Result<BTreeMap<String, Vec<u8>>, SkipReason> {
-    let mut out = BTreeMap::new();
-    let mut total = 0u64;
-    for f in &src.files {
-        let b = std::fs::read(&f.path).map_err(|e| SkipReason::Unreadable(e.to_string()))?;
-        let n = b.len() as u64;
-        if n > MAX_FILE_BYTES {
-            return Err(SkipReason::FileTooLarge {
-                file: f.rel.clone(),
-                bytes: n,
-            });
-        }
-        total += n;
-        if total > MAX_SKILL_BYTES {
-            return Err(SkipReason::TooLarge { bytes: total });
-        }
-        out.insert(f.rel.clone(), b);
-    }
-    Ok(out)
+/// spine 裡沒拿出來用的 skill 與原因（`ctx health` 列出）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Skipped {
+    /// 資料夾名（不合法的名稱也照原樣）。
+    pub name: String,
+    pub reason: SkipReason,
 }
 
-/// 內容雜湊（FNV-1a 64；只拿來認「是不是同一份」，不是安全用途）。
-fn content_hash(files: &BTreeMap<String, Vec<u8>>) -> String {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    let mut feed = |bytes: &[u8]| {
-        for b in bytes {
-            h ^= u64::from(*b);
-            h = h.wrapping_mul(0x0100_0000_01b3);
+/// 一個可用的工作台 skill（清單那一層）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Entry {
+    pub name: String,
+    /// SKILL.md frontmatter 的 description。
+    pub description: Option<String>,
+    /// skill 資料夾裡的檔（相對路徑，`/` 分隔；含 SKILL.md）。
+    pub files: Vec<String>,
+    /// 沒拿出來的檔（symlink 指到外面、指到資料夾、壞掉的連結…）。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub ignored: Vec<String>,
+}
+
+/// `<spine>/skills/` 的清單。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Index {
+    pub skills: Vec<Entry>,
+    pub skipped: Vec<Skipped>,
+}
+
+/// 掃 `<spine>/skills/`：可用的（只讀 SKILL.md 取說明）＋略過的。沒有 `skills/`＝空。
+pub fn index(spine_dir: &Path) -> Result<Index> {
+    let listing = list(spine_dir)?;
+    let skills = listing
+        .sources
+        .iter()
+        .map(|s| Entry {
+            name: s.name.clone(),
+            description: std::fs::read_to_string(s.dir.join(SKILL_FILE))
+                .ok()
+                .and_then(|t| description_of(&t)),
+            files: s.files.iter().map(|f| f.rel.clone()).collect(),
+            ignored: s.ignored.clone(),
+        })
+        .collect();
+    Ok(Index {
+        skills,
+        skipped: listing.skipped,
+    })
+}
+
+/// (名稱, description)：給 spine 的 AGENTS.md 用（registry 每次寫入都會走到；讀不了＝空）。
+pub fn listed(spine_dir: &Path) -> Vec<(String, Option<String>)> {
+    index(spine_dir)
+        .map(|i| {
+            i.skills
+                .into_iter()
+                .map(|e| (e.name, e.description))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// 開場清單最多列幾個 skill（其餘用 `skill_get` 不帶名稱看）。
+pub const OPENING_MAX: usize = 12;
+/// 開場清單每個說明最多幾個字。
+pub const OPENING_DESC_CHARS: usize = 100;
+
+/// 開場注入的那一段（漸進揭露第 1 層）；spine 沒有可用的 skill＝None（開場跟以前一字不差）。
+pub fn opening(spine_dir: &Path) -> Option<String> {
+    let idx = index(spine_dir).ok()?;
+    if idx.skills.is_empty() {
+        return None;
+    }
+    let mut lines = vec![
+        "## 工作台 skill（教你用 repo-context 做事；要用時 skill_get 讀全文，沒掛 MCP 用 `ctx skill <名稱>`）"
+            .to_string(),
+    ];
+    for e in idx.skills.iter().take(OPENING_MAX) {
+        let desc = e.description.as_deref().unwrap_or("（沒寫說明）");
+        lines.push(format!("- {}：{}", e.name, clip(desc, OPENING_DESC_CHARS)));
+    }
+    if idx.skills.len() > OPENING_MAX {
+        lines.push(format!(
+            "- …還有 {} 個：skill_get 不帶名稱看全部",
+            idx.skills.len() - OPENING_MAX
+        ));
+    }
+    Some(lines.join("\n"))
+}
+
+fn clip(s: &str, n: usize) -> String {
+    let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    if s.chars().count() <= n {
+        s
+    } else {
+        format!("{}…", s.chars().take(n).collect::<String>())
+    }
+}
+
+/// 讀到的一個 skill 檔（漸進揭露第 2、3 層）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Doc {
+    pub name: String,
+    /// 讀的是哪個檔（相對 skill 資料夾）。
+    pub file: String,
+    pub text: String,
+    /// 這個 skill 的所有檔（要附檔就再帶 file 讀）。
+    pub files: Vec<String>,
+    /// skill 資料夾的絕對路徑（SKILL.md 叫你跑裡面的腳本時用）。
+    pub dir: String,
+}
+
+fn not_found(msg: String, hint: &str) -> crate::Error {
+    crate::Error::rejected(crate::RejectCode::NotFound, msg, Some(hint.to_string()))
+}
+
+/// 讀 `<spine>/skills/<name>/<file>`（file 省略＝SKILL.md）。只讀清單裡的檔：不跟 symlink 出去、不讀 `..`。
+pub fn read(spine_dir: &Path, name: &str, file: Option<&str>) -> Result<Doc> {
+    let listing = list(spine_dir)?;
+    let name = name.trim();
+    let Some(src) = listing.sources.iter().find(|s| s.name == name) else {
+        if let Some(sk) = listing.skipped.iter().find(|s| s.name == name) {
+            return Err(not_found(
+                format!("工作台 skill {name} 沒有啟用：{}", sk.reason.text()),
+                "請使用者修正 spine/skills/ 裡的那個資料夾；ctx health 也會列出。",
+            ));
         }
+        return Err(not_found(
+            format!("沒有這個工作台 skill：{name}"),
+            "skill_get 不帶名稱看有哪些。",
+        ));
     };
-    for (rel, b) in files {
-        feed(rel.as_bytes());
-        feed(&[0]);
-        feed(&(b.len() as u64).to_le_bytes());
-        feed(b);
+    let rel = file
+        .map(|f| f.trim().replace('\\', "/"))
+        .map(|f| f.trim_start_matches("./").to_string())
+        .filter(|f| !f.is_empty())
+        .unwrap_or_else(|| SKILL_FILE.to_string());
+    let files: Vec<String> = src.files.iter().map(|f| f.rel.clone()).collect();
+    let Some(f) = src.files.iter().find(|f| f.rel == rel) else {
+        return Err(not_found(
+            format!("{name} 裡沒有 {rel}"),
+            &format!("有的檔：{}", files.join("、")),
+        ));
+    };
+    let bytes = std::fs::read(&f.path)?;
+    if bytes.len() as u64 > MAX_FILE_BYTES {
+        return Err(not_found(
+            format!("{name}/{rel} 超過單檔上限 {}", human(MAX_FILE_BYTES)),
+            "請使用者把它拆小。",
+        ));
     }
-    format!("{h:016x}")
+    let dir = crate::fsutil::resolve(&src.dir)
+        .to_string_lossy()
+        .into_owned();
+    let Ok(text) = String::from_utf8(bytes) else {
+        return Err(not_found(
+            format!("{name}/{rel} 不是文字檔"),
+            &format!("要執行就用路徑 {dir}/{rel}"),
+        ));
+    };
+    Ok(Doc {
+        name: src.name.clone(),
+        file: rel,
+        text,
+        files,
+        dir,
+    })
 }
 
-// ── 目的地 ──────────────────────────────────────────────────────────────
-
-/// 目的地資料夾的內容（不跟 symlink；symlink 記成一個不可能跟來源相同的值，同步時會被換掉）。
-fn read_dest(dir: &Path) -> std::io::Result<BTreeMap<String, Vec<u8>>> {
-    let mut out = BTreeMap::new();
-    let mut stack = vec![(String::new(), dir.to_path_buf())];
-    while let Some((prefix, d)) = stack.pop() {
-        for e in std::fs::read_dir(&d)? {
-            let e = e?;
-            let name = e.file_name().to_string_lossy().into_owned();
-            if prefix.is_empty() && name == MARK_FILE {
-                continue;
-            }
-            let rel = format!("{prefix}{name}");
-            let ft = e.file_type()?;
-            if ft.is_dir() {
-                stack.push((format!("{rel}/"), e.path()));
-            } else if ft.is_file() {
-                out.insert(rel, std::fs::read(e.path())?);
-            } else {
-                out.insert(rel, b"\0ctx:not-a-file\0".to_vec());
-            }
+/// 收回 2026-11-18 早上那版發到 `<cli_home>/skills/` 的副本：帶本 spine 標記的資料夾才收
+/// （使用者自己的、別的 spine 的不動）。`write=false` 只回會收哪些。依名稱排序。
+pub fn retire(spine_dir: &Path, cli_home: &Path, write: bool) -> Result<Vec<String>> {
+    let spine = crate::fsutil::resolve(spine_dir)
+        .to_string_lossy()
+        .into_owned();
+    let Ok(rd) = std::fs::read_dir(cli_home.join(SKILLS_DIR)) else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for e in rd.flatten() {
+        let Ok(name) = e.file_name().into_string() else {
+            continue;
+        };
+        let is_dir = std::fs::symlink_metadata(e.path()).is_ok_and(|m| m.is_dir());
+        if !is_dir || marker_spine(&e.path()).as_deref() != Some(spine.as_str()) {
+            continue;
         }
+        if write {
+            std::fs::remove_dir_all(e.path())?;
+        }
+        out.push(name);
     }
+    out.sort();
     Ok(out)
 }
 
@@ -372,268 +452,6 @@ fn marker_spine(dir: &Path) -> Option<String> {
     let t = std::fs::read_to_string(dir.join(MARK_FILE)).ok()?;
     let v: serde_json::Value = serde_json::from_str(&t).ok()?;
     v["spine"].as_str().map(str::to_string)
-}
-
-fn marker_text(spine: &str, hash: &str) -> String {
-    let mut s = serde_json::to_string_pretty(&json!({
-        "managed_by": "ctx setup（repo-context 共享 skill；來源改了會覆蓋，這裡的修改不會留下）",
-        "spine": spine,
-        "hash": hash,
-    }))
-    .unwrap_or_default();
-    s.push('\n');
-    s
-}
-
-/// 目的地同名路徑的狀態。
-enum Dest {
-    Missing,
-    Ours,
-    Foreign(Conflict),
-}
-
-fn dest_state(dir: &Path, spine: &str) -> Dest {
-    match std::fs::symlink_metadata(dir) {
-        Err(_) => Dest::Missing,
-        Ok(m) if !m.is_dir() => Dest::Foreign(Conflict::UserOwned),
-        Ok(_) => match marker_spine(dir) {
-            None => Dest::Foreign(Conflict::UserOwned),
-            Some(s) if s == spine => Dest::Ours,
-            Some(s) => Dest::Foreign(Conflict::OtherSpine(s)),
-        },
-    }
-}
-
-fn remove_any(p: &Path) -> std::io::Result<()> {
-    match std::fs::symlink_metadata(p) {
-        Ok(m) if m.is_dir() => std::fs::remove_dir_all(p),
-        Ok(_) => std::fs::remove_file(p),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
-}
-
-fn abs(dir: &Path, rel: &str) -> PathBuf {
-    rel.split('/').fold(dir.to_path_buf(), |p, c| p.join(c))
-}
-
-/// 由下往上收掉空資料夾（skill 根目錄不收）。
-fn prune_empty(dir: &Path, is_root: bool) -> std::io::Result<bool> {
-    let mut empty = true;
-    for e in std::fs::read_dir(dir)? {
-        let e = e?;
-        if e.file_type()?.is_dir() {
-            if !prune_empty(&e.path(), false)? {
-                empty = false;
-            }
-        } else {
-            empty = false;
-        }
-    }
-    if empty && !is_root {
-        std::fs::remove_dir(dir)?;
-    }
-    Ok(empty)
-}
-
-/// 把目的地換成來源的樣子：標記先寫（中途失敗留下的也認得是我們的），刪多的、寫不同的，最後更新標記的雜湊。
-fn write_skill(
-    dest: &Path,
-    want: &BTreeMap<String, Vec<u8>>,
-    have: &BTreeMap<String, Vec<u8>>,
-    spine: &str,
-    hash: &str,
-) -> std::io::Result<()> {
-    std::fs::create_dir_all(dest)?;
-    if !dest.join(MARK_FILE).exists() {
-        crate::fsutil::write_atomic(&dest.join(MARK_FILE), marker_text(spine, "").as_bytes())?;
-    }
-    for rel in have.keys().filter(|k| !want.contains_key(*k)) {
-        remove_any(&abs(dest, rel))?;
-    }
-    prune_empty(dest, true)?;
-    for (rel, bytes) in want {
-        if have.get(rel) == Some(bytes) {
-            continue;
-        }
-        let p = abs(dest, rel);
-        // 路徑上有同名的檔（來源把檔換成資料夾）或這裡是資料夾（反過來）：先清掉
-        let mut cur = dest.to_path_buf();
-        for c in rel.split('/') {
-            cur = cur.join(c);
-            if cur == p {
-                if std::fs::symlink_metadata(&cur).is_ok_and(|m| !m.is_file()) {
-                    remove_any(&cur)?;
-                }
-            } else if std::fs::symlink_metadata(&cur).is_ok_and(|m| !m.is_dir()) {
-                remove_any(&cur)?;
-            }
-        }
-        if let Some(parent) = p.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        crate::fsutil::write_atomic(&p, bytes)?;
-    }
-    crate::fsutil::write_atomic(&dest.join(MARK_FILE), marker_text(spine, hash).as_bytes())
-}
-
-// ── 對外 ────────────────────────────────────────────────────────────────
-
-/// 把 `<spine>/skills/` 發到 `<cli_home>/skills/`；`write=false` 只回計畫。回報依名稱排序：先來源的
-/// （發了／沒變／衝突／略過），再目的地要移除的。沒有 `skills/`、也沒有本 spine 發過的＝空。
-pub fn sync(spine_dir: &Path, cli_home: &Path, write: bool) -> Result<Vec<Report>> {
-    let spine = crate::fsutil::resolve(spine_dir)
-        .to_string_lossy()
-        .into_owned();
-    let listing = list(spine_dir)?;
-    let target_root = cli_home.join(SKILLS_DIR);
-    let mut out = listing.skipped;
-    for src in &listing.sources {
-        let dest = target_root.join(&src.name);
-        let report = |outcome| Report {
-            name: src.name.clone(),
-            outcome,
-            ignored: src.ignored.clone(),
-        };
-        let want = match load(src) {
-            Ok(w) => w,
-            Err(r) => {
-                out.push(report(Outcome::Skipped(r)));
-                continue;
-            }
-        };
-        let (outcome, have) = match dest_state(&dest, &spine) {
-            Dest::Foreign(c) => {
-                out.push(report(Outcome::Conflict(c)));
-                continue;
-            }
-            Dest::Missing => (Outcome::Installed, BTreeMap::new()),
-            Dest::Ours => {
-                let have = read_dest(&dest)?;
-                if have == want {
-                    out.push(report(Outcome::Unchanged));
-                    continue;
-                }
-                (Outcome::Updated, have)
-            }
-        };
-        if write {
-            write_skill(&dest, &want, &have, &spine, &content_hash(&want))?;
-        }
-        out.push(report(outcome));
-    }
-    // spine 裡已經沒有的：目的地帶本 spine 標記的才移除
-    if let Ok(rd) = std::fs::read_dir(&target_root) {
-        for e in rd.flatten() {
-            let Ok(name) = e.file_name().into_string() else {
-                continue;
-            };
-            if listing.present.contains(&name) || !e.file_type().is_ok_and(|t| t.is_dir()) {
-                continue;
-            }
-            if marker_spine(&e.path()).as_deref() != Some(spine.as_str()) {
-                continue;
-            }
-            if write {
-                std::fs::remove_dir_all(e.path())?;
-            }
-            out.push(Report {
-                name,
-                outcome: Outcome::Removed,
-                ignored: Vec::new(),
-            });
-        }
-    }
-    out.sort_by(|a, b| {
-        (matches!(a.outcome, Outcome::Removed), &a.name)
-            .cmp(&(matches!(b.outcome, Outcome::Removed), &b.name))
-    });
-    Ok(out)
-}
-
-/// setup 要不要多一步發共享 skill（沒有 `skills/`、目的地也沒有本 spine 發過的＝不用，輸出跟以前一樣）。
-/// 讀不了就當要（讓那一步把錯誤講出來）。
-pub fn has_work(spine_dir: &Path, cli_home: &Path) -> bool {
-    sync(spine_dir, cli_home, false).map_or(true, |r| !r.is_empty())
-}
-
-/// 一行摘要：「新增 a、b；更新 c；…」（setup 的計畫與結果都用這個）。
-pub fn summary(reports: &[Report]) -> String {
-    let mut groups: Vec<(String, Vec<String>)> = Vec::new();
-    let mut push = |k: &str, v: String| match groups.iter_mut().find(|(g, _)| g == k) {
-        Some((_, list)) => list.push(v),
-        None => groups.push((k.to_string(), vec![v])),
-    };
-    for r in reports {
-        match &r.outcome {
-            Outcome::Installed => push("新增", r.name.clone()),
-            Outcome::Updated => push("更新", r.name.clone()),
-            Outcome::Unchanged => push("已是最新", r.name.clone()),
-            Outcome::Removed => push("移除（spine 裡已刪）", r.name.clone()),
-            Outcome::Conflict(c) => push("衝突", format!("{}（{}）", r.name, c.text())),
-            Outcome::Skipped(s) => push("略過", format!("{}（{}）", r.name, s.text())),
-        }
-    }
-    let ignored: Vec<String> = reports
-        .iter()
-        .flat_map(|r| r.ignored.iter().map(move |i| format!("{}/{i}", r.name)))
-        .collect();
-    if !ignored.is_empty() {
-        push("沒發的檔", ignored.join("、"));
-    }
-    if groups.is_empty() {
-        return "沒有共享 skill".into();
-    }
-    groups
-        .into_iter()
-        .map(|(k, v)| format!("{k} {}", v.join("、")))
-        .collect::<Vec<_>>()
-        .join("；")
-}
-
-/// 某家 CLI 的共享 skill 哪些不是最新（`ctx health` 用）：未安裝、過時（含 spine 裡已刪但還留著的）、衝突。
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Pending {
-    pub missing: Vec<String>,
-    pub stale: Vec<String>,
-    pub conflict: Vec<String>,
-}
-
-impl Pending {
-    pub fn is_empty(&self) -> bool {
-        self.missing.is_empty() && self.stale.is_empty() && self.conflict.is_empty()
-    }
-}
-
-pub fn pending(spine_dir: &Path, cli_home: &Path) -> Result<Pending> {
-    let mut p = Pending::default();
-    for r in sync(spine_dir, cli_home, false)? {
-        match r.outcome {
-            Outcome::Installed => p.missing.push(r.name),
-            Outcome::Updated | Outcome::Removed => p.stale.push(r.name),
-            Outcome::Conflict(_) => p.conflict.push(r.name),
-            Outcome::Unchanged | Outcome::Skipped(_) => {}
-        }
-    }
-    Ok(p)
-}
-
-/// spine 裡會發的 skill：(名稱, SKILL.md frontmatter 的 description)。給 spine 的 AGENTS.md 用——
-/// 只看 metadata 與 SKILL.md，不讀其他檔（registry 每次寫入都會走到）。
-pub fn listed(spine_dir: &Path) -> Vec<(String, Option<String>)> {
-    let Ok(listing) = list(spine_dir) else {
-        return Vec::new();
-    };
-    listing
-        .sources
-        .iter()
-        .map(|s| {
-            let desc = std::fs::read_to_string(s.dir.join(SKILL_FILE))
-                .ok()
-                .and_then(|t| description_of(&t));
-            (s.name.clone(), desc)
-        })
-        .collect()
 }
 
 /// SKILL.md 開頭 `---…---` 裡的 `description`。
