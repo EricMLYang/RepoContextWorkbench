@@ -241,7 +241,9 @@ CLI、前端仍要各改各的，但改壞既有介面會被測試擋下。
    考慮過但沒採用：發到每個 repo 的 `.claude/skills`／`.agents/skills`＋`.git/info/exclude`（repo 工作目錄裡還是有檔）；
    Claude Code 外掛照專案開關（多則回報不可靠、Codex 要另寫一套）。
 4. 還沒驗：Codex 壓縮脈絡後會不會重跑 SessionStart（不會的話清單會在長會話裡被摘要掉；`skill_get` 不帶名稱仍列得出來）。
-5. `repo-context` 自己的 skill 還裝在使用者層（沒納管的地方也看得到），改成同樣的方式或短 stub＋`ctx instructions`。（沒做）
+5. `repo-context` 內建 skill 縮成精簡版（約 30 行：節奏、規則、退路，寫明不在登記的 repo 用不到），細節搬進工作台 skill；
+   spine 先放 `cross-repo-research`、`pick-up-work` 兩個。（**已做**，2026-11-18；內建 skill 仍裝在使用者層，因為沒掛 hook 的
+   會話要靠它知道有這個工具）
 
 ## 10. 要你決定的
 

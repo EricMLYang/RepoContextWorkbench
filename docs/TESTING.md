@@ -414,6 +414,9 @@
 | 8q-9 | 長會話讓 Claude Code 壓縮脈絡（`/compact`）後再問暗號 | 壓縮後開場重注入，清單還在 | [ ] | [ ] |
 | 8q-10 | 同上換 Codex | **還沒驗**：Codex 壓縮後會不會重跑開場 hook；不會的話清單可能被摘要掉（`skill_get` 不帶名稱仍列得出來） | [ ] | [ ] |
 | 8q-11 | spine 的 `AGENTS.md` | 有「工作台 skill」段，每個一行；拿掉所有 skill 後這段不見 | [ ] | [ ] |
+| 8q-12 | 在一個納管 repo 交代「去查 <另一個 repo> 的 X 怎麼定義」（兩家各一次） | agent 讀 `cross-repo-research`，照 search_knowledge → repo_entry → 讀 找；沒有掃 `.git`、沒有寫死路徑；結論標出 repo 與檔 | [ ] | [ ] |
+| 8q-13 | 隔天在同一個 repo 說「接著做上次那個」（兩家各一次） | agent 讀 `pick-up-work`：講出上次做到哪、看了 repo_status、需要時用 `ctx sessions --grep` 找上一場；開頭一句說從哪接 | [ ] | [ ] |
+| 8q-14 | `ctx instructions`、`~/.claude/skills/repo-context/SKILL.md`（重裝後） | 精簡版：約 30 行，節奏＋規則＋沒掛 MCP 的退路，提到工作台 skill／`skill_get` | [ ] | [ ] |
 
 ## 9. 要你決定
 

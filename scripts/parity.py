@@ -725,8 +725,9 @@ def main():
     impl, notes = "repos/impl", "repos/notes"
 
     # ── 讀（初始狀態）──
-    C("instructions", ["instructions"], spine=False,
-      stdout_fix=lambda s: re.sub(r"\n## 跨 repo 參考.*?(?=\n規則：)", "", re.sub(r"\n## (?:判斷的沿革、回顧與交辦|使用者的畫面|同組成員與 repo 名片|對講：跟別的 repo 的 agent 協作|要使用者決定時)（Rust 版）\n.*?(?=\n## )", "", re.sub(r"`remaining` [^。]*。", "", re.sub(r"\n## 反芻推薦（別人替你先找好的）\n.*?(?=\n## )", "", re.sub(r"\n1\. \*\*開工\*\*.*?(?=\n2\. )", "", s, flags=re.S), flags=re.S)), flags=re.S), flags=re.S))  # 跨 repo 那節見 SEARCH_BRIEF_WHY；收尾那句見 TODO_SOURCE_WHY；反芻那節見 FRESH_WHY；開工那步見 SLIM_CONTEXT_WHY
+    # 內建 skill（`ctx instructions` 印的就是它）2026-11-18 縮成精簡版（Rust 才改：細節搬進 spine 的工作台 skill，
+    # 只在納管 repo 看得到）——內容不比，只比 exit code。精簡版的內容由 Rust 測試把關。
+    C("instructions", ["instructions"], spine=False, stdout_fix=lambda s: "")
     C("registry list", ["registry", "list"])
     C("registry list --json", ["registry", "list", "--json"])
     C("registry relations", ["registry", "relations"])

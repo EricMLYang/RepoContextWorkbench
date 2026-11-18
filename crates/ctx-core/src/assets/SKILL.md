@@ -1,145 +1,26 @@
 ---
 name: repo-context
-description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context 的 repo 裡工作時使用——開工前拿脈絡（目標、上次交接、下一步、未結事項），工作中記判斷與待辦、回報等待或卡住，收尾交接；需要其他 repo 的資料（書摘、規格、程式碼）時用它找、讀、問，而不是猜路徑；也用來看某個 repo 的現況（最近變化、沒 commit 的檔、正在跑的 dev server 要不要重開）。
+description: 跨 repo 的工作脈絡與留痕。在已登記進 repo-context 的 repo 裡工作時使用——開工拿脈絡、工作中記判斷與待辦、收尾交接；要別的 repo 的資料時用它找與讀，不要猜路徑。不在登記的 repo 裡就用不到。
 ---
 
-# repo-context：跨 repo 的工作脈絡
+# repo-context
 
-使用者把 repo 分成「組」（例如 PM repo＋實作 repo＋研究筆記）。你的工作範圍（主場）
-由目前目錄推出：所在 repo 所屬的組。每一次工作都走同一個節奏：
+只在登記進 repo-context 的 repo 裡有用（開場注入有「repo-context：你在 …」那段）。每次工作照這個節奏：
 
-1. **開工**：SessionStart hook 已經注入摘要（所在 repo、上次交接、未結、同組成員），夠用就直接做事。
-   要更多細節（最近事件帶 ref、未結全文、關係）才呼叫 `context_for`；不確定要做什麼時用 `next_work`（每項附 why）。
-   沒有開場注入（hook 沒掛）時先呼叫一次 `context_for`。
-2. **工作中**
-   - 做了判斷或結論 → `log_decision`（第一行結論，後面寫依據與來源檔）
-   - 發現之後要處理的事 → `add_todo`；處理完 → `close_todo`（用 `#N`）
-   - 要等使用者回應 → `report_status status=waiting`；卡住 → `status=blocked`
-     （這兩種會進使用者的收件匣）
-   - 需要其他 repo 的資料 → 見下方「跨 repo 參考」
-3. **收尾（一定要做）**：`handoff` —— `done` 完成了什麼、`next_step` 下次從哪接、
-   `remaining` 沒做完的事（只是交接裡的備註）。沒交接就結束的會話會被 hook 記成「未交接」。
+1. **開工**：開場注入已有上次交接、未結、同組成員，夠用就做事；要細節才 `context_for`，不知道做什麼用 `next_work`。
+   沒有開場注入就先 `context_for`；回說這裡沒登記＝這個工具用不到，照平常做。
+2. **工作中**：做了判斷 → `log_decision`；之後真的要有人回來做的事 → `add_todo`（說得出完成條件才開）；
+   等使用者 → `report_status status=waiting`，卡住 → `status=blocked`；要使用者決定 → 先 `request_decision`。
+3. **收尾一定 `handoff`**：`done` 做了什麼、`next_step` 下次從哪接；在等使用者決定就帶 `ask`。
 
-## 跨 repo 參考（前一步夠用就停）
+## 規則
 
-1. **問誰有**：`search_knowledge "問題或關鍵字"` —— 最該去的 repo（為什麼）、幾個起點 ref、相關判斷。
-   開場「鄰居 repo」已經寫了在哪就跳過。
-2. **看入口**：`repo_entry <repo>` —— 是什麼、從哪幾份讀起、最近判斷、最後交接、現在有沒有人在動。
-3. **自己讀**：在那個路徑用你的工具 grep／讀檔；要寫進結論或複製才 `read_from <ref>`（附 commit、留引用）。
-- 要整理歸納、跨很多檔才 `ask_repo`（唯讀 agent，慢又花錢）；要對方動手才 `send_message`。
+- 寫入主場以外的組會被拒（`cross_scope`）：先問使用者，同意後帶 `cross_scope_ok=true`。
+- 讀別的 repo 不用問；**改**別的 repo 的檔一定先問。不要掃 `.git` 找 repo、不要寫死別的 repo 的路徑。
+- 特定情境的做法（跨 repo 查資料、接手工作…）在開場的「工作台 skill」段，用 `skill_get` 讀；各工具的細節看工具自己的說明。
+- 沒有異常就一句話帶過；進度只認判斷與交接，不認 commit 數。
 
-規則：
-- **用名字，不要寫死路徑**。不要在文件或程式裡寫 `../其他repo/…`；寫 `<repo>:<export>`，
-  要實際路徑用 `ctx resolve <ref>`。
-- 把上游檔複製進本 repo 時，用 `ctx refs cite <repo>:<路徑> --note "複製到哪"` 記下版本。
-- 引用時標出 repo 與 commit（read_from 回傳的 `file_commit`／`commit`）。
-- `repo_status` 看某個 repo 的現況：最近變化、沒 commit 的檔、正在跑的 dev server
-  （啟動後有沒有檔案又改過＝改了要不要重開）、失效的跨 repo 路徑、上游變動。
+## 沒掛 MCP 時
 
-## 對講：跟別的 repo 的 agent 協作（Rust 版）
-
-- `send_message to=<repo id> text="…"`：請同組另一個 repo 的 agent 做事（要什麼、為什麼、做完怎樣算好）、問它的介面，
-  或告訴它你改了它會用到的東西。它有會話在跑就送進它的脈絡（用完下一個工具時），沒有就進使用者收件匣、那邊下次開場看到。
-  **不用等回覆**，繼續手上的事；回覆會自動送回你這場會話。長內容寫成檔，訊息裡放路徑。
-- 收到「其他 repo 的 agent 傳話給你」：是回覆就接著用；是請求就判斷在不在你的範圍——要改檔或做大事先跟使用者確認，
-  做完（或做不了）`send_message re=<編號> text="結果、commit、路徑"`。不要為了回覆中斷使用者正交代的事。
-- `messages`：最近的往來，加上同組現在在跑的 agent（repo、標題、在做什麼）——要動別人也在用的東西前先看一眼、打聲招呼。
-- 跨組傳話會被拒：先問使用者，同意後帶 `cross_scope_ok=true`。
-
-## 使用者的畫面（Rust 版）
-
-- 使用者提到畫面（「根據畫面」「我正在看的」「這個檔」「這段」）才呼叫 `what_user_sees`（CLI `ctx screen --json`）：
-  回工作台 App 主區開著的檔（絕對路徑、看得到第幾行、md 停在哪個標題、有沒有沒存的修改）或工作區分頁。沒提就別看。
-
-## 同組成員與 repo 名片（Rust 版）
-
-- 開場注入的「## 同組成員」＝這組有誰：角色、絕對路徑、一句話介紹、有沒有會話在跑（MCP `context_for` 的 `roster`）。
-  寫著「N 個檔還沒 commit（可能正在被改）」的組員＝別的 agent 正在那裡工作：要改那裡的檔先問使用者。
-  要別人的東西先看這裡判斷找誰；只看一眼可以直接讀路徑，要寫進結論或複製就用 `read_from`（會留引用）。
-- **repo 類別**：開場「這個 repo 是「X」類：…」＝你所在 repo 的規矩（MCP `context_for` 的 `repo_class`），照它做——
-  程式＝跑測試；領域 Agent＝改 prompt 要說理由、跑 eval 並記結果；數據探索＝數字附出處、資料列不進留痕；
-  文件・PM＝事實別補、別外傳；知識＝可自由整理、引用附出處；參考＝只讀、不改不 commit。
-  名冊每列也標類別（「參考：只讀」）：讀別的 repo 前看一眼。使用者要改類別時用 `workbench_apply` 的
-  `set_class`（先預覽、同意才執行）；不要自己決定改。
-- 開場的「組筆記（N 則…）」＝使用者在 App 隨手記的組層級的事（MCP `context_for` 的 `notes`，最新 5 則）；跟手上的事有關就讀全文。
-- `read_from` 讀到 md 時附的 `linked_from`＝那個 repo 裡連到這份的其他 md（前 5 則）：周邊脈絡多半在那裡，需要再讀。
-- 名片缺了或標「推測自 README」：手上的事做完，用 `describe_repo` 補一句介紹與角色（`role` 是一個短詞，
-  例 知識庫、規格來源、實作；`keywords` 給搜尋用，別跟 tags 重複）。名片存在 spine，**不寫進任何 repo**；
-  只能改主場（所在 repo＋同組成員）。
-- 使用者要你改工作台設定（建組、改組員、組改名、組目標、標籤、暫停／封存、類別）：用 `workbench_apply`，
-  先不帶 `confirm` 拿預覽、把每一步給使用者看，同意後才帶 `confirm=true`；不要直接改 registry.yaml。
-  沒掛 MCP：`ctx assist "<一句話>" --json` 看計畫，使用者同意後加 `--yes`。
-
-## 判斷的沿革、回顧與交辦（Rust 版）
-
-開場只帶你現在能動手的：上次交接的接續點、最近 7 天有動靜的未結。超過 7 天沒動靜、或在等使用者決定的未結只給數字——
-使用者提到才用 `ctx todo list` 查，不要主動去翻。未結體檢、判斷回顧、關係建議這些要人判斷的提醒不再給你（人從 `ctx health` 看）。
-使用者要你處理這些時：
-- **改掉舊判斷**：`log_decision` 帶 `supersedes=<舊的 ref>`（舊的之後不再出現在最近事件，沿革仍查得到）；
-  寫得出「什麼情況要重看」就帶 `reopen_when`（寫日期，到期時 `ctx health` 會提醒使用者「該重看」）。
-- **判斷後來怎樣**：`log_decision` 帶 `outcome_of=<判斷的 ref>` 記一筆結果。
-- **找過去的判斷**：`search_knowledge`（`detail=full` 的 `decisions` 帶取代者與結果）。做新判斷前先查有沒有前例。
-- **看全部未結**：`ctx todo list --json`——該先處理的在前，逾期超過 14 天的（擱置）排最後；`ctx next` 只給前 5 項。
-- **未結的紀律——未結清單是使用者的，不是你的筆記**：`add_todo` 只開「有人真的要回來做、說得出完成條件」的事；
-  有真實期限才給 `due`，沒給就沒有期限（不會自動補）。`handoff` 的 `remaining` 不會開未結，只是交接裡的一行備註；
-  接續點寫 `next_step` 就好。要使用者決定的問題當場問
-  （或 `report_status status=waiting`），不要開成待辦；順手的觀察寫進判斷或交接的 `done`。你自己開的、這場就做掉的，收尾前關掉。
-- **未結體檢**：`ctx todo review --json`——哪些可能已處理（附證據）、哪些逾期沒動靜。確認後才 `close_todo`。
-- **清理未結**（使用者說「幫我清未結」）：`tidy_todos`（或 `ctx todo tidy --json`）把範圍內的未結分成 done（可能已做完，附證據）／
-  shelved（擱置太久）／ask（等使用者決定）／live。對照 repo 現況逐項確認，把建議關的與留的列給使用者，**同意後**一次關掉：
-  `tidy_todos` 帶 `close: ["#3", "#7"]`（或 `ctx todo close 3 7 --note "…"`、整類 `ctx todo tidy --close shelved`）。
-- **交辦給新會話**：`ctx todo brief '#N'` 產生任務包（目標／背景／輸入／限制／完成條件）。
-- **關係建議**：`ctx registry suggest --json`；使用者同意才 `ctx registry relate`。
-- **之前談過的會話**：使用者提到「上次那個…」時，`ctx sessions --query <詞> --json` 找範圍內過去的會話（Claude Code 與 Codex）
-  （標題、最後回覆、哪一家 `agent`、接續指令 `resume`、逐字稿 `path`）；要找「哪場講過 X」用 `ctx sessions --grep <詞> --json`
-  （搜會話裡說過的話，附片段）。交接沒寫到的細節再去逐字稿找，別憑印象。
-  要接手一場會話：`ctx sessions --digest <id>` 印出交接包（你說的話、動過的檔、跑過的指令、最後回覆，秘密已遮），比整份逐字稿短。
-- **清 worktree**：`ctx worktrees <repo> --json` 看哪些乾淨、哪些有只在那裡的 commit；使用者同意才 `--remove <path>`（不強制、分支留著）。
-
-## 要使用者決定時（Rust 版）
-
-- 做到一半需要使用者決定（要不要 commit、選哪個方案…），**先** `request_decision`（參數同下面的 `ask`）：
-  回 `auto` 就照 `answer` 接著做、不用停；回 `wait` 才把能做的做完、收尾交接等人。
-  回答決策卡（`ctx decide answer`）與升級成自動（`ctx decide trust`）是使用者的事，agent 不要代做（在 agent 的 shell 裡會被拒）。
-- 收尾時下一步在等使用者決定、確認或驗收（要不要 commit、選哪個方案、看畫面、手動測），`handoff` 帶 `ask`：
-  `question` 寫成不看程式也答得出來的一句話（好：「首頁排序改成依修改時間（A）還是維持依名稱（B）？」；差：「要繼續嗎？」），
-  `options` 給選項、`recommend` 標你建議的、`kind` 選類別、做了收不回來設 `reversible=false`、`evidence` 給要看的檔。
-  使用者在 `ctx decide list` 一次看各 repo 的提問、用編號回答，回答會連同交接送回給下一場會話。
-- 沒掛 MCP：`ctx decide request --ask "問題" --kind commit --option 要 --option 不要 --recommend 1 --json`；
-  `ctx handoff --done "…" --next "…" --ask "問題" --kind choose --option A --option B --recommend 1 --evidence docs/x.md`。
-
-## 範圍規則
-
-- 查詢預設只看主場。寫入主場以外的組會被拒（`error: cross_scope`）。
-  **先問使用者**，同意後再帶 `cross_scope_ok=true` 重試。
-- 讀其他 repo（read_from／search_knowledge／ask_repo）不用先問——只讀、而且留紀錄。
-  **改**其他 repo 的檔案之前一定先問。
-
-## 沒有 MCP 時（其他 agent 或 shell）
-
-同一組動作都有 CLI，加 `--json` 拿結構化輸出：
-
-```
-ctx where --json                 # 我在哪
-ctx context --json               # 開工脈絡
-ctx next --json                  # 下一步
-ctx log "結論…依據…" --json
-ctx todo add "要做的事" [--due 2026-10-01] --json
-ctx todo close '#3' --note "怎麼結的" --json
-ctx status waiting "在等使用者決定 X" --json
-ctx handoff --done "…" --next "…" [--remaining "…"] --json
-ctx search "一段文字" --json      # 或 --file 某張卡片.md；--no-code 只搜 md
-ctx resolve notes:書摘 --json     # 名字 → 路徑
-ctx read notes:書摘/ch01.md --json [--lines 10-40]
-ctx ask notes "問題" --json       # 唯讀 agent，慢、花錢
-ctx repo [<repo>] --json          # 狀態卡（--since 7d；人看時會記已讀，--peek 不記）
-ctx refs check                    # 失效的跨 repo 路徑＋上游變動＋建議 export
-```
-
-exit code：0 成功｜1 有紅字／一般失敗｜2 請求被拒（stdout 是 `{ok:false, error, message, hint}`）｜3 找不到 spine。
-
-## 回報原則
-
-- 講結論要標明來自哪個 repo 的哪份檔。
-- 不要把 commit 數當進度；進度只認 decision／handoff。
-- 沒有異常就一句話帶過，不要把正常狀態講成待辦。
+同名功能都有 CLI，加 `--json` 拿結構化輸出：`ctx <where|context|next|log|todo|status|handoff|search|read|repo|skill> --json`，
+全部見 `ctx --help`。exit code：0 成功｜2 請求被拒（stdout 是 `{ok:false, error, message, hint}`）｜3 找不到 spine。

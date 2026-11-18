@@ -142,6 +142,26 @@ fn test_instructions_print_skill_without_frontmatter() {
     let t = tempfile::tempdir().unwrap();
     let r = ctx(t.path()).run(&["instructions"]);
     assert!(r.code == 0 && r.stdout.contains("handoff") && !r.stdout.starts_with("---"));
+    // 2026-11-18 精簡版：裝在使用者層（沒納管的地方也看得到），只留節奏、規則、沒掛 MCP 的退路；
+    // 特定情境的做法在 spine 的工作台 skill（skill_get）。長度上限擋它再長回去。
+    for must in [
+        "context_for",
+        "log_decision",
+        "add_todo",
+        "report_status",
+        "request_decision",
+        "handoff",
+        "cross_scope_ok",
+        "skill_get",
+        "ctx --help",
+    ] {
+        assert!(r.stdout.contains(must), "少了 {must}：{}", r.stdout);
+    }
+    assert!(
+        r.stdout.lines().count() <= 40,
+        "{} 行",
+        r.stdout.lines().count()
+    );
 }
 
 // test_mcp_add_name_before_variadic_env：引擎層測試，已在 ctx-core tests/agentsetup.rs（Rust 版指令沒有 -e）。

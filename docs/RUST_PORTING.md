@@ -692,3 +692,8 @@ CLI／MCP（ctx-cli）：
   setup 輸出跟 Python 一字不差。`ctx health` 的 `setup.shared_skills.retired`（`[{cli,label,names}]`）有就印一行叫你跑 setup。
   spine 的 `AGENTS.md` 有工作台 skill 時多「工作台 skill」段（每個一行：名稱＋description 截 60 字，最多 12 行，再多併成「另 N 個」），
   仍守 60 行；沒有就不出現。
+- **內建 skill 精簡版**（2026-11-18，Rust 才改）：`crates/ctx-core/src/assets/SKILL.md`（`ctx setup` 裝到 `~/.claude/skills`、
+  `~/.codex/skills` 的 `repo-context`，`ctx instructions` 印的也是它）從 146 行縮到約 30 行：只留工作節奏、範圍規則、沒掛 MCP 的退路，
+  並寫明「不在登記的 repo 裡用不到」。它裝在使用者層，沒納管的地方也看得到，所以工具知識的細節搬進 spine 的工作台 skill
+  （`cross-repo-research`、`pick-up-work`…），各工具的用法留在 MCP 工具說明。對拍的 `instructions` 不比內容、只比 exit code；
+  內容由 `test_instructions_print_skill_without_frontmatter` 把關（必要的工具名都在、≤ 40 行）。
