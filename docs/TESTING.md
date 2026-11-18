@@ -341,12 +341,12 @@
 
 | # | 操作 | 應該看到 | macOS | Windows |
 |---|---|---|---|---|
-| 8m-1 | 終端跑 `ctx home sync --check` | 列出 AGENTS.md、CLAUDE.md、每組與未分組的 REPOS.md 會新建；exit 1。跑 `ctx home sync` 後再 `--check`：都是最新的、exit 0 | [ ] | [ ] |
-| 8m-2 | 打開 spine 的 `AGENTS.md` 與 `groups/<組>/REPOS.md` | 第一行是生成標記；AGENTS.md ≤ 60 行、每組一行；每個 repo 一行：名片、本機路徑、Clone from …、提示（參考類「只讀，不要改。」）；路徑不在的標「（路徑不存在）」 | [ ] | [ ] |
+| 8m-1 | 終端跑 `ctx home sync --check` | 列出 AGENTS.md、CLAUDE.md、每組與未分組的 REPOS.md 會新建；exit 1。跑 `ctx home sync` 後再 `--check`：都是最新的、exit 0 | [x] 真 spine 已由 App 生成；spine 副本重跑新建→exit 1、sync 後 exit 0 | [ ] |
+| 8m-2 | 打開 spine 的 `AGENTS.md` 與 `groups/<組>/REPOS.md` | 第一行是生成標記；AGENTS.md ≤ 60 行、每組一行；每個 repo 一行：名片、本機路徑、Clone from …、提示（參考類「只讀，不要改。」）；路徑不在的標「（路徑不存在）」 | [x] 真 spine：AGENTS.md 24 行；REPOS.md 格式符合，沒有路徑不存在 | [ ] |
 | 8m-3 | 在 App 改一個 repo 的名片、建組、把組改名、拖曳排序組 | 不用手動跑，`groups/<組>/REPOS.md` 與 AGENTS.md 跟著變；改名後舊名字的 REPOS.md 不見了（資料夾裡別的檔還在） | [ ] | [ ] |
-| 8m-4 | 在 spine 根目錄放一份自己寫的 `AGENTS.md`（第一行不是標記），再改 registry | 你的檔沒被蓋掉；`ctx home sync` 印「衝突」並 exit 1；`ctx health` 多一行 spine 入口檔被手寫檔擋住 | [ ] | [ ] |
-| 8m-5 | spine 副本、沒掛 hook／MCP／skill 的設定目錄，在 spine 目錄跑 `claude -p "現在登記了幾個 repo"` 與 `codex exec` 同一句 | 兩家都答出 registry 的數量，沒有自己掃檔案系統找 `.git`（規劃 §5 的驗收） | [ ] | [ ] |
-| 8m-6 | 重跑 `ctx setup --claude` | 輸出跟以前一樣（入口檔不印）；之後 `ctx home sync --check` 是最新的 | [ ] | [ ] |
+| 8m-4 | 在 spine 根目錄放一份自己寫的 `AGENTS.md`（第一行不是標記），再改 registry | 你的檔沒被蓋掉；`ctx home sync` 印「衝突」並 exit 1；`ctx health` 多一行 spine 入口檔被手寫檔擋住 | [x] spine 副本（直接 sync，沒經 App 改 registry） | [ ] |
+| 8m-5 | spine 副本、沒掛 hook／MCP／skill 的設定目錄，在 spine 目錄跑 `claude -p "現在登記了幾個 repo"` 與 `codex exec` 同一句 | 兩家都答出 registry 的數量，沒有自己掃檔案系統找 `.git`（規劃 §5 的驗收） | [x] spine 副本：兩家都答 23；Codex 沒跑指令；Claude 先 `ls` 再讀 registry.yaml＋AGENTS.md（CLAUDE.md 的 @AGENTS.md 看起來沒先進開場） | [ ] |
+| 8m-6 | 重跑 `ctx setup --claude` | 輸出跟以前一樣（入口檔不印）；之後 `ctx home sync --check` 是最新的 | [x] 真 `~/.claude` | [ ] |
 
 ## 8n. 狀態雙通道：agent 自己在終端報狀態（OSC 7501，F-130，2026-11-18）——**引擎單元測試與真 PTY 端到端（假程式印 7501）已過；真 Claude Code、真 Codex 在 App 裡還沒人點過**
 
@@ -390,9 +390,9 @@
 | 8p-5 | ⌘K 打「&」再打兩個字的中文（例「&索引」）、三個字以上、英文 | 列出說過這些話的會話（兩家都有、標 Codex／會話、repo、時間、命中的那一段、幾則）；第一次會等幾秒（建索引），之後幾乎立刻 | [ ] 未測 | [ ] 未測 |
 | 8p-6 | 上面的結果按 Enter／⌘Enter | Enter＝接續那場（Codex 的開 `codex resume`）；⌘Enter＝開逐字稿 | [ ] 未測 | [ ] 未測 |
 | 8p-7 | 換到另一個牌組再搜同一個詞 | 只列這個牌組的 repo 的會話 | [ ] 未測 | [ ] 未測 |
-| 8p-8 | 跟 agent 多談幾句，再 `ctx sessions --grep <剛說的詞> --json` | 新說的話搜得到；`index.appended` ≥ 1、`index.read` 是 0（只讀新增的部分） | [x] spine 副本＋真逐字稿（CLI） | [ ] 未測 |
-| 8p-9 | 刪掉 `.state/sessions.db` 再搜 | 重建一次（第一次慢），結果一樣 | [x] spine 副本（CLI） | [ ] 未測 |
-| 8p-10 | `ctx backfill scan` | 列出的會話包含 Codex 的互動會話（`--json` 那幾筆有 `"agent": "codex"`）；`codex exec` 的不列 | [x] spine 副本（CLI，只 scan、沒跑 run） | [ ] 未測 |
+| 8p-8 | 跟 agent 多談幾句，再 `ctx sessions --grep <剛說的詞> --json` | 新說的話搜得到；`index.appended` ≥ 1、`index.read` 是 0（只讀新增的部分） | [x] spine 副本＋真逐字稿（CLI）；真 spine 11-18：暖查詢 0.03 秒、read 0／appended 1 | [ ] 未測 |
+| 8p-9 | 刪掉 `.state/sessions.db` 再搜 | 重建一次（第一次慢），結果一樣 | [x] spine 副本（CLI）；真 spine 冷建 3.5 秒（112 場、1.9 萬則） | [ ] 未測 |
+| 8p-10 | `ctx backfill scan` | 列出的會話包含 Codex 的互動會話（`--json` 那幾筆有 `"agent": "codex"`）；`codex exec` 的不列 | [x] spine 副本（CLI，只 scan、沒跑 run）；真 spine 147 場、Codex 4 場 | [ ] 未測 |
 
 真資料量測（release，spine 副本，2026-11-18）：113 場（Claude Code 110、Codex 3）、1.9 萬則，冷建 4.1 秒、db 23 MB、暖查詢 10–20 ms。中文兩個字的詞（例「索引」）走 `LIKE`、三個字以上走 trigram 索引，兩種都實測搜得到。
 
@@ -402,13 +402,13 @@
 
 | # | 操作 | 應該看到 | macOS | Windows |
 |---|---|---|---|---|
-| 8q-1 | spine 還沒有 `skills/` 時跑 `ctx setup --claude --codex --dry-run` | 跟以前一模一樣，沒有「共享 skill」那行 | [ ] 未測 | [ ] 未測 |
-| 8q-2 | 放一個 `spine/skills/<名稱>/SKILL.md`（可帶子資料夾），跑 `ctx setup --claude --codex --dry-run`，再拿掉 `--dry-run` 跑 | 試跑每家多一行「發 spine/skills/ 的共享 skill 到 …：新增 <名稱>」且沒寫；真跑後 `~/.claude/skills/<名稱>/`、`~/.codex/skills/<名稱>/` 有整份檔＋`.ctx-managed` | [ ] 未測 | [ ] 未測 |
-| 8q-3 | 開新的 Claude Code 與 Codex 會話，問一句會觸發那個 skill 的話 | 兩家都讀到這個 skill（Claude Code 的 `/skills` 列得出來） | [ ] 未測 | [ ] 未測 |
-| 8q-4 | 改 spine 裡那個 skill 的一個檔、刪一個檔，跑 `ctx health`，再跑 `ctx setup --claude` | health 一行「共享 skill（spine/skills/）不是最新：Claude Code 過時 …；Codex 過時 …」；setup 後兩家都更新（Codex 沒點名也會更新）、刪掉的檔不見了 | [ ] 未測 | [ ] 未測 |
-| 8q-5 | 在 `~/.codex/skills/` 先放一個同名、自己寫的資料夾，再跑 setup | 你的資料夾沒被動；setup 與 health 都說「衝突」 | [ ] 未測 | [ ] 未測 |
-| 8q-6 | 從 spine 刪掉那個 skill，跑 setup | 兩家的副本被收掉；自己寫的同名資料夾（8q-5）還在 | [ ] 未測 | [ ] 未測 |
-| 8q-7 | 打開 spine 的 `AGENTS.md` | 有「共享 skill」段，每個一行（名稱＋說明）；總行數 ≤ 60；拿掉所有共享 skill 後這段不見 | [ ] 未測 | [ ] 未測 |
+| 8q-1 | spine 還沒有 `skills/` 時跑 `ctx setup --claude --codex --dry-run` | 跟以前一模一樣，沒有「共享 skill」那行 | [x] 真 spine | [ ] 未測 |
+| 8q-2 | 放一個 `spine/skills/<名稱>/SKILL.md`（可帶子資料夾），跑 `ctx setup --claude --codex --dry-run`，再拿掉 `--dry-run` 跑 | 試跑每家多一行「發 spine/skills/ 的共享 skill 到 …：新增 <名稱>」且沒寫；真跑後 `~/.claude/skills/<名稱>/`、`~/.codex/skills/<名稱>/` 有整份檔＋`.ctx-managed` | [x] 真 spine、真 `~/.claude`／`~/.codex` | [ ] 未測 |
+| 8q-3 | 開新的 Claude Code 與 Codex 會話，問一句會觸發那個 skill 的話 | 兩家都讀到這個 skill（Claude Code 的 `/skills` 列得出來） | [x] `claude -p`、`codex exec` 都答出 skill 內容 | [ ] 未測 |
+| 8q-4 | 改 spine 裡那個 skill 的一個檔、刪一個檔，跑 `ctx health`，再跑 `ctx setup --claude` | health 一行「共享 skill（spine/skills/）不是最新：Claude Code 過時 …；Codex 過時 …」；setup 後兩家都更新（Codex 沒點名也會更新）、刪掉的檔不見了 | [x] | [ ] 未測 |
+| 8q-5 | 在 `~/.codex/skills/` 先放一個同名、自己寫的資料夾，再跑 setup | 你的資料夾沒被動；setup 與 health 都說「衝突」 | [x]（小瑕疵：health 對衝突仍建議「跑 setup」，其實要先移走） | [ ] 未測 |
+| 8q-6 | 從 spine 刪掉那個 skill，跑 setup | 兩家的副本被收掉；自己寫的同名資料夾（8q-5）還在 | [x] | [ ] 未測 |
+| 8q-7 | 打開 spine 的 `AGENTS.md` | 有「共享 skill」段，每個一行（名稱＋說明）；總行數 ≤ 60；拿掉所有共享 skill 後這段不見 | [x] 有段時 28 行；拿掉後段落消失 | [ ] 未測 |
 | 8q-8 | 重裝 App 後在 App 按「更新 skill」 | 訊息裡多「共享 skill：…」那幾項 | [ ] 未測 | [ ] 未測 |
 | 8q-9 | Windows：skill 裡有 symlink（或 junction）指到資料夾外 | 不跟、回報「沒發的檔」；macOS 這條只有單元測試 | — | [ ] 未測 |
 
